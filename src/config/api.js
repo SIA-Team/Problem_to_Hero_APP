@@ -22,6 +22,7 @@ export const API_ENDPOINTS = {
   // 认证相关
   AUTH: {
     LOGIN: '/app/user/auth/login',
+    TOKEN_LOGIN: '/app/user/auth/token-login',  // Token 自动登录
     REGISTER: '/app/user/auth/register',
     LOGOUT: '/app/user/auth/logout',
     REFRESH_TOKEN: '/auth/refresh',
@@ -99,6 +100,13 @@ export const API_ENDPOINTS = {
     CREATE: '/emergency',
     DETAIL: '/emergency/:id',
     RESPOND: '/emergency/:id/respond',
+  },
+  
+  // Twitter 相关
+  TWITTER: {
+    SEARCH_USERS: '/api/twitter/search/users',      // 搜索 Twitter 用户
+    INVITE_USER: '/api/twitter/invite',              // 邀请 Twitter 用户
+    INVITED_USERS: '/api/twitter/invited',           // 获取已邀请的用户列表
   },
   
   // 上传相关

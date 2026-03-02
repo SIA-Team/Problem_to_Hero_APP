@@ -1,10 +1,17 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_CONFIG } from '../../config/api';
+import ENV, { shouldUseMock } from '../../config/env';
+
+// 真实服务器的 baseURL
+const REAL_BASE_URL = ENV.apiUrl || API_CONFIG.BASE_URL;
+
+// Mock 服务器的 baseURL
+const MOCK_BASE_URL = 'https://m1.apifoxmock.com/m1/7857964-7606903-default';
 
 // 创建 axios 实例
 const apiClient = axios.create({
-  baseURL: API_CONFIG.BASE_URL,
+  baseURL: REAL_BASE_URL,  // 默认使用真实服务器
   timeout: API_CONFIG.TIMEOUT,
   headers: API_CONFIG.HEADERS,
 });
@@ -13,6 +20,22 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use(
   async (config) => {
     try {
+      // 判断当前接口是否使用 Mock
+      const useMock = shouldUseMock(config.url);
+      
+      // 动态设置 baseURL
+      if (useMock) {
+        config.baseURL = MOCK_BASE_URL;
+        if (__DEV__) {
+          console.log(`🔧 接口 ${config.url} 使用 Mock 服务器`);
+        }
+      } else {
+        config.baseURL = REAL_BASE_URL;
+        if (__DEV__) {
+          console.log(`🌐 接口 ${config.url} 使用真实服务器`);
+        }
+      }
+      
       // 从本地存储获取 token
       const token = await AsyncStorage.getItem('authToken');
       
@@ -82,11 +105,35 @@ apiClient.interceptors.response.use(
     // 处理嵌套的 data 结构
     // 如果返回的是 {data: {code: 200, data: {...}, msg: "..."}}
     // 则提取内层的 {code: 200, data: {...}, msg: "..."}
-    if (response.data && response.data.data !== undefined && response.data.code !== undefined) {
-      return response.data;
+    let responseData = response.data;
+    if (responseData && responseData.data !== undefined && responseData.code !== undefined) {
+      responseData = responseData;
     }
     
-    return response.data;
+    // 判断当前接口是否使用 Mock
+    const useMock = shouldUseMock(response.config.url);
+    
+    // Mock 环境特殊处理：标准化响应格式
+    if (useMock && responseData) {
+      // 如果在 Mock 环境下，且响应有 data 字段，则认为请求成功
+      // 将 code 标准化为 200，方便业务代码判断
+      if (responseData.data !== undefined) {
+        if (__DEV__) {
+          console.log('🔧 Mock 环境：检测到 data 字段，标准化 code 为 200');
+          console.log('   原始 code:', responseData.code);
+        }
+        
+        // 创建标准化的响应对象
+        return {
+          ...responseData,
+          code: 200,  // 标准化为 200
+          _originalCode: responseData.code,  // 保留原始 code 供调试
+          _isMockResponse: true,  // 标记为 Mock 响应
+        };
+      }
+    }
+    
+    return responseData;
   },
   async (error) => {
     const originalRequest = error.config;

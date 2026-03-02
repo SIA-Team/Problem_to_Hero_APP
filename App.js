@@ -16,6 +16,7 @@ import DebugToken from './src/utils/debugToken';
 import UserCacheService from './src/services/UserCacheService';
 import ToastContainer from './src/components/ToastContainer';
 import { setToastRef, showToast } from './src/utils/toast';
+import LocalMockService from './src/services/LocalMockService';
 
 import HomeScreen from './src/screens/HomeScreen';
 import SearchScreen from './src/screens/SearchScreen';
@@ -55,6 +56,7 @@ import SuperLikePurchaseScreen from './src/screens/SuperLikePurchaseScreen';
 import SuperLikeHistoryScreen from './src/screens/SuperLikeHistoryScreen';
 import ContributorsScreen from './src/screens/ContributorsScreen';
 import PublicProfileScreen from './src/screens/PublicProfileScreen';
+import NetworkTestScreen from './src/screens/NetworkTestScreen';
 import DeviceInfoScreen from './src/screens/DeviceInfoScreen';
 import ChangePasswordScreen from './src/screens/ChangePasswordScreen';
 import ConnectionStatusScreen from './src/screens/ConnectionStatusScreen';
@@ -495,6 +497,11 @@ export default function App() {
         console.log('⚙️  环境:', __DEV__ ? '开发环境' : '生产环境');
         console.log('');
         
+        // 初始化本地 Mock 服务（Mock 环境）
+        if (__DEV__) {
+          await LocalMockService.initialize();
+        }
+        
         // 初始化超级赞积分系统（异步，不阻塞）
         superLikeCreditService.initialize().catch(error => {
           console.error('⚠️ Service initialization failed:', error);
@@ -504,61 +511,73 @@ export default function App() {
         const savedToken = await AsyncStorage.getItem('authToken');
         
         if (savedToken) {
-          console.log('✅ 检测到已保存的 token，自动登录');
+          console.log('✅ 检测到已保存的 token，尝试 token 自动登录');
           console.log('   Token (前20字符):', savedToken.substring(0, 20) + '...');
           
-          // 调试：检查 token 状态（仅开发环境）
-          if (__DEV__) {
-            DebugToken.checkTokenStatus().catch(e => console.error('Debug check failed:', e));
-            DebugToken.testTokenInRequest().catch(e => console.error('Debug test failed:', e));
+          try {
+            // 尝试使用 token 自动登录
+            const tokenLoginResponse = await authApi.tokenLogin();
+            
+            if (tokenLoginResponse.code === 200) {
+              console.log('✅ Token 自动登录成功');
+              
+              // 立即设置登录状态，让用户进入应用
+              setIsLoggedIn(true);
+              setIsInitializing(false);
+              
+              // 后台加载用户信息（不阻塞UI）
+              console.log('\n👤 后台加载用户信息...');
+              UserCacheService.loadUserProfileWithCache(
+                (cachedProfile) => {
+                  console.log('⚡ 从缓存加载用户信息:', cachedProfile?.nickName || 'Unknown');
+                },
+                (freshProfile) => {
+                  console.log('🔄 用户信息已更新:', freshProfile?.nickName || 'Unknown');
+                }
+              ).catch(error => {
+                console.error('⚠️ User profile loading failed:', error);
+              });
+              
+              return; // 成功登录，退出初始化流程
+            } else {
+              console.log('⚠️ Token 自动登录失败:', tokenLoginResponse.msg);
+              console.log('   Token 可能已过期，尝试设备指纹重新注册...');
+              
+              // Token 过期，清除旧数据
+              await AsyncStorage.multiRemove(['authToken', 'refreshToken', 'userInfo']);
+            }
+          } catch (tokenLoginError) {
+            console.error('❌ Token 自动登录异常:', tokenLoginError.message);
+            console.log('   尝试设备指纹重新注册...');
+            
+            // Token 登录失败，清除旧数据
+            await AsyncStorage.multiRemove(['authToken', 'refreshToken', 'userInfo']);
           }
           
-          // 立即设置登录状态，让用户进入应用
-          setIsLoggedIn(true);
-          setIsInitializing(false);
+          // Token 登录失败，尝试使用设备指纹重新注册
+          const savedFingerprint = await AsyncStorage.getItem('deviceFingerprint');
           
-          // 后台加载用户信息（不阻塞UI）
-          console.log('\n👤 后台加载用户信息...');
-          UserCacheService.loadUserProfileWithCache(
-            (cachedProfile) => {
-              console.log('⚡ 从缓存加载用户信息:', cachedProfile?.nickName || 'Unknown');
-            },
-            (freshProfile) => {
-              console.log('🔄 用户信息已更新:', freshProfile?.nickName || 'Unknown');
+          if (savedFingerprint) {
+            console.log('🔄 使用已保存的设备指纹重新注册...');
+            const result = await autoRegisterWithRetry(savedFingerprint);
+            
+            if (result.success) {
+              console.log('✅ 自动重新注册成功！');
+              setIsLoggedIn(true);
+              setIsInitializing(false);
+              showToast('登录已更新', 'success');
+            } else {
+              console.error('❌ 自动重新注册失败');
+              setIsLoggedIn(false);
+              setIsInitializing(false);
+              showToast('登录状态已过期，请重新登录', 'error');
             }
-          ).catch(async (userError) => {
-            console.error('⚠️ User profile loading failed:', userError);
-            // 如果是登录状态过期或 401 错误，尝试重新注册
-            const errorMsg = userError.message || '';
-            if (errorMsg.includes('登录状态已过期') || errorMsg.includes('未授权') || userError.status === 401) {
-              console.log('🚪 检测到登录状态过期，尝试重新注册...');
-              
-              // 清除过期数据
-              await AsyncStorage.multiRemove(['authToken', 'refreshToken', 'userInfo']);
-              
-              // 尝试使用设备指纹重新注册（开发和生产环境都执行）
-              const savedFingerprint = await AsyncStorage.getItem('deviceFingerprint');
-              
-              if (savedFingerprint) {
-                console.log('🔄 使用已保存的设备指纹重新注册...');
-                const result = await autoRegisterWithRetry(savedFingerprint);
-                
-                if (result.success) {
-                  console.log('✅ 自动重新注册成功！');
-                  setIsLoggedIn(true);
-                  showToast('登录已更新', 'success');
-                } else {
-                  console.error('❌ 自动重新注册失败');
-                  setIsLoggedIn(false);
-                  showToast('登录状态已过期，请重新登录', 'error');
-                }
-              } else {
-                // 没有设备指纹，退出登录
-                setIsLoggedIn(false);
-                showToast('登录状态已过期，请重新登录', 'error');
-              }
-            }
-          });
+          } else {
+            // 没有设备指纹，退出登录
+            setIsLoggedIn(false);
+            setIsInitializing(false);
+            showToast('登录状态已过期，请重新登录', 'error');
+          }
         } else {
           console.log('📱 未检测到 token，检查设备指纹...');
           
@@ -624,9 +643,22 @@ export default function App() {
               
               setIsInitializing(false);
               
+              // 根据错误类型提供更详细的提示
+              let errorMessage = '首次启动初始化失败';
+              
+              if (registerError.message.includes('Network') || registerError.message.includes('network')) {
+                errorMessage = '网络连接失败，请检查网络后点击"使用设备登录"重试';
+              } else if (registerError.message.includes('timeout') || registerError.message.includes('超时')) {
+                errorMessage = '连接超时，请检查网络或稍后重试';
+              } else if (registerError.response?.status === 500) {
+                errorMessage = '服务器错误，请稍后重试';
+              } else if (registerError.response?.status === 403) {
+                errorMessage = '访问被拒绝，请联系管理员';
+              }
+              
               // 网络错误或其他异常，显示登录页面
               setTimeout(() => {
-                showToast('网络连接失败，请检查网络后点击"使用设备登录"', 'error');
+                showToast(errorMessage, 'error');
               }, 500);
             }
           }
@@ -679,9 +711,16 @@ export default function App() {
   if (!isLoggedIn) {
     return (
       <SafeAreaProvider>
-        <StatusBar style="dark" />
-        <LoginScreen onLogin={handleLogin} />
-        <ToastContainer ref={toastRef} />
+        <NavigationContainer>
+          <StatusBar style="dark" />
+          <Stack.Navigator screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="Login">
+              {(props) => <LoginScreen {...props} onLogin={handleLogin} />}
+            </Stack.Screen>
+            <Stack.Screen name="NetworkTest" component={NetworkTestScreen} />
+          </Stack.Navigator>
+          <ToastContainer ref={toastRef} />
+        </NavigationContainer>
       </SafeAreaProvider>
     );
   }
@@ -726,6 +765,7 @@ export default function App() {
         <Stack.Screen name="Contributors" component={ContributorsScreen} />
         <Stack.Screen name="PublicProfile" component={PublicProfileScreen} />
         <Stack.Screen name="DeviceInfo" component={DeviceInfoScreen} />
+        <Stack.Screen name="NetworkTest" component={NetworkTestScreen} />
         <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
         <Stack.Screen name="ConnectionStatus" component={ConnectionStatusScreen} />
         </Stack.Navigator>

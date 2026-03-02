@@ -1,6 +1,8 @@
 import apiClient from './apiClient';
 import { API_ENDPOINTS } from '../../config/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { shouldUseMock } from '../../config/env';
+import LocalMockService from '../LocalMockService';
 
 /**
  * 认证相关 API
@@ -16,19 +18,25 @@ const authApi = {
   login: async (credentials) => {
     const response = await apiClient.post(API_ENDPOINTS.AUTH.LOGIN, credentials);
     
+    // Mock 环境：使用本地数据保持一致性
+    const useMock = shouldUseMock(API_ENDPOINTS.AUTH.LOGIN);
+    const processedResponse = useMock 
+      ? await LocalMockService.handleLoginResponse(credentials.username, response)
+      : response;
+    
     // 保存 token 和用户信息
-    if (response.code === 200 && response.data) {
-      if (response.data.token) {
-        await AsyncStorage.setItem('authToken', response.data.token);
+    if (processedResponse.code === 200 && processedResponse.data) {
+      if (processedResponse.data.token) {
+        await AsyncStorage.setItem('authToken', processedResponse.data.token);
         console.log('✅ Token 已保存');
       }
-      if (response.data.userBaseInfo) {
-        await AsyncStorage.setItem('userInfo', JSON.stringify(response.data.userBaseInfo));
-        console.log('✅ 用户信息已保存:', response.data.userBaseInfo.username);
+      if (processedResponse.data.userBaseInfo) {
+        await AsyncStorage.setItem('userInfo', JSON.stringify(processedResponse.data.userBaseInfo));
+        console.log('✅ 用户信息已保存:', processedResponse.data.userBaseInfo.username);
       }
     }
     
-    return response;
+    return processedResponse;
   },
 
   /**
@@ -57,6 +65,100 @@ const authApi = {
   },
 
   /**
+   * Token 自动登录
+   * 使用已有的 Token 自动登录，Token 有效则刷新有效期并返回用户信息
+   * @returns {Promise<Object>} 用户信息和新 token
+   */
+  tokenLogin: async () => {
+    console.log('\n═══════════════════════════════════════════════════════════════');
+    console.log('🔐 Token 自动登录');
+    console.log('═══════════════════════════════════════════════════════════════');
+    
+    try {
+      // 获取本地保存的 token
+      const savedToken = await AsyncStorage.getItem('authToken');
+      
+      if (!savedToken) {
+        console.log('❌ 未找到本地 Token');
+        console.log('═══════════════════════════════════════════════════════════════\n');
+        return { code: 401, msg: '未找到 Token' };
+      }
+      
+      console.log('✅ 找到本地 Token:', savedToken.substring(0, 30) + '...');
+      console.log('📡 请求接口:', API_ENDPOINTS.AUTH.TOKEN_LOGIN);
+      console.log('⏰ 请求时间:', new Date().toLocaleString('zh-CN'));
+      console.log('───────────────────────────────────────────────────────────────');
+      
+      // 调用 token 登录接口（token 会自动在 apiClient 的请求拦截器中添加到 header）
+      const response = await apiClient.post(API_ENDPOINTS.AUTH.TOKEN_LOGIN);
+      
+      // Mock 环境：使用本地数据保持一致性
+      const useMock = shouldUseMock(API_ENDPOINTS.AUTH.TOKEN_LOGIN);
+      const processedResponse = useMock 
+        ? await LocalMockService.handleTokenLoginResponse(response)
+        : response;
+      
+      console.log('\n📥 后端响应数据:');
+      console.log('═══════════════════════════════════════════════════════════════');
+      console.log(JSON.stringify(processedResponse, null, 2));
+      console.log('═══════════════════════════════════════════════════════════════');
+      
+      console.log('\n📊 响应数据解析:');
+      console.log('   响应码 (code):', processedResponse.code);
+      console.log('   响应消息 (msg):', processedResponse.msg);
+      console.log('   是否成功:', processedResponse.code === 200 ? '✅ 是' : '❌ 否');
+      
+      if (processedResponse.code === 200 && processedResponse.data) {
+        console.log('\n📦 data 字段内容:');
+        console.log('   新 Token:', processedResponse.data.token ? `${processedResponse.data.token.substring(0, 30)}...` : '❌ 无');
+        console.log('   Token 有效期 (expiresIn):', processedResponse.data.expiresIn, '小时');
+        console.log('   用户基本信息 (userBaseInfo):', processedResponse.data.userBaseInfo ? '✅ 有' : '❌ 无');
+        
+        if (processedResponse.data.userBaseInfo) {
+          console.log('\n👤 用户信息详情:');
+          console.log('   用户ID:', processedResponse.data.userBaseInfo.userId);
+          console.log('   用户名:', processedResponse.data.userBaseInfo.username);
+          console.log('   昵称:', processedResponse.data.userBaseInfo.nickName);
+          console.log('   头像:', processedResponse.data.userBaseInfo.avatar || '无');
+        }
+        
+        // 保存新的 token 和用户信息
+        if (processedResponse.data.token) {
+          await AsyncStorage.setItem('authToken', processedResponse.data.token);
+          console.log('\n💾 新 Token 已保存到 AsyncStorage');
+        }
+        
+        if (processedResponse.data.userBaseInfo) {
+          await AsyncStorage.setItem('userInfo', JSON.stringify(processedResponse.data.userBaseInfo));
+          console.log('💾 用户信息已更新到 AsyncStorage');
+        }
+        
+        console.log('\n✅ Token 自动登录成功');
+      } else {
+        console.log('\n❌ Token 自动登录失败:', processedResponse.msg);
+      }
+      
+      console.log('═══════════════════════════════════════════════════════════════\n');
+      
+      return processedResponse;
+    } catch (error) {
+      console.log('\n❌ Token 自动登录失败');
+      console.log('═══════════════════════════════════════════════════════════════');
+      console.log('错误类型:', error.constructor.name);
+      console.log('错误消息:', error.message);
+      
+      if (error.response) {
+        console.log('\n📥 错误响应数据:');
+        console.log('   状态码:', error.response.status);
+        console.log('   响应数据:', JSON.stringify(error.response.data, null, 2));
+      }
+      
+      console.log('═══════════════════════════════════════════════════════════════\n');
+      throw error;
+    }
+  },
+
+  /**
    * 设备指纹注册（自动注册/登录）
    * @param {string} fingerprint - 设备指纹
    * @returns {Promise<Object>} 用户信息和 token
@@ -78,43 +180,49 @@ const authApi = {
         fingerprint: fingerprint,
       });
       
+      // Mock 环境：使用本地数据保持一致性
+      const useMock = shouldUseMock(API_ENDPOINTS.AUTH.REGISTER);
+      const processedResponse = useMock 
+        ? await LocalMockService.handleRegisterResponse(response)
+        : response;
+      
       console.log('\n📥 后端响应数据:');
       console.log('═══════════════════════════════════════════════════════════════');
-      console.log(JSON.stringify(response, null, 2));
+      console.log(JSON.stringify(processedResponse, null, 2));
       console.log('═══════════════════════════════════════════════════════════════');
       
       console.log('\n📊 响应数据解析:');
-      console.log('   响应码 (code):', response.code);
-      console.log('   响应消息 (msg):', response.msg);
-      console.log('   是否成功:', response.code === 200 ? '✅ 是' : '❌ 否');
+      console.log('   响应码 (code):', processedResponse.code);
+      console.log('   响应消息 (msg):', processedResponse.msg);
+      console.log('   是否成功:', processedResponse.code === 200 ? '✅ 是' : '❌ 否');
       
-      if (response.data) {
+      if (processedResponse.data) {
         console.log('\n📦 data 字段内容:');
-        console.log('   Token:', response.data.token ? `${response.data.token.substring(0, 30)}...` : '❌ 无');
-        console.log('   用户基本信息 (userBaseInfo):', response.data.userBaseInfo ? '✅ 有' : '❌ 无');
+        console.log('   Token:', processedResponse.data.token ? `${processedResponse.data.token.substring(0, 30)}...` : '❌ 无');
+        console.log('   用户基本信息 (userBaseInfo):', processedResponse.data.userBaseInfo ? '✅ 有' : '❌ 无');
         
-        if (response.data.userBaseInfo) {
+        if (processedResponse.data.userBaseInfo) {
           console.log('\n👤 用户信息详情:');
-          console.log('   用户ID:', response.data.userBaseInfo.userId);
-          console.log('   用户名:', response.data.userBaseInfo.username);
-          console.log('   昵称:', response.data.userBaseInfo.nickName);
-          console.log('   头像:', response.data.userBaseInfo.avatar || '无');
-          console.log('   其他字段:', Object.keys(response.data.userBaseInfo).join(', '));
+          console.log('   用户ID:', processedResponse.data.userBaseInfo.userId);
+          console.log('   用户名:', processedResponse.data.userBaseInfo.username);
+          console.log('   昵称:', processedResponse.data.userBaseInfo.nickName);
+          console.log('   头像:', processedResponse.data.userBaseInfo.avatar || '无');
+          console.log('   其他字段:', Object.keys(processedResponse.data.userBaseInfo).join(', '));
         }
       } else {
         console.log('\n⚠️ 警告: response.data 为空');
       }
       
       // 保存 token 和用户信息
-      if (response.data && response.data.token) {
-        await AsyncStorage.setItem('authToken', response.data.token);
+      if (processedResponse.data && processedResponse.data.token) {
+        await AsyncStorage.setItem('authToken', processedResponse.data.token);
         console.log('\n💾 Token 已保存到 AsyncStorage');
       } else {
         console.log('\n⚠️ 警告: 未找到 Token，无法保存');
       }
       
-      if (response.data && response.data.userBaseInfo) {
-        await AsyncStorage.setItem('userInfo', JSON.stringify(response.data.userBaseInfo));
+      if (processedResponse.data && processedResponse.data.userBaseInfo) {
+        await AsyncStorage.setItem('userInfo', JSON.stringify(processedResponse.data.userBaseInfo));
         console.log('💾 用户信息已保存到 AsyncStorage');
       } else {
         console.log('⚠️ 警告: 未找到用户信息，无法保存');
@@ -127,7 +235,7 @@ const authApi = {
       console.log('\n✅ 设备指纹注册/登录流程完成');
       console.log('═══════════════════════════════════════════════════════════════\n');
       
-      return response;
+      return processedResponse;
     } catch (error) {
       console.log('\n❌ 设备指纹注册/登录失败');
       console.log('═══════════════════════════════════════════════════════════════');

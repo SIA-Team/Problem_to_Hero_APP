@@ -1,445 +1,576 @@
 # iOS 版本兼容性详细说明
 
-## ⚠️ 重要更正
+## 📱 iOS 版本支持范围
 
-你问得非常对！iOS 不同版本确实有不同的限制。让我详细说明：
+### 当前配置
 
----
+根据 React Native 和 Expo SDK 的要求：
 
-## 📱 iOS 版本历史与隐私变化
-
-### iOS 5.0（2011年）- 重大隐私变更
-- ❌ **禁止访问 UDID**（设备唯一标识符）
-- ✅ 引入 **IDFV**（Identifier For Vendor）
-
-### iOS 6.0（2012年）
-- ✅ 引入 **IDFA**（广告标识符）
-- ⚠️ 用户可以在设置中重置 IDFA
-
-### iOS 10.0（2016年）
-- ⚠️ 加强隐私保护
-- ✅ IDFV 仍然可用
-
-### iOS 14.0（2020年）- ATT 框架
-- ⚠️ **IDFA 需要用户授权**（App Tracking Transparency）
-- ✅ IDFV 仍然可用（无需授权）
-
-### iOS 14.5+（2021年）
-- ⚠️ **强制要求 ATT 弹窗**才能获取 IDFA
-- ✅ IDFV 仍然可用
-
-### iOS 15.0+（2021年）
-- ⚠️ 更严格的隐私保护
-- ✅ IDFV 仍然可用
-
-### iOS 16.0+（2022年）
-- ⚠️ 继续加强隐私
-- ✅ IDFV 仍然可用
-
-### iOS 17.0+（2023年）
-- ⚠️ 最新隐私政策
-- ✅ IDFV 仍然可用
-
----
-
-## ✅ 各 iOS 版本可获取的信息对比
-
-### 设备标识符
-
-| 标识符类型 | iOS 5-13 | iOS 14+ | 需要权限 | 说明 |
-|-----------|----------|---------|---------|------|
-| **UDID** | ❌ | ❌ | - | iOS 5+ 已禁止 |
-| **IDFV** | ✅ | ✅ | ❌ 否 | **所有版本可用** |
-| **IDFA** | ✅ | ⚠️ | ✅ 是 | iOS 14+ 需要 ATT 授权 |
-
-### 设备信息
-
-| 信息类型 | iOS 5-13 | iOS 14+ | iOS 15+ | iOS 16+ | iOS 17+ | 需要权限 |
-|---------|----------|---------|---------|---------|---------|---------|
-| **设备型号** | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ 否 |
-| **设备名称** | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ 否 |
-| **系统版本** | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ 否 |
-| **屏幕尺寸** | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ 否 |
-| **系统语言** | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ 否 |
-| **时区** | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ 否 |
-| **国家/地区** | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ 否 |
-| **网络状态** | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ 否 |
-| **IP 地址** | ✅ | ✅ | ⚠️ | ⚠️ | ⚠️ | ❌ 否 |
-
----
-
-## ⚠️ 需要特别注意的变化
-
-### 1. IP 地址获取（iOS 15+）
-
-**iOS 15 引入了 iCloud Private Relay**
-
-```javascript
-// iOS 14 及以下
-const ipAddress = await Network.getIpAddressAsync();
-// 返回: "192.168.1.100" ✅
-
-// iOS 15+ 如果用户开启了 Private Relay
-const ipAddress = await Network.getIpAddressAsync();
-// 可能返回: Apple 的代理 IP ⚠️
-// 或者返回: null ❌
-```
-
-**影响：**
-- 如果用户开启了 iCloud Private Relay，IP 地址会被隐藏
-- 大约 5-10% 的 iOS 用户会开启此功能
-- 你仍然可以获取 IP，但可能不是真实 IP
-
-### 2. 设备名称（iOS 16+）
-
-**iOS 16 开始，设备名称可能被限制**
-
-```javascript
-// iOS 15 及以下
-Device.deviceName
-// 返回: "张三的 iPhone" ✅
-
-// iOS 16+ 某些情况
-Device.deviceName
-// 可能返回: "iPhone" ⚠️（通用名称）
-// 或返回: 用户设置的名称 ✅
-```
-
-**影响：**
-- 大部分情况下仍然可以获取
-- 但可能不是用户自定义的名称
-- 不影响设备识别（IDFV 仍然可用）
-
-### 3. MAC 地址（iOS 14+）
-
-**iOS 14 引入了 MAC 地址随机化**
-
-```javascript
-// iOS 13 及以下
-// 可以获取真实 MAC 地址 ✅
-
-// iOS 14+
-// MAC 地址会随机化 ⚠️
-// 每次连接 WiFi 可能不同
-```
-
-**影响：**
-- 不能再用 MAC 地址识别设备
-- 但我们本来就不推荐使用 MAC 地址
-
----
-
-## ✅ 100% 保证可用的信息（所有 iOS 版本）
-
-### 核心信息（iOS 5 - iOS 17+）
-
-| 信息类型 | API | 所有版本可用 | 说明 |
-|---------|-----|------------|------|
-| **IDFV** | `identifierForVendor` | ✅ | 同一开发者应用共享 |
-| **设备型号** | `UIDevice.model` | ✅ | "iPhone", "iPad" |
-| **系统名称** | `UIDevice.systemName` | ✅ | "iOS" |
-| **系统版本** | `UIDevice.systemVersion` | ✅ | "17.2" |
-| **屏幕尺寸** | `UIScreen.bounds` | ✅ | 390x844 |
-| **屏幕缩放** | `UIScreen.scale` | ✅ | 3.0 |
-| **系统语言** | `NSLocale.preferredLanguages` | ✅ | ["zh-Hans-CN"] |
-| **时区** | `NSTimeZone.local` | ✅ | "Asia/Shanghai" |
-| **国家代码** | `NSLocale.current.regionCode` | ✅ | "CN" |
-| **应用版本** | `CFBundleShortVersionString` | ✅ | "1.0.0" |
-| **网络状态** | `Network.getNetworkStateAsync()` | ✅ | WiFi/蜂窝 |
-
----
-
-## 🔍 Expo SDK 的兼容性
-
-### Expo Device API
-
-```javascript
-import * as Device from 'expo-device';
-
-// ✅ 所有 iOS 版本都支持
-Device.brand              // "Apple"
-Device.manufacturer       // "Apple"
-Device.modelName          // "iPhone 14 Pro"
-Device.osName            // "iOS"
-Device.osVersion         // "17.2"
-Device.deviceType        // 1 (手机)
-```
-
-**支持的 iOS 版本：**
-- ✅ iOS 13.0+（Expo SDK 54 最低要求）
-- ✅ iOS 14.0+
-- ✅ iOS 15.0+
-- ✅ iOS 16.0+
-- ✅ iOS 17.0+
-
-### Expo Application API
-
-```javascript
-import * as Application from 'expo-application';
-
-// ✅ 所有 iOS 版本都支持
-await Application.getIosIdForVendorAsync()  // IDFV
-Application.nativeApplicationVersion        // "1.0.0"
-Application.nativeBuildVersion             // "1"
-Application.applicationName                // "QA App"
-Application.applicationId                  // "com.example.app"
-```
-
-**支持的 iOS 版本：**
-- ✅ iOS 13.0+
-- ✅ iOS 14.0+
-- ✅ iOS 15.0+
-- ✅ iOS 16.0+
-- ✅ iOS 17.0+
-
-### Expo Localization API
-
-```javascript
-import * as Localization from 'expo-localization';
-
-// ✅ 所有 iOS 版本都支持
-Localization.locale      // "zh-CN"
-Localization.timezone    // "Asia/Shanghai"
-Localization.region      // "CN"
-Localization.currency    // "CNY"
-```
-
-**支持的 iOS 版本：**
-- ✅ iOS 13.0+（所有版本）
-
-### Expo Network API
-
-```javascript
-import * as Network from 'expo-network';
-
-// ✅ 所有 iOS 版本都支持
-await Network.getNetworkStateAsync()  // 网络状态
-await Network.getIpAddressAsync()     // IP 地址（iOS 15+ 可能受限）
-```
-
-**支持的 iOS 版本：**
-- ✅ iOS 13.0+
-- ⚠️ iOS 15+ IP 地址可能被 Private Relay 隐藏
-
----
-
-## 📊 实际测试数据
-
-### 测试环境
-
-| 设备 | iOS 版本 | IDFV | 设备信息 | 语言/时区 | 网络状态 |
-|-----|---------|------|---------|----------|---------|
-| iPhone 8 | iOS 13.7 | ✅ | ✅ | ✅ | ✅ |
-| iPhone X | iOS 14.8 | ✅ | ✅ | ✅ | ✅ |
-| iPhone 11 | iOS 15.7 | ✅ | ✅ | ✅ | ✅ |
-| iPhone 12 | iOS 16.6 | ✅ | ✅ | ✅ | ✅ |
-| iPhone 13 | iOS 17.2 | ✅ | ✅ | ✅ | ✅ |
-| iPhone 14 Pro | iOS 17.3 | ✅ | ✅ | ✅ | ✅ |
-
-**结论：所有测试设备都能成功获取核心信息**
-
----
-
-## ⚠️ 潜在问题和解决方案
-
-### 问题 1：IDFV 可能为 nil
-
-**情况：**
-- 用户首次安装应用
-- 设备刚刚重置
-- 某些极端情况
-
-**解决方案：**
-```javascript
-let deviceId;
-try {
-  deviceId = await Application.getIosIdForVendorAsync();
-  if (!deviceId) {
-    // 生成备用 ID
-    deviceId = `ios_fallback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    await AsyncStorage.setItem('fallbackDeviceId', deviceId);
-  }
-} catch (error) {
-  // 使用本地存储的备用 ID
-  deviceId = await AsyncStorage.getItem('fallbackDeviceId');
-  if (!deviceId) {
-    deviceId = `ios_error_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    await AsyncStorage.setItem('fallbackDeviceId', deviceId);
+```json
+{
+  "ios": {
+    "deploymentTarget": "13.4"  // 最低支持 iOS 13.4
   }
 }
 ```
 
-### 问题 2：IP 地址在 iOS 15+ 可能被隐藏
+### 支持的 iOS 版本
 
-**解决方案：**
-```javascript
-let ipAddress;
-try {
-  ipAddress = await Network.getIpAddressAsync();
-  if (!ipAddress || ipAddress === '0.0.0.0') {
-    ipAddress = 'hidden_by_private_relay';
-  }
-} catch (error) {
-  ipAddress = 'unavailable';
-}
+| iOS 版本 | 发布年份 | 支持状态 | 市场占有率 | 说明 |
+|---------|---------|---------|-----------|------|
+| iOS 13.4+ | 2020 | ✅ 最低支持 | ~2% | 最低版本 |
+| iOS 14.x | 2020 | ✅ 完全支持 | ~5% | |
+| iOS 15.x | 2021 | ✅ 完全支持 | ~10% | |
+| iOS 16.x | 2022 | ✅ 完全支持 | ~25% | |
+| iOS 17.x | 2023 | ✅ 完全支持 | ~45% | |
+| iOS 18.x | 2024 | ✅ 完全支持 | ~10% | 最新版本 |
 
-// 不要依赖 IP 地址作为唯一标识
-// 使用 IDFV 作为主要标识
-```
+**覆盖率**：约 97% 的 iOS 设备
 
-### 问题 3：设备名称可能是通用名称
+### 支持的设备
 
-**解决方案：**
-```javascript
-const deviceName = Device.deviceName || Device.modelName || 'Unknown Device';
-// 不要依赖设备名称作为重要信息
-// 仅用于显示，不用于识别
-```
+- ✅ iPhone 6s 及以上（2015 年及以后）
+- ✅ iPad Air 2 及以上（2014 年及以后）
+- ✅ iPad mini 4 及以上（2015 年及以后）
+- ✅ iPad Pro 所有型号
+- ✅ iPod touch（第 7 代）
 
 ---
 
-## ✅ 最终推荐方案（兼容所有 iOS 版本）
+## 🔒 iOS 特定限制和配置
 
-### 核心信息（100% 可靠）
+### 1. App Transport Security (ATS) ⚠️ 重要
 
-```javascript
-import * as Device from 'expo-device';
-import * as Application from 'expo-application';
-import * as Localization from 'expo-localization';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+**问题**：iOS 9+ 默认只允许 HTTPS 连接，禁止 HTTP
 
-async function getReliableDeviceInfo() {
-  // 1. 获取 IDFV（最可靠的标识符）
-  let idfv;
-  try {
-    idfv = await Application.getIosIdForVendorAsync();
-    if (!idfv) {
-      // 备用方案：使用本地生成的 ID
-      idfv = await AsyncStorage.getItem('fallbackDeviceId');
-      if (!idfv) {
-        idfv = `ios_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        await AsyncStorage.setItem('fallbackDeviceId', idfv);
-      }
+**影响**：你的服务器使用 HTTP (`http://123.144.100.10:30560`)
+
+**已修复**：
+```json
+"NSAppTransportSecurity": {
+  "NSAllowsArbitraryLoads": true
+}
+```
+
+**状态**：✅ 已配置
+
+**说明**：
+- `NSAllowsArbitraryLoads: true` 允许所有 HTTP 连接
+- 这是临时方案，生产环境应使用 HTTPS
+- App Store 审核可能要求说明原因
+
+**更安全的配置**（推荐）：
+```json
+"NSAppTransportSecurity": {
+  "NSExceptionDomains": {
+    "123.144.100.10": {
+      "NSExceptionAllowsInsecureHTTPLoads": true,
+      "NSIncludesSubdomains": false
     }
-  } catch (error) {
-    idfv = 'unavailable';
   }
-
-  // 2. 获取设备信息（100% 可靠）
-  const deviceInfo = {
-    // 设备标识（最重要）
-    idfv: idfv,
-    
-    // 设备信息（100% 可用）
-    brand: Device.brand || 'Apple',
-    manufacturer: Device.manufacturer || 'Apple',
-    modelName: Device.modelName || 'Unknown',
-    osName: Device.osName || 'iOS',
-    osVersion: Device.osVersion || 'Unknown',
-    
-    // 应用信息（100% 可用）
-    appVersion: Application.nativeApplicationVersion || '1.0.0',
-    buildNumber: Application.nativeBuildVersion || '1',
-    
-    // 区域信息（100% 可用）
-    locale: Localization.locale || 'en-US',
-    timezone: Localization.timezone || 'UTC',
-    region: Localization.region || 'US',
-    currency: Localization.currency || 'USD',
-  };
-
-  return deviceInfo;
 }
 ```
 
-### 可选信息（可能受限）
+---
+
+### 2. 权限说明（Privacy Descriptions）
+
+**要求**：iOS 要求为每个权限提供使用说明
+
+**已配置的权限**：
+
+```json
+"infoPlist": {
+  "NSPhotoLibraryUsageDescription": "允许访问您的相册以更换头像",
+  "NSCameraUsageDescription": "允许使用相机拍摄头像",
+  "NSPhotoLibraryAddUsageDescription": "允许保存照片到相册"
+}
+```
+
+**状态**：✅ 已配置
+
+**说明**：
+- 用户首次使用相关功能时会看到这些说明
+- 说明应该清晰、简洁、真实
+- App Store 审核会检查说明是否合理
+
+---
+
+### 3. 后台模式（Background Modes）
+
+**当前状态**：未配置后台模式
+
+**如果未来需要**：
+
+```json
+"ios": {
+  "backgroundModes": [
+    "audio",           // 后台音频
+    "location",        // 后台定位
+    "fetch",           // 后台获取
+    "remote-notification"  // 推送通知
+  ]
+}
+```
+
+**无需立即配置**
+
+---
+
+### 4. 状态栏配置
+
+**已配置**：
+```json
+"UIViewControllerBasedStatusBarAppearance": false
+```
+
+**效果**：允许全局控制状态栏样式
+
+**状态**：✅ 已配置
+
+---
+
+### 5. iPad 支持
+
+**已配置**：
+```json
+"supportsTablet": true
+```
+
+**效果**：应用支持 iPad，可以在 iPad 上运行
+
+**状态**：✅ 已配置
+
+---
+
+## 🚫 iOS 特定限制
+
+### 1. 不支持的设备
+
+- ❌ iPhone 6 及更早（iOS 12 及以下）
+- ❌ iPad Air（第 1 代）
+- ❌ iPad mini（第 1-3 代）
+- ❌ iPod touch（第 6 代及更早）
+
+**原因**：无法升级到 iOS 13.4
+
+### 2. 32 位设备
+
+- ❌ 所有 32 位设备不支持
+- iOS 11 开始只支持 64 位应用
+
+### 3. App Store 限制
+
+**HTTP 使用**：
+- ⚠️ 使用 `NSAllowsArbitraryLoads` 可能被审核拒绝
+- 需要在审核时说明使用 HTTP 的原因
+- 建议尽快升级到 HTTPS
+
+**隐私政策**：
+- 需要提供隐私政策链接
+- 说明数据收集和使用方式
+
+---
+
+## 📋 必需的权限配置
+
+### 相机和相册权限
+
+| 权限 Key | 说明 | 用途 | 状态 |
+|---------|------|------|------|
+| NSCameraUsageDescription | 相机使用说明 | 拍照上传头像 | ✅ 已配置 |
+| NSPhotoLibraryUsageDescription | 相册访问说明 | 选择图片 | ✅ 已配置 |
+| NSPhotoLibraryAddUsageDescription | 保存照片说明 | 保存图片 | ✅ 已配置 |
+
+### 未来可能需要的权限
+
+| 权限 Key | 说明 | 用途 | 状态 |
+|---------|------|------|------|
+| NSLocationWhenInUseUsageDescription | 使用时定位 | 位置服务 | ❌ 未配置 |
+| NSMicrophoneUsageDescription | 麦克风使用 | 录音功能 | ❌ 未配置 |
+| NSContactsUsageDescription | 通讯录访问 | 邀请好友 | ❌ 未配置 |
+| NSCalendarsUsageDescription | 日历访问 | 添加日程 | ❌ 未配置 |
+| NSFaceIDUsageDescription | Face ID 使用 | 生物识别 | ❌ 未配置 |
+
+---
+
+## 🔧 iOS 特殊配置
+
+### 1. HTTP 安全配置（已修复）
+
+**方案 1：允许所有 HTTP（当前配置）**
+
+```json
+"NSAppTransportSecurity": {
+  "NSAllowsArbitraryLoads": true
+}
+```
+
+**优点**：简单，所有 HTTP 都能访问
+**缺点**：不安全，App Store 可能拒绝
+
+---
+
+**方案 2：只允许特定域名（推荐）**
+
+```json
+"NSAppTransportSecurity": {
+  "NSExceptionDomains": {
+    "123.144.100.10": {
+      "NSExceptionAllowsInsecureHTTPLoads": true,
+      "NSIncludesSubdomains": false
+    }
+  }
+}
+```
+
+**优点**：更安全，只允许特定服务器
+**缺点**：需要列出所有 HTTP 域名
+
+---
+
+**方案 3：使用 HTTPS（最佳）**
+
+```json
+// 不需要任何配置
+```
+
+**优点**：
+- ✅ 最安全
+- ✅ 不需要特殊配置
+- ✅ App Store 审核无问题
+- ✅ 用户数据加密
+
+**缺点**：需要配置服务器 SSL 证书
+
+---
+
+### 2. 屏幕方向配置
+
+**当前配置**：
+```json
+"orientation": "portrait"
+```
+
+**效果**：只支持竖屏
+
+**如果需要支持横屏**：
+```json
+"orientation": "default"  // 支持所有方向
+```
+
+---
+
+### 3. 启动画面配置
+
+**当前配置**：
+```json
+"splash": {
+  "resizeMode": "contain",
+  "backgroundColor": "#ef4444"
+}
+```
+
+**效果**：红色背景的启动画面
+
+**状态**：✅ 已配置
+
+---
+
+## 🧪 iOS 测试建议
+
+### 必测设备
+
+1. **iPhone SE（第 2 代或第 3 代）** - 小屏幕
+2. **iPhone 14/15** - 标准屏幕
+3. **iPhone 14/15 Pro Max** - 大屏幕
+4. **iPad** - 平板适配
+
+### 必测版本
+
+1. **iOS 13.4** - 最低支持版本
+2. **iOS 16.x** - 主流版本
+3. **iOS 17.x** - 当前主流版本
+4. **iOS 18.x** - 最新版本
+
+### 测试场景
+
+#### 1. 首次安装
+- ✅ 自动注册功能
+- ✅ HTTP 连接（确认能访问服务器）
+- ✅ 设备指纹生成
+
+#### 2. 权限请求
+- ✅ 相机权限弹窗和说明
+- ✅ 相册权限弹窗和说明
+- ✅ 权限被拒绝后的处理
+
+#### 3. 网络功能
+- ✅ HTTP 请求（注册、登录）
+- ✅ 图片上传
+- ✅ 网络错误处理
+
+#### 4. UI 适配
+- ✅ 不同屏幕尺寸
+- ✅ 安全区域（刘海屏）
+- ✅ iPad 横屏/竖屏
+
+---
+
+## 🐛 iOS 常见问题
+
+### 问题 1: 无法连接服务器
+
+**症状**：首次安装显示登录页，网络错误
+
+**原因**：ATS 阻止 HTTP 连接
+
+**解决方案**：✅ 已添加 `NSAllowsArbitraryLoads: true`
+
+**状态**：已修复
+
+---
+
+### 问题 2: 权限弹窗不显示
+
+**症状**：点击相机/相册没有反应
+
+**原因**：缺少权限说明
+
+**解决方案**：✅ 已配置所有权限说明
+
+**状态**：已修复
+
+---
+
+### 问题 3: App Store 审核被拒
+
+**可能原因**：
+
+1. **使用 HTTP**
+   - 说明：需要在审核时说明为什么使用 HTTP
+   - 建议：升级到 HTTPS
+
+2. **权限说明不清晰**
+   - 说明：权限说明应该清晰、真实
+   - 当前：✅ 说明已清晰
+
+3. **缺少隐私政策**
+   - 说明：需要提供隐私政策链接
+   - 建议：在 App Store Connect 中添加
+
+---
+
+## 📊 iOS vs Android 对比
+
+| 特性 | iOS | Android | 说明 |
+|-----|-----|---------|------|
+| HTTP 限制 | ✅ 已配置 | ✅ 已配置 | 都需要特殊配置 |
+| 权限说明 | ✅ 已配置 | ✅ 自动处理 | iOS 更严格 |
+| 最低版本 | iOS 13.4 | Android 6.0 | iOS 更新 |
+| 覆盖率 | ~97% | ~96% | 相近 |
+| 审核 | 严格 | 宽松 | iOS 更严格 |
+
+---
+
+## 🚀 构建 iOS 应用
+
+### 使用 EAS Build
+
+```bash
+# 开发版本
+eas build --platform ios --profile development
+
+# 预览版本（TestFlight）
+eas build --platform ios --profile preview
+
+# 生产版本（App Store）
+eas build --platform ios --profile production
+```
+
+### 本地构建（需要 Mac）
+
+```bash
+# 生成 iOS 项目
+npx expo prebuild --platform ios
+
+# 使用 Xcode 打开
+open ios/qaapp.xcworkspace
+
+# 或使用命令行构建
+xcodebuild -workspace ios/qaapp.xcworkspace \
+  -scheme qaapp \
+  -configuration Release \
+  -archivePath build/qaapp.xcarchive \
+  archive
+```
+
+---
+
+## 📝 App Store 提交清单
+
+### 必需信息
+
+- [ ] 应用名称
+- [ ] 应用描述
+- [ ] 关键词
+- [ ] 应用图标（1024x1024）
+- [ ] 截图（不同设备尺寸）
+- [ ] 隐私政策链接
+- [ ] 支持 URL
+
+### 审核准备
+
+- [ ] 测试账号（如果需要登录）
+- [ ] 审核说明（如使用 HTTP 的原因）
+- [ ] 演示视频（可选）
+
+### 技术要求
+
+- [x] 支持 iOS 13.4+
+- [x] 支持 64 位
+- [x] 权限说明完整
+- [ ] 隐私政策（需要添加）
+- [ ] HTTPS（建议升级）
+
+---
+
+## 🔒 安全和隐私
+
+### 数据收集
+
+**当前收集的数据**：
+- 设备指纹（用于自动注册）
+- 用户名和密码
+- 用户头像
+- 用户发布的内容
+
+**需要在隐私政策中说明**：
+- 收集哪些数据
+- 如何使用数据
+- 是否分享给第三方
+- 如何保护数据安全
+
+### App Store 隐私标签
+
+需要在 App Store Connect 中填写：
+- 联系信息（用户名）
+- 照片或视频（头像）
+- 用户内容（问题、回答）
+- 标识符（设备指纹）
+
+---
+
+## 💡 iOS 特定优化建议
+
+### 1. 使用 Face ID / Touch ID
 
 ```javascript
-async function getOptionalInfo() {
-  // 网络信息（iOS 15+ 可能受限）
-  let networkInfo = { type: 'unknown', ipAddress: 'unavailable' };
-  try {
-    const networkState = await Network.getNetworkStateAsync();
-    const ipAddress = await Network.getIpAddressAsync();
-    networkInfo = {
-      type: networkState.type || 'unknown',
-      ipAddress: ipAddress || 'unavailable',
-      isPrivateRelayEnabled: !ipAddress || ipAddress === '0.0.0.0',
-    };
-  } catch (error) {
-    console.log('网络信息获取失败（不影响核心功能）:', error);
-  }
+import * as LocalAuthentication from 'expo-local-authentication';
 
-  // 设备名称（iOS 16+ 可能是通用名称）
-  let deviceName = 'Unknown';
-  try {
-    deviceName = Device.deviceName || Device.modelName || 'Unknown';
-  } catch (error) {
-    console.log('设备名称获取失败（不影响核心功能）:', error);
-  }
+// 检查是否支持
+const hasHardware = await LocalAuthentication.hasHardwareAsync();
+const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
-  return {
-    network: networkInfo,
-    deviceName: deviceName,
-  };
+// 认证
+const result = await LocalAuthentication.authenticateAsync({
+  promptMessage: '验证身份以登录',
+});
+```
+
+**需要添加权限**：
+```json
+"NSFaceIDUsageDescription": "使用 Face ID 快速登录"
+```
+
+---
+
+### 2. 支持 Dark Mode
+
+```javascript
+import { useColorScheme } from 'react-native';
+
+const colorScheme = useColorScheme();
+const isDark = colorScheme === 'dark';
+```
+
+**配置**：
+```json
+"userInterfaceStyle": "automatic"  // 支持深色模式
+```
+
+---
+
+### 3. 支持 iPad 多任务
+
+```json
+"ios": {
+  "requireFullScreen": false  // 允许分屏
 }
 ```
 
 ---
 
-## 📋 兼容性总结表
+## 📚 参考资料
 
-### 核心功能（所有 iOS 版本）
-
-| 功能 | iOS 13 | iOS 14 | iOS 15 | iOS 16 | iOS 17 | 可靠性 |
-|-----|--------|--------|--------|--------|--------|--------|
-| **IDFV** | ✅ | ✅ | ✅ | ✅ | ✅ | 99.9% |
-| **设备型号** | ✅ | ✅ | ✅ | ✅ | ✅ | 100% |
-| **系统版本** | ✅ | ✅ | ✅ | ✅ | ✅ | 100% |
-| **语言设置** | ✅ | ✅ | ✅ | ✅ | ✅ | 100% |
-| **时区** | ✅ | ✅ | ✅ | ✅ | ✅ | 100% |
-| **应用版本** | ✅ | ✅ | ✅ | ✅ | ✅ | 100% |
-| **网络状态** | ✅ | ✅ | ✅ | ✅ | ✅ | 100% |
-
-### 可选功能（可能受限）
-
-| 功能 | iOS 13 | iOS 14 | iOS 15 | iOS 16 | iOS 17 | 可靠性 |
-|-----|--------|--------|--------|--------|--------|--------|
-| **IP 地址** | ✅ | ✅ | ⚠️ | ⚠️ | ⚠️ | 90% |
-| **设备名称** | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | 95% |
-| **IDFA** | ✅ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | 20% |
+- [iOS 版本分布](https://developer.apple.com/support/app-store/)
+- [App Transport Security](https://developer.apple.com/documentation/security/preventing_insecure_network_connections)
+- [iOS 权限指南](https://developer.apple.com/documentation/uikit/protecting_the_user_s_privacy)
+- [App Store 审核指南](https://developer.apple.com/app-store/review/guidelines/)
 
 ---
 
-## ✅ 最终答案
+## ✅ iOS 配置检查清单
 
-### 可以 100% 保证获取的信息（所有 iOS 版本）：
+### 已完成
 
-1. ✅ **IDFV**（设备标识符）- iOS 5 至今
-2. ✅ **设备型号** - 所有版本
-3. ✅ **系统版本** - 所有版本
-4. ✅ **系统语言** - 所有版本
-5. ✅ **时区** - 所有版本
-6. ✅ **国家/地区** - 所有版本
-7. ✅ **货币** - 所有版本
-8. ✅ **应用版本** - 所有版本
-9. ✅ **网络状态**（WiFi/蜂窝）- 所有版本
+- [x] 最低版本设置（iOS 13.4）
+- [x] HTTP 安全配置（NSAppTransportSecurity）
+- [x] 相机权限说明
+- [x] 相册权限说明
+- [x] 状态栏配置
+- [x] iPad 支持
+- [x] Bundle Identifier
 
-### 可能受限的信息：
+### 待完成（可选）
 
-1. ⚠️ **IP 地址** - iOS 15+ 如果开启 Private Relay 会被隐藏（约 5-10% 用户）
-2. ⚠️ **设备名称** - iOS 16+ 可能返回通用名称（不影响识别）
-3. ❌ **IDFA** - iOS 14+ 需要用户授权（约 80% 用户拒绝）
-
-### 推荐策略：
-
-- ✅ 使用 **IDFV** 作为主要设备标识
-- ✅ 使用 **设备型号 + 系统版本** 作为辅助信息
-- ✅ 使用 **语言 + 时区** 进行本地化
-- ⚠️ **不要依赖** IP 地址或设备名称作为关键信息
+- [ ] 隐私政策链接
+- [ ] App Store 截图
+- [ ] 应用图标优化
+- [ ] 深色模式支持
+- [ ] Face ID 支持
 
 ---
 
-**文档版本：** 2.0（已更正）  
-**更新日期：** 2026-02-05  
-**测试覆盖：** iOS 13.0 - iOS 17.3
+## 💡 总结
+
+### 当前状态
+
+✅ **支持 iOS 13.4 - iOS 18**（覆盖 97% 设备）
+
+✅ **HTTP 安全配置已添加**
+
+✅ **所有必需权限已配置**
+
+✅ **iPad 支持已启用**
+
+### 唯一的问题
+
+⚠️ **使用 HTTP 而非 HTTPS**
+
+**影响**：
+- App Store 审核可能要求说明
+- 用户数据不加密
+- 不符合最佳实践
+
+**建议**：
+- 短期：在审核时说明原因
+- 长期：升级到 HTTPS
+
+### 可以构建了！
+
+iOS 配置已完成，可以使用 EAS Build 构建 iOS 应用了！
+
+```bash
+eas build --platform ios --profile production
+```

@@ -1,5 +1,7 @@
 import apiClient from './apiClient';
 import { API_ENDPOINTS } from '../../config/api';
+import { shouldUseMock } from '../../config/env';
+import LocalMockService from '../LocalMockService';
 
 /**
  * 用户相关 API
@@ -25,28 +27,34 @@ const userApi = {
       response = await apiClient.get(API_ENDPOINTS.USER.PROFILE_ME);
     }
     
+    // Mock 环境：使用本地数据保持一致性
+    const useMock = shouldUseMock(userId ? `${API_ENDPOINTS.USER.PROFILE}/${userId}` : API_ENDPOINTS.USER.PROFILE_ME);
+    const processedResponse = useMock 
+      ? await LocalMockService.handleGetProfileResponse(response)
+      : response;
+    
     console.log('\n📥 /app/user/profile/me 接口返回数据:');
     console.log('─────────────────────────────────────────────────────────────────');
-    console.log(JSON.stringify(response, null, 2));
+    console.log(JSON.stringify(processedResponse, null, 2));
     console.log('─────────────────────────────────────────────────────────────────');
     
-    if (response && response.data) {
+    if (processedResponse && processedResponse.data) {
       console.log('\n📊 用户数据字段详情:');
-      console.log('   userId:', response.data.userId);
-      console.log('   username:', response.data.username, '(用户名)');
-      console.log('   usernameLastModified:', response.data.usernameLastModified, '(用户名上次修改时间)');
-      console.log('   nickName:', response.data.nickName);
-      console.log('   email:', response.data.email);
-      console.log('   phonenumber:', response.data.phonenumber);
-      console.log('   avatar:', response.data.avatar);
-      console.log('   signature:', response.data.signature);
-      console.log('   profession:', response.data.profession);
-      console.log('   location:', response.data.location);
-      console.log('   sex:', response.data.sex);
-      console.log('   passwordChanged:', response.data.passwordChanged, '(是否修改过密码)');
+      console.log('   userId:', processedResponse.data.userId);
+      console.log('   username:', processedResponse.data.username, '(用户名)');
+      console.log('   usernameLastModified:', processedResponse.data.usernameLastModified, '(用户名上次修改时间)');
+      console.log('   nickName:', processedResponse.data.nickName);
+      console.log('   email:', processedResponse.data.email);
+      console.log('   phonenumber:', processedResponse.data.phonenumber);
+      console.log('   avatar:', processedResponse.data.avatar);
+      console.log('   signature:', processedResponse.data.signature);
+      console.log('   profession:', processedResponse.data.profession);
+      console.log('   location:', processedResponse.data.location);
+      console.log('   sex:', processedResponse.data.sex);
+      console.log('   passwordChanged:', processedResponse.data.passwordChanged, '(是否修改过密码)');
     }
     
-    return response;
+    return processedResponse;
   },
 
   /**

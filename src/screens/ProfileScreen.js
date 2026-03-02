@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 import Avatar from '../components/Avatar';
 import SuperLikeBalance from '../components/SuperLikeBalance';
 import LogoutConfirmModal from '../components/LogoutConfirmModal';
@@ -27,48 +28,57 @@ export default function ProfileScreen({ navigation, onLogout }) {
   });
   
   // 加载用户信息
-  useEffect(() => {
-    const loadUserProfile = async () => {
-      // 读取密码修改标记
-      const passwordChangedFlag = await AsyncStorage.getItem('passwordChanged');
-      const hasChangedPassword = passwordChangedFlag === 'true';
-      
-      await UserCacheService.loadUserProfileWithCache(
-        // 缓存加载完成回调（立即显示）
-        (cachedProfile) => {
-          console.log('ProfileScreen: 从缓存加载用户信息', cachedProfile);
-          setUserProfile(prev => ({
-            ...prev,
-            nickname: cachedProfile.nickName || '',
-            userId: cachedProfile.userId || '',
-            username: cachedProfile.username || '',
-            avatar: cachedProfile.avatar || null,
-            bio: cachedProfile.signature || '',
-            location: cachedProfile.location || '',
-            occupation: cachedProfile.profession || '',
-            passwordChanged: cachedProfile.passwordChanged === true || hasChangedPassword,
-          }));
-        },
-        // 最新数据加载完成回调（静默更新）
-        (freshProfile) => {
-          console.log('ProfileScreen: 从服务器更新用户信息', freshProfile);
-          setUserProfile(prev => ({
-            ...prev,
-            nickname: freshProfile.nickName || '',
-            userId: freshProfile.userId || '',
-            username: freshProfile.username || '',
-            avatar: freshProfile.avatar || null,
-            bio: freshProfile.signature || '',
-            location: freshProfile.location || '',
-            occupation: freshProfile.profession || '',
-            passwordChanged: freshProfile.passwordChanged === true || hasChangedPassword,
-          }));
-        }
-      );
-    };
+  const loadUserProfile = React.useCallback(async () => {
+    // 读取密码修改标记
+    const passwordChangedFlag = await AsyncStorage.getItem('passwordChanged');
+    const hasChangedPassword = passwordChangedFlag === 'true';
     
-    loadUserProfile();
+    await UserCacheService.loadUserProfileWithCache(
+      // 缓存加载完成回调（立即显示）
+      (cachedProfile) => {
+        console.log('ProfileScreen: 从缓存加载用户信息', cachedProfile);
+        setUserProfile(prev => ({
+          ...prev,
+          nickname: cachedProfile.nickName || '',
+          userId: cachedProfile.userId || '',
+          username: cachedProfile.username || '',
+          avatar: cachedProfile.avatar || null,
+          bio: cachedProfile.signature || '',
+          location: cachedProfile.location || '',
+          occupation: cachedProfile.profession || '',
+          passwordChanged: cachedProfile.passwordChanged === true || hasChangedPassword,
+        }));
+      },
+      // 最新数据加载完成回调（静默更新）
+      (freshProfile) => {
+        console.log('ProfileScreen: 从服务器更新用户信息', freshProfile);
+        setUserProfile(prev => ({
+          ...prev,
+          nickname: freshProfile.nickName || '',
+          userId: freshProfile.userId || '',
+          username: freshProfile.username || '',
+          avatar: freshProfile.avatar || null,
+          bio: freshProfile.signature || '',
+          location: freshProfile.location || '',
+          occupation: freshProfile.profession || '',
+          passwordChanged: freshProfile.passwordChanged === true || hasChangedPassword,
+        }));
+      }
+    );
   }, []);
+
+  // 首次加载
+  useEffect(() => {
+    loadUserProfile();
+  }, [loadUserProfile]);
+
+  // 每次页面获得焦点时重新加载（从设置页面返回时会触发）
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('🔄 ProfileScreen 获得焦点，重新加载用户信息');
+      loadUserProfile();
+    }, [loadUserProfile])
+  );
   
   const stats = React.useMemo(() => [
     { label: t('profile.likes'), value: '3.5k', screen: 'Likes' },

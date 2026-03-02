@@ -1,75 +1,110 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import apiClient from '../services/api/apiClient';
-import { API_ENDPOINTS } from '../config/api';
+import NetInfo from '@react-native-community/netinfo';
 import ENV from '../config/env';
+import DeviceInfo from '../utils/deviceInfo';
+import authApi from '../services/api/authApi';
 
+/**
+ * 网络诊断测试页面
+ * 用于排查用户无法自动注册的问题
+ */
 export default function NetworkTestScreen({ navigation }) {
   const [testing, setTesting] = useState(false);
   const [results, setResults] = useState([]);
 
-  const addResult = (test, status, message, details = null) => {
-    setResults(prev => [...prev, { test, status, message, details, time: new Date().toLocaleTimeString() }]);
+  const addResult = (title, status, message, details = null) => {
+    setResults(prev => [...prev, { title, status, message, details, timestamp: new Date().toLocaleTimeString() }]);
   };
 
   const runTests = async () => {
     setTesting(true);
     setResults([]);
 
-    // 测试 1: 基础连接
-    addResult('基础连接', 'testing', '正在测试...');
     try {
-      const response = await fetch(ENV.apiUrl, { method: 'GET' });
-      addResult('基础连接', 'success', `服务器可访问 (${response.status})`);
-    } catch (error) {
-      addResult('基础连接', 'error', '无法连接到服务器', error.message);
-    }
-
-    // 测试 2: 注册接口（不需要 token）
-    addResult('注册接口', 'testing', '正在测试...');
-    try {
-      const response = await apiClient.post(API_ENDPOINTS.AUTH.REGISTER, {
-        fingerprint: 'test-' + Date.now(),
-      });
-      addResult('注册接口', 'success', '接口正常', JSON.stringify(response, null, 2));
-    } catch (error) {
-      addResult('注册接口', 'error', '接口异常', error.message);
-    }
-
-    // 测试 3: 用户资料接口（需要 token）
-    addResult('用户资料接口', 'testing', '正在测试...');
-    try {
-      const response = await apiClient.get(API_ENDPOINTS.USER.PROFILE_ME);
-      addResult('用户资料接口', 'success', '接口正常', JSON.stringify(response, null, 2));
-    } catch (error) {
-      if (error.status === 401) {
-        addResult('用户资料接口', 'success', '接口正常（需要 token）');
+      // 测试 1: 网络连接状态
+      addResult('网络连接检查', 'testing', '检查中...');
+      const netInfo = await NetInfo.fetch();
+      if (netInfo.isConnected) {
+        addResult('网络连接检查', 'success', `已连接 - ${netInfo.type}`, netInfo);
       } else {
-        addResult('用户资料接口', 'error', '接口异常', error.message);
+        addResult('网络连接检查', 'error', '网络未连接', netInfo);
+        setTesting(false);
+        return;
       }
-    }
 
-    // 测试 4: 头像上传接口
-    addResult('头像上传接口', 'testing', '正在测试...');
-    try {
-      const formData = new FormData();
-      formData.append('avatarfile', 'test-base64-data');
-      
-      const response = await apiClient.post(API_ENDPOINTS.USER.AVATAR, formData, {
-        headers: {
-          'Content-Type': undefined,
-        },
-        transformRequest: [(data) => data],
-      });
-      addResult('头像上传接口', 'success', '接口正常', JSON.stringify(response, null, 2));
-    } catch (error) {
-      if (error.status === 401) {
-        addResult('头像上传接口', 'success', '接口正常（需要 token）');
-      } else {
-        addResult('头像上传接口', 'error', '接口异常', error.message);
+      // 测试 2: 服务器连接测试
+      addResult('服务器连接测试', 'testing', '测试中...');
+      try {
+        const response = await fetch(`${ENV.apiUrl}/app/user/auth/register`, {
+          method: 'GET', // 故意用 GET 测试连接
+          timeout: 10000,
+        });
+        
+        if (response.status === 500) {
+          // 返回 500 说明服务器可访问（只是不支持 GET）
+          addResult('服务器连接测试', 'success', '服务器可访问', {
+            status: response.status,
+            url: `${ENV.apiUrl}/app/user/auth/register`
+          });
+        } else {
+          addResult('服务器连接测试', 'warning', `服务器响应: ${response.status}`, {
+            status: response.status,
+            url: `${ENV.apiUrl}/app/user/auth/register`
+          });
+        }
+      } catch (error) {
+        addResult('服务器连接测试', 'error', `无法连接: ${error.message}`, {
+          error: error.message,
+          url: `${ENV.apiUrl}/app/user/auth/register`
+        });
+        setTesting(false);
+        return;
       }
+
+      // 测试 3: 设备指纹生成
+      addResult('设备指纹生成', 'testing', '生成中...');
+      try {
+        const fingerprint = await DeviceInfo.generateFingerprintString();
+        addResult('设备指纹生成', 'success', `指纹: ${fingerprint}`, { fingerprint });
+      } catch (error) {
+        addResult('设备指纹生成', 'error', `生成失败: ${error.message}`, { error: error.message });
+        setTesting(false);
+        return;
+      }
+
+      // 测试 4: 自动注册接口测试
+      addResult('自动注册接口', 'testing', '测试中...');
+      try {
+        const fingerprint = await DeviceInfo.generateFingerprintString();
+        const response = await authApi.registerByFingerprint(fingerprint);
+        
+        if (response.code === 200) {
+          addResult('自动注册接口', 'success', '注册成功！', {
+            username: response.data?.userBaseInfo?.username,
+            userId: response.data?.userBaseInfo?.userId,
+          });
+        } else {
+          addResult('自动注册接口', 'error', `注册失败: ${response.msg}`, {
+            code: response.code,
+            msg: response.msg,
+            data: response.data,
+          });
+        }
+      } catch (error) {
+        addResult('自动注册接口', 'error', `请求失败: ${error.message}`, {
+          error: error.message,
+          response: error.response?.data,
+        });
+      }
+
+      // 测试完成
+      addResult('测试完成', 'success', '所有测试已完成', null);
+
+    } catch (error) {
+      addResult('测试异常', 'error', error.message, { error: error.stack });
     }
 
     setTesting(false);
@@ -77,82 +112,86 @@ export default function NetworkTestScreen({ navigation }) {
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'testing':
-        return <ActivityIndicator size="small" color="#3b82f6" />;
-      case 'success':
-        return <Ionicons name="checkmark-circle" size={24} color="#10b981" />;
-      case 'error':
-        return <Ionicons name="close-circle" size={24} color="#ef4444" />;
-      default:
-        return null;
+      case 'success': return <Ionicons name="checkmark-circle" size={24} color="#22c55e" />;
+      case 'error': return <Ionicons name="close-circle" size={24} color="#ef4444" />;
+      case 'warning': return <Ionicons name="warning" size={24} color="#f59e0b" />;
+      case 'testing': return <ActivityIndicator size="small" color="#3b82f6" />;
+      default: return <Ionicons name="help-circle" size={24} color="#9ca3af" />;
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* 头部 */}
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#1f2937" />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>网络测试</Text>
+        <Text style={styles.headerTitle}>网络诊断</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView style={styles.content}>
-        {/* 配置信息 */}
-        <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>当前配置</Text>
-          <Text style={styles.infoText}>后端地址: {ENV.apiUrl}</Text>
-          <Text style={styles.infoText}>测试时间: {new Date().toLocaleString('zh-CN')}</Text>
-        </View>
+      {/* Info */}
+      <View style={styles.infoBox}>
+        <Ionicons name="information-circle" size={20} color="#3b82f6" />
+        <Text style={styles.infoText}>
+          此工具用于诊断自动注册失败的问题，点击下方按钮开始测试
+        </Text>
+      </View>
 
-        {/* 测试按钮 */}
-        <TouchableOpacity
-          style={[styles.testButton, testing && styles.testButtonDisabled]}
-          onPress={runTests}
-          disabled={testing}
-        >
-          {testing ? (
-            <>
-              <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.testButtonText}>测试中...</Text>
-            </>
-          ) : (
-            <>
-              <Ionicons name="play-circle" size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.testButtonText}>开始测试</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        {/* 测试结果 */}
-        {results.length > 0 && (
-          <View style={styles.resultsContainer}>
-            <Text style={styles.resultsTitle}>测试结果</Text>
-            {results.map((result, index) => (
-              <View key={index} style={styles.resultItem}>
-                <View style={styles.resultHeader}>
-                  {getStatusIcon(result.status)}
-                  <View style={styles.resultInfo}>
-                    <Text style={styles.resultTest}>{result.test}</Text>
-                    <Text style={styles.resultTime}>{result.time}</Text>
-                  </View>
-                </View>
-                <Text style={[
-                  styles.resultMessage,
-                  result.status === 'error' && styles.resultMessageError
-                ]}>
-                  {result.message}
-                </Text>
-                {result.details && (
-                  <Text style={styles.resultDetails}>{result.details}</Text>
-                )}
-              </View>
-            ))}
-          </View>
+      {/* Test Button */}
+      <TouchableOpacity
+        style={[styles.testButton, testing && styles.testButtonDisabled]}
+        onPress={runTests}
+        disabled={testing}
+      >
+        {testing ? (
+          <>
+            <ActivityIndicator size="small" color="#fff" />
+            <Text style={styles.testButtonText}>测试中...</Text>
+          </>
+        ) : (
+          <>
+            <Ionicons name="play-circle" size={20} color="#fff" />
+            <Text style={styles.testButtonText}>开始测试</Text>
+          </>
         )}
+      </TouchableOpacity>
+
+      {/* Results */}
+      <ScrollView style={styles.resultsContainer}>
+        {results.map((result, index) => (
+          <View key={index} style={styles.resultItem}>
+            <View style={styles.resultHeader}>
+              {getStatusIcon(result.status)}
+              <View style={styles.resultInfo}>
+                <Text style={styles.resultTitle}>{result.title}</Text>
+                <Text style={styles.resultTime}>{result.timestamp}</Text>
+              </View>
+            </View>
+            <Text style={[
+              styles.resultMessage,
+              result.status === 'error' && styles.resultMessageError,
+              result.status === 'success' && styles.resultMessageSuccess,
+            ]}>
+              {result.message}
+            </Text>
+            {result.details && (
+              <View style={styles.detailsBox}>
+                <Text style={styles.detailsText}>
+                  {JSON.stringify(result.details, null, 2)}
+                </Text>
+              </View>
+            )}
+          </View>
+        ))}
       </ScrollView>
+
+      {/* Server Info */}
+      <View style={styles.serverInfo}>
+        <Text style={styles.serverInfoLabel}>服务器地址:</Text>
+        <Text style={styles.serverInfoValue}>{ENV.apiUrl}</Text>
+      </View>
     </SafeAreaView>
   );
 }
@@ -172,82 +211,70 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+  backButton: {
+    padding: 4,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#1f2937',
   },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  infoCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  infoTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 12,
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eff6ff',
+    margin: 16,
+    padding: 12,
+    borderRadius: 8,
+    gap: 8,
   },
   infoText: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 4,
+    flex: 1,
+    fontSize: 13,
+    color: '#1e40af',
+    lineHeight: 18,
   },
   testButton: {
-    backgroundColor: '#3b82f6',
-    borderRadius: 12,
-    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#3b82f6',
+    marginHorizontal: 16,
     marginBottom: 16,
+    paddingVertical: 14,
+    borderRadius: 8,
+    gap: 8,
   },
   testButtonDisabled: {
     backgroundColor: '#9ca3af',
   },
   testButtonText: {
-    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+    color: '#fff',
   },
   resultsContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-  },
-  resultsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 12,
+    flex: 1,
+    paddingHorizontal: 16,
   },
   resultItem: {
-    marginBottom: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   resultHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
     marginBottom: 8,
   },
   resultInfo: {
-    marginLeft: 12,
     flex: 1,
   },
-  resultTest: {
+  resultTitle: {
     fontSize: 15,
     fontWeight: '600',
     color: '#1f2937',
@@ -260,16 +287,39 @@ const styles = StyleSheet.create({
   resultMessage: {
     fontSize: 14,
     color: '#6b7280',
-    marginLeft: 36,
+    lineHeight: 20,
   },
   resultMessageError: {
     color: '#ef4444',
   },
-  resultDetails: {
-    fontSize: 12,
-    color: '#9ca3af',
-    marginLeft: 36,
-    marginTop: 4,
+  resultMessageSuccess: {
+    color: '#22c55e',
+  },
+  detailsBox: {
+    backgroundColor: '#f3f4f6',
+    padding: 8,
+    borderRadius: 4,
+    marginTop: 8,
+  },
+  detailsText: {
+    fontSize: 11,
     fontFamily: 'monospace',
+    color: '#4b5563',
+  },
+  serverInfo: {
+    backgroundColor: '#fff',
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  serverInfoLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 4,
+  },
+  serverInfoValue: {
+    fontSize: 13,
+    fontFamily: 'monospace',
+    color: '#1f2937',
   },
 });

@@ -336,6 +336,16 @@ export default function LoginScreen({ navigation, onLogin }) {
             <Text style={styles.hintText}>
               首次使用将自动创建账号，默认密码为 12345678
             </Text>
+
+            {/* 网络诊断按钮 */}
+            <TouchableOpacity
+              style={styles.diagnosticButton}
+              onPress={() => navigation.navigate('NetworkTest')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="pulse-outline" size={16} color="#3b82f6" />
+              <Text style={styles.diagnosticButtonText}>网络诊断</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -486,5 +496,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
     lineHeight: 20,
+  },
+  diagnosticButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  diagnosticButtonText: {
+    fontSize: 14,
+    color: '#3b82f6',
+    fontWeight: '500',
   },
 });
