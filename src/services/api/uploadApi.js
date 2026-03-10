@@ -15,7 +15,7 @@ const uploadApi = {
    */
   uploadImage: async (file) => {
     const formData = new FormData();
-    formData.append('image', {
+    formData.append('file', {
       uri: file.uri,
       name: file.name || 'image.jpg',
       type: file.type || 'image/jpeg',

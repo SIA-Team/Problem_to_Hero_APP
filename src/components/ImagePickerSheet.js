@@ -18,15 +18,15 @@ import { showToast } from '../utils/toast';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 /**
- * 现代化的头像操作底部弹出框
- * 参考微信、QQ、小红书等主流 APP 的设计
+ * 通用图片选择器底部弹出框
+ * 支持拍照和从相册选择
  * 
  * @param {boolean} visible - 是否显示
  * @param {function} onClose - 关闭回调
  * @param {function} onImageSelected - 图片选择成功回调，参数为图片URI
- * @param {string} title - 弹窗标题，默认为"更换头像"
+ * @param {string} title - 弹窗标题，默认为"选择图片"
  */
-export default function AvatarActionSheet({ visible, onClose, onImageSelected, title = '更换头像' }) {
+export default function ImagePickerSheet({ visible, onClose, onImageSelected, title = '选择图片' }) {
   const insets = useSafeAreaInsets();
   const [slideAnim] = React.useState(new Animated.Value(SCREEN_HEIGHT));
 
@@ -93,8 +93,12 @@ export default function AvatarActionSheet({ visible, onClose, onImageSelected, t
     }
   };
 
-  const handleTakePhoto = () => {
+  /**
+   * 拍照
+   */
+  const handleTakePhoto = async () => {
     handleClose();
+    
     setTimeout(async () => {
       try {
         const hasPermission = await requestCameraPermission();
@@ -117,8 +121,12 @@ export default function AvatarActionSheet({ visible, onClose, onImageSelected, t
     }, 300);
   };
 
-  const handleChooseFromAlbum = () => {
+  /**
+   * 从相册选择
+   */
+  const handleChooseFromAlbum = async () => {
     handleClose();
+    
     setTimeout(async () => {
       try {
         const hasPermission = await requestMediaLibraryPermission();
@@ -152,12 +160,10 @@ export default function AvatarActionSheet({ visible, onClose, onImageSelected, t
       statusBarTranslucent
     >
       <View style={styles.overlay}>
-        {/* 遮罩层 - 点击关闭 */}
         <TouchableWithoutFeedback onPress={handleClose}>
           <View style={StyleSheet.absoluteFill} />
         </TouchableWithoutFeedback>
         
-        {/* 内容区域 - 不拦截点击 */}
         <Animated.View
           style={[
             styles.container,
@@ -168,15 +174,12 @@ export default function AvatarActionSheet({ visible, onClose, onImageSelected, t
           ]}
           pointerEvents="box-none"
         >
-          {/* 标题 */}
           <View style={styles.header} pointerEvents="auto">
             <View style={styles.dragIndicator} />
             <Text style={styles.title}>{title}</Text>
           </View>
 
-          {/* 操作选项 */}
           <View style={styles.optionsContainer} pointerEvents="auto">
-            {/* 拍照 */}
             <TouchableOpacity
               style={styles.option}
               onPress={handleTakePhoto}
@@ -188,7 +191,6 @@ export default function AvatarActionSheet({ visible, onClose, onImageSelected, t
               <Text style={styles.optionText}>拍照</Text>
             </TouchableOpacity>
 
-            {/* 从相册选择 */}
             <TouchableOpacity
               style={styles.option}
               onPress={handleChooseFromAlbum}
@@ -201,7 +203,6 @@ export default function AvatarActionSheet({ visible, onClose, onImageSelected, t
             </TouchableOpacity>
           </View>
 
-          {/* 取消按钮 */}
           <TouchableOpacity
             style={styles.cancelButton}
             onPress={handleClose}

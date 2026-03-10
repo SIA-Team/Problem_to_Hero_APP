@@ -58,9 +58,16 @@ fastlane/test_output
 dist/
 web-build/
 
-# 原生项目文件夹（转换后会生成）
-android/
+# iOS 原生项目文件夹（转换后会生成）
 ios/
+
+# Android 构建产物（保留源码，排除构建文件）
+android/app/build/
+android/build/
+android/.gradle/
+android/app/.cxx/
+android/app/release/
+android/app/debug/
 
 # Temporary files
 *.log
@@ -76,7 +83,7 @@ ios/
 .vscode/
 .idea/
 
-# Documentation and guide files
+# Documentation and guide files (临时文档)
 *_GUIDE.md
 *_FIX*.md
 *_FEATURE.md
@@ -89,10 +96,29 @@ PUBLIC_ACCESS_GUIDE.md
 QRCODE_GUIDE.md
 SERVER_STATUS.md
 RESTART_COMPLETE.md
+BUILD_STATUS.md
+BUILD_SUCCESS.md
+BUILD_RELEASE_APK.md
+CURRENT_STATUS.md
+GENERATE_KEYSTORE.md
+INSTALLATION_STEPS.md
+INTEGRATION_COMPLETED.md
+KEYSTORE_INFO.md
+TEST_*.md
+TROUBLESHOOTING.md
+VERSION_COMPARISON.md
 模拟器访问说明.md
 公网访问说明.md
 工作日报*.md
 今日工作日报.md
+构建进行中.md
+闪退问题已修复.md
+迁移进度报告.md
+热更新*.md
+获取Token指南.md
+动态服务器配置方案.md
+模拟器连接问题解决方案.md
+方案2*.md
 
 # QR codes and images
 *.png
@@ -102,10 +128,17 @@ expo-public-qrcode.png
 expo-tunnel-page.html
 qrcode-page.html
 
-# Generated files
+# Generated files and test scripts
 generate-*.js
 save-qrcode.js
 fix-*.js
+test-*.js
+test-*.bat
+*-test.js
+
+# Batch scripts (工具脚本)
+*.bat
+!build.bat
 
 # Backup and temporary files
 *.bak
@@ -121,7 +154,11 @@ temp_*.txt
 *.tar.gz
 *.tgz
 
-# Properties and build files
-*.properties
+# APK files (构建产物)
+*.apk
+*.aab
+
+# Properties and build files (保留必要的配置文件)
+local.properties
 *.jar
-*.xml
+!gradle-wrapper.jar

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Switch, Alert, TextInput, Modal, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Avatar from '../components/Avatar';
 import EditTextModal from '../components/EditTextModal';
@@ -321,54 +320,6 @@ export default function SettingsScreen({ navigation }) {
   };
 
   /**
-   * 请求相机权限
-   */
-  const requestCameraPermission = async () => {
-    try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      
-      if (status !== 'granted') {
-        Alert.alert(
-          '需要相机权限',
-          '请在设置中允许访问相机',
-          [{ text: '确定' }]
-        );
-        return false;
-      }
-      
-      return true;
-    } catch (error) {
-      // 只记录错误类型，不显示详细信息
-      console.error('❌ 请求相机权限失败');
-      return false;
-    }
-  };
-
-  /**
-   * 请求相册权限
-   */
-  const requestMediaLibraryPermission = async () => {
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (status !== 'granted') {
-        Alert.alert(
-          '需要相册权限',
-          '请在设置中允许访问相册',
-          [{ text: '确定' }]
-        );
-        return false;
-      }
-      
-      return true;
-    } catch (error) {
-      // 只记录错误类型，不显示详细信息
-      console.error('❌ 请求相册权限失败');
-      return false;
-    }
-  };
-
-  /**
    * 将图片 URI 转换为 Base64（纯 JavaScript 方案）
    * 使用 fetch + FileReader 实现，无需原生模块
    */
@@ -618,68 +569,6 @@ export default function SettingsScreen({ navigation }) {
       showToast(errorMessage, 'error');
     } finally {
       setUploadingAvatar(false);
-    }
-  };
-
-  /**
-   * 拍照
-   */
-  const handleTakePhoto = async () => {
-    try {
-      // 请求相机权限
-      const hasPermission = await requestCameraPermission();
-      if (!hasPermission) return;
-      
-      // 打开相机
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 0.8, // 压缩质量
-        // 注意：ImagePicker 不支持直接限制格式，需要在上传前验证
-      });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const imageUri = result.assets[0].uri;
-        console.log('📷 拍照成功:', imageUri);
-        
-        // 上传图片（会自动验证格式和大小）
-        await uploadImageToServer(imageUri);
-      }
-    } catch (error) {
-      // 只记录错误类型，不显示详细信息
-      console.error('❌ 拍照失败');
-      showToast('拍照失败，请重试', 'error');
-    }
-  };
-
-  /**
-   * 从相册选择
-   */
-  const handleChooseFromAlbum = async () => {
-    try {
-      // 请求相册权限
-      const hasPermission = await requestMediaLibraryPermission();
-      if (!hasPermission) return;
-      
-      // 打开相册
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 0.8, // 压缩质量
-        // 注意：ImagePicker 不支持直接限制格式，需要在上传前验证
-      });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const imageUri = result.assets[0].uri;
-        console.log('🖼️ 选择图片成功:', imageUri);
-        
-        // 上传图片（会自动验证格式和大小）
-        await uploadImageToServer(imageUri);
-      }
-    } catch (error) {
-      // 只记录错误类型，不显示详细信息
-      console.error('❌ 选择图片失败');
-      showToast('选择失败，请重试', 'error');
     }
   };
 
@@ -1280,8 +1169,8 @@ export default function SettingsScreen({ navigation }) {
       <AvatarActionSheet
         visible={showAvatarSheet}
         onClose={() => setShowAvatarSheet(false)}
-        onTakePhoto={handleTakePhoto}
-        onChooseFromAlbum={handleChooseFromAlbum}
+        onImageSelected={uploadImageToServer}
+        title="更换头像"
       />
 
       {/* 绑定联系方式弹窗 */}

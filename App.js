@@ -20,6 +20,7 @@ import LocalMockService from './src/services/LocalMockService';
 // import UpdateChecker from './src/components/UpdateChecker'; // 临时注释：构建APK时不需要热更新功能
 
 import HomeScreen from './src/screens/HomeScreen';
+import HomeScreenOptimizedSimple from './src/screens/HomeScreenOptimizedSimple';
 import SearchScreen from './src/screens/SearchScreen';
 import PublishScreen from './src/screens/PublishScreen';
 import MessagesScreen from './src/screens/MessagesScreen';
@@ -433,9 +434,13 @@ function MainTabs({ onLogout }) {
 }
 
 export default function App() {
+  console.log('📱 App component rendering...');
+  
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [fontsLoaded, setFontsLoaded] = useState(false);
+  
+  console.log('📱 App state:', { isLoggedIn, isInitializing, fontsLoaded });
   
   // 使用回调 ref 确保 Toast 引用在组件挂载时立即设置
   const toastRef = React.useCallback((ref) => {
@@ -447,8 +452,10 @@ export default function App() {
 
   // 预加载字体
   useEffect(() => {
+    console.log('🔤 开始加载字体...');
     async function loadFonts() {
       try {
+        console.log('🔤 正在加载字体...');
         await Font.loadAsync({
           ...Ionicons.font,
           // 预加载 Font Awesome 5 字体
@@ -456,9 +463,10 @@ export default function App() {
           'FontAwesome5_Regular': require('react-native-vector-icons/Fonts/FontAwesome5_Regular.ttf'),
           'FontAwesome5_Brands': require('react-native-vector-icons/Fonts/FontAwesome5_Brands.ttf'),
         });
+        console.log('✅ 字体加载完成');
         setFontsLoaded(true);
       } catch (error) {
-        console.error('Error loading fonts:', error);
+        console.error('❌ 字体加载失败:', error);
         // 即使加载失败也继续，避免卡住
         setFontsLoaded(true);
       }
@@ -695,6 +703,7 @@ export default function App() {
 
   // 显示加载界面直到字体和初始化完成
   if (!fontsLoaded || isInitializing) {
+    console.log('🔄 App loading state:', { fontsLoaded, isInitializing });
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
         <ActivityIndicator size="large" color="#ef4444" />
@@ -704,6 +713,8 @@ export default function App() {
       </View>
     );
   }
+
+  console.log('✅ App ready, isLoggedIn:', isLoggedIn);
 
   const handleLogin = () => {
     setIsLoggedIn(true);

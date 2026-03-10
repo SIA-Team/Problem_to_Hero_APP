@@ -46,7 +46,7 @@ export const API_ENDPOINTS = {
   
   // 问题相关
   QUESTION: {
-    LIST: '/questions',
+    LIST: '/app/content/question/list',  // 问题列表（新接口）
     DETAIL: '/questions/:id',
     CREATE: '/app/content/question',
     UPDATE: '/questions/:id',
@@ -116,7 +116,7 @@ export const API_ENDPOINTS = {
   
   // 上传相关
   UPLOAD: {
-    IMAGE: '/upload/image',
+    IMAGE: '/app/content/image/upload',
     FILE: '/upload/file',
   },
 };

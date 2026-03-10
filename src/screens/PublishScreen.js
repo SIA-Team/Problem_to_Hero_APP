@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Switch, Alert, Modal, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Switch, Alert, Modal, Platform, ActivityIndicator, Image, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import CategoryIcon from '../components/CategoryIcon';
 import IdentitySelector from '../components/IdentitySelector';
 import CitySelector from '../components/CitySelector';
+import ImagePickerSheet from '../components/ImagePickerSheet';
 import categoryApi from '../services/api/categoryApi';
 import questionApi from '../services/api/questionApi';
 import uploadApi from '../services/api/uploadApi';
+import expertApi from '../services/api/expertApi';
 import { showToast } from '../utils/toast';
 
 const questionTypes = [
@@ -18,18 +20,6 @@ const questionTypes = [
 
 
 const rewardAmounts = [10, 20, 50, 100];
-
-// 可邀请的专家用户
-const expertUsers = [
-  { id: 1, name: 'Python老司机', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert1', verified: true, title: '资深Python开发 · 10年经验', field: '编程', recommended: true },
-  { id: 2, name: '王医生', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert2', verified: true, title: '主任医师 · 三甲医院', field: '医疗', recommended: true },
-  { id: 3, name: '理财达人', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert3', verified: true, title: '注册理财规划师', field: '理财', recommended: true },
-  { id: 4, name: '美食评论家', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert4', verified: true, title: '美食博主 · 100万粉丝', field: '美食', recommended: false },
-  { id: 5, name: '职场导师', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert5', verified: true, title: 'HR总监 · 15年经验', field: '职场', recommended: false },
-  { id: 6, name: '心理咨询师', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert6', verified: true, title: '国家二级心理咨询师', field: '心理', recommended: true },
-  { id: 7, name: '法律顾问', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert7', verified: true, title: '执业律师 · 8年经验', field: '法律', recommended: false },
-  { id: 8, name: '健身教练', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert8', verified: true, title: '国家级健身教练', field: '健身', recommended: false },
-];
 
 // 问题类别数据
 const categoryData = {
@@ -89,6 +79,15 @@ export default function PublishScreen({ navigation }) {
   const [targetedReward, setTargetedReward] = useState('');
   const [expertSearchQuery, setExpertSearchQuery] = useState('');
   
+  // 专家列表数据状态
+  const [expertList, setExpertList] = useState([]); // 专家列表
+  const [expertTotal, setExpertTotal] = useState(0); // 专家总数
+  const [expertPageNum, setExpertPageNum] = useState(1); // 当前页码
+  const [expertPageSize] = useState(10); // 每页条数
+  const [expertLoading, setExpertLoading] = useState(false); // 加载状态
+  const [expertLoadingMore, setExpertLoadingMore] = useState(false); // 加载更多状态
+  const [expertHasMore, setExpertHasMore] = useState(true); // 是否还有更多数据
+  
   // 答案设置
   const [answerPublic, setAnswerPublic] = useState(true); // 是否公开答案
   const [answerPaid, setAnswerPaid] = useState(false); // 是否付费查看
@@ -97,6 +96,9 @@ export default function PublishScreen({ navigation }) {
   // 身份选择
   const [publishIdentity, setPublishIdentity] = useState('personal'); // 'personal' or 'team'
   const [selectedTeams, setSelectedTeams] = useState([]); // 选中的团队ID数组
+
+  // 图片选择器状态
+  const [showImagePicker, setShowImagePicker] = useState(false);
 
   // 输入框高度状态
   const [contentInputHeight, setContentInputHeight] = useState(150); // 问题描述输入框高度
@@ -372,9 +374,15 @@ export default function PublishScreen({ navigation }) {
   };
 
   const addImage = () => {
-    if (images.length < 9) {
-      setImages([...images, `https://images.unsplash.com/photo-1526379095098-d400fd0bf935?w=200&h=200&fit=crop&r=${Date.now()}`]);
+    if (images.length >= 9) {
+      showToast('最多只能添加9张图片', 'warning');
+      return;
     }
+    setShowImagePicker(true);
+  };
+
+  const handleImageSelected = (imageUri) => {
+    setImages([...images, imageUri]);
   };
 
   const addCustomTopic = () => {
@@ -482,21 +490,16 @@ export default function PublishScreen({ navigation }) {
       if (images.length > 0) {
         setIsUploadingImages(true);
         try {
-          // TODO: 等待图片上传接口实现后，这里需要实际上传图片
-          // 目前暂时使用模拟的图片URL
-          imageUrls = images; // 临时方案：直接使用现有的图片URL
-          
-          // 实际实现应该是：
-          // for (const imageUri of images) {
-          //   const result = await uploadApi.uploadImage({
-          //     uri: imageUri,
-          //     name: `question_${Date.now()}_${Math.random()}.jpg`,
-          //     type: 'image/jpeg'
-          //   });
-          //   if (result.code === 200 && result.data?.url) {
-          //     imageUrls.push(result.data.url);
-          //   }
-          // }
+          for (const imageUri of images) {
+            const result = await uploadApi.uploadImage({
+              uri: imageUri,
+              name: `question_${Date.now()}_${Math.random()}.jpg`,
+              type: 'image/jpeg'
+            });
+            if (result.code === 200 && result.data) {
+              imageUrls.push(result.data);
+            }
+          }
         } catch (uploadError) {
           console.error('图片上传失败:', uploadError);
           showToast('图片上传失败，请重试', 'error');
@@ -680,11 +683,95 @@ export default function PublishScreen({ navigation }) {
     setTargetedUsers(targetedUsers.filter(u => u.id !== userId));
   };
 
-  // 过滤专家列表
-  const filteredExperts = expertUsers.filter(user => 
-    user.name.toLowerCase().includes(expertSearchQuery.toLowerCase()) ||
-    user.title.toLowerCase().includes(expertSearchQuery.toLowerCase()) ||
-    user.field.toLowerCase().includes(expertSearchQuery.toLowerCase())
+  /**
+   * 加载专家列表
+   * @param {boolean} isLoadMore - 是否是加载更多
+   */
+  const loadExpertList = async (isLoadMore = false) => {
+    // 如果正在加载或没有更多数据，则不重复加载
+    if (expertLoading || (isLoadMore && !expertHasMore)) {
+      return;
+    }
+
+    try {
+      if (isLoadMore) {
+        setExpertLoadingMore(true);
+      } else {
+        setExpertLoading(true);
+        setExpertPageNum(1);
+      }
+
+      const pageNum = isLoadMore ? expertPageNum + 1 : 1;
+      
+      // 根据选中的分类筛选专家
+      const params = {
+        pageNum,
+        pageSize: expertPageSize,
+      };
+      
+      // 如果选择了二级分类，则按分类筛选
+      if (selectedLevel2?.id) {
+        params.categoryId = selectedLevel2.id;
+      }
+
+      const response = await expertApi.getExpertList(params);
+
+      console.log('✅ 专家列表响应:', response);
+
+      if (response.code === 200 && response.data) {
+        const { total, rows } = response.data;
+        
+        console.log(`📊 专家数据: total=${total}, rows.length=${rows?.length || 0}`);
+        
+        if (isLoadMore) {
+          setExpertList([...expertList, ...rows]);
+          setExpertPageNum(pageNum);
+        } else {
+          setExpertList(rows);
+          setExpertPageNum(1);
+        }
+        
+        setExpertTotal(total);
+        setExpertHasMore(rows.length === expertPageSize);
+      } else {
+        console.warn('⚠️ 专家列表响应异常:', response);
+      }
+    } catch (error) {
+      console.error('❌ 加载专家列表失败:', error);
+      showToast('加载专家列表失败', 'error');
+    } finally {
+      setExpertLoading(false);
+      setExpertLoadingMore(false);
+    }
+  };
+
+  /**
+   * 加载更多专家
+   */
+  const loadMoreExperts = () => {
+    if (!expertLoadingMore && expertHasMore) {
+      loadExpertList(true);
+    }
+  };
+
+  // 当选择定向问题类型或分类变化时，重新加载专家列表
+  useEffect(() => {
+    // 只有在选择了定向问题类型且选择了分类时才加载专家列表
+    if (selectedType === 'targeted' && selectedLevel2?.id) {
+      loadExpertList(false);
+    } else if (selectedType === 'targeted' && !selectedLevel2?.id) {
+      // 如果选择了定向问题但没有选择分类，清空专家列表
+      setExpertList([]);
+      setExpertTotal(0);
+    }
+  }, [selectedType, selectedLevel2]);
+
+  // 过滤专家列表（本地搜索）
+  const filteredExperts = expertList.filter(user => 
+    user.nickname.toLowerCase().includes(expertSearchQuery.toLowerCase()) ||
+    (user.categories && user.categories.some(cat => 
+      cat.name.toLowerCase().includes(expertSearchQuery.toLowerCase())
+    ))
   );
 
   const selectLevel1 = async (cat) => {
@@ -850,7 +937,7 @@ export default function PublishScreen({ navigation }) {
         )}
 
         {/* 定向问题 - 邀请专家 */}
-        {selectedType === 'targeted' && (
+        {selectedType === 'targeted' && (expertLoading || expertList.length > 0 || targetedUsers.length > 0) && (
           <>
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>邀请回答专家 <Text style={styles.required}>*</Text></Text>
@@ -862,8 +949,11 @@ export default function PublishScreen({ navigation }) {
                   {targetedUsers.map(user => (
                     <View key={user.id} style={styles.selectedUserChip}>
                       <View style={styles.selectedUserInfo}>
-                        <Ionicons name="person-circle" size={20} color="#3b82f6" style={{ marginRight: 4 }} />
-                        <Text style={styles.selectedUserName}>{user.name}</Text>
+                        <Image 
+                          source={{ uri: user.avatar }} 
+                          style={styles.selectedUserAvatar}
+                        />
+                        <Text style={styles.selectedUserName}>{user.nickname}</Text>
                       </View>
                       <TouchableOpacity onPress={() => removeTargetedUser(user.id)} style={{ marginLeft: 6 }}>
                         <Ionicons name="close-circle" size={20} color="#ef4444" />
@@ -895,49 +985,97 @@ export default function PublishScreen({ navigation }) {
                 {/* 推荐标题 */}
                 <View style={styles.recommendedHeader}>
                   <Ionicons name="star" size={18} color="#f59e0b" style={{ marginRight: 6 }} />
-                  <Text style={styles.recommendedHeaderText}>推荐专家</Text>
+                  <Text style={styles.recommendedHeaderText}>推荐专家 ({expertTotal})</Text>
                 </View>
 
                 {/* 专家列表 */}
-                <View style={styles.expertList}>
-                  {filteredExperts.length > 0 ? (
-                    filteredExperts.map(user => {
+                {expertLoading && expertList.length === 0 ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#3b82f6" />
+                    <Text style={styles.loadingText}>加载专家列表...</Text>
+                  </View>
+                ) : filteredExperts.length > 0 ? (
+                  <FlatList
+                    data={filteredExperts}
+                    keyExtractor={(item) => item.id.toString()}
+                    renderItem={({ item: user }) => {
                       const isSelected = targetedUsers.find(u => u.id === user.id);
                       return (
                         <TouchableOpacity
-                          key={user.id}
                           style={[styles.expertItem, isSelected && styles.expertItemSelected]}
                           onPress={() => toggleTargetedUser(user)}
                         >
-                          <View style={styles.expertAvatar}>
-                            <Ionicons name="person-circle" size={40} color={isSelected ? '#3b82f6' : '#9ca3af'} />
-                          </View>
+                          <Image 
+                            source={{ uri: user.avatar }} 
+                            style={styles.expertAvatarImage}
+                          />
                           <View style={styles.expertInfo}>
                             <View style={styles.expertNameRow}>
-                              <Text style={styles.expertName}>{user.name}</Text>
-                              {user.verified && (
-                                <Ionicons name="checkmark-circle" size={16} color="#3b82f6" style={{ marginLeft: 4 }} />
-                              )}
+                              <Text style={styles.expertName}>{user.nickname}</Text>
+                              <Ionicons name="checkmark-circle" size={16} color="#3b82f6" style={{ marginLeft: 4 }} />
                             </View>
-                            <Text style={styles.expertTitle}>{user.title}</Text>
-                            <View style={styles.expertFieldTag}>
-                              <Text style={styles.expertFieldText}>{user.field}</Text>
-                            </View>
+                            {user.categories && user.categories.length > 0 && (
+                              <View style={styles.expertCategoriesRow}>
+                                {user.categories.slice(0, 2).map((cat, idx) => (
+                                  <View key={cat.id} style={styles.expertFieldTag}>
+                                    <Text style={styles.expertFieldText}>{cat.name}</Text>
+                                  </View>
+                                ))}
+                                {user.categories.length > 2 && (
+                                  <Text style={styles.expertMoreCategories}>+{user.categories.length - 2}</Text>
+                                )}
+                              </View>
+                            )}
                           </View>
                           {isSelected && (
                             <Ionicons name="checkmark-circle" size={24} color="#3b82f6" />
                           )}
                         </TouchableOpacity>
                       );
-                    })
-                  ) : (
-                    <View style={styles.noResultsContainer}>
-                      <Ionicons name="search-outline" size={48} color="#d1d5db" />
-                      <Text style={styles.noResultsText}>未找到匹配的专家</Text>
-                      <Text style={styles.noResultsHint}>试试其他关键词</Text>
-                    </View>
-                  )}
-                </View>
+                    }}
+                    onEndReached={loadMoreExperts}
+                    onEndReachedThreshold={0.5}
+                    ListFooterComponent={() => {
+                      if (expertLoadingMore) {
+                        return (
+                          <View style={styles.loadingMoreContainer}>
+                            <ActivityIndicator size="small" color="#3b82f6" />
+                            <Text style={styles.loadingMoreText}>加载更多...</Text>
+                          </View>
+                        );
+                      }
+                      if (!expertHasMore && expertList.length > 0) {
+                        return (
+                          <View style={styles.noMoreContainer}>
+                            <Text style={styles.noMoreText}>没有更多专家了</Text>
+                          </View>
+                        );
+                      }
+                      return null;
+                    }}
+                    scrollEnabled={false}
+                    nestedScrollEnabled={true}
+                    style={styles.expertFlatList}
+                  />
+                ) : (
+                  <View style={styles.noResultsContainer}>
+                    <Ionicons name="search-outline" size={48} color="#d1d5db" />
+                    <Text style={styles.noResultsText}>
+                      {expertSearchQuery 
+                        ? '未找到匹配的专家' 
+                        : !selectedLevel2?.id 
+                          ? '请先选择问题类别' 
+                          : '该类别暂无专家'}
+                    </Text>
+                    <Text style={styles.noResultsHint}>
+                      {expertSearchQuery 
+                        ? '试试其他关键词' 
+                        : !selectedLevel2?.id 
+                          ? '选择类别后可查看该领域的专家' 
+                          : '可以尝试选择其他类别'}
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
 
@@ -1015,10 +1153,11 @@ export default function PublishScreen({ navigation }) {
             {images.map((img, idx) => (
               <View key={idx} style={styles.imageItem}>
                 <View style={styles.imageItemInner}>
-                  <TouchableOpacity style={styles.removeImage} onPress={() => setImages(images.filter((_, i) => i !== idx))}>
-                    <Ionicons name="close-circle" size={20} color="#ef4444" />
-                  </TouchableOpacity>
+                  <Image source={{ uri: img }} style={styles.imagePreview} />
                 </View>
+                <TouchableOpacity style={styles.removeImage} onPress={() => setImages(images.filter((_, i) => i !== idx))}>
+                  <Ionicons name="close-circle" size={20} color="#ef4444" />
+                </TouchableOpacity>
               </View>
             ))}
             {images.length < 9 && (
@@ -1387,6 +1526,14 @@ export default function PublishScreen({ navigation }) {
         onSelect={handleLocationSelect}
         onClose={handleLocationClose}
       />
+
+      {/* 图片选择器 */}
+      <ImagePickerSheet
+        visible={showImagePicker}
+        onClose={() => setShowImagePicker(false)}
+        onImageSelected={handleImageSelected}
+        title="添加图片"
+      />
     </SafeAreaView>
   );
 }
@@ -1440,15 +1587,33 @@ const styles = StyleSheet.create({
     width: '33.333%',
     paddingHorizontal: 4,
     marginBottom: 8,
+    position: 'relative',
   },
   imageItemInner: {
     width: '100%',
     aspectRatio: 1,
     borderRadius: 8, 
     backgroundColor: '#e5e7eb',
-    position: 'relative',
+    overflow: 'hidden',
   },
-  removeImage: { position: 'absolute', top: -8, right: -8, zIndex: 1 },
+  imagePreview: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  removeImage: { 
+    position: 'absolute', 
+    top: -6, 
+    right: -2, 
+    zIndex: 10,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
   addImageBtn: { 
     width: '33.333%',
     paddingHorizontal: 4,
@@ -1619,6 +1784,13 @@ const styles = StyleSheet.create({
   selectedUsersContainer: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4, marginBottom: 16 },
   selectedUserChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#eff6ff', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, marginHorizontal: 4, marginBottom: 8 },
   selectedUserInfo: { flexDirection: 'row', alignItems: 'center', marginRight: 6 },
+  selectedUserAvatar: { 
+    width: 20, 
+    height: 20, 
+    borderRadius: 10, 
+    marginRight: 6,
+    backgroundColor: '#e5e7eb',
+  },
   selectedUserName: { fontSize: 13, color: '#1f2937', fontWeight: '500' },
   expertSearchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16, borderWidth: 1, borderColor: '#e5e7eb' },
   expertSearchInput: { flex: 1, marginLeft: 8, fontSize: 14, color: '#1f2937' },
@@ -1626,15 +1798,74 @@ const styles = StyleSheet.create({
   recommendedHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 4, marginBottom: 8 },
   recommendedHeaderText: { fontSize: 15, fontWeight: '700', color: '#1f2937' },
   expertList: { marginBottom: 10 },
-  expertItem: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#f9fafb', borderRadius: 12, borderWidth: 2, borderColor: 'transparent' },
+  expertFlatList: { maxHeight: 400 },
+  expertItem: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    padding: 12, 
+    backgroundColor: '#f9fafb', 
+    borderRadius: 12, 
+    borderWidth: 2, 
+    borderColor: 'transparent',
+    marginBottom: 8,
+  },
   expertItemSelected: { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' },
+  expertAvatarImage: { 
+    width: 48, 
+    height: 48, 
+    borderRadius: 24, 
+    marginRight: 12,
+    backgroundColor: '#e5e7eb',
+  },
   expertAvatar: { marginRight: 12 },
   expertInfo: { flex: 1 },
   expertNameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' },
   expertName: { fontSize: 14, fontWeight: '600', color: '#1f2937' },
   expertTitle: { fontSize: 12, color: '#6b7280', marginBottom: 6 },
-  expertFieldTag: { alignSelf: 'flex-start', backgroundColor: '#fef3c7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
+  expertCategoriesRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  expertFieldTag: { 
+    backgroundColor: '#fef3c7', 
+    paddingHorizontal: 8, 
+    paddingVertical: 3, 
+    borderRadius: 12,
+    marginRight: 6,
+    marginBottom: 4,
+  },
   expertFieldText: { fontSize: 11, color: '#f59e0b', fontWeight: '500' },
+  expertMoreCategories: { fontSize: 11, color: '#9ca3af', marginLeft: 4 },
+  loadingContainer: { 
+    alignItems: 'center', 
+    paddingVertical: 40,
+  },
+  loadingText: { 
+    fontSize: 14, 
+    color: '#6b7280', 
+    marginTop: 12,
+  },
+  loadingMoreContainer: { 
+    flexDirection: 'row',
+    alignItems: 'center', 
+    justifyContent: 'center',
+    paddingVertical: 16,
+  },
+  loadingMoreText: { 
+    fontSize: 13, 
+    color: '#6b7280', 
+    marginLeft: 8,
+  },
+  noMoreContainer: { 
+    alignItems: 'center', 
+    paddingVertical: 16,
+  },
+  noMoreText: { 
+    fontSize: 13, 
+    color: '#9ca3af',
+  },
   noResultsContainer: { alignItems: 'center', paddingVertical: 40 },
   noResultsText: { fontSize: 15, fontWeight: '600', color: '#6b7280', marginTop: 12 },
   noResultsHint: { fontSize: 13, color: '#9ca3af', marginTop: 4 },

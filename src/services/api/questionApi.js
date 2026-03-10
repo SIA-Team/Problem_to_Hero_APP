@@ -9,13 +9,33 @@ const questionApi = {
   /**
    * 获取问题列表
    * @param {Object} params - 查询参数
-   * @param {number} params.page - 页码
+   * @param {Object} params.question - 筛选条件
+   * @param {number} params.question.userId - 提问者ID
+   * @param {number} params.question.type - 问题类型
+   * @param {number} params.question.categoryId - 类别ID
+   * @param {number} params.question.status - 状态
+   * @param {string} params.question.title - 标题（模糊搜索）
+   * @param {number} params.pageNum - 页码
    * @param {number} params.pageSize - 每页数量
-   * @param {string} params.sort - 排序方式
    * @returns {Promise<Object>}
    */
   getQuestions: (params) => {
-    return apiClient.get(API_ENDPOINTS.QUESTION.LIST, { params });
+    const { pageNum = 1, pageSize = 20, question = {} } = params;
+    
+    // 构建请求参数
+    const requestParams = {
+      pageNum,
+      pageSize,
+      question: {
+        ...question,
+        // 确保必要的字段存在
+        params: question.params || {},
+      },
+    };
+    
+    console.log('📡 请求问题列表:', requestParams);
+    
+    return contentApiClient.get(API_ENDPOINTS.QUESTION.LIST, { params: requestParams });
   },
 
   /**
@@ -104,6 +124,68 @@ const questionApi = {
    */
   searchQuestions: (params) => {
     return apiClient.get(API_ENDPOINTS.QUESTION.SEARCH, { params });
+  },
+
+  /**
+   * 获取推荐列表（用于首页优化）
+   * @param {Object} params - 查询参数
+   * @param {number} params.pageNum - 页码
+   * @param {number} params.pageSize - 每页数量
+   * @returns {Promise<Object>}
+   */
+  getRecommendList: (params) => {
+    const { pageNum = 1, pageSize = 20 } = params;
+    
+    // 推荐列表：获取所有已发布的问题，按创建时间排序
+    return questionApi.getQuestions({
+      pageNum,
+      pageSize,
+      question: {
+        status: 1, // 只获取已发布的问题
+      },
+    });
+  },
+
+  /**
+   * 获取热榜列表（用于首页优化）
+   * @param {Object} params - 查询参数
+   * @param {number} params.pageNum - 页码
+   * @param {number} params.pageSize - 每页数量
+   * @returns {Promise<Object>}
+   */
+  getHotList: (params) => {
+    const { pageNum = 1, pageSize = 20 } = params;
+    
+    // 热榜列表：可以根据浏览量、点赞数等排序
+    // 这里先使用基础接口，后续可以优化
+    return questionApi.getQuestions({
+      pageNum,
+      pageSize,
+      question: {
+        status: 1,
+      },
+    });
+  },
+
+  /**
+   * 获取关注列表（用于首页优化）
+   * @param {Object} params - 查询参数
+   * @param {number} params.pageNum - 页码
+   * @param {number} params.pageSize - 每页数量
+   * @returns {Promise<Object>}
+   */
+  getFollowList: (params) => {
+    const { pageNum = 1, pageSize = 20 } = params;
+    
+    // 关注列表：获取关注用户的问题
+    // 这里先使用基础接口，后续需要后端支持
+    return questionApi.getQuestions({
+      pageNum,
+      pageSize,
+      question: {
+        status: 1,
+      },
+    });
   },
 };
 
