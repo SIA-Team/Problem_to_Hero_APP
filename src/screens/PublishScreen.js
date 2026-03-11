@@ -13,61 +13,28 @@ import expertApi from '../services/api/expertApi';
 import { showToast } from '../utils/toast';
 
 const questionTypes = [
-  { id: 'free', name: '公开问题', desc: '公开提问', icon: 'gift', color: '#22c55e' },
-  { id: 'reward', name: '悬赏问题', desc: '付费求答', icon: 'cash', color: '#f97316' },
-  { id: 'targeted', name: '定向问题', desc: '指定回答', icon: 'locate', color: '#3b82f6' },
+  { id: 0, name: '公开问题', desc: '公开提问', icon: 'gift', color: '#22c55e' },
+  { id: 1, name: '悬赏问题', desc: '付费求答', icon: 'cash', color: '#f97316' },
+  { id: 2, name: '定向问题', desc: '指定回答', icon: 'locate', color: '#3b82f6' },
 ];
 
 
 const rewardAmounts = [10, 20, 50, 100];
 
-// 问题类别数据
-const categoryData = {
-  level1: [
-    { id: 1, name: '国家', icon: 'business', color: '#3b82f6', desc: '国家政策、社会民生' },
-    { id: 2, name: '行业', icon: 'briefcase', color: '#22c55e', desc: '各行业专业问题' },
-    { id: 3, name: '个人', icon: 'person', color: '#8b5cf6', desc: '个人生活、成长' },
-  ],
-  level2: {
-    1: [
-      { id: 101, name: '政策法规', icon: 'document-text' },
-      { id: 102, name: '社会民生', icon: 'people' },
-      { id: 103, name: '经济发展', icon: 'trending-up' },
-      { id: 104, name: '教育医疗', icon: 'school' },
-      { id: 105, name: '环境保护', icon: 'leaf' },
-      { id: 106, name: '基础设施', icon: 'construct' },
-    ],
-    2: [
-      { id: 201, name: '互联网', icon: 'globe' },
-      { id: 202, name: '金融', icon: 'card' },
-      { id: 203, name: '医疗健康', icon: 'fitness' },
-      { id: 204, name: '教育培训', icon: 'school' },
-      { id: 205, name: '房地产', icon: 'home' },
-      { id: 206, name: '制造业', icon: 'cog' },
-      { id: 207, name: '餐饮服务', icon: 'restaurant' },
-    ],
-    3: [
-      { id: 301, name: '职业发展', icon: 'rocket' },
-      { id: 302, name: '情感生活', icon: 'heart' },
-      { id: 303, name: '健康养生', icon: 'fitness' },
-      { id: 304, name: '理财投资', icon: 'wallet' },
-      { id: 305, name: '学习成长', icon: 'book' },
-      { id: 306, name: '家庭关系', icon: 'home' },
-    ],
-  }
-};
-
-export default function PublishScreen({ navigation }) {
+export default function PublishScreen({ navigation, route }) {
+  // 获取路由参数中的草稿数据
+  const draftData = route?.params?.draftData;
+  
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [selectedType, setSelectedType] = useState('free');
+  const [selectedType, setSelectedType] = useState(0); // 直接使用数字：0=公开，1=悬赏，2=定向
   const [reward, setReward] = useState('');
   const [selectedTopics, setSelectedTopics] = useState([]);
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [images, setImages] = useState([]);
   const [customTopic, setCustomTopic] = useState('');
   const [location, setLocation] = useState('北京');
-  const [visibility, setVisibility] = useState('所有人');
+  const [visibility, setVisibility] = useState(0); // 直接使用数字：0=所有人，1=仅关注我的人，2=仅自己
   
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showVisibilityModal, setShowVisibilityModal] = useState(false);
@@ -129,6 +96,190 @@ export default function PublishScreen({ navigation }) {
     fetchLevel1Categories();
   }, []);
   
+  // 回显草稿数据
+  useEffect(() => {
+    if (draftData) {
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('📝 回显草稿数据');
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('草稿数据:', JSON.stringify(draftData, null, 2));
+      
+      // 基础信息
+      if (draftData.title) {
+        console.log('  设置标题:', draftData.title);
+        setTitle(draftData.title);
+      }
+      if (draftData.description) {
+        console.log('  设置描述:', draftData.description.substring(0, 50) + '...');
+        setContent(draftData.description);
+      }
+      if (typeof draftData.type === 'number') {
+        console.log('  设置问题类型:', draftData.type);
+        setSelectedType(draftData.type);
+      }
+      if (draftData.location) {
+        console.log('  设置位置:', draftData.location);
+        setLocation(draftData.location);
+      }
+      if (typeof draftData.visibilityScope === 'number') {
+        console.log('  设置可见范围:', draftData.visibilityScope);
+        setVisibility(draftData.visibilityScope);
+      }
+      if (typeof draftData.isAnonymous === 'number') {
+        console.log('  设置匿名:', draftData.isAnonymous);
+        setIsAnonymous(draftData.isAnonymous === 1);
+      }
+      if (typeof draftData.isPublicAnswer === 'number') {
+        console.log('  设置答案公开:', draftData.isPublicAnswer);
+        setAnswerPublic(draftData.isPublicAnswer === 1);
+      }
+      
+      // 悬赏金额（分转元）
+      if (draftData.bountyAmount && draftData.bountyAmount > 0) {
+        const amount = (draftData.bountyAmount / 100).toString();
+        console.log('  设置悬赏金额:', amount, '元');
+        if (draftData.type === 2) { // 定向问题
+          setTargetedReward(amount);
+        } else {
+          setReward(amount);
+        }
+      }
+      
+      // 付费查看金额（分转元）
+      if (draftData.payViewAmount && draftData.payViewAmount > 0) {
+        const amount = (draftData.payViewAmount / 100).toString();
+        console.log('  设置付费查看金额:', amount, '元');
+        setAnswerPaid(true);
+        setAnswerPrice(amount);
+      }
+      
+      // 图片
+      console.log('  检查图片数据:');
+      console.log('    draftData.imageUrls:', draftData.imageUrls);
+      console.log('    是否为数组:', Array.isArray(draftData.imageUrls));
+      console.log('    数组长度:', draftData.imageUrls?.length);
+      
+      if (draftData.imageUrls && Array.isArray(draftData.imageUrls) && draftData.imageUrls.length > 0) {
+        // 过滤掉空字符串和无效的URL
+        const validImages = draftData.imageUrls.filter(url => {
+          const isValid = url && typeof url === 'string' && url.trim() !== '';
+          console.log(`    图片URL: "${url}" - 有效: ${isValid}`);
+          return isValid;
+        });
+        
+        console.log('  过滤后的有效图片数量:', validImages.length);
+        
+        if (validImages.length > 0) {
+          console.log('  ✅ 设置图片:', validImages.length, '张');
+          console.log('  图片URLs:', validImages);
+          setImages(validImages);
+        } else {
+          console.log('  ⚠️ 草稿中的图片URL都是空的，清空图片数组');
+          setImages([]);
+        }
+      } else {
+        console.log('  ℹ️ 草稿中没有图片数据，清空图片数组');
+        setImages([]);
+      }
+      
+      // 话题
+      if (draftData.topics && Array.isArray(draftData.topics) && draftData.topics.length > 0) {
+        const topicNames = draftData.topics.map(t => `#${t.name}`);
+        console.log('  设置话题:', topicNames);
+        setSelectedTopics(topicNames);
+        setAllTopics(topicNames);
+        setCustomTopicNames(draftData.topics.map(t => t.name));
+      }
+      
+      // 专家（定向问题）
+      if (draftData.experts && Array.isArray(draftData.experts) && draftData.experts.length > 0) {
+        console.log('  设置专家:', draftData.experts.length, '位');
+        setTargetedUsers(draftData.experts);
+      }
+      
+      // 分类（需要等分类数据加载完成后再设置）
+      if (draftData.categoryId) {
+        console.log('  草稿分类ID:', draftData.categoryId);
+        console.log('  等待分类数据加载...');
+      }
+      
+      console.log('✅ 草稿数据回显完成');
+      console.log('═══════════════════════════════════════════════════════════');
+    }
+  }, [draftData]); // 只依赖 draftData
+  
+  // 单独处理分类回显（当分类数据加载完成后）
+  useEffect(() => {
+    if (draftData && level1Categories.length > 0) {
+      const categoryId = draftData.categoryId;
+      const categoryName = draftData.categoryName;
+      
+      if (!categoryId && !categoryName) {
+        console.log('⚠️ 草稿中没有分类信息');
+        return;
+      }
+      
+      console.log('🔍 开始查找分类');
+      console.log('  categoryId:', categoryId);
+      console.log('  categoryName:', categoryName);
+      console.log('  一级分类数量:', level1Categories.length);
+      
+      // 查找对应的分类
+      let found = false;
+      
+      for (const level1 of level1Categories) {
+        // 先尝试加载该一级分类的二级分类（如果还没加载）
+        if (!level2CategoriesMap[level1.id]) {
+          console.log(`  一级分类 ${level1.name} 的二级分类尚未加载，跳过`);
+          continue;
+        }
+        
+        const level2List = level2CategoriesMap[level1.id] || [];
+        console.log(`  检查一级分类: ${level1.name} (ID:${level1.id}), 二级分类数量: ${level2List.length}`);
+        
+        // 优先通过 ID 查找
+        let level2 = null;
+        if (categoryId) {
+          level2 = level2List.find(cat => cat.id === categoryId);
+        }
+        
+        // 如果通过 ID 没找到，尝试通过名称查找
+        if (!level2 && categoryName) {
+          level2 = level2List.find(cat => cat.name === categoryName);
+          if (level2) {
+            console.log(`  通过名称找到分类: ${categoryName}`);
+          }
+        }
+        
+        if (level2) {
+          console.log(`✅ 找到匹配的分类: ${level1.name} > ${level2.name}`);
+          setSelectedLevel1(level1);
+          setSelectedLevel2(level2);
+          found = true;
+          break;
+        }
+      }
+      
+      if (!found) {
+        console.warn('⚠️ 未找到对应的分类');
+        console.warn('  categoryId:', categoryId);
+        console.warn('  categoryName:', categoryName);
+        console.warn('  可能原因：');
+        console.warn('  1. 该分类的二级分类尚未加载（需要先点击一级分类）');
+        console.warn('  2. 该分类ID或名称不存在');
+        console.warn('  3. 分类数据结构有变化');
+        
+        // 尝试自动加载所有一级分类的二级分类
+        console.log('  尝试自动加载所有二级分类...');
+        level1Categories.forEach(level1 => {
+          if (!level2CategoriesMap[level1.id]) {
+            fetchLevel2Categories(level1.id);
+          }
+        });
+      }
+    }
+  }, [draftData, level1Categories, level2CategoriesMap]);
+  
   // 加载一级分类
   const fetchLevel1Categories = async () => {
     setCategoryLoading(true);
@@ -142,11 +293,25 @@ export default function PublishScreen({ navigation }) {
         parentId: 0, // 只获取一级分类
       });
       
-      if (__DEV__) {
-        console.log('一级分类数据:', response);
-      }
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('📡 一级分类接口原始响应数据');
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('完整响应:', JSON.stringify(response, null, 2));
+      console.log('═══════════════════════════════════════════════════════════');
       
       if (response && response.code === 200 && response.data && response.data.rows) {
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('📊 接口返回的原始数据分析');
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log(`总记录数 (total): ${response.data.total}`);
+        console.log(`当前页数据条数 (rows.length): ${response.data.rows.length}`);
+        console.log('');
+        console.log('原始数据列表 (response.data.rows):');
+        response.data.rows.forEach((cat, index) => {
+          console.log(`  ${index + 1}. ID:${cat.id}, Name:"${cat.name}", ParentId:${cat.parentId}, Icon:"${cat.icon}"`);
+        });
+        console.log('═══════════════════════════════════════════════════════════');
+        
         // 直接使用返回的数据，因为我们已经通过 parentId=0 参数过滤了
         const categories = response.data.rows.map(cat => {
           return {
@@ -156,10 +321,15 @@ export default function PublishScreen({ navigation }) {
           };
         });
         
-        if (__DEV__) {
-          console.log(`✅ 一级分类加载成功，共${categories.length}个`);
-          console.log('一级分类数据示例:', JSON.stringify(categories[0], null, 2));
-        }
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('📂 处理后的一级分类数据');
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log(`✅ 一级分类加载成功，共 ${categories.length} 个`);
+        console.log('处理后的分类列表:');
+        categories.forEach((cat, index) => {
+          console.log(`  ${index + 1}. ID:${cat.id} - ${cat.name} (ParentId:${cat.parentId})`);
+        });
+        console.log('═══════════════════════════════════════════════════════════');
         
         // 检查是否还有更多一级分类（极少见）
         if (response.data.total > categories.length) {
@@ -168,13 +338,14 @@ export default function PublishScreen({ navigation }) {
         
         setLevel1Categories(categories);
       } else {
+        console.error('❌ 接口响应格式异常:', response);
         throw new Error(response?.msg || '获取分类数据失败');
       }
     } catch (error) {
-      console.error('获取一级分类失败:', error);
+      console.error('❌ 获取一级分类失败:', error);
       setCategoryError(error.message || '获取分类数据失败');
-      // 失败时使用本地备用数据
-      setLevel1Categories(categoryData.level1);
+      // 不使用备用数据，保持空数组
+      setLevel1Categories([]);
     } finally {
       setCategoryLoading(false);
     }
@@ -267,10 +438,10 @@ export default function PublishScreen({ navigation }) {
       }
     } catch (error) {
       console.error(`获取二级分类失败 (parentId=${parentId}):`, error);
-      // 失败时使用本地备用数据
+      // 失败时保持空数组，不使用备用数据
       setLevel2CategoriesMap(prev => ({
         ...prev,
-        [parentId]: categoryData.level2[parentId] || [],
+        [parentId]: [],
       }));
     } finally {
       setLoadingLevel2(false);
@@ -280,7 +451,7 @@ export default function PublishScreen({ navigation }) {
   // 获取要显示的分类数据
   const getDisplayCategoryData = () => {
     return {
-      level1: level1Categories.length > 0 ? level1Categories : categoryData.level1,
+      level1: level1Categories, // 只使用接口数据，不使用备用数据
       level2: level2CategoriesMap,
     };
   };
@@ -299,19 +470,6 @@ export default function PublishScreen({ navigation }) {
       (cat.description && cat.description.toLowerCase().includes(query)) ||
       (cat.desc && cat.desc.toLowerCase().includes(query))
     );
-  };
-  
-  // 转换本地数据格式（用于备用）
-  const transformLocalCategoryData = () => {
-    const level1 = categoryData.level1.map(cat => ({
-      id: cat.id,
-      name: cat.name,
-      icon: cat.icon,
-      color: cat.color,
-      description: cat.desc,
-    }));
-    
-    return { level1, level2: categoryData.level2 };
   };
   
   // 根据分类名称返回颜色（辅助函数，用于后端没有返回颜色时的降级方案）
@@ -417,25 +575,106 @@ export default function PublishScreen({ navigation }) {
     setCustomTopic('');
   };
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     if (!title && !content) {
       showToast('请先输入内容', 'warning');
       return;
     }
-    showToast('草稿已保存', 'success');
+
+    try {
+      // 构建草稿数据（与发布数据结构相同）
+      const draftData = {
+        id: 0, // 新建草稿
+        type: selectedType, // 直接使用数字，不需要映射
+        categoryId: selectedLevel2?.id || 5, // 使用选中的分类ID，如果没有则使用默认值5
+        title: title.trim() || '',
+        description: content.trim() || '',
+        subQuestions: '',
+        bountyAmount: 5000, // 默认悬赏金额
+        payViewAmount: answerPaid ? Math.round(parseFloat(answerPrice || 0) * 100) : 0,
+        location: location && location !== '不显示' ? location : '北京市朝阳区',
+        visibilityScope: visibility, // 直接使用数字，不需要映射
+        isAnonymous: isAnonymous ? 1 : 0,
+        isPublicAnswer: answerPublic ? 1 : 0,
+        teamId: publishIdentity === 'team' && selectedTeams.length > 0 ? selectedTeams[0] : 100,
+        expertIds: selectedType === 2 && targetedUsers.length > 0 ? targetedUsers.map(u => u.id) : [], // 2 = 定向问题
+        topicIds: [],
+        topicNames: customTopicNames.length > 0 ? customTopicNames : [],
+        imageUrls: images.length > 0 ? images : [],
+      };
+
+      // 设置悬赏金额（根据问题类型）
+      if (selectedType === 1 && reward) { // 1 = 悬赏问题
+        draftData.bountyAmount = Math.round(parseFloat(reward) * 100);
+      } else if (selectedType === 2 && targetedReward) { // 2 = 定向问题
+        draftData.bountyAmount = Math.round(parseFloat(targetedReward) * 100);
+      } else if (selectedType === 0 && reward) { // 0 = 公开问题
+        draftData.bountyAmount = Math.round(parseFloat(reward) * 100);
+      }
+
+      console.log('保存草稿数据:', JSON.stringify(draftData, null, 2));
+      
+      const response = await questionApi.saveDraft(draftData);
+      
+      console.log('保存草稿响应:', response);
+
+      if (response.code === 200) {
+        showToast('草稿已保存', 'success');
+      } else {
+        showToast(response.msg || '保存草稿失败', 'error');
+      }
+    } catch (error) {
+      console.error('保存草稿失败:', error);
+      
+      let errorMessage = '网络错误，请检查网络连接后重试';
+      
+      if (error.response) {
+        errorMessage = error.response.data?.msg || error.response.data?.message || '服务器错误，请稍后重试';
+      } else if (error.request) {
+        errorMessage = '网络请求超时，请检查网络连接';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      showToast(errorMessage, 'error');
+    }
   };
 
   const handlePublish = async () => {
+    // 调试信息
+    console.log('🔍 发布验证开始');
+    console.log('🔍 selectedType 原始值检查:');
+    console.log('  - selectedType:', selectedType);
+    console.log('  - typeof selectedType:', typeof selectedType);
+    console.log('  - selectedType === 0:', selectedType === 0);
+    console.log('  - selectedType === 1:', selectedType === 1);
+    console.log('  - selectedType === 2:', selectedType === 2);
+    console.log('  - JSON.stringify(selectedType):', JSON.stringify(selectedType));
+    
+    console.log('🔍 title值:', `"${title}"`);
+    console.log('🔍 title.trim():', `"${title.trim()}"`);
+    console.log('🔍 title.length:', title.length);
+    console.log('🔍 selectedLevel1:', selectedLevel1);
+    console.log('🔍 selectedLevel2:', selectedLevel2);
+    console.log('🔍 content.trim():', `"${content.trim()}"`);
+    
+    // 验证问题类型（现在直接是数字，不需要映射）
+    console.log('🔍 问题类型验证:');
+    console.log('  - selectedType:', selectedType);
+    console.log('  - 是否为有效类型:', [0, 1, 2].includes(selectedType));
     // 1. 基础验证
     if (!title.trim()) {
+      console.log('❌ 标题验证失败: 标题为空');
       showToast('请输入问题标题', 'warning');
       return;
     }
-    if (title.length < 5) {
+    if (title.trim().length < 5) {
+      console.log('❌ 标题验证失败: 标题长度不足5个字');
       showToast('标题至少5个字', 'warning');
       return;
     }
-    if (title.length > 50) {
+    if (title.trim().length > 50) {
+      console.log('❌ 标题验证失败: 标题长度超过50个字');
       showToast('标题最多50个字', 'warning');
       return;
     }
@@ -444,12 +683,13 @@ export default function PublishScreen({ navigation }) {
       return;
     }
     if (!selectedLevel1 || !selectedLevel2) {
+      console.log('❌ 分类验证失败: selectedLevel1=', selectedLevel1, 'selectedLevel2=', selectedLevel2);
       showToast('请选择问题类别', 'warning');
       return;
     }
 
     // 2. 验证悬赏问题金额
-    if (selectedType === 'reward') {
+    if (selectedType === 1) { // 1 = 悬赏问题
       const amount = parseFloat(reward);
       if (isNaN(amount) || amount < 1) {
         showToast('悬赏问题金额不能小于$1', 'warning');
@@ -458,7 +698,7 @@ export default function PublishScreen({ navigation }) {
     }
     
     // 3. 验证定向问题
-    if (selectedType === 'targeted') {
+    if (selectedType === 2) { // 2 = 定向问题
       if (targetedUsers.length === 0) {
         showToast('请至少邀请一位专家', 'warning');
         return;
@@ -510,90 +750,129 @@ export default function PublishScreen({ navigation }) {
       }
 
       // 7. 构建请求数据
-      const requestData = {
-        // 问题类型：0=公开问题，1=悬赏问题，2=定向问题
-        type: selectedType === 'free' ? 0 : selectedType === 'reward' ? 1 : 2,
-        
-        // 基础信息
-        categoryId: selectedLevel2.id,
-        title: title.trim(),
-        description: content.trim(),
-        
-        // 子问题（JSON数组字符串格式）
-        subQuestions: JSON.stringify([]), // 暂时为空数组，后续可扩展为 [{"order":1,"content":"子问题1"}]
-        
-        // 是否保存为草稿
-        asDraft: false,
-        
-        // 悬赏金额（单位：分，需要转换）
-        bountyAmount: 0,
-        
-        // 付费查看金额（单位：分）
-        payViewAmount: answerPaid ? Math.round(parseFloat(answerPrice) * 100) : 0,
-        
-        // 可见范围：0=所有人，1=仅关注我的人，2=仅自己
-        visibilityScope: visibility === '所有人' ? 0 : visibility === '仅关注我的人' ? 1 : 2,
-        
-        // 是否匿名：0=不匿名，1=匿名
-        isAnonymous: isAnonymous ? 1 : 0,
-        
-        // 是否公开答案：0=不公开，1=公开
-        isPublicAnswer: answerPublic ? 1 : 0,
-      };
+      // 🧪 临时测试：使用简化的数据结构来排查500错误
+      const useMinimalData = false; // 设置为 true 使用简化数据，false 使用完整数据
       
-      // 位置信息（只有非空时才添加）
-      if (location && location !== '不显示') {
-        requestData.location = location;
+      let requestData;
+      
+      if (useMinimalData) {
+        // 简化的数据结构，只包含最基本的字段
+        requestData = {
+          id: 0,
+          type: selectedType, // 直接使用数字，不需要映射
+          categoryId: selectedLevel2.id,
+          title: title.trim(),
+          description: content.trim() || '',
+          subQuestions: '[]', // JSON 字符串格式的空数组
+          bountyAmount: selectedType === 1 && reward ? Math.round(parseFloat(reward) * 100) : 0, // 1 = 悬赏问题
+          payViewAmount: 0,
+          location: location || '',
+          visibilityScope: 0,
+          isAnonymous: 0,
+          isPublicAnswer: 1,
+          teamId: 100, // 使用一个默认的有效团队ID
+          expertIds: [],
+          topicIds: [],
+          topicNames: [],
+          imageUrls: []
+        };
+        
+        console.log('🧪 使用简化数据结构进行测试');
+        console.log('🧪 问题类型: selectedType =', selectedType);
+      } else {
+        // 完整的数据结构
+        requestData = {
+          // 基础必填字段
+          id: 0, // 新建问题
+          type: selectedType, // 直接使用数字，不需要映射
+          categoryId: selectedLevel2.id, // 必填，使用选中的二级分类ID
+          title: title.trim(), // 确保去除首尾空格
+          description: content.trim() || '',
+          
+          // 子问题（JSON 字符串格式的数组）
+          subQuestions: '[]',
+          
+          // 悬赏金额（单位：分，需要转换）
+          bountyAmount: 0,
+          
+          // 付费查看金额（单位：分）
+          payViewAmount: answerPaid ? Math.round(parseFloat(answerPrice || 0) * 100) : 0,
+          
+          // 位置信息
+          location: location && location !== '不显示' ? location : '北京市朝阳区',
+          
+          // 可见范围：0=所有人，1=仅关注我的人，2=仅自己
+          visibilityScope: visibility, // 直接使用数字，不需要映射
+          
+          // 是否匿名：0=不匿名，1=匿名
+          isAnonymous: isAnonymous ? 1 : 0,
+          
+          // 是否公开答案：0=不公开，1=公开
+          isPublicAnswer: answerPublic ? 1 : 0,
+          
+          // 团队ID（以团队身份发布时才添加）
+          teamId: publishIdentity === 'team' && selectedTeams.length > 0 ? selectedTeams[0] : 100,
+          
+          // 专家ID列表（仅定向问题且有选择专家时才添加）
+          expertIds: selectedType === 2 && targetedUsers.length > 0 ? targetedUsers.map(u => u.id) : [], // 2 = 定向问题
+          
+          // 话题ID列表（已有话题）
+          topicIds: [],
+          
+          // 话题名称列表（用户自定义的话题）
+          topicNames: customTopicNames.length > 0 ? customTopicNames : [],
+          
+          // 图片URL列表
+          imageUrls: imageUrls.length > 0 ? imageUrls : [],
+        };
+        
+        console.log('📦 使用完整数据结构');
+        console.log('📦 问题类型: selectedType =', selectedType);
       }
       
-      // 团队ID（以团队身份发布时才添加）
-      if (publishIdentity === 'team' && selectedTeams.length > 0) {
-        requestData.teamId = selectedTeams[0];
-      }
-      
-      // 专家ID列表（仅定向问题且有选择专家时才添加）
-      if (selectedType === 'targeted' && targetedUsers.length > 0) {
-        requestData.expertIds = targetedUsers.map(u => u.id);
-      }
-      
-      // 话题处理（只发送用户自定义的话题）
-      if (customTopicNames.length > 0) {
-        // 只发送用户自定义的话题名称（不含#）
-        requestData.topicNames = customTopicNames;
-      }
-      
-      // TODO: 如果后端支持已有话题ID，需要添加 topicIds 字段
-      // 预设话题（#职场、#教育等）应该通过 topicIds 发送
-      // if (selectedTopics.length > 0) {
-      //   const presetTopics = ['#职场', '#教育', '#科技', '#生活', '#健康', '#情感', '#理财', '#美食'];
-      //   requestData.topicIds = selectedTopics
-      //     .filter(topic => presetTopics.includes(topic))
-      //     .map(topic => getTopicIdByName(topic)); // 需要实现 getTopicIdByName 函数
-      // }
-      
-      // 图片URL列表（只有上传了图片时才添加）
-      if (imageUrls.length > 0) {
-        requestData.imageUrls = imageUrls;
-      }
-
       // 8. 设置悬赏金额（根据问题类型）
-      if (selectedType === 'reward') {
+      if (selectedType === 1 && reward) { // 1 = 悬赏问题
         // 悬赏问题：使用 reward 字段的金额，转换为分
         requestData.bountyAmount = Math.round(parseFloat(reward) * 100);
-      } else if (selectedType === 'targeted') {
+      } else if (selectedType === 2 && targetedReward) { // 2 = 定向问题
         // 定向问题：使用 targetedReward 字段的金额，转换为分
         requestData.bountyAmount = Math.round(parseFloat(targetedReward) * 100);
-      } else if (selectedType === 'free' && reward) {
+      } else if (selectedType === 0 && reward) { // 0 = 公开问题
         // 公开问题：如果设置了悬赏金额，也转换为分
         requestData.bountyAmount = Math.round(parseFloat(reward) * 100);
+      } else {
+        // 默认悬赏金额
+        requestData.bountyAmount = 5000;
       }
 
       // 9. 调用发布接口
-      console.log('发布问题请求数据:', JSON.stringify(requestData, null, 2));
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('📤 发布问题 - 完整请求数据');
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log(JSON.stringify(requestData, null, 2));
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('📤 请求数据字段验证:');
+      console.log('  ✓ title:', `"${requestData.title}" (长度: ${requestData.title.length})`);
+      console.log('  ✓ categoryId:', requestData.categoryId);
+      console.log('  ✓ type:', requestData.type, `(类型: ${typeof requestData.type})`);
+      console.log('  ✓ description:', `"${requestData.description.substring(0, 50)}..." (长度: ${requestData.description.length})`);
+      console.log('  ✓ bountyAmount:', requestData.bountyAmount, '分');
+      console.log('  ✓ location:', requestData.location);
+      console.log('  ✓ visibilityScope:', requestData.visibilityScope);
+      console.log('  ✓ isAnonymous:', requestData.isAnonymous);
+      console.log('  ✓ isPublicAnswer:', requestData.isPublicAnswer);
+      console.log('  ✓ teamId:', requestData.teamId);
+      console.log('  ✓ expertIds:', requestData.expertIds);
+      console.log('  ✓ imageUrls:', requestData.imageUrls);
+      console.log('═══════════════════════════════════════════════════════════');
       
-      const response = await questionApi.createQuestion(requestData);
+      const response = await questionApi.publishQuestion(requestData);
       
-      console.log('发布问题响应:', response);
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('📥 发布问题 - 服务器响应');
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log(JSON.stringify(response, null, 2));
+      console.log('═══════════════════════════════════════════════════════════');
 
       // 10. 处理响应
       if (response.code === 200) {
@@ -603,7 +882,7 @@ export default function PublishScreen({ navigation }) {
         // 清空表单
         setTitle('');
         setContent('');
-        setSelectedType('free');
+        setSelectedType(0); // 重置为公开问题
         setReward('');
         setTargetedReward('');
         setTargetedUsers([]);
@@ -632,7 +911,24 @@ export default function PublishScreen({ navigation }) {
       
       if (error.response) {
         // 服务器返回了错误响应
-        errorMessage = error.response.data?.msg || error.response.data?.message || '服务器错误，请稍后重试';
+        console.error('服务器错误响应:', error.response.data);
+        
+        // 优先使用服务器返回的具体错误信息
+        if (error.response.data?.msg) {
+          errorMessage = error.response.data.msg;
+        } else if (error.response.data?.message) {
+          errorMessage = error.response.data.message;
+        } else {
+          errorMessage = '服务器错误，请稍后重试';
+        }
+        
+        // 特别处理验证错误
+        if (error.response.status === 400) {
+          console.error('❌ 验证错误 - 检查请求数据:');
+          console.error('   请求的title:', title);
+          console.error('   请求的categoryId:', selectedLevel2?.id);
+          console.error('   请求的type:', selectedType);
+        }
       } else if (error.request) {
         // 请求已发出但没有收到响应
         errorMessage = '网络请求超时，请检查网络连接';
@@ -662,6 +958,15 @@ export default function PublishScreen({ navigation }) {
 
   const handleVisibilityPress = () => {
     setShowVisibilityModal(true);
+  };
+
+  const getVisibilityText = (value) => {
+    switch(value) {
+      case 0: return '所有人';
+      case 1: return '仅关注我的人';
+      case 2: return '仅自己';
+      default: return '所有人';
+    }
   };
 
   const selectVisibility = (value) => {
@@ -757,9 +1062,9 @@ export default function PublishScreen({ navigation }) {
   // 当选择定向问题类型或分类变化时，重新加载专家列表
   useEffect(() => {
     // 只有在选择了定向问题类型且选择了分类时才加载专家列表
-    if (selectedType === 'targeted' && selectedLevel2?.id) {
+    if (selectedType === 2 && selectedLevel2?.id) { // 2 = 定向问题
       loadExpertList(false);
-    } else if (selectedType === 'targeted' && !selectedLevel2?.id) {
+    } else if (selectedType === 2 && !selectedLevel2?.id) { // 2 = 定向问题
       // 如果选择了定向问题但没有选择分类，清空专家列表
       setExpertList([]);
       setExpertTotal(0);
@@ -869,7 +1174,7 @@ export default function PublishScreen({ navigation }) {
         </View>
 
         {/* 公开问题 - 悬赏金额 */}
-        {selectedType === 'free' && (
+        {selectedType === 0 && ( // 0 = 公开问题
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>设置悬赏金额</Text>
             <Text style={styles.sectionDesc}>可以设置为 $0（不设悬赏）或任意金额</Text>
@@ -903,7 +1208,7 @@ export default function PublishScreen({ navigation }) {
         )}
 
         {/* 悬赏金额 */}
-        {selectedType === 'reward' && (
+        {selectedType === 1 && ( // 1 = 悬赏问题
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>设置悬赏金额 <Text style={styles.required}>*</Text></Text>
             <Text style={styles.sectionDesc}>悬赏金额不能小于 $1</Text>
@@ -937,7 +1242,7 @@ export default function PublishScreen({ navigation }) {
         )}
 
         {/* 定向问题 - 邀请专家 */}
-        {selectedType === 'targeted' && (expertLoading || expertList.length > 0 || targetedUsers.length > 0) && (
+        {selectedType === 2 && (expertLoading || expertList.length > 0 || targetedUsers.length > 0) && ( // 2 = 定向问题
           <>
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>邀请回答专家 <Text style={styles.required}>*</Text></Text>
@@ -1279,7 +1584,7 @@ export default function PublishScreen({ navigation }) {
           <TouchableOpacity style={styles.settingItem} onPress={handleVisibilityPress}>
             <Ionicons name="eye-outline" size={20} color="#9ca3af" />
             <Text style={styles.settingLabel}>谁可以看</Text>
-            <Text style={styles.settingValue}>{visibility}</Text>
+            <Text style={styles.settingValue}>{getVisibilityText(visibility)}</Text>
             <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
           </TouchableOpacity>
           <View style={styles.settingItem}>
@@ -1420,7 +1725,7 @@ export default function PublishScreen({ navigation }) {
                       </View>
                     ) : (
                       <View style={styles.level2Grid}>
-                        {(level2CategoriesMap[tempSelectedLevel1?.id] || categoryData.level2[tempSelectedLevel1?.id] || []).map(cat => (
+                        {(level2CategoriesMap[tempSelectedLevel1?.id] || []).map(cat => (
                           <TouchableOpacity
                             key={cat.id}
                             style={styles.level2Item}
@@ -1457,8 +1762,8 @@ export default function PublishScreen({ navigation }) {
 
             <View style={styles.visibilityOptions}>
               <TouchableOpacity
-                style={[styles.visibilityOption, visibility === '所有人' && styles.visibilityOptionActive]}
-                onPress={() => selectVisibility('所有人')}
+                style={[styles.visibilityOption, visibility === 0 && styles.visibilityOptionActive]}
+                onPress={() => selectVisibility(0)}
                 activeOpacity={0.7}
               >
                 <View style={[styles.visibilityIconContainer, { backgroundColor: '#dbeafe' }]}>
@@ -1468,14 +1773,14 @@ export default function PublishScreen({ navigation }) {
                   <Text style={styles.visibilityOptionTitle}>所有人</Text>
                   <Text style={styles.visibilityOptionDesc}>所有用户都可以看到这个问题</Text>
                 </View>
-                {visibility === '所有人' && (
+                {visibility === 0 && (
                   <Ionicons name="checkmark-circle" size={24} color="#3b82f6" />
                 )}
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.visibilityOption, visibility === '仅关注我的人' && styles.visibilityOptionActive]}
-                onPress={() => selectVisibility('仅关注我的人')}
+                style={[styles.visibilityOption, visibility === 1 && styles.visibilityOptionActive]}
+                onPress={() => selectVisibility(1)}
                 activeOpacity={0.7}
               >
                 <View style={[styles.visibilityIconContainer, { backgroundColor: '#fef3c7' }]}>
@@ -1485,14 +1790,14 @@ export default function PublishScreen({ navigation }) {
                   <Text style={styles.visibilityOptionTitle}>仅关注我的人</Text>
                   <Text style={styles.visibilityOptionDesc}>只有关注你的用户可以看到</Text>
                 </View>
-                {visibility === '仅关注我的人' && (
+                {visibility === 1 && (
                   <Ionicons name="checkmark-circle" size={24} color="#f59e0b" />
                 )}
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.visibilityOption, visibility === '仅自己' && styles.visibilityOptionActive]}
-                onPress={() => selectVisibility('仅自己')}
+                style={[styles.visibilityOption, visibility === 2 && styles.visibilityOptionActive]}
+                onPress={() => selectVisibility(2)}
                 activeOpacity={0.7}
               >
                 <View style={[styles.visibilityIconContainer, { backgroundColor: '#fce7f3' }]}>
@@ -1502,7 +1807,7 @@ export default function PublishScreen({ navigation }) {
                   <Text style={styles.visibilityOptionTitle}>仅自己</Text>
                   <Text style={styles.visibilityOptionDesc}>只有你自己可以看到这个问题</Text>
                 </View>
-                {visibility === '仅自己' && (
+                {visibility === 2 && (
                   <Ionicons name="checkmark-circle" size={24} color="#ec4899" />
                 )}
               </TouchableOpacity>

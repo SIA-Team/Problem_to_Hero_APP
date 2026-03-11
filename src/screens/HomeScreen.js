@@ -7,6 +7,7 @@ import Avatar from '../components/Avatar';
 import TranslateButton from '../components/TranslateButton';
 import { useTranslation } from '../i18n/useTranslation';
 import { getRegionData } from '../data/regionData';
+import { useOptimizedQuestions } from '../hooks/useOptimizedQuestions';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -75,6 +76,14 @@ export default function HomeScreen({ navigation }) {
       setActiveTab(t('home.recommend'));
     }
   }, [t, activeTab]);
+  
+  // Tab 切换监听 - 触发优化加载
+  useEffect(() => {
+    if (activeTab && handleOptimizedTabChange) {
+      handleOptimizedTabChange(activeTab);
+    }
+  }, [activeTab, handleOptimizedTabChange]);
+  
   const [likedItems, setLikedItems] = useState({});
   const [bookmarkedItems, setBookmarkedItems] = useState({});
   const [showRegionModal, setShowRegionModal] = useState(false);
@@ -89,11 +98,21 @@ export default function HomeScreen({ navigation }) {
   // 话题关注状态
   const [topicFollowState, setTopicFollowState] = useState({});
   
-  // 列表状态
-  const [questionList, setQuestionList] = useState(questions);
-  const [refreshing, setRefreshing] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+  // 列表状态 - 使用优化 Hook（今日头条式优化）
+  const {
+    questionList,
+    loading: optimizedLoading,
+    refreshing,
+    loadingMore,
+    hasMore,
+    hasNewContent,
+    onRefresh,
+    onLoadMore,
+    onTabChange: handleOptimizedTabChange,
+    setQuestionList,
+  } = useOptimizedQuestions(activeTab, tabs);
+  
+  // 保留 page 状态（用于其他功能）
   const [page, setPage] = useState(1);
   
   // 翻译状态
@@ -110,36 +129,41 @@ export default function HomeScreen({ navigation }) {
   
   // 时间格式化函数 - with translation support
   const formatTime = (timeStr) => {
-    // 如果已经是格式化的字符串（如"2小时前"），需要解析
-    const now = new Date();
-    let targetTime;
-    
-    // 解析不同格式的时间字符串
-    if (timeStr.includes('小时前') || timeStr.includes('hours ago')) {
-      const hours = parseInt(timeStr);
-      targetTime = new Date(now.getTime() - hours * 60 * 60 * 1000);
-    } else if (timeStr.includes('分钟前') || timeStr.includes('minutes ago')) {
-      const minutes = parseInt(timeStr);
-      targetTime = new Date(now.getTime() - minutes * 60 * 1000);
-    } else if (timeStr.includes('昨天') || timeStr.includes('Yesterday')) {
-      targetTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    } else {
-      // 假设是时间戳或其他格式
-      targetTime = new Date(timeStr);
+    // 如果已经是格式化的字符串，直接返回
+    if (typeof timeStr === 'string' && (
+      timeStr.includes('前') || 
+      timeStr.includes('ago') || 
+      timeStr === '刚刚' || 
+      timeStr === 'just now'
+    )) {
+      return timeStr;
     }
     
-    const diff = now - targetTime;
-    const minutes = Math.floor(diff / (1000 * 60));
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    
-    if (days >= 1) {
-      return t('home.yesterday');
-    } else if (hours >= 1) {
-      return `${hours} ${t('home.hoursAgo')}`;
-    } else if (minutes >= 1) {
-      return `${minutes} ${t('home.minutesAgo')}`;
-    } else {
+    // 否则进行时间格式化
+    try {
+      const now = new Date();
+      const targetTime = new Date(timeStr);
+      
+      if (isNaN(targetTime.getTime())) {
+        return t('home.justNow');
+      }
+      
+      const diff = now - targetTime;
+      const minutes = Math.floor(diff / (1000 * 60));
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      
+      if (days >= 1) {
+        return t('home.yesterday');
+      } else if (hours >= 1) {
+        return `${hours} ${t('home.hoursAgo')}`;
+      } else if (minutes >= 1) {
+        return `${minutes} ${t('home.minutesAgo')}`;
+      } else {
+        return t('home.justNow');
+      }
+    } catch (error) {
+      console.error('时间格式化错误:', error, '原始时间:', timeStr);
       return t('home.justNow');
     }
   };
@@ -235,6 +259,9 @@ export default function HomeScreen({ navigation }) {
   const usedCount = 0; // 已使用次数
   const remainingFree = freeCount - usedCount;
 
+  // 下拉刷新和上拉加载已由 useOptimizedQuestions Hook 提供
+  // 原有函数已注释，使用优化版本
+  /*
   // 下拉刷新
   const onRefresh = async () => {
     setRefreshing(true);
@@ -273,6 +300,7 @@ export default function HomeScreen({ navigation }) {
       setLoadingMore(false);
     }, 1500);
   };
+  */
 
   // 渲染底部组件
   const renderFooter = () => {
@@ -491,10 +519,23 @@ export default function HomeScreen({ navigation }) {
             onEndReached={onLoadMore}
             onEndReachedThreshold={0.3}
             ListHeaderComponent={() => (
-              /* 同城筛选条 */
-              <View style={[styles.localFilterBar, { display: activeTab === t('home.sameCity') ? 'flex' : 'none' }]}>
-                <View style={styles.localFilterRow}>
-                  <TouchableOpacity style={styles.localFilterItem} onPress={() => setShowCityModal(true)}>
+              <>
+                {/* 新内容提示 - 今日头条式优化 */}
+                {hasNewContent && (
+                  <TouchableOpacity
+                    style={styles.newContentBanner}
+                    onPress={onRefresh}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="arrow-up-circle" size={16} color="#ef4444" />
+                    <Text style={styles.newContentText}>{t('home.hasNewContent') || '有新内容，点击刷新'}</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {/* 同城筛选条 */}
+                <View style={[styles.localFilterBar, { display: activeTab === t('home.sameCity') ? 'flex' : 'none' }]}>
+                  <View style={styles.localFilterRow}>
+                    <TouchableOpacity style={styles.localFilterItem} onPress={() => setShowCityModal(true)}>
                     <View style={[styles.localFilterIcon, { backgroundColor: '#e0f2fe' }]}>
                       <Ionicons name="navigate" size={22} color="#0ea5e9" />
                     </View>
@@ -538,6 +579,7 @@ export default function HomeScreen({ navigation }) {
                   </TouchableOpacity>
                 </View>
               </View>
+              </>
             )}
           ListFooterComponent={renderFooter}
           renderItem={({ item, index }) => {
@@ -1011,6 +1053,7 @@ export default function HomeScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#ffffff' },
+  
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#ffffff' },
   regionBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 6, backgroundColor: '#fef2f2', borderRadius: 16, marginRight: 8, maxWidth: 80 },
   regionText: { fontSize: 12, color: '#ef4444', marginLeft: 4, fontWeight: '500', lineHeight: 16, includeFontPadding: false, maxWidth: 56 },
@@ -1360,4 +1403,29 @@ const styles = StyleSheet.create({
   topicFollowBtnText: { fontSize: 12, color: '#6b7280', fontWeight: '500' },
   topicFollowBtnActive: { backgroundColor: '#fef2f2' },
   topicFollowBtnTextActive: { color: '#ef4444' },
+  
+  // 新内容提示样式 - 今日头条式优化
+  newContentBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fef2f2',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    gap: 6,
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  newContentText: {
+    fontSize: 13,
+    color: '#ef4444',
+    fontWeight: '500',
+  },
 });

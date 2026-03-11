@@ -20,14 +20,12 @@ import LocalMockService from './src/services/LocalMockService';
 // import UpdateChecker from './src/components/UpdateChecker'; // 临时注释：构建APK时不需要热更新功能
 
 import HomeScreen from './src/screens/HomeScreen';
-import HomeScreenOptimizedSimple from './src/screens/HomeScreenOptimizedSimple';
 import SearchScreen from './src/screens/SearchScreen';
 import PublishScreen from './src/screens/PublishScreen';
 import MessagesScreen from './src/screens/MessagesScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import QuestionDetailScreen from './src/screens/QuestionDetailScreen';
 import FollowScreen from './src/screens/FollowScreen';
-import DebugButton from './src/components/DebugButton';
 import HotListScreen from './src/screens/HotListScreen';
 import IncomeRankingScreen from './src/screens/IncomeRankingScreen';
 import QuestionRankingScreen from './src/screens/QuestionRankingScreen';
@@ -787,8 +785,6 @@ export default function App() {
         <Stack.Screen name="ConnectionStatus" component={ConnectionStatusScreen} />
         </Stack.Navigator>
         
-        {/* 调试按钮 - 仅开发环境显示 */}
-        <DebugButton />
         <ToastContainer ref={toastRef} />
       </NavigationContainer>
     </SafeAreaProvider>

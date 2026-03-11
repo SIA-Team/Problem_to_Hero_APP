@@ -60,7 +60,8 @@
     "city": "City",
     "state": "State",
     "district": "District",
-    "fullText": "Full Text"
+    "fullText": "Full Text",
+    "hasNewContent": "New content available, tap to refresh"
   },
   "emergency": {
     "title": "Emergency Help",

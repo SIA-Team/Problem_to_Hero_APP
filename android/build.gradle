@@ -1,52 +1,24 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
 buildscript {
-    ext {
-        buildToolsVersion = findProperty('android.buildToolsVersion') ?: '35.0.0'
-        minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: '24')
-        // 使用 '+' 自动使用最新的 SDK 版本
-        compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: '36')
-        // targetSdkVersion 保持在一个稳定版本，避免未测试的新版本问题
-        targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: '35')
-        kotlinVersion = findProperty('android.kotlinVersion') ?: '2.0.0'
-
-        ndkVersion = "27.0.12077973"
-    }
-    repositories {
-        maven { url 'https://maven.aliyun.com/repository/public/' }
-        maven { url 'https://maven.aliyun.com/repository/google/' }
-        maven { url 'https://maven.aliyun.com/repository/gradle-plugin/' }
-        maven { url 'https://maven.aliyun.com/repository/central/' }
-        maven { url 'https://maven.aliyun.com/repository/jcenter/' }
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        classpath('com.android.tools.build:gradle')
-        classpath('com.facebook.react:react-native-gradle-plugin')
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
-    }
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath('com.android.tools.build:gradle')
+    classpath('com.facebook.react:react-native-gradle-plugin')
+    classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')
+  }
 }
-
-apply plugin: "com.facebook.react.rootproject"
 
 allprojects {
-    repositories {
-        maven { url 'https://maven.aliyun.com/repository/public/' }
-        maven { url 'https://maven.aliyun.com/repository/google/' }
-        maven { url 'https://maven.aliyun.com/repository/central/' }
-        maven { url 'https://maven.aliyun.com/repository/jcenter/' }
-        maven {
-            // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
-            url(new File(['node', '--print', "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim(), '../android'))
-        }
-        maven {
-            // Android JSC is installed from npm
-            url(new File(['node', '--print', "require.resolve('jsc-android/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim(), '../dist'))
-        }
-
-        google()
-        mavenCentral()
-        maven { url 'https://www.jitpack.io' }
-    }
+  repositories {
+    google()
+    mavenCentral()
+    maven { url 'https://www.jitpack.io' }
+  }
 }
+
+apply plugin: "expo-root-project"
+apply plugin: "com.facebook.react.rootproject"

@@ -60,7 +60,8 @@
     "city": "城市",
     "state": "省份",
     "district": "区",
-    "fullText": "全文"
+    "fullText": "全文",
+    "hasNewContent": "有新内容，点击刷新"
   },
   "emergency": {
     "title": "紧急求助",

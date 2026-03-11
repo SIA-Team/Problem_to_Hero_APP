@@ -48,9 +48,13 @@ export const API_ENDPOINTS = {
   QUESTION: {
     LIST: '/app/content/question/list',  // 问题列表（新接口）
     DETAIL: '/questions/:id',
+    DRAFT_DETAIL: '/app/content/question/:id',  // 获取草稿详情
     CREATE: '/app/content/question',
+    PUBLISH: '/app/content/question/publish',  // 发布问题
     UPDATE: '/questions/:id',
     DELETE: '/questions/:id',
+    DRAFT: '/app/content/question/draft',  // 保存草稿
+    DRAFTS: '/app/content/question/drafts',  // 获取草稿列表
     HOT: '/questions/hot',
     RANKING: '/questions/ranking',
     SEARCH: '/questions/search',

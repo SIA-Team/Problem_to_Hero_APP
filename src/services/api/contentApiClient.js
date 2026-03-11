@@ -69,6 +69,18 @@ contentApiClient.interceptors.request.use(
         if (config.params) {
           console.log('   Params:', JSON.stringify(config.params, null, 2));
         }
+        if (config.data) {
+          console.log('   Request Body:', JSON.stringify(config.data, null, 2));
+          // 特别检查发布问题的数据
+          if (config.url?.includes('/question/publish') && config.data?.questionPublishRequest) {
+            const qpr = config.data.questionPublishRequest;
+            console.log('   🔍 发布问题数据验证:');
+            console.log('     - title:', `"${qpr.title}" (长度: ${qpr.title?.length || 0})`);
+            console.log('     - categoryId:', qpr.categoryId);
+            console.log('     - type:', qpr.type);
+            console.log('     - description:', `"${qpr.description}" (长度: ${qpr.description?.length || 0})`);
+          }
+        }
         console.log('');
       }
       
@@ -132,6 +144,16 @@ contentApiClient.interceptors.response.use(
         message: error.message,
         data: error.response?.data,
       });
+      
+      // 特别处理发布问题的错误
+      if (error.config?.url?.includes('/question/publish')) {
+        console.error('❌ 发布问题失败详情:');
+        console.error('   状态码:', error.response?.status);
+        console.error('   错误数据:', JSON.stringify(error.response?.data, null, 2));
+        if (error.response?.data?.msg) {
+          console.error('   服务器错误消息:', error.response.data.msg);
+        }
+      }
     }
     
     // 统一错误处理
@@ -140,6 +162,7 @@ contentApiClient.interceptors.response.use(
       message: errorMessage,
       status: error.response?.status,
       data: error.response?.data,
+      response: error.response, // 保留原始响应对象
     });
   }
 );

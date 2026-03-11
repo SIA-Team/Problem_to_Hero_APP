@@ -11,6 +11,7 @@ import LogoutConfirmModal from '../components/LogoutConfirmModal';
 import { useTranslation } from '../i18n/withTranslation';
 import UserCacheService from '../services/UserCacheService';
 import authApi from '../services/api/authApi';
+import questionApi from '../services/api/questionApi';
 
 export default function ProfileScreen({ navigation, onLogout }) {
   const { t } = useTranslation();
@@ -139,12 +140,42 @@ export default function ProfileScreen({ navigation, onLogout }) {
     { id: 3, title: '如何克服社交恐惧症？', author: '心理咨询师', time: t('profile.time.yesterday') },
   ], [t]);
 
-  // 草稿数据
-  const draftsList = React.useMemo(() => [
-    { id: 1, title: '关于远程办公的一些思考...', time: t('profile.savedAt') + t('profile.time.hoursAgo').replace('{hours}', '1'), type: 'question' },
-    { id: 2, title: '我对Python学习的建议是...', time: t('profile.savedAt') + t('profile.time.yesterday'), type: 'answer' },
-    { id: 3, title: '新手养猫注意事项', time: t('profile.savedAt') + '3' + t('profile.time.daysAgo').replace('{days}', ''), type: 'question' },
-  ], [t]);
+  // 获取草稿列表
+  const loadDraftsList = async (isLoadMore = false) => {
+    if (draftsLoading) return;
+    
+    try {
+      setDraftsLoading(true);
+      
+      const pageNum = isLoadMore ? draftsPageNum + 1 : 1;
+      const response = await questionApi.getDraftsList({
+        pageNum,
+        pageSize: 10,
+      });
+      
+      if (response.code === 200 || response.code === 0) {
+        const { rows = [], total = 0 } = response.data || {};
+        
+        if (isLoadMore) {
+          setDraftsList(prev => [...prev, ...rows]);
+          setDraftsPageNum(pageNum);
+        } else {
+          setDraftsList(rows);
+          setDraftsPageNum(1);
+        }
+        
+        // 检查是否还有更多数据
+        const currentTotal = isLoadMore ? draftsList.length + rows.length : rows.length;
+        setDraftsHasMore(currentTotal < total);
+      }
+    } catch (error) {
+      console.error('获取草稿列表失败:', error);
+    } finally {
+      setDraftsLoading(false);
+    }
+  };
+
+
 
   const [activeTab, setActiveTab] = useState('');
   
@@ -161,6 +192,13 @@ export default function ProfileScreen({ navigation, onLogout }) {
   const [showFavoritesModal, setShowFavoritesModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showDraftsModal, setShowDraftsModal] = useState(false);
+  
+  // 草稿数据状态
+  const [draftsList, setDraftsList] = useState([]);
+  const [draftsLoading, setDraftsLoading] = useState(false);
+  const [draftsPageNum, setDraftsPageNum] = useState(1);
+  const [draftsHasMore, setDraftsHasMore] = useState(true);
+  
   const [favoritesTab, setFavoritesTab] = useState('questions');
   
   // 认证状态: 'none' | 'personal' | 'enterprise' | 'government'
@@ -274,6 +312,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
         break;
       case t('profile.myDrafts'):
         setShowDraftsModal(true);
+        loadDraftsList(); // 加载草稿数据
         break;
       case t('profile.myGroups'):
         navigation.navigate('MyGroups');
@@ -343,12 +382,58 @@ export default function ProfileScreen({ navigation, onLogout }) {
     navigation.navigate('QuestionDetail', { id: item.id });
   };
 
-  const handleDraftPress = (item) => {
-    setShowDraftsModal(false);
-    if (item.type === 'question') {
-      navigation.navigate('Publish');
-    } else {
-      Alert.alert(t('profile.contentTabs.answers'), t('profile.continueEditing'));
+  const handleDraftPress = async (item) => {
+    try {
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('📝 点击草稿，ID:', item.id);
+      console.log('═══════════════════════════════════════════════════════════');
+      
+      // 显示加载提示
+      setShowDraftsModal(false);
+      
+      // 调用接口获取草稿完整数据
+      const response = await questionApi.getDraftDetail(item.id);
+      
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('📋 草稿详情接口响应');
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('完整响应:', JSON.stringify(response, null, 2));
+      console.log('═══════════════════════════════════════════════════════════');
+      
+      if (response && response.code === 200 && response.data) {
+        const draftData = response.data;
+        
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('📦 草稿数据详情');
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('ID:', draftData.id);
+        console.log('标题:', draftData.title);
+        console.log('描述:', draftData.description);
+        console.log('类型:', draftData.type);
+        console.log('分类ID:', draftData.categoryId);
+        console.log('分类名称:', draftData.categoryName);
+        console.log('图片URLs:', draftData.imageUrls);
+        console.log('图片URLs类型:', typeof draftData.imageUrls);
+        console.log('图片URLs是否为数组:', Array.isArray(draftData.imageUrls));
+        console.log('图片URLs长度:', draftData.imageUrls?.length);
+        if (Array.isArray(draftData.imageUrls)) {
+          draftData.imageUrls.forEach((url, index) => {
+            console.log(`  图片${index + 1}: "${url}" (类型: ${typeof url}, 长度: ${url?.length})`);
+          });
+        }
+        console.log('话题:', draftData.topics);
+        console.log('专家:', draftData.experts);
+        console.log('═══════════════════════════════════════════════════════════');
+        
+        // 跳转到发布页面，传递完整的草稿数据
+        navigation.navigate('Publish', { draftData });
+      } else {
+        console.error('❌ 获取草稿失败:', response);
+        Alert.alert('获取草稿失败', response?.msg || '无法加载草稿数据');
+      }
+    } catch (error) {
+      console.error('❌ 获取草稿详情失败:', error);
+      Alert.alert('获取草稿失败', '网络错误，请稍后重试');
     }
   };
 
@@ -1091,22 +1176,44 @@ export default function ProfileScreen({ navigation, onLogout }) {
             <View style={{ width: 24 }} />
           </View>
           <ScrollView style={styles.listModalContent}>
-            {draftsList.map(item => (
-              <View key={item.id} style={styles.draftItem}>
-                <TouchableOpacity style={styles.draftContent} onPress={() => handleDraftPress(item)}>
-                  <View style={styles.draftTypeTag}>
-                    <Text style={styles.draftTypeText}>{item.type === 'question' ? t('profile.draftTypes.question') : t('profile.draftTypes.answer')}</Text>
-                  </View>
-                  <View style={styles.draftInfo}>
-                    <Text style={styles.draftTitle} numberOfLines={1}>{item.title}</Text>
-                    <Text style={styles.draftTime}>{item.time}</Text>
-                  </View>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.draftDeleteBtn} onPress={() => handleDeleteDraft(item)}>
-                  <Ionicons name="trash-outline" size={18} color="#ef4444" />
-                </TouchableOpacity>
+            {draftsLoading && draftsList.length === 0 ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#ef4444" />
+                <Text style={styles.loadingText}>加载中...</Text>
               </View>
-            ))}
+            ) : draftsList.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="document-text-outline" size={48} color="#d1d5db" />
+                <Text style={styles.emptyText}>暂无草稿</Text>
+                <Text style={styles.emptyHint}>您还没有保存任何草稿</Text>
+              </View>
+            ) : (
+              draftsList.map(item => (
+                <View key={item.id} style={styles.draftItem}>
+                  <TouchableOpacity style={styles.draftContent} onPress={() => handleDraftPress(item)}>
+                    <View style={styles.draftTypeTag}>
+                      <Text style={styles.draftTypeText}>
+                        {item.type === 0 ? '公开问题' : item.type === 1 ? '悬赏问题' : '定向问题'}
+                      </Text>
+                    </View>
+                    <View style={styles.draftInfo}>
+                      <Text style={styles.draftTitle} numberOfLines={1}>
+                        {item.title && item.title !== '未命名草稿' 
+                          ? item.title 
+                          : (item.description ? item.description.substring(0, 20) + '...' : '无标题')
+                        }
+                      </Text>
+                      <Text style={styles.draftTime}>
+                        {item.createTime ? new Date(item.createTime).toLocaleString() : '未知时间'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.draftDeleteBtn} onPress={() => handleDeleteDraft(item)}>
+                    <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -1961,4 +2068,11 @@ const styles = StyleSheet.create({
   verificationFooter: { backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 0 },
   verificationSubmitBtn: { backgroundColor: '#3b82f6', paddingVertical: 14, borderRadius: 8, alignItems: 'center' },
   verificationSubmitText: { fontSize: 15, fontWeight: '600', color: '#fff' },
+  
+  // 加载和空状态样式
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 60 },
+  loadingText: { fontSize: 14, color: '#6b7280', marginTop: 12 },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 60 },
+  emptyText: { fontSize: 16, color: '#6b7280', marginTop: 12, fontWeight: '500' },
+  emptyHint: { fontSize: 14, color: '#9ca3af', marginTop: 4 },
 });
