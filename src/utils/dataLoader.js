@@ -12,6 +12,89 @@ import { getCache, setCache } from './cacheManager';
 import questionApi from '../services/api/questionApi';
 
 /**
+ * 处理标题字段
+ * 如果后端返回的title字段包含描述内容，进行适当处理
+ */
+const processTitle = (title) => {
+  if (!title || typeof title !== 'string') {
+    return '无标题';
+  }
+  
+  // 去除首尾空格
+  title = title.trim();
+  
+  // 如果标题过长（超过50个字符），可能包含了描述内容
+  if (title.length > 50) {
+    console.log(`⚠️ 标题过长: "${title}" (${title.length}字符)`);
+    
+    // 尝试提取问题的核心部分
+    // 1. 如果包含问号，截取到第一个问号
+    const questionMarkIndex = title.indexOf('？') !== -1 ? title.indexOf('？') : title.indexOf('?');
+    if (questionMarkIndex !== -1 && questionMarkIndex < 50) {
+      const extractedTitle = title.substring(0, questionMarkIndex + 1);
+      console.log(`📝 提取问题标题: "${extractedTitle}"`);
+      return extractedTitle;
+    }
+    
+    // 2. 如果包含句号，截取到第一个句号
+    const periodIndex = title.indexOf('。') !== -1 ? title.indexOf('。') : title.indexOf('.');
+    if (periodIndex !== -1 && periodIndex < 50) {
+      const extractedTitle = title.substring(0, periodIndex + 1);
+      console.log(`📝 提取问题标题: "${extractedTitle}"`);
+      return extractedTitle;
+    }
+    
+    // 3. 如果都没有，截取前40个字符并加省略号
+    const truncatedTitle = title.substring(0, 40) + '...';
+    console.log(`📝 截断标题: "${truncatedTitle}"`);
+    return truncatedTitle;
+  }
+  
+  return title;
+};
+
+/**
+ * 将补充API数据转换为组件期望的格式
+ */
+const transformSupplementDataToFormat = (apiData) => {
+  if (!apiData || !Array.isArray(apiData)) {
+    return [];
+  }
+  
+  return apiData.map((item) => {
+    // 生成一个合理的时间（如果API没有提供时间字段）
+    let timeDisplay = '刚刚';
+    
+    if (item.createTime || item.createdAt || item.updateTime || item.updatedAt) {
+      timeDisplay = formatApiTime(item.createTime || item.createdAt || item.updateTime || item.updatedAt);
+    }
+    
+    // 基础数据转换
+    const transformedItem = {
+      id: item.id,
+      author: item.userName || item.userNickname || '匿名用户',
+      avatar: item.userAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${item.id}`,
+      location: item.location || '未知',
+      content: item.content || item.description || '',
+      likes: item.likeCount || 0,
+      dislikes: item.dislikeCount || 0,
+      comments: item.commentCount || 0,
+      shares: item.shareCount || 0,
+      bookmarks: item.collectCount || 0,
+      superLikes: item.superLikeCount || 0,
+      time: timeDisplay,
+    };
+    
+    // 处理图片
+    if (item.imageUrls && Array.isArray(item.imageUrls) && item.imageUrls.length > 0) {
+      transformedItem.images = item.imageUrls;
+    }
+    
+    return transformedItem;
+  });
+};
+
+/**
  * 将API数据转换为HomeScreen组件期望的格式
  */
 const transformApiDataToHomeFormat = (apiData) => {
@@ -41,22 +124,34 @@ const transformApiDataToHomeFormat = (apiData) => {
     // 基础数据转换
     const transformedItem = {
       id: item.id,
-      title: item.title || '无标题',
+      title: processTitle(item.title) || '无标题',
       author: item.userName || item.userNickname || '匿名用户',
       avatar: item.userAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${item.id}`,
       time: timeDisplay,
-      likes: item.likeCount || Math.floor(Math.random() * 500) + 50,
-      dislikes: item.dislikeCount || Math.floor(Math.random() * 20) + 1,
-      answers: item.answerCount || Math.floor(Math.random() * 100) + 10,
-      shares: item.shareCount || Math.floor(Math.random() * 50) + 5,
-      bookmarks: item.bookmarkCount || Math.floor(Math.random() * 80) + 20,
+      likes: item.likeCount || 0,
+      dislikes: item.dislikeCount || 0,
+      answers: item.answerCount || 0,
+      shares: item.shareCount || 0,
+      bookmarks: item.collectCount || 0,
       country: '中国',
       city: item.location || '北京',
       solvedPercent: item.solvedPercent || Math.floor(Math.random() * 100),
     };
     
     // 问题类型转换
-    if (item.type === 1 && item.bountyAmount > 0) {
+    // 注意：付费查看的优先级最高，如果 payViewAmount > 0，优先显示付费样式
+    if (item.payViewAmount > 0) {
+      // 付费查看（优先级最高）
+      transformedItem.type = 'paid';
+      transformedItem.paidAmount = Math.floor(item.payViewAmount / 100);
+      // 付费功能暂未完成，统一设置为未付费
+      transformedItem.isPaid = false;
+      // 保存原始问题类型，用户付费后可以看到
+      transformedItem.originalType = item.type;
+      if (item.bountyAmount > 0) {
+        transformedItem.originalReward = Math.floor(item.bountyAmount / 100);
+      }
+    } else if (item.type === 1 && item.bountyAmount > 0) {
       // 悬赏问题
       transformedItem.type = 'reward';
       transformedItem.reward = Math.floor(item.bountyAmount / 100); // 转换为元
@@ -66,11 +161,6 @@ const transformApiDataToHomeFormat = (apiData) => {
       if (item.bountyAmount > 0) {
         transformedItem.reward = Math.floor(item.bountyAmount / 100);
       }
-    } else if (item.payViewAmount > 0) {
-      // 付费查看
-      transformedItem.type = 'paid';
-      transformedItem.paidAmount = Math.floor(item.payViewAmount / 100);
-      transformedItem.isPaid = false;
     } else {
       // 免费问题
       transformedItem.type = 'free';
@@ -159,6 +249,106 @@ const pendingRequests = new Map();
 // 预加载队列
 const prefetchQueue = [];
 let isPrefetching = false;
+
+/**
+ * 加载问题补充列表（带缓存）
+ * 
+ * @param {string} questionId - 问题ID
+ * @param {string} sortBy - 排序方式 (featured, latest)
+ * @param {number} page - 页码
+ * @param {boolean} forceRefresh - 是否强制刷新（忽略缓存）
+ * @returns {Promise<{data: Array, fromCache: boolean}>}
+ */
+export const loadQuestionSupplements = async (questionId, sortBy = 'featured', page = 1, forceRefresh = false) => {
+  const cacheKey = `supplements_${questionId}_${sortBy}_${page}`;
+  
+  // 检查是否有正在进行的相同请求
+  if (pendingRequests.has(cacheKey)) {
+    return pendingRequests.get(cacheKey);
+  }
+  
+  // 创建请求 Promise
+  const requestPromise = (async () => {
+    try {
+      // 1. 如果不是强制刷新，先尝试从缓存获取
+      if (!forceRefresh) {
+        const cached = await getCache('supplements', { questionId, sortBy, page });
+        if (cached) {
+          // 返回缓存数据，同时在后台更新
+          backgroundUpdateSupplements(questionId, sortBy, page);
+          return { data: cached, fromCache: true };
+        }
+      }
+      
+      // 2. 从网络加载数据
+      const response = await fetchSupplementsByQuestion(questionId, sortBy, page);
+      
+      // 3. 保存到缓存
+      if (response && response.length > 0) {
+        await setCache('supplements', { questionId, sortBy, page }, response);
+      }
+      
+      return { data: response, fromCache: false };
+    } catch (error) {
+      // 如果网络请求失败，尝试返回缓存数据
+      const cached = await getCache('supplements', { questionId, sortBy, page });
+      if (cached) {
+        return { data: cached, fromCache: true };
+      }
+      
+      throw error;
+    } finally {
+      // 请求完成，从 pending 中移除
+      pendingRequests.delete(cacheKey);
+    }
+  })();
+  
+  // 将请求添加到 pending
+  pendingRequests.set(cacheKey, requestPromise);
+  
+  return requestPromise;
+};
+
+/**
+ * 后台更新补充数据（不阻塞 UI）
+ */
+const backgroundUpdateSupplements = async (questionId, sortBy, page) => {
+  try {
+    console.log(`🔄 后台更新补充: questionId=${questionId}, sortBy=${sortBy}, page=${page}`);
+    const response = await fetchSupplementsByQuestion(questionId, sortBy, page);
+    
+    if (response && response.length > 0) {
+      await setCache('supplements', { questionId, sortBy, page }, response);
+      console.log(`✅ 后台更新补充完成: questionId=${questionId}, sortBy=${sortBy}, page=${page}`);
+    }
+  } catch (error) {
+    console.error(`❌ 后台更新补充失败: questionId=${questionId}, sortBy=${sortBy}, page=${page}`, error);
+  }
+};
+
+/**
+ * 获取问题补充数据
+ */
+const fetchSupplementsByQuestion = async (questionId, sortBy, page) => {
+  try {
+    const response = await questionApi.getQuestionSupplements(questionId, {
+      sortBy,
+      pageNum: page,
+      pageSize: 10,
+    });
+    
+    // 处理响应数据
+    if (response && response.code === 200) {
+      const rawData = response.data?.rows || response.data?.list || response.data || [];
+      const transformedData = transformSupplementDataToFormat(rawData);
+      return transformedData;
+    } else {
+      return [];
+    }
+  } catch (error) {
+    throw error;
+  }
+};
 
 /**
  * 加载问题列表（带缓存）

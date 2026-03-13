@@ -998,7 +998,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
           {/* 回答列表 */}
           <View style={{ display: activeTab === t('profile.contentTabs.answers') ? 'flex' : 'none' }}>
             {myAnswers.map(a => (
-              <TouchableOpacity key={a.id} style={styles.answerItem} onPress={() => navigation.navigate('AnswerDetail', { answer: a })}>
+              <TouchableOpacity key={a.id} style={styles.answerItem} onPress={() => navigation.navigate('AnswerDetail', { answer: a, defaultTab: 'supplements' })}>
                 <View style={styles.answerHeader}>
                   <Text style={styles.answerTime}>{a.time}</Text>
                 </View>

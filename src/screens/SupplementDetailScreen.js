@@ -211,7 +211,7 @@ export default function SupplementDetailScreen({ navigation, route }) {
                 <TouchableOpacity 
                   key={answer.id} 
                   style={styles.answerCard}
-                  onPress={() => navigation.navigate('AnswerDetail', { answer })}
+                  onPress={() => navigation.navigate('AnswerDetail', { answer, defaultTab: 'supplements' })}
                   activeOpacity={0.7}
                 >
                   <View style={styles.answerHeader}>

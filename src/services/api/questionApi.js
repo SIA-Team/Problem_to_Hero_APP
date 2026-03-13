@@ -103,7 +103,8 @@ const questionApi = {
    */
   getQuestionDetail: (questionId) => {
     const url = replaceUrlParams(API_ENDPOINTS.QUESTION.DETAIL, { id: questionId });
-    return apiClient.get(url);
+    console.log(`📋 获取问题详情: ID=${questionId}`);
+    return contentApiClient.get(url);
   },
 
   /**
@@ -197,6 +198,72 @@ const questionApi = {
     const url = replaceUrlParams(API_ENDPOINTS.QUESTION.DRAFT_DETAIL, { id });
     console.log(`📋 获取草稿详情: ID=${id}`);
     return contentApiClient.get(url);
+  },
+
+  /**
+   * 获取问题补充列表
+   * @param {string} questionId - 问题ID
+   * @param {Object} params - 查询参数
+   * @param {string} params.sortBy - 排序方式（featured=精选，latest=最新）
+   * @param {number} params.pageNum - 页码（默认1）
+   * @param {number} params.pageSize - 每页数量（默认10）
+   * @returns {Promise<Object>}
+   */
+  getQuestionSupplements: (questionId, params = {}) => {
+    const {
+      sortBy = 'featured',
+      pageNum = 1,
+      pageSize = 10
+    } = params;
+
+    const url = replaceUrlParams(API_ENDPOINTS.QUESTION.SUPPLEMENTS, { questionId });
+    
+    const requestParams = {
+      sortBy,
+      pageNum,
+      pageSize
+    };
+    
+    console.log(`📋 获取问题补充列表: questionId=${questionId}`, requestParams);
+    
+    return contentApiClient.get(url, { params: requestParams });
+  },
+
+  /**
+   * 发布补充问题
+   * @param {number} questionId - 问题ID
+   * @param {Object} supplementCreateRequest - 补充问题数据
+   * @param {string} supplementCreateRequest.content - 补充内容
+   * @returns {Promise<Object>}
+   */
+  publishSupplement: (questionId, supplementCreateRequest) => {
+    const url = replaceUrlParams(API_ENDPOINTS.QUESTION.PUBLISH_SUPPLEMENT, { questionId });
+    console.log('📤 发布补充问题:');
+    console.log('  questionId:', questionId);
+    console.log('  supplementCreateRequest:', JSON.stringify(supplementCreateRequest, null, 2));
+    return contentApiClient.post(url, supplementCreateRequest);
+  },
+
+  /**
+   * 踩一下/取消踩一下补充问题
+   * @param {number} id - 补充问题ID
+   * @returns {Promise<Object>} 返回 { code: 200, msg: '', data: true/false }
+   */
+  dislikeSupplement: (id) => {
+    const url = replaceUrlParams(API_ENDPOINTS.QUESTION.DISLIKE_SUPPLEMENT, { id });
+    console.log('👎 踩一下补充问题: id=', id);
+    return contentApiClient.post(url);
+  },
+
+  /**
+   * 点赞/取消点赞补充问题
+   * @param {number} id - 补充问题ID
+   * @returns {Promise<Object>} 返回 { code: 200, msg: '', data: true/false }
+   */
+  likeSupplement: (id) => {
+    const url = replaceUrlParams(API_ENDPOINTS.QUESTION.LIKE_SUPPLEMENT, { id });
+    console.log('👍 点赞补充问题: id=', id);
+    return contentApiClient.post(url);
   },
 
   /**

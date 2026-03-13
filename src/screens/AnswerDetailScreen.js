@@ -35,7 +35,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
   };
   
   const [inputText, setInputText] = useState('');
-  const [activeTab, setActiveTab] = useState(1); // 0 for supplements, 1 for comments
+  const [activeTab, setActiveTab] = useState(0); // 0 for supplements, 1 for comments - default to supplements
   const [sortFilter, setSortFilter] = useState('featured'); // featured or latest
   const [liked, setLiked] = useState({});
   const [disliked, setDisliked] = useState({});

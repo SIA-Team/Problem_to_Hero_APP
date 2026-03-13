@@ -587,7 +587,17 @@ export default function HomeScreen({ navigation }) {
             const isFirstItem = index === 0;
             const isLastItem = index === questionList.length - 1;
             return (
-              <TouchableOpacity style={[styles.questionCard, isFirstItem && styles.firstQuestionCard]} onPress={() => navigation.navigate('QuestionDetail', { id: item.id })}>
+              <TouchableOpacity 
+                style={[styles.questionCard, isFirstItem && styles.firstQuestionCard]} 
+                onPress={() => {
+                  // 检查是否为付费问题，如果是则阻止跳转
+                  if (item.type === 'paid') {
+                    return; // 直接返回，不跳转
+                  }
+                  // 其他类型问题正常跳转
+                  navigation.navigate('QuestionDetail', { id: item.id });
+                }}
+              >
                 <View style={[styles.questionCardInner, isLastItem && styles.lastQuestionCardInner]}>
                   {/* 问题标题和标签 */}
                   <View style={styles.questionTitleWrapper}>
@@ -960,7 +970,18 @@ export default function HomeScreen({ navigation }) {
               <Ionicons name="people-circle-outline" size={22} color="#1f2937" />
               <Text style={styles.actionItemText}>加入团队</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); navigation.navigate('QuestionDetail', { id: selectedQuestion?.id, openAnswerModal: true }); }}>
+            <TouchableOpacity 
+              style={styles.actionItem} 
+              onPress={() => { 
+                setShowActionModal(false); 
+                // 检查是否为付费问题，如果是则阻止跳转
+                if (selectedQuestion?.type === 'paid') {
+                  return; // 直接返回，不跳转
+                }
+                // 其他类型问题正常跳转
+                navigation.navigate('QuestionDetail', { id: selectedQuestion?.id, openAnswerModal: true });
+              }}
+            >
               <Ionicons name="create-outline" size={22} color="#ef4444" />
               <Text style={[styles.actionItemText, { color: '#ef4444' }]}>写回答</Text>
             </TouchableOpacity>

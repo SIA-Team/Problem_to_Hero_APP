@@ -47,8 +47,12 @@ export const API_ENDPOINTS = {
   // 问题相关
   QUESTION: {
     LIST: '/app/content/question/list',  // 问题列表（新接口）
-    DETAIL: '/questions/:id',
+    DETAIL: '/app/content/question/:id',  // 问题详情
     DRAFT_DETAIL: '/app/content/question/:id',  // 获取草稿详情
+    SUPPLEMENTS: '/app/content/supplement/question/:questionId/list',  // 问题补充列表
+    PUBLISH_SUPPLEMENT: '/app/content/supplement/question/:questionId',  // 发布补充问题
+    DISLIKE_SUPPLEMENT: '/app/content/supplement/:id/dislike',  // 踩一下补充问题
+    LIKE_SUPPLEMENT: '/app/content/supplement/:id/like',  // 点赞补充问题
     CREATE: '/app/content/question',
     PUBLISH: '/app/content/question/publish',  // 发布问题
     UPDATE: '/questions/:id',
@@ -67,13 +71,15 @@ export const API_ENDPOINTS = {
   
   // 回答相关
   ANSWER: {
-    LIST: '/answers',
-    DETAIL: '/answers/:id',
-    CREATE: '/answers',
-    UPDATE: '/answers/:id',
-    DELETE: '/answers/:id',
-    ADOPT: '/answers/:id/adopt',
-    LIKE: '/answers/:id/like',
+    LIST: '/app/content/answer/question/:questionId/list',
+    PUBLISH: '/app/content/answer/question/:questionId',  // 发布回答
+    COLLECT: '/app/content/answer/:id/collect',  // 收藏回答
+    UNCOLLECT: '/app/content/answer/:id/uncollect',  // 取消收藏回答
+    LIKE: '/app/content/answer/:id/like',  // 点赞回答
+    UNLIKE: '/app/content/answer/:id/unlike',  // 取消点赞回答
+    DISLIKE: '/app/content/answer/:id/dislike',  // 点踩回答
+    UNDISLIKE: '/app/content/answer/:id/undislike',  // 取消踩回答
+    ADOPT: '/app/content/answer/question/:questionId/accept/:answerId',  // 采纳回答
   },
   
   // 活动相关
