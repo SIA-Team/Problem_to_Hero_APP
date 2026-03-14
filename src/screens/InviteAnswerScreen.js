@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, Image, TextInput, StyleSheet 
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
+import { showToast } from '../utils/toast';
 
 export default function InviteAnswerScreen({ navigation, route }) {
   const { t } = useTranslation();
@@ -83,7 +84,7 @@ export default function InviteAnswerScreen({ navigation, route }) {
             <TouchableOpacity 
               style={styles.inviteBtn} 
               onPress={() => {
-                alert(`${t('screens.inviteAnswer.alerts.invitedLocal')}${i}`);
+                showToast(`${t('screens.inviteAnswer.alerts.invitedLocal')}${i}`, 'success');
                 navigation.goBack();
               }}
             >
@@ -102,7 +103,7 @@ export default function InviteAnswerScreen({ navigation, route }) {
             <TouchableOpacity 
               style={[styles.inviteBtn, styles.inviteBtnTwitter]} 
               onPress={() => {
-                alert(`${t('screens.inviteAnswer.alerts.invitedTwitter')}${i}`);
+                showToast(`${t('screens.inviteAnswer.alerts.invitedTwitter')}${i}`, 'success');
                 navigation.goBack();
               }}
             >

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import i18n from '../i18n';
+import { modalTokens } from '../components/modalTokens';
 
 export default function EmergencyScreen({ navigation }) {
   const t = (key) => {
@@ -516,12 +517,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, 
     paddingVertical: 12, 
     borderBottomWidth: 1, 
-    borderBottomColor: '#f0f0f0' 
+    borderBottomColor: modalTokens.border 
   },
   headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  headerTitle: { fontSize: 17, fontWeight: '600', color: '#222' },
-  submitBtn: { backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4 },
-  submitBtnDisabled: { backgroundColor: '#fecaca' },
+  headerTitle: { fontSize: 17, fontWeight: '600', color: modalTokens.textPrimary },
+  submitBtn: { backgroundColor: modalTokens.danger, paddingHorizontal: modalTokens.actionPaddingX, paddingVertical: modalTokens.actionPaddingY, borderRadius: modalTokens.actionRadius },
+  submitBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   submitText: { fontSize: 14, color: '#fff', fontWeight: '600' },
   submitTextDisabled: { color: '#fff' },
   warning: { 
@@ -765,18 +766,20 @@ const styles = StyleSheet.create({
   // 进度模态框样式
   progressModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: modalTokens.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   progressModalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: modalTokens.surface,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
     borderRadius: 16,
     padding: 24,
     width: '100%',
     maxWidth: 340,
-    shadowColor: '#000',
+    shadowColor: modalTokens.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -789,7 +792,7 @@ const styles = StyleSheet.create({
   progressTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1f2937',
+    color: modalTokens.textPrimary,
     marginTop: 12,
   },
   progressBody: {
@@ -809,18 +812,18 @@ const styles = StyleSheet.create({
   progressTotal: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#9ca3af',
+    color: modalTokens.textMuted,
     marginLeft: 4,
   },
   progressLabel: {
     fontSize: 14,
-    color: '#6b7280',
+    color: modalTokens.textSecondary,
     marginBottom: 20,
   },
   progressBarContainer: {
     width: '100%',
     height: 8,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: modalTokens.surfaceMuted,
     borderRadius: 4,
     overflow: 'hidden',
     marginBottom: 16,
@@ -834,14 +837,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#f9fafb',
+    backgroundColor: modalTokens.surfaceSoft,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
   },
   progressInfoText: {
     fontSize: 13,
-    color: '#6b7280',
+    color: modalTokens.textSecondary,
   },
   progressComplete: {
     flexDirection: 'row',
@@ -851,7 +856,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingTop: 20,
     borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
+    borderTopColor: modalTokens.border,
   },
   progressCompleteText: {
     fontSize: 16,

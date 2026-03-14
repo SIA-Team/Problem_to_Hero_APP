@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, Tex
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
+import { modalTokens } from '../components/modalTokens';
 
 const initialActivities = [
   { 
@@ -380,7 +381,7 @@ const styles = StyleSheet.create({
     right: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: modalTokens.overlay,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -407,7 +408,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: modalTokens.overlay,
   },
   imageViewerCounter: {
     color: '#fff',

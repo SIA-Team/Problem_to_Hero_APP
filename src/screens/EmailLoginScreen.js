@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authApi } from '../services/api';
+import { showToast } from '../utils/toast';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -28,7 +29,7 @@ export default function LoginScreen({ navigation, onLogin }) {
   const handleSendCode = () => {
     // 取消邮箱验证
     // if (!email || !validateEmail(email)) {
-    //   alert('Please enter a valid email address');
+    //   showToast('Please enter a valid email address', 'warning');
     //   return;
     // }
     setCountdown(60);
@@ -41,7 +42,7 @@ export default function LoginScreen({ navigation, onLogin }) {
         return prev - 1;
       });
     }, 1000);
-    alert('Verification code sent to your email');
+    showToast('Verification code sent to your email', 'success');
   };
 
   const handleSubmit = async () => {

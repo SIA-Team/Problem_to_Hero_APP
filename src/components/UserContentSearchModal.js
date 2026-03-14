@@ -15,6 +15,7 @@ import { useTranslation } from '../i18n/useTranslation';
 import QuestionListItem from './QuestionListItem';
 import AnswerListItem from './AnswerListItem';
 import FavoriteListItem from './FavoriteListItem';
+import { modalTokens } from './modalTokens';
 
 /**
  * 用户内容搜索模态框组件
@@ -204,7 +205,7 @@ export default function UserContentSearchModal({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: modalTokens.surface,
   },
   header: {
     flexDirection: 'row',
@@ -213,8 +214,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingTop: 48, // 状态栏高度
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    backgroundColor: '#fff',
+    borderBottomColor: modalTokens.border,
+    backgroundColor: modalTokens.surface,
   },
   backButton: {
     width: 40,
@@ -227,10 +228,12 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f3f4f6',
-    borderRadius: 20,
+    backgroundColor: modalTokens.surfaceSoft,
+    borderRadius: 14,
     paddingHorizontal: 12,
     height: 40,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
   },
   searchIcon: {
     marginRight: 8,
@@ -238,7 +241,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: '#1f2937',
+    color: modalTokens.textPrimary,
     padding: 0,
   },
   clearButton: {
@@ -251,11 +254,11 @@ const styles = StyleSheet.create({
   },
   searchButtonText: {
     fontSize: 15,
-    color: '#ef4444',
-    fontWeight: '600',
+    color: modalTokens.danger,
+    fontWeight: '700',
   },
   searchButtonTextDisabled: {
-    color: '#d1d5db',
+    color: modalTokens.textMuted,
   },
   content: {
     flex: 1,
@@ -269,7 +272,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#6b7280',
+    color: modalTokens.textSecondary,
   },
   emptyContainer: {
     flex: 1,
@@ -280,13 +283,13 @@ const styles = StyleSheet.create({
   emptyText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#6b7280',
-    fontWeight: '500',
+    color: modalTokens.textSecondary,
+    fontWeight: '600',
   },
   emptyHint: {
     marginTop: 8,
     fontSize: 14,
-    color: '#9ca3af',
+    color: modalTokens.textMuted,
   },
   resultsList: {
     paddingBottom: 20,

@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, Image, TextInput, StyleSheet,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 
 const initialMessages = [
@@ -375,26 +376,26 @@ const styles = StyleSheet.create({
   msgActionText: { fontSize: 12, color: '#6b7280' },
   replyBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' },
   replyBtnText: { fontSize: 12, color: '#ef4444', fontWeight: '500' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  replyModal: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: 34 },
-  replyModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  replyModalTitle: { fontSize: 16, fontWeight: '600', color: '#1f2937' },
-  replyTargetCard: { flexDirection: 'row', padding: 16, backgroundColor: '#f9fafb', margin: 16, marginBottom: 0, borderRadius: 8 },
+  modalOverlay: { flex: 1, backgroundColor: modalTokens.overlay, justifyContent: 'flex-end' },
+  replyModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, paddingBottom: 34 },
+  replyModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  replyModalTitle: { fontSize: 16, fontWeight: '600', color: modalTokens.textPrimary },
+  replyTargetCard: { flexDirection: 'row', padding: 16, backgroundColor: modalTokens.surfaceSoft, margin: 16, marginBottom: 0, borderRadius: 12, borderWidth: 1, borderColor: modalTokens.border },
   replyTargetAvatar: { width: 32, height: 32, borderRadius: 16 },
   replyTargetInfo: { flex: 1, marginLeft: 10 },
-  replyTargetAuthor: { fontSize: 13, fontWeight: '500', color: '#1f2937' },
-  replyTargetContent: { fontSize: 12, color: '#6b7280', marginTop: 2, lineHeight: 18 },
-  replyInputWrapper: { margin: 16, backgroundColor: '#f3f4f6', borderRadius: 12, padding: 12, minHeight: 100 },
-  replyInput: { fontSize: 14, color: '#1f2937', textAlignVertical: 'top' },
+  replyTargetAuthor: { fontSize: 13, fontWeight: '500', color: modalTokens.textPrimary },
+  replyTargetContent: { fontSize: 12, color: modalTokens.textSecondary, marginTop: 2, lineHeight: 18 },
+  replyInputWrapper: { margin: 16, backgroundColor: modalTokens.surfaceSoft, borderRadius: 12, padding: 12, minHeight: 100, borderWidth: 1, borderColor: modalTokens.border },
+  replyInput: { fontSize: 14, color: modalTokens.textPrimary, textAlignVertical: 'top' },
   replyModalFooter: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, gap: 12 },
   replyCancelBtn: { paddingHorizontal: 20, paddingVertical: 10 },
-  replyCancelText: { fontSize: 14, color: '#6b7280' },
+  replyCancelText: { fontSize: 14, color: modalTokens.textSecondary },
   replySubmitBtn: { backgroundColor: '#ef4444', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20 },
-  replySubmitBtnDisabled: { backgroundColor: '#fca5a5' },
+  replySubmitBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   replySubmitText: { fontSize: 14, color: '#fff', fontWeight: '500' },
   bottomBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#f3f4f6' },
   inputWrapper: { flex: 1, backgroundColor: '#f3f4f6', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, maxHeight: 100 },
   input: { fontSize: 14, color: '#1f2937' },
   sendBtn: { backgroundColor: '#ef4444', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
-  sendBtnDisabled: { backgroundColor: '#fca5a5' },
+  sendBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
 });

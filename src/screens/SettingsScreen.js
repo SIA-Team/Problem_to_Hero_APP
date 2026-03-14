@@ -11,6 +11,7 @@ import BindContactModal from '../components/BindContactModal';
 import GenderPickerModal from '../components/GenderPickerModal';
 import DatePickerModal from '../components/DatePickerModal';
 import Toast from '../components/Toast';
+import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import UserCacheService from '../services/UserCacheService';
 import userApi from '../services/api/userApi';
@@ -1332,13 +1333,15 @@ const styles = StyleSheet.create({
   // 编辑弹窗样式
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: modalTokens.overlay,
     justifyContent: 'flex-end'
   },
   editModal: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: modalTokens.surface,
+    borderTopLeftRadius: modalTokens.sheetRadius,
+    borderTopRightRadius: modalTokens.sheetRadius,
+    borderTopWidth: 1,
+    borderColor: modalTokens.border,
     paddingBottom: 40
   },
   editModalHeader: {
@@ -1348,34 +1351,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6'
+    borderBottomColor: modalTokens.border
   },
   editModalCancel: {
     fontSize: 15,
-    color: '#6b7280'
+    color: modalTokens.textSecondary
   },
   editModalTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937'
+    fontWeight: '700',
+    color: modalTokens.textPrimary
   },
   editModalSave: {
     fontSize: 15,
-    color: '#ef4444',
-    fontWeight: '600'
+    color: modalTokens.danger,
+    fontWeight: '700'
   },
   editModalContent: {
     padding: 16
   },
   editInput: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: modalTokens.surfaceSoft,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
+    borderColor: modalTokens.border,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 12,
     fontSize: 15,
-    color: '#1f2937'
+    color: modalTokens.textPrimary
   },
   editInputMultiline: {
     minHeight: 100,
@@ -1383,7 +1386,7 @@ const styles = StyleSheet.create({
   },
   editHint: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: modalTokens.textMuted,
     marginTop: 8
   }
 });

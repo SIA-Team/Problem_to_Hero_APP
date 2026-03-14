@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import { useTranslation } from '../i18n/withTranslation';
+import { modalTokens } from '../components/modalTokens';
 
 // 模拟该问题下的团队数据
 const questionTeams = [
@@ -393,23 +394,23 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80 },
   emptyText: { fontSize: 16, color: '#9ca3af', marginTop: 16 },
   emptyHint: { fontSize: 13, color: '#d1d5db', marginTop: 8 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  modalTitle: { fontSize: 18, fontWeight: '600', color: '#1f2937' },
+  modalOverlay: { flex: 1, backgroundColor: modalTokens.overlay, justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '80%' },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: modalTokens.textPrimary },
   modalBody: { padding: 20 },
   inputGroup: { marginBottom: 20 },
   inputLabel: { fontSize: 14, fontWeight: '500', color: '#374151', marginBottom: 8 },
-  input: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: '#1f2937' },
+  input: { borderWidth: 1, borderColor: modalTokens.border, borderRadius: 12, backgroundColor: modalTokens.surfaceSoft, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: modalTokens.textPrimary },
   textArea: { height: 80, textAlignVertical: 'top' },
   inputHint: { fontSize: 12, color: '#9ca3af', marginTop: 6 },
-  submitBtn: { backgroundColor: '#ef4444', paddingVertical: 14, borderRadius: 8, alignItems: 'center', marginTop: 10 },
+  submitBtn: { backgroundColor: modalTokens.danger, paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 10 },
   submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   // 等待审核弹窗
-  pendingModal: { backgroundColor: '#fff', borderRadius: 20, padding: 24, marginHorizontal: 32, alignItems: 'center' },
+  pendingModal: { backgroundColor: modalTokens.surface, borderRadius: 24, borderWidth: 1, borderColor: modalTokens.border, padding: 24, marginHorizontal: 32, alignItems: 'center' },
   pendingModalIcon: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#fef3c7', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  pendingModalTitle: { fontSize: 20, fontWeight: '600', color: '#1f2937', marginBottom: 12 },
-  pendingModalDesc: { fontSize: 14, color: '#6b7280', lineHeight: 22, textAlign: 'center', marginBottom: 24 },
+  pendingModalTitle: { fontSize: 20, fontWeight: '700', color: modalTokens.textPrimary, marginBottom: 12 },
+  pendingModalDesc: { fontSize: 14, color: modalTokens.textSecondary, lineHeight: 22, textAlign: 'center', marginBottom: 24 },
   pendingModalBtn: { backgroundColor: '#f59e0b', paddingVertical: 12, paddingHorizontal: 32, borderRadius: 12, width: '100%', alignItems: 'center' },
   pendingModalBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
 });

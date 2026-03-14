@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { showToast } from '../utils/toast';
+import { modalTokens } from './modalTokens';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -220,24 +221,26 @@ export default function ImagePickerSheet({ visible, onClose, onImageSelected, ti
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: modalTokens.overlay,
     justifyContent: 'flex-end',
   },
   container: {
-    backgroundColor: '#f8f9fa',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 8,
+    backgroundColor: modalTokens.surfaceSoft,
+    borderTopLeftRadius: modalTokens.sheetRadius,
+    borderTopRightRadius: modalTokens.sheetRadius,
+    paddingTop: 10,
     paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderColor: modalTokens.border,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: modalTokens.shadow,
         shadowOffset: { width: 0, height: -3 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
       },
       android: {
-        elevation: 8,
+        elevation: 10,
       },
     }),
   },
@@ -246,16 +249,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   dragIndicator: {
-    width: 40,
+    width: 44,
     height: 4,
-    backgroundColor: '#d1d5db',
+    backgroundColor: '#cbd5e1',
     borderRadius: 2,
     marginBottom: 12,
   },
   title: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: modalTokens.textPrimary,
   },
   optionsContainer: {
     flexDirection: 'row',
@@ -288,31 +291,33 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 14,
-    color: '#4b5563',
-    fontWeight: '500',
+    color: modalTokens.textSecondary,
+    fontWeight: '600',
   },
   cancelButton: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    backgroundColor: modalTokens.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 8,
     marginBottom: 12,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: modalTokens.shadow,
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
+        shadowOpacity: 0.08,
+        shadowRadius: 4,
       },
       android: {
-        elevation: 1,
+        elevation: 2,
       },
     }),
   },
   cancelButtonText: {
     fontSize: 16,
-    color: '#6b7280',
-    fontWeight: '500',
+    color: modalTokens.textSecondary,
+    fontWeight: '600',
   },
 });

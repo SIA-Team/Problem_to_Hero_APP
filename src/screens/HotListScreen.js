@@ -6,6 +6,7 @@ import { useTranslation } from '../i18n/withTranslation';
 import i18n from '../i18n';
 import { getHotListData } from '../data/hotListData';
 import TranslateButton from '../components/TranslateButton';
+import { modalTokens } from '../components/modalTokens';
 
 // 区域数据
 const regionData = {
@@ -683,23 +684,23 @@ const styles = StyleSheet.create({
   answerCount: { fontSize: 11, color: '#9ca3af', marginLeft: 8 },
   
   // 区域选择弹窗样式
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
-  regionModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' },
-  regionModalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
-  regionModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  regionModalTitle: { fontSize: 17, fontWeight: '600', color: '#1f2937' },
-  regionTypeTabs: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, gap: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  regionTypeTab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: '#f9fafb' },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: modalTokens.overlay },
+  regionModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '80%' },
+  regionModalHandle: { width: 40, height: 4, backgroundColor: modalTokens.border, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
+  regionModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  regionModalTitle: { fontSize: 17, fontWeight: '600', color: modalTokens.textPrimary },
+  regionTypeTabs: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, gap: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  regionTypeTab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border },
   regionTypeTabActive: { backgroundColor: '#ef4444' },
-  regionTypeTabText: { fontSize: 14, color: '#6b7280', fontWeight: '500' },
+  regionTypeTabText: { fontSize: 14, color: modalTokens.textSecondary, fontWeight: '500' },
   regionTypeTabTextActive: { color: '#fff', fontWeight: '600' },
   regionList: { maxHeight: 400 },
   regionGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: 12 },
-  regionItem: { width: '30%', margin: '1.66%', paddingVertical: 16, paddingHorizontal: 8, alignItems: 'center', borderRadius: 12, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', position: 'relative' },
+  regionItem: { width: '30%', margin: '1.66%', paddingVertical: 16, paddingHorizontal: 8, alignItems: 'center', borderRadius: 12, backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, position: 'relative' },
   regionItemActive: { backgroundColor: '#fef2f2', borderColor: '#ef4444' },
   regionFlag: { fontSize: 32, marginBottom: 8 },
-  regionName: { fontSize: 13, color: '#374151', fontWeight: '500', textAlign: 'center' },
-  regionCityName: { fontSize: 14, color: '#374151', fontWeight: '500', textAlign: 'center' },
+  regionName: { fontSize: 13, color: modalTokens.textPrimary, fontWeight: '500', textAlign: 'center' },
+  regionCityName: { fontSize: 14, color: modalTokens.textPrimary, fontWeight: '500', textAlign: 'center' },
   regionNameActive: { color: '#ef4444', fontWeight: '600' },
   regionCheck: { position: 'absolute', top: 8, right: 8 },
 });

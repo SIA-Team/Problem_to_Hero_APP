@@ -3,6 +3,7 @@ import { View, Text, Modal, TouchableOpacity, ScrollView, StyleSheet, Platform, 
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { getRegionData } from '../data/regionData';
+import { modalTokens } from './modalTokens';
 
 /**
  * 城市选择器组件
@@ -239,26 +240,28 @@ export default function CitySelector({ visible, currentCity, onSelect, onClose }
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: modalTokens.overlay,
     justifyContent: 'flex-end',
   },
   modalBackdrop: {
     flex: 1,
   },
   modal: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: modalTokens.surface,
+    borderTopLeftRadius: modalTokens.sheetRadius,
+    borderTopRightRadius: modalTokens.sheetRadius,
     height: '80%',
+    borderTopWidth: 1,
+    borderColor: modalTokens.border,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: modalTokens.shadow,
         shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
       },
       android: {
-        elevation: 8,
+        elevation: 10,
       },
     }),
   },
@@ -269,7 +272,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: modalTokens.border,
   },
   closeBtn: {
     width: 40,
@@ -279,8 +282,8 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
+    fontWeight: '700',
+    color: modalTokens.textPrimary,
   },
   content: {
     flex: 1,
@@ -293,17 +296,17 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
+    backgroundColor: modalTokens.surfaceSoft,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: modalTokens.border,
   },
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: '#1f2937',
+    color: modalTokens.textPrimary,
     marginLeft: 8,
     padding: 0,
   },
@@ -329,24 +332,24 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#6b7280',
+    color: modalTokens.textSecondary,
     marginBottom: 12,
   },
   locationItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
+    backgroundColor: modalTokens.surfaceSoft,
+    borderRadius: 12,
     gap: 10,
   },
   locationText: {
     flex: 1,
     fontSize: 15,
-    color: '#1f2937',
+    color: modalTokens.textPrimary,
   },
   locationTextDisabled: {
-    color: '#9ca3af',
+    color: modalTokens.textMuted,
   },
   cityGrid: {
     flexDirection: 'row',
@@ -356,22 +359,22 @@ const styles = StyleSheet.create({
   cityItem: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: modalTokens.surfaceMuted,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'transparent',
   },
   cityItemActive: {
-    backgroundColor: '#fef2f2',
-    borderColor: '#ef4444',
+    backgroundColor: modalTokens.dangerSoft,
+    borderColor: modalTokens.danger,
   },
   cityText: {
     fontSize: 14,
-    color: '#374151',
+    color: modalTokens.textSecondary,
   },
   cityTextActive: {
-    color: '#ef4444',
-    fontWeight: '500',
+    color: modalTokens.danger,
+    fontWeight: '700',
   },
   cityList: {
     gap: 1,
@@ -383,11 +386,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 4,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: modalTokens.border,
   },
   cityListText: {
     fontSize: 15,
-    color: '#1f2937',
+    color: modalTokens.textPrimary,
   },
   noLocationBtn: {
     flexDirection: 'row',
@@ -396,12 +399,12 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 20,
     padding: 12,
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
+    backgroundColor: modalTokens.surfaceSoft,
+    borderRadius: 12,
     gap: 8,
   },
   noLocationText: {
     fontSize: 14,
-    color: '#6b7280',
+    color: modalTokens.textSecondary,
   },
 });

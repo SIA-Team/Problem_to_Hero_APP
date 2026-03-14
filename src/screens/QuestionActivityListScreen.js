@@ -3,6 +3,8 @@ import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, Tex
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
+import { modalTokens } from '../components/modalTokens';
+import { showToast } from '../utils/toast';
 
 const activitiesData = [
   { id: 1, title: 'Python学习交流会', type: '线上活动', date: '2026-01-20', time: '19:00-21:00', location: '腾讯会议', participants: 45, maxParticipants: 100, organizer: '张三丰', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user1', status: '报名中', description: '本次活动将邀请多位Python专家分享学习经验和实战技巧,适合零基础和有一定基础的学习者参加。' },
@@ -30,30 +32,30 @@ export default function QuestionActivityListScreen({ navigation, route }) {
   const handleJoinActivity = (activityId) => {
     setJoinedActivities({ ...joinedActivities, [activityId]: !joinedActivities[activityId] });
     if (!joinedActivities[activityId]) {
-      alert(t('screens.questionActivityList.joinSuccess'));
+      showToast(t('screens.questionActivityList.joinSuccess'), 'success');
     } else {
-      alert(t('screens.questionActivityList.cancelSuccess'));
+      showToast(t('screens.questionActivityList.cancelSuccess'), 'info');
     }
   };
 
   const handleCreateActivity = () => {
     if (!activityForm.title.trim()) {
-      alert(t('screens.questionActivityList.modal.validation.titleRequired'));
+      showToast(t('screens.questionActivityList.modal.validation.titleRequired'), 'warning');
       return;
     }
     if (!activityForm.description.trim()) {
-      alert(t('screens.questionActivityList.modal.validation.descriptionRequired'));
+      showToast(t('screens.questionActivityList.modal.validation.descriptionRequired'), 'warning');
       return;
     }
     if (!activityForm.startTime || !activityForm.endTime) {
-      alert(t('screens.questionActivityList.modal.validation.timeRequired'));
+      showToast(t('screens.questionActivityList.modal.validation.timeRequired'), 'warning');
       return;
     }
     if (activityForm.activityType === 'offline' && !activityForm.location.trim()) {
-      alert(t('screens.questionActivityList.modal.validation.locationRequired'));
+      showToast(t('screens.questionActivityList.modal.validation.locationRequired'), 'warning');
       return;
     }
-    alert(t('screens.questionActivityList.modal.createSuccess'));
+    showToast(t('screens.questionActivityList.modal.createSuccess'), 'success');
     setShowActivityModal(false);
     setActivityForm({ 
       title: '', 
@@ -75,7 +77,7 @@ export default function QuestionActivityListScreen({ navigation, route }) {
         images: [...activityForm.images, `https://images.unsplash.com/photo-${Math.floor(Math.random() * 1000000)}?w=800&h=600&fit=crop`]
       });
     } else {
-      alert(t('screens.questionActivityList.modal.images.maxLimit'));
+      showToast(t('screens.questionActivityList.modal.images.maxLimit'), 'warning');
     }
   };
 
@@ -446,47 +448,47 @@ const styles = StyleSheet.create({
   joinBtnTextActive: { color: '#22c55e' },
   emptySpace: { height: 20 },
   // 发起活动弹窗样式
-  activityModal: { flex: 1, backgroundColor: '#fff' },
-  activityModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  activityModal: { flex: 1, backgroundColor: modalTokens.surface },
+  activityModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   activityCloseBtn: { padding: 4 },
   activityHeaderCenter: { flex: 1, alignItems: 'center' },
-  activityModalTitle: { fontSize: 17, fontWeight: '600', color: '#222' },
-  activityPublishBtn: { backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4 },
-  activityPublishBtnDisabled: { backgroundColor: '#ffcdd2' },
+  activityModalTitle: { fontSize: 17, fontWeight: '600', color: modalTokens.textPrimary },
+  activityPublishBtn: { backgroundColor: modalTokens.danger, paddingHorizontal: modalTokens.actionPaddingX, paddingVertical: modalTokens.actionPaddingY, borderRadius: modalTokens.actionRadius },
+  activityPublishBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   activityPublishText: { fontSize: 14, color: '#fff', fontWeight: '600' },
   activityPublishTextDisabled: { color: '#fff' },
   boundQuestionCard: { backgroundColor: '#f0fdf4', padding: 12, marginHorizontal: 16, marginTop: 12, borderRadius: 8, borderLeftWidth: 3, borderLeftColor: '#22c55e' },
   boundQuestionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
   boundQuestionLabel: { fontSize: 12, fontWeight: '500', color: '#22c55e' },
   boundQuestionText: { fontSize: 14, color: '#374151', lineHeight: 20 },
-  activityFormArea: { flex: 1, padding: 16 },
+  activityFormArea: { flex: 1, padding: 16, backgroundColor: modalTokens.surface },
   formGroup: { marginBottom: 16 },
   formLabel: { fontSize: 14, fontWeight: '500', color: '#374151', marginBottom: 8 },
-  formInput: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, fontSize: 15, color: '#1f2937' },
+  formInput: { backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, fontSize: 15, color: modalTokens.textPrimary },
   formTextarea: { minHeight: 100, textAlignVertical: 'top' },
   formRow: { flexDirection: 'row', alignItems: 'center' },
-  formSelectBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12 },
-  formSelectText: { fontSize: 15, color: '#6b7280', flex: 1 },
-  formInputWithIcon: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12 },
-  formInputInner: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#1f2937' },
+  formSelectBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12 },
+  formSelectText: { fontSize: 15, color: modalTokens.textSecondary, flex: 1 },
+  formInputWithIcon: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 8, paddingHorizontal: 12 },
+  formInputInner: { flex: 1, paddingVertical: 12, fontSize: 15, color: modalTokens.textPrimary },
   activityTypeSelector: { flexDirection: 'row', gap: 12 },
-  activityTypeSelectorBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f9fafb', gap: 8 },
+  activityTypeSelectorBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: modalTokens.border, backgroundColor: modalTokens.surfaceSoft, gap: 8 },
   activityTypeSelectorBtnActive: { backgroundColor: '#ef4444', borderColor: '#ef4444' },
-  activityTypeSelectorText: { fontSize: 14, color: '#6b7280', fontWeight: '500' },
+  activityTypeSelectorText: { fontSize: 14, color: modalTokens.textSecondary, fontWeight: '500' },
   activityTypeSelectorTextActive: { color: '#fff' },
   required: { color: '#ef4444' },
   organizerSelector: { flexDirection: 'row', gap: 12 },
-  organizerOption: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', gap: 6 },
+  organizerOption: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: modalTokens.border, gap: 6 },
   organizerOptionActive: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
-  organizerOptionText: { fontSize: 14, color: '#666' },
+  organizerOptionText: { fontSize: 14, color: modalTokens.textSecondary },
   organizerOptionTextActive: { color: '#fff' },
   timeRow: { flexDirection: 'row', alignItems: 'center' },
   timeContainer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   timeInputWrapper: { flex: 1 },
-  timeInputLabel: { fontSize: 12, color: '#6b7280', marginBottom: 6 },
-  timeInputField: { backgroundColor: '#f9fafb', borderRadius: 8, padding: 12, fontSize: 14, borderWidth: 1, borderColor: '#e5e7eb', color: '#1f2937' },
+  timeInputLabel: { fontSize: 12, color: modalTokens.textSecondary, marginBottom: 6 },
+  timeInputField: { backgroundColor: modalTokens.surfaceSoft, borderRadius: 8, padding: 12, fontSize: 14, borderWidth: 1, borderColor: modalTokens.border, color: modalTokens.textPrimary },
   timeSeparatorWrapper: { paddingBottom: 12 },
-  timeSeparator: { fontSize: 14, color: '#6b7280', fontWeight: '500' },
+  timeSeparator: { fontSize: 14, color: modalTokens.textSecondary, fontWeight: '500' },
   imageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   imageItem: { width: 80, height: 80, borderRadius: 8, backgroundColor: '#e5e7eb', position: 'relative', overflow: 'hidden' },
   uploadedImage: { width: '100%', height: '100%' },

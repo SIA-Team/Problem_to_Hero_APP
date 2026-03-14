@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { modalTokens } from './modalTokens';
 
 /**
  * 通用文本编辑弹窗组件
@@ -190,9 +191,10 @@ export default function EditTextModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: modalTokens.overlay,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 20,
   },
   keyboardView: {
     width: '100%',
@@ -201,14 +203,16 @@ const styles = StyleSheet.create({
   modalContainer: {
     width: '85%',
     maxWidth: 400,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    backgroundColor: modalTokens.surface,
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
+    shadowColor: modalTokens.shadow,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.16,
+    shadowRadius: 20,
+    elevation: 12,
   },
   modalContainerLarge: {
     minHeight: 280,
@@ -221,8 +225,8 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
+    fontWeight: '700',
+    color: modalTokens.textPrimary,
   },
   closeButton: {
     padding: 4,
@@ -232,15 +236,15 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: modalTokens.surfaceSoft,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
+    borderColor: modalTokens.border,
+    borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     paddingRight: 40,
     fontSize: 16,
-    color: '#1f2937',
+    color: modalTokens.textPrimary,
   },
   inputMultiline: {
     minHeight: 120,
@@ -248,8 +252,8 @@ const styles = StyleSheet.create({
     paddingRight: 16,
   },
   inputError: {
-    borderColor: '#ef4444',
-    backgroundColor: '#fef2f2',
+    borderColor: modalTokens.danger,
+    backgroundColor: modalTokens.dangerSoft,
   },
   clearButton: {
     position: 'absolute',
@@ -266,20 +270,20 @@ const styles = StyleSheet.create({
   hintText: {
     flex: 1,
     fontSize: 12,
-    color: '#9ca3af',
+    color: modalTokens.textMuted,
   },
   errorText: {
     flex: 1,
     fontSize: 12,
-    color: '#ef4444',
+    color: modalTokens.danger,
   },
   countText: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: modalTokens.textMuted,
     marginLeft: 8,
   },
   countError: {
-    color: '#ef4444',
+    color: modalTokens.danger,
   },
   buttonContainer: {
     flexDirection: 'row',
@@ -287,24 +291,26 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 13,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cancelButton: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: modalTokens.surfaceMuted,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
   },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#6b7280',
+    color: modalTokens.textSecondary,
   },
   saveButton: {
-    backgroundColor: '#ef4444',
+    backgroundColor: modalTokens.danger,
   },
   saveButtonDisabled: {
-    backgroundColor: '#fca5a5',
+    backgroundColor: '#fda4af',
     opacity: 0.6,
   },
   saveButtonText: {

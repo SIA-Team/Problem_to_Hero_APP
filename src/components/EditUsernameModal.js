@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Modal, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { modalTokens } from './modalTokens';
 
 /**
  * 修改用户名弹窗组件
@@ -258,31 +259,38 @@ export default function EditUsernameModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: modalTokens.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   modalContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
+    backgroundColor: modalTokens.surface,
+    borderRadius: 24,
     width: '100%',
     maxWidth: 380,
     padding: 24,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
+    shadowColor: modalTokens.shadow,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.16,
+    shadowRadius: 20,
+    elevation: 12,
   },
   title: {
     fontSize: 20,
-    fontWeight: '600',
-    color: '#1f2937',
+    fontWeight: '700',
+    color: modalTokens.textPrimary,
     marginBottom: 16,
     textAlign: 'center',
   },
   warningBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fffbeb',
+    backgroundColor: modalTokens.warningSoft,
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 16,
     gap: 8,
   },
@@ -298,22 +306,22 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
+    backgroundColor: modalTokens.surfaceSoft,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: modalTokens.border,
     borderRadius: 12,
     paddingHorizontal: 12,
     gap: 8,
   },
   inputWrapperError: {
-    borderColor: '#ef4444',
-    backgroundColor: '#fef2f2',
+    borderColor: modalTokens.danger,
+    backgroundColor: modalTokens.dangerSoft,
   },
   input: {
     flex: 1,
     paddingVertical: 12,
     fontSize: 15,
-    color: '#1f2937',
+    color: modalTokens.textPrimary,
   },
   counterRow: {
     flexDirection: 'row',
@@ -322,7 +330,7 @@ const styles = StyleSheet.create({
   },
   counterText: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: modalTokens.textMuted,
   },
   errorContainer: {
     flexDirection: 'row',
@@ -332,19 +340,19 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 13,
-    color: '#ef4444',
+    color: modalTokens.danger,
     flex: 1,
   },
   rulesContainer: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: modalTokens.surfaceSoft,
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 20,
   },
   rulesTitle: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#6b7280',
+    color: modalTokens.textSecondary,
     marginBottom: 8,
   },
   ruleItem: {
@@ -355,10 +363,10 @@ const styles = StyleSheet.create({
   },
   ruleText: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: modalTokens.textMuted,
   },
   ruleTextActive: {
-    color: '#22c55e',
+    color: modalTokens.success,
   },
   buttonContainer: {
     flexDirection: 'row',
@@ -373,20 +381,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cancelButton: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: modalTokens.surfaceMuted,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: modalTokens.border,
   },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#6b7280',
+    color: modalTokens.textSecondary,
   },
   confirmButton: {
-    backgroundColor: '#ef4444',
+    backgroundColor: modalTokens.danger,
   },
   confirmButtonDisabled: {
-    backgroundColor: '#fca5a5',
+    backgroundColor: '#fda4af',
     opacity: 0.6,
   },
   confirmButtonText: {

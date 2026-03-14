@@ -5,9 +5,11 @@ import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import Avatar from '../components/Avatar';
 import TranslateButton from '../components/TranslateButton';
+import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/useTranslation';
 import { getRegionData } from '../data/regionData';
 import { useOptimizedQuestions } from '../hooks/useOptimizedQuestions';
+import { showToast } from '../utils/toast';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -92,6 +94,8 @@ export default function HomeScreen({ navigation }) {
   const [socialPlatform, setSocialPlatform] = useState('');
   const [socialSearchText, setSocialSearchText] = useState('');
   const [selectedQuestion, setSelectedQuestion] = useState(null);
+  const [showPaidAlertModal, setShowPaidAlertModal] = useState(false);
+  const [paidAlertAmount, setPaidAlertAmount] = useState(null);
   const [regionStep, setRegionStep] = useState(0);
   const [selectedRegion, setSelectedRegion] = useState({ country: '', city: '', state: '', district: '' });
   
@@ -356,7 +360,7 @@ export default function HomeScreen({ navigation }) {
   };
 
   const sendSocialMessage = (user) => {
-    alert(`已向 ${user.name} 发送私信,邀请回答问题:${selectedQuestion?.title?.substring(0, 30)}...`);
+    showToast(`已向 ${user.name} 发送私信,邀请回答问题:${selectedQuestion?.title?.substring(0, 30)}...`, 'success');
     setShowSocialModal(false);
   };
 
@@ -371,6 +375,10 @@ export default function HomeScreen({ navigation }) {
   const formatNumber = (num) => num >= 1000 ? (num / 1000).toFixed(1) + 'k' : num;
 
   const openActionModal = (item) => { setSelectedQuestion(item); setShowActionModal(true); };
+  const openPaidAlertModal = (amount) => {
+    setPaidAlertAmount(amount);
+    setShowPaidAlertModal(true);
+  };
 
   const getRegionOptions = () => {
     if (regionStep === 0) return regionData.countries;
@@ -698,7 +706,7 @@ export default function HomeScreen({ navigation }) {
                       style={styles.paidViewButton}
                       onPress={(e) => {
                         e.stopPropagation();
-                        alert(t('home.payToView').replace('${amount}', item.paidAmount));
+                        openPaidAlertModal(item.paidAmount);
                       }}
                     >
                       <View style={styles.paidViewContent}>
@@ -966,7 +974,7 @@ export default function HomeScreen({ navigation }) {
               <Ionicons name="people-outline" size={22} color="#1f2937" />
               <Text style={styles.actionItemText}>加入群聊</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); alert('加入团队功能'); }}>
+            <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); showToast('加入团队功能', 'info'); }}>
               <Ionicons name="people-circle-outline" size={22} color="#1f2937" />
               <Text style={styles.actionItemText}>加入团队</Text>
             </TouchableOpacity>
@@ -1065,6 +1073,36 @@ export default function HomeScreen({ navigation }) {
               )}
               style={styles.socialUserList}
             />
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showPaidAlertModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPaidAlertModal(false)}
+      >
+        <View style={styles.paidAlertOverlay}>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowPaidAlertModal(false)}
+          />
+          <View style={styles.paidAlertModal}>
+            <View style={styles.paidAlertHeader}>
+              <Ionicons name="lock-closed-outline" size={18} color={modalTokens.danger} />
+              <Text style={styles.paidAlertTitle}>{t('home.paidViewContent')}</Text>
+            </View>
+            <Text style={styles.paidAlertDesc}>
+              {t('home.payToView').replace('${amount}', paidAlertAmount)}
+            </Text>
+            <TouchableOpacity
+              style={styles.paidAlertConfirmBtn}
+              onPress={() => setShowPaidAlertModal(false)}
+            >
+              <Text style={styles.paidAlertConfirmText}>{t('home.confirm')}</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1291,10 +1329,10 @@ const styles = StyleSheet.create({
   imageGrid: { flexDirection: 'row', paddingHorizontal: 12, paddingBottom: 10, gap: 6 },
   gridImage: { width: 100, height: 100, borderRadius: 8 },
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
-  modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)' },
-  regionModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%' },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  modalTitle: { fontSize: 16, fontWeight: '600', color: '#1f2937' },
+  modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: modalTokens.overlay },
+  regionModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '70%' },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  modalTitle: { fontSize: 16, fontWeight: '600', color: modalTokens.textPrimary },
   confirmText: { fontSize: 14, color: '#ef4444', fontWeight: '600' },
   // 面包屑导航样式
   breadcrumbContainer: { 
@@ -1339,61 +1377,61 @@ const styles = StyleSheet.create({
     marginTop: 5
   },
   regionList: { padding: 8 },
-  regionOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#f9fafb' },
-  regionOptionText: { fontSize: 15, color: '#1f2937' },
-  actionModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 30 },
-  actionModalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
-  actionItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#f9fafb' },
-  actionItemText: { fontSize: 15, color: '#1f2937', marginLeft: 14 },
+  regionOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  regionOptionText: { fontSize: 15, color: modalTokens.textPrimary },
+  actionModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, paddingBottom: 30 },
+  actionModalHandle: { width: 40, height: 4, backgroundColor: modalTokens.border, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
+  actionItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  actionItemText: { fontSize: 15, color: modalTokens.textPrimary, marginLeft: 14 },
   reportItem: { borderBottomWidth: 0 },
-  cancelBtn: { marginTop: 8, marginHorizontal: 16, backgroundColor: '#f3f4f6', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  cancelBtnText: { fontSize: 15, color: '#6b7280', fontWeight: '500' },
-  channelModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
-  channelModal: { flex: 1, backgroundColor: '#fff', marginTop: 60, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
-  channelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  cancelBtn: { marginTop: 8, marginHorizontal: 16, backgroundColor: modalTokens.surfaceMuted, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  cancelBtnText: { fontSize: 15, color: modalTokens.textSecondary, fontWeight: '500' },
+  channelModalOverlay: { flex: 1, backgroundColor: modalTokens.overlay },
+  channelModal: { flex: 1, backgroundColor: modalTokens.surface, marginTop: 60, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border },
+  channelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   channelScrollView: { flex: 1, padding: 16 },
-  channelTitle: { fontSize: 18, fontWeight: '600', color: '#1f2937' },
+  channelTitle: { fontSize: 18, fontWeight: '600', color: modalTokens.textPrimary },
   closeBtn: { padding: 4 },
-  channelTabs: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6', paddingHorizontal: 8 },
+  channelTabs: { flexDirection: 'row', backgroundColor: modalTokens.surface, borderBottomWidth: 1, borderBottomColor: modalTokens.border, paddingHorizontal: 8 },
   channelTabItem: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
   channelTabItemActive: { borderBottomColor: '#ef4444' },
-  channelTabText: { fontSize: 14, color: '#6b7280' },
+  channelTabText: { fontSize: 14, color: modalTokens.textSecondary },
   channelTabTextActive: { color: '#ef4444', fontWeight: '600' },
   channelSection: { marginBottom: 0 },
-  channelCategoryTitle: { fontSize: 16, fontWeight: '600', color: '#1f2937', marginBottom: 8, marginTop: 4 },
-  channelSectionTitle: { fontSize: 13, fontWeight: '600', color: '#6b7280', marginBottom: 8, marginTop: 4 },
-  channelDivider: { height: 8, backgroundColor: '#f3f4f6', marginVertical: 12 },
-  channelSectionDesc: { fontSize: 13, color: '#9ca3af', marginBottom: 12, lineHeight: 18 },
+  channelCategoryTitle: { fontSize: 16, fontWeight: '600', color: modalTokens.textPrimary, marginBottom: 8, marginTop: 4 },
+  channelSectionTitle: { fontSize: 13, fontWeight: '600', color: modalTokens.textSecondary, marginBottom: 8, marginTop: 4 },
+  channelDivider: { height: 8, backgroundColor: modalTokens.surfaceMuted, marginVertical: 12 },
+  channelSectionDesc: { fontSize: 13, color: modalTokens.textMuted, marginBottom: 12, lineHeight: 18 },
   channelGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
   myChannelItem: { position: 'relative' },
-  channelTag: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f3f4f6', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 6 },
+  channelTag: { flexDirection: 'row', alignItems: 'center', backgroundColor: modalTokens.surfaceMuted, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 6 },
   channelTagAdded: { backgroundColor: '#dcfce7', borderWidth: 1, borderColor: '#22c55e' },
-  channelTagText: { fontSize: 14, color: '#1f2937' },
+  channelTagText: { fontSize: 14, color: modalTokens.textPrimary },
   channelTagTextAdded: { color: '#16a34a', fontWeight: '500' },
-  removeChannelBtn: { position: 'absolute', top: -6, right: -6, backgroundColor: '#fff', borderRadius: 10 },
-  categoryMainBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', padding: 14, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: '#e5e7eb' },
+  removeChannelBtn: { position: 'absolute', top: -6, right: -6, backgroundColor: modalTokens.surface, borderRadius: 10 },
+  categoryMainBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: modalTokens.surfaceSoft, padding: 14, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: modalTokens.border },
   categoryIcon: { width: 40, height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  categoryMainText: { flex: 1, fontSize: 15, fontWeight: '500', color: '#1f2937' },
+  categoryMainText: { flex: 1, fontSize: 15, fontWeight: '500', color: modalTokens.textPrimary },
   createComboBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fef2f2', padding: 16, borderRadius: 12, borderWidth: 2, borderStyle: 'dashed', borderColor: '#fecaca' },
   createComboBtnText: { fontSize: 15, fontWeight: '500', color: '#ef4444', marginLeft: 8 },
-  comboCreatorModal: { flex: 1, backgroundColor: '#fff', marginTop: 100, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  comboCreatorModal: { flex: 1, backgroundColor: modalTokens.surface, marginTop: 100, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border },
   comboCreatorContent: { flex: 1, padding: 16 },
-  comboSummary: { backgroundColor: '#f9fafb', padding: 12, borderRadius: 8, marginBottom: 16 },
-  comboSummaryLabel: { fontSize: 12, color: '#6b7280', marginBottom: 4 },
-  comboSummaryValue: { fontSize: 14, fontWeight: '500', color: '#1f2937' },
-  categorySelectItem: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#f9fafb', borderRadius: 10, marginBottom: 8, borderWidth: 1, borderColor: '#e5e7eb' },
+  comboSummary: { backgroundColor: modalTokens.surfaceSoft, padding: 12, borderRadius: 8, marginBottom: 16 },
+  comboSummaryLabel: { fontSize: 12, color: modalTokens.textSecondary, marginBottom: 4 },
+  comboSummaryValue: { fontSize: 14, fontWeight: '500', color: modalTokens.textPrimary },
+  categorySelectItem: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: modalTokens.surfaceSoft, borderRadius: 10, marginBottom: 8, borderWidth: 1, borderColor: modalTokens.border },
   categorySelectItemActive: { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
-  categorySelectText: { flex: 1, fontSize: 14, color: '#1f2937', marginLeft: 12 },
+  categorySelectText: { flex: 1, fontSize: 14, color: modalTokens.textPrimary, marginLeft: 12 },
   comboCreateBtn: { backgroundColor: '#ef4444', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 24 },
   comboCreateBtnDisabled: { backgroundColor: '#fca5a5' },
   comboCreateBtnText: { fontSize: 15, fontWeight: '600', color: '#fff' },
-  socialModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%', paddingBottom: 30 },
-  socialHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  socialModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '80%', paddingBottom: 30 },
+  socialHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   socialTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  socialTitle: { fontSize: 16, fontWeight: '600', color: '#1f2937' },
-  socialSearchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f3f4f6', marginHorizontal: 16, marginVertical: 12, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 20 },
+  socialTitle: { fontSize: 16, fontWeight: '600', color: modalTokens.textPrimary },
+  socialSearchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: modalTokens.surfaceSoft, marginHorizontal: 16, marginVertical: 12, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 20, borderWidth: 1, borderColor: modalTokens.border },
   socialSearchInput: { flex: 1, marginLeft: 8, fontSize: 14 },
-  socialRecommendTitle: { fontSize: 14, fontWeight: '500', color: '#6b7280', marginHorizontal: 16, marginBottom: 8 },
+  socialRecommendTitle: { fontSize: 14, fontWeight: '500', color: modalTokens.textSecondary, marginHorizontal: 16, marginBottom: 8 },
   socialUserList: { maxHeight: 400 },
   socialUserItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f9fafb' },
   socialUserAvatar: { width: 48, height: 48, borderRadius: 24 },
@@ -1404,6 +1442,30 @@ const styles = StyleSheet.create({
   socialUserFollowers: { fontSize: 12, color: '#9ca3af', marginBottom: 6 },
   inviteBtn: { backgroundColor: '#ef4444', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14 },
   inviteBtnText: { fontSize: 12, color: '#fff', fontWeight: '500' },
+  paidAlertOverlay: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+  paidAlertModal: {
+    backgroundColor: modalTokens.surface,
+    borderRadius: modalTokens.cardRadius,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
+    padding: 20,
+    shadowColor: modalTokens.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  paidAlertHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  paidAlertTitle: { fontSize: 20, fontWeight: '700', color: modalTokens.textPrimary },
+  paidAlertDesc: { fontSize: 17, color: modalTokens.textSecondary, lineHeight: 26, marginBottom: 20 },
+  paidAlertConfirmBtn: {
+    alignSelf: 'flex-end',
+    backgroundColor: modalTokens.danger,
+    paddingHorizontal: modalTokens.actionPaddingX,
+    paddingVertical: modalTokens.actionPaddingY,
+    borderRadius: modalTokens.actionRadius,
+  },
+  paidAlertConfirmText: { fontSize: 15, color: '#fff', fontWeight: '600' },
   localFilterBar: { backgroundColor: '#fff', marginBottom: 12, borderRadius: 12, paddingVertical: 16, paddingHorizontal: 8 },
   localFilterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
   localFilterItem: { alignItems: 'center', flex: 1 },

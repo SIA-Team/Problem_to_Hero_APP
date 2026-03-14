@@ -8,6 +8,7 @@ import ImagePickerSheet from '../components/ImagePickerSheet';
 import QuestionDetailSkeleton from '../components/QuestionDetailSkeleton';
 import superLikeCreditService from '../services/SuperLikeCreditService';
 import { useTranslation } from '../i18n/withTranslation';
+import { modalTokens } from '../components/modalTokens';
 import questionApi from '../services/api/questionApi';
 import answerApi from '../services/api/answerApi';
 import uploadApi from '../services/api/uploadApi';
@@ -415,22 +416,22 @@ export default function QuestionDetailScreen({ navigation, route }) {
 
   const handleCreateActivity = () => {
     if (!activityForm.title.trim()) {
-      alert('请输入活动标题');
+      showToast('请输入活动标题', 'warning');
       return;
     }
     if (!activityForm.description.trim()) {
-      alert('请输入活动内容');
+      showToast('请输入活动内容', 'warning');
       return;
     }
     if (!activityForm.startTime || !activityForm.endTime) {
-      alert('请选择活动时间');
+      showToast('请选择活动时间', 'warning');
       return;
     }
     if (activityForm.activityType === 'offline' && !activityForm.location.trim()) {
-      alert('线下活动请填写活动地址');
+      showToast('线下活动请填写活动地址', 'warning');
       return;
     }
-    alert('活动创建成功！');
+    showToast('活动创建成功！', 'success');
     setShowActivityModal(false);
     setActivityForm({ 
       title: '', 
@@ -453,7 +454,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
         images: [...activityForm.images, `https://images.unsplash.com/photo-${Math.floor(Math.random() * 1000000)}?w=800&h=600&fit=crop`]
       });
     } else {
-      alert('最多只能上传9张图片');
+      showToast('最多只能上传9张图片', 'warning');
     }
   };
 
@@ -1613,7 +1614,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
 
   const handleSubmitSupplementAnswer = () => {
     if (!supplementAnswerText.trim()) return;
-    alert('补充回答提交成功！');
+    showToast('补充回答提交成功！', 'success');
     setSupplementAnswerText('');
     setShowSupplementAnswerModal(false);
     setCurrentAnswer(null);
@@ -1682,21 +1683,21 @@ export default function QuestionDetailScreen({ navigation, route }) {
   const handleAddReward = () => {
     const amount = selectedAddRewardAmount || parseFloat(addRewardAmount);
     if (!amount || amount <= 0) {
-      alert('请输入有效的悬赏金额');
+      showToast('请输入有效的悬赏金额', 'warning');
       return;
     }
     if (amount < 5) {
-      alert('最低追加金额为 $5');
+      showToast('最低追加金额为 $5', 'warning');
       return;
     }
     if (amount > 1000) {
-      alert('单次追加金额不能超过 $1000');
+      showToast('单次追加金额不能超过 $1000', 'warning');
       return;
     }
     
     setCurrentReward(currentReward + amount);
     setRewardContributors(rewardContributors + 1);
-    alert(`成功追加 $${amount} 悬赏！`);
+    showToast(`成功追加 $${amount} 悬赏！`, 'success');
     setShowAddRewardModal(false);
     setAddRewardAmount('');
     setSelectedAddRewardAmount(null);
@@ -1706,15 +1707,15 @@ export default function QuestionDetailScreen({ navigation, route }) {
   const handleBuySuperLike = () => {
     const amount = selectedSuperLikeAmount || parseInt(superLikeAmount);
     if (!amount || amount <= 0) {
-      alert('请输入有效的超级赞数量');
+      showToast('请输入有效的超级赞数量', 'warning');
       return;
     }
     if (amount < 1) {
-      alert('最少购买 1 个超级赞');
+      showToast('最少购买 1 个超级赞', 'warning');
       return;
     }
     if (amount > 100) {
-      alert('单次最多购买 100 个超级赞');
+      showToast('单次最多购买 100 个超级赞', 'warning');
       return;
     }
     
@@ -1723,7 +1724,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
     setAnswerSuperLikes({ ...answerSuperLikes, [answerId]: currentCount + amount });
     
     const totalCost = amount * 2; // 每个超级赞 $2
-    alert(`成功购买 ${amount} 个超级赞！\n花费：$${totalCost}\n您的回答排名将会提升！`);
+    showToast(`成功购买 ${amount} 个超级赞！\n花费：$${totalCost}\n您的回答排名将会提升！`, 'success', 3000);
     setShowSuperLikeModal(false);
     setSuperLikeAmount('');
     setSelectedSuperLikeAmount(null);
@@ -1733,22 +1734,22 @@ export default function QuestionDetailScreen({ navigation, route }) {
   // 处理仲裁申请
   const handleSubmitArbitration = () => {
     if (!arbitrationReason.trim()) {
-      alert('请说明申请仲裁的理由');
+      showToast('请说明申请仲裁的理由', 'warning');
       return;
     }
     if (selectedExperts.length < 3) {
-      alert('至少需要邀请 3 位专家参与仲裁');
+      showToast('至少需要邀请 3 位专家参与仲裁', 'warning');
       return;
     }
     if (selectedExperts.length > 5) {
-      alert('最多只能邀请 5 位专家');
+      showToast('最多只能邀请 5 位专家', 'warning');
       return;
     }
 
     // 提交仲裁申请
     setArbitrationStatus('pending');
     setArbitrationVotes({ agree: 0, disagree: 0, total: selectedExperts.length });
-    alert('仲裁申请已提交，等待专家投票中...');
+    showToast('仲裁申请已提交，等待专家投票中...', 'success');
     setShowArbitrationModal(false);
     setArbitrationReason('');
   };
@@ -1759,7 +1760,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
       setSelectedExperts(selectedExperts.filter(id => id !== expertId));
     } else {
       if (selectedExperts.length >= 5) {
-        alert('最多只能邀请 5 位专家');
+        showToast('最多只能邀请 5 位专家', 'warning');
         return;
       }
       setSelectedExperts([...selectedExperts, expertId]);
@@ -1782,10 +1783,10 @@ export default function QuestionDetailScreen({ navigation, route }) {
     if (agreePercentage > 50) {
       setArbitrationStatus('approved');
       setShowProgressBar(false); // 回到PK状态
-      alert('仲裁通过！问题状态已回到PK状态');
+      showToast('仲裁通过！问题状态已回到PK状态', 'success');
     } else {
       setArbitrationStatus('rejected');
-      alert('仲裁未通过，维持原采纳答案');
+      showToast('仲裁未通过，维持原采纳答案', 'info');
     }
   };
 
@@ -1854,7 +1855,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
         <Text style={styles.headerTitle}>{t('screens.questionDetail.title')}</Text>
         <View style={styles.headerRight}>
           <TouchableOpacity 
-            onPress={() => alert('分享功能')}
+            onPress={() => showToast('分享功能', 'info')}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             activeOpacity={0.7}
           >
@@ -3223,22 +3224,22 @@ export default function QuestionDetailScreen({ navigation, route }) {
           <View style={[styles.reportModal, { paddingBottom: Math.max(insets.bottom, 30) }]}>
             <View style={styles.reportModalHandle} />
             <Text style={styles.reportModalTitle}>举报问题</Text>
-            <TouchableOpacity style={styles.reportItem} onPress={() => { setShowReportModal(false); alert('已提交举报：垃圾广告'); }}>
+            <TouchableOpacity style={styles.reportItem} onPress={() => { setShowReportModal(false); showToast('已提交举报：垃圾广告', 'success'); }}>
               <Text style={styles.reportItemText}>垃圾广告</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.reportItem} onPress={() => { setShowReportModal(false); alert('已提交举报：违法违规'); }}>
+            <TouchableOpacity style={styles.reportItem} onPress={() => { setShowReportModal(false); showToast('已提交举报：违法违规', 'success'); }}>
               <Text style={styles.reportItemText}>违法违规</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.reportItem} onPress={() => { setShowReportModal(false); alert('已提交举报：低俗色情'); }}>
+            <TouchableOpacity style={styles.reportItem} onPress={() => { setShowReportModal(false); showToast('已提交举报：低俗色情', 'success'); }}>
               <Text style={styles.reportItemText}>低俗色情</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.reportItem} onPress={() => { setShowReportModal(false); alert('已提交举报：侵权'); }}>
+            <TouchableOpacity style={styles.reportItem} onPress={() => { setShowReportModal(false); showToast('已提交举报：侵权', 'success'); }}>
               <Text style={styles.reportItemText}>侵权</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.reportItem} onPress={() => { setShowReportModal(false); alert('已提交举报：不实信息'); }}>
+            <TouchableOpacity style={styles.reportItem} onPress={() => { setShowReportModal(false); showToast('已提交举报：不实信息', 'success'); }}>
               <Text style={styles.reportItemText}>不实信息</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.reportItem} onPress={() => { setShowReportModal(false); alert('已提交举报：其他'); }}>
+            <TouchableOpacity style={styles.reportItem} onPress={() => { setShowReportModal(false); showToast('已提交举报：其他', 'success'); }}>
               <Text style={styles.reportItemText}>其他</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.reportCancelBtn} onPress={() => setShowReportModal(false)}>
@@ -3407,7 +3408,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
               style={[styles.commentPublishBtn, !commentText.trim() && styles.commentPublishBtnDisabled]}
               onPress={() => {
                 if (commentText.trim()) {
-                  alert('评论发布成功！');
+                  showToast('评论发布成功！', 'success');
                   setCommentText('');
                   setShowCommentModal(false);
                 }
@@ -5063,17 +5064,17 @@ const styles = StyleSheet.create({
   suppCommentText: { fontSize: 13, color: '#6b7280', fontWeight: '500' },
   suppMoreBtn: { padding: 6 },
   // 补充问题更多弹窗
-  suppMoreModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20 },
-  suppMoreModalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 16 },
+  suppMoreModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border },
+  suppMoreModalHandle: { width: 40, height: 4, backgroundColor: modalTokens.border, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 16 },
   suppMoreActionList: { paddingTop: 8 },
-  suppMoreActionItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#f9fafb' },
-  suppMoreActionText: { fontSize: 15, color: '#1f2937', marginLeft: 14 },
-  suppMoreCancelBtn: { marginTop: 8, marginHorizontal: 16, backgroundColor: '#f3f4f6', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  suppMoreCancelText: { fontSize: 15, color: '#6b7280', fontWeight: '500' },
+  suppMoreActionItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  suppMoreActionText: { fontSize: 15, color: modalTokens.textPrimary, marginLeft: 14 },
+  suppMoreCancelBtn: { marginTop: 8, marginHorizontal: 16, backgroundColor: modalTokens.surfaceMuted, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  suppMoreCancelText: { fontSize: 15, color: modalTokens.textSecondary, fontWeight: '500' },
   // 更多操作弹窗样式
   modalOverlay: { 
     flex: 1, 
-    backgroundColor: 'rgba(0,0,0,0.5)', 
+    backgroundColor: modalTokens.overlay, 
     justifyContent: 'flex-end' 
   },
   modalBackdrop: {
@@ -5083,37 +5084,37 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
-  moreActionModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20 },
-  moreActionModalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 16 },
+  moreActionModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border },
+  moreActionModalHandle: { width: 40, height: 4, backgroundColor: modalTokens.border, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 16 },
   actionListSection: { paddingTop: 8 },
-  moreActionItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#f9fafb' },
-  moreActionItemText: { fontSize: 15, color: '#1f2937', marginLeft: 14 },
-  moreActionCancelBtn: { marginTop: 8, marginHorizontal: 16, backgroundColor: '#f3f4f6', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  moreActionCancelText: { fontSize: 15, color: '#6b7280', fontWeight: '500' },
+  moreActionItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  moreActionItemText: { fontSize: 15, color: modalTokens.textPrimary, marginLeft: 14 },
+  moreActionCancelBtn: { marginTop: 8, marginHorizontal: 16, backgroundColor: modalTokens.surfaceMuted, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  moreActionCancelText: { fontSize: 15, color: modalTokens.textSecondary, fontWeight: '500' },
   // 评论弹窗样式
-  commentModal: { flex: 1, backgroundColor: '#fff' },
-  commentModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  commentModal: { flex: 1, backgroundColor: modalTokens.surface },
+  commentModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   commentCloseBtn: { padding: 4, zIndex: 10 },
   commentHeaderCenter: { flex: 1, alignItems: 'center' },
-  commentModalTitle: { fontSize: 17, fontWeight: '600', color: '#222' },
-  commentPublishBtn: { backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, zIndex: 1 },
-  commentPublishBtnDisabled: { backgroundColor: '#ffcdd2' },
+  commentModalTitle: { fontSize: 17, fontWeight: '600', color: modalTokens.textPrimary },
+  commentPublishBtn: { backgroundColor: modalTokens.danger, paddingHorizontal: modalTokens.actionPaddingX, paddingVertical: modalTokens.actionPaddingY, borderRadius: modalTokens.actionRadius, zIndex: 1 },
+  commentPublishBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   commentPublishText: { fontSize: 14, color: '#fff', fontWeight: '600' },
   commentPublishTextDisabled: { color: '#fff' },
-  commentContentArea: { flex: 1, backgroundColor: '#fff' },
-  commentTextInput: { padding: 16, fontSize: 16, color: '#333', lineHeight: 26, minHeight: 200 },
+  commentContentArea: { flex: 1, backgroundColor: modalTokens.surface },
+  commentTextInput: { padding: 16, fontSize: 16, color: modalTokens.textPrimary, lineHeight: 26, minHeight: 200 },
   commentIdentitySection: { paddingHorizontal: 16, paddingBottom: 16 },
-  commentToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0', backgroundColor: '#fff' },
+  commentToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: modalTokens.border, backgroundColor: modalTokens.surface },
   commentToolsLeft: { flexDirection: 'row', alignItems: 'center' },
   commentToolItem: { padding: 10 },
-  commentWordCount: { fontSize: 13, color: '#999' },
+  commentWordCount: { fontSize: 13, color: modalTokens.textMuted },
   // 评论列表弹窗样式 - 今日头条风格
-  commentListModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85%' },
-  commentListModalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
-  commentListModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  commentListModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '85%' },
+  commentListModalHandle: { width: 40, height: 4, backgroundColor: modalTokens.border, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
+  commentListModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   commentListHeaderLeft: { width: 40 },
   commentListCloseBtn: { position: 'absolute', right: 16, padding: 4, zIndex: 10 },
-  commentListModalTitle: { fontSize: 17, fontWeight: '600', color: '#1f2937' },
+  commentListModalTitle: { fontSize: 17, fontWeight: '600', color: modalTokens.textPrimary },
   // 原评论卡片样式 - 今日头条风格
   originalCommentCard: { paddingHorizontal: 16, paddingVertical: 16, backgroundColor: '#fff', borderBottomWidth: 8, borderBottomColor: '#f9fafb' },
   originalCommentHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 },
@@ -5137,20 +5138,20 @@ const styles = StyleSheet.create({
   commentListActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   commentListActionText: { fontSize: 12, color: '#9ca3af' },
   commentListReplyBtn: { fontSize: 12, color: '#ef4444' },
-  commentListBottomBar: { paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  commentListWriteBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f9fafb', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 20 },
-  commentListWriteText: { fontSize: 14, color: '#9ca3af' },
+  commentListBottomBar: { paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: modalTokens.border },
+  commentListWriteBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 20 },
+  commentListWriteText: { fontSize: 14, color: modalTokens.textMuted },
   // 今日头条风格回答弹窗
-  answerModal: { flex: 1, backgroundColor: '#fff' },
-  answerModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  answerModal: { flex: 1, backgroundColor: modalTokens.surface },
+  answerModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   answerCloseBtn: { padding: 4, zIndex: 10 },
   answerHeaderCenter: { flex: 1, alignItems: 'center' },
-  answerModalTitle: { fontSize: 17, fontWeight: '600', color: '#222' },
-  answerPublishBtn: { backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, zIndex: 1 },
-  answerPublishBtnDisabled: { backgroundColor: '#ffcdd2' },
+  answerModalTitle: { fontSize: 17, fontWeight: '600', color: modalTokens.textPrimary },
+  answerPublishBtn: { backgroundColor: modalTokens.danger, paddingHorizontal: modalTokens.actionPaddingX, paddingVertical: modalTokens.actionPaddingY, borderRadius: modalTokens.actionRadius, zIndex: 1 },
+  answerPublishBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   answerPublishText: { fontSize: 14, color: '#fff', fontWeight: '600' },
   answerPublishTextDisabled: { color: '#fff' },
-  answerQuestionCard: { flexDirection: 'row', alignItems: 'flex-start', padding: 16, backgroundColor: '#fafafa', borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  answerQuestionCard: { flexDirection: 'row', alignItems: 'flex-start', padding: 16, backgroundColor: modalTokens.surfaceSoft, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   answerQuestionIcon: { marginRight: 8, marginTop: 2 },
   answerQuestionContent: { flex: 1 },
   answerQuestionLabel: { fontSize: 12, color: '#f59e0b', fontWeight: '600', marginBottom: 6 },
@@ -5160,17 +5161,17 @@ const styles = StyleSheet.create({
   answerSupplementText: { flex: 1, fontSize: 13, color: '#6b7280', lineHeight: 18 },
   answerQuestionAuthor: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 6 },
   answerQuestionAuthorText: { fontSize: 12, color: '#9ca3af' },
-  answerContentArea: { flex: 1, backgroundColor: '#fff' },
-  answerTextInput: { padding: 16, fontSize: 16, color: '#333', lineHeight: 26, minHeight: 300 },
+  answerContentArea: { flex: 1, backgroundColor: modalTokens.surface },
+  answerTextInput: { padding: 16, fontSize: 16, color: modalTokens.textPrimary, lineHeight: 26, minHeight: 300 },
   answerIdentitySection: { paddingHorizontal: 16, paddingBottom: 16 },
   answerImagesPreview: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, paddingTop: 8 },
   answerImagePreviewItem: { width: 80, height: 80, marginRight: 8, marginBottom: 8, position: 'relative' },
   answerImagePreview: { width: '100%', height: '100%', borderRadius: 8 },
   answerImageRemoveBtn: { position: 'absolute', top: -8, right: -8, backgroundColor: '#fff', borderRadius: 10 },
-  answerToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0', backgroundColor: '#fff' },
+  answerToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: modalTokens.border, backgroundColor: modalTokens.surface },
   answerToolsLeft: { flexDirection: 'row', alignItems: 'center' },
   answerToolItem: { padding: 10 },
-  answerWordCount: { fontSize: 13, color: '#999' },
+  answerWordCount: { fontSize: 13, color: modalTokens.textMuted },
   // 补充回答弹窗样式
   supplementAnswerContext: { backgroundColor: '#f0f9ff', padding: 16, borderBottomWidth: 1, borderBottomColor: '#e0f2fe' },
   supplementAnswerHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
@@ -5179,29 +5180,29 @@ const styles = StyleSheet.create({
   supplementAnswerAuthorName: { fontSize: 14, fontWeight: '500', color: '#1f2937' },
   supplementAnswerContent: { fontSize: 14, color: '#6b7280', lineHeight: 20 },
   // 发起活动弹窗样式
-  activityModal: { flex: 1, backgroundColor: '#fff' },
-  activityModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  activityModal: { flex: 1, backgroundColor: modalTokens.surface },
+  activityModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   activityCloseBtn: { padding: 4, zIndex: 10 },
   activityHeaderCenter: { flex: 1, alignItems: 'center' },
-  activityModalTitle: { fontSize: 17, fontWeight: '600', color: '#222' },
-  activityPublishBtn: { backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, zIndex: 1 },
-  activityPublishBtnDisabled: { backgroundColor: '#fecaca' },
+  activityModalTitle: { fontSize: 17, fontWeight: '600', color: modalTokens.textPrimary },
+  activityPublishBtn: { backgroundColor: modalTokens.danger, paddingHorizontal: modalTokens.actionPaddingX, paddingVertical: modalTokens.actionPaddingY, borderRadius: modalTokens.actionRadius, zIndex: 1 },
+  activityPublishBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   activityPublishText: { fontSize: 14, color: '#fff', fontWeight: '600' },
   activityPublishTextDisabled: { color: '#fff' },
   boundQuestionCard: { backgroundColor: '#f0fdf4', padding: 12, marginHorizontal: 16, marginTop: 12, borderRadius: 8, borderWidth: 1, borderColor: '#bbf7d0' },
   boundQuestionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   boundQuestionLabel: { fontSize: 12, color: '#22c55e', fontWeight: '500', marginLeft: 6 },
   boundQuestionText: { fontSize: 14, color: '#166534', lineHeight: 20 },
-  activityFormArea: { flex: 1, padding: 16 },
+  activityFormArea: { flex: 1, padding: 16, backgroundColor: modalTokens.surface },
   formGroup: { marginBottom: 16 },
   formLabel: { fontSize: 14, fontWeight: '500', color: '#374151', marginBottom: 8 },
-  formInput: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, fontSize: 15, color: '#1f2937' },
+  formInput: { backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, fontSize: 15, color: modalTokens.textPrimary },
   formTextarea: { minHeight: 100, textAlignVertical: 'top' },
   formRow: { flexDirection: 'row' },
-  formSelectBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, gap: 8 },
-  formSelectText: { fontSize: 15, color: '#6b7280' },
-  formInputWithIcon: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12, gap: 8 },
-  formInputInner: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#1f2937' },
+  formSelectBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, gap: 8 },
+  formSelectText: { fontSize: 15, color: modalTokens.textSecondary },
+  formInputWithIcon: { flexDirection: 'row', alignItems: 'center', backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 8, paddingHorizontal: 12, gap: 8 },
+  formInputInner: { flex: 1, paddingVertical: 12, fontSize: 15, color: modalTokens.textPrimary },
   // 评论样式 - 横向布局
   commentCard: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   commentHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
@@ -5239,23 +5240,23 @@ const styles = StyleSheet.create({
   activityJoinText: { fontSize: 13, color: '#fff', fontWeight: '500' },
   // 活动类型选择器
   activityTypeSelector: { flexDirection: 'row', gap: 12 },
-  activityTypeSelectorBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f9fafb', gap: 8 },
+  activityTypeSelectorBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: modalTokens.border, backgroundColor: modalTokens.surfaceSoft, gap: 8 },
   activityTypeSelectorBtnActive: { backgroundColor: '#ef4444', borderColor: '#ef4444' },
-  activityTypeSelectorText: { fontSize: 14, color: '#6b7280', fontWeight: '500' },
+  activityTypeSelectorText: { fontSize: 14, color: modalTokens.textSecondary, fontWeight: '500' },
   activityTypeSelectorTextActive: { color: '#fff' },
   required: { color: '#ef4444' },
   organizerSelector: { flexDirection: 'row', gap: 12 },
-  organizerOption: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', gap: 6 },
+  organizerOption: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: modalTokens.border, gap: 6 },
   organizerOptionActive: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
-  organizerOptionText: { fontSize: 14, color: '#666' },
+  organizerOptionText: { fontSize: 14, color: modalTokens.textSecondary },
   organizerOptionTextActive: { color: '#fff' },
   timeRow: { flexDirection: 'row', alignItems: 'center' },
   timeContainer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   timeInputWrapper: { flex: 1 },
-  timeInputLabel: { fontSize: 12, color: '#6b7280', marginBottom: 6 },
-  timeInputField: { backgroundColor: '#f9fafb', borderRadius: 8, padding: 12, fontSize: 14, borderWidth: 1, borderColor: '#e5e7eb', color: '#1f2937' },
+  timeInputLabel: { fontSize: 12, color: modalTokens.textSecondary, marginBottom: 6 },
+  timeInputField: { backgroundColor: modalTokens.surfaceSoft, borderRadius: 8, padding: 12, fontSize: 14, borderWidth: 1, borderColor: modalTokens.border, color: modalTokens.textPrimary },
   timeSeparatorWrapper: { paddingBottom: 12 },
-  timeSeparator: { fontSize: 14, color: '#6b7280', fontWeight: '500' },
+  timeSeparator: { fontSize: 14, color: modalTokens.textSecondary, fontWeight: '500' },
   imageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   imageItem: { width: 80, height: 80, borderRadius: 8, backgroundColor: '#e5e7eb', position: 'relative', overflow: 'hidden' },
   uploadedImage: { width: '100%', height: '100%' },
@@ -5263,13 +5264,13 @@ const styles = StyleSheet.create({
   addImageBtn: { width: 80, height: 80, borderRadius: 8, borderWidth: 2, borderStyle: 'dashed', borderColor: '#d1d5db', justifyContent: 'center', alignItems: 'center' },
   addImageText: { fontSize: 10, color: '#9ca3af', marginTop: 4 },
   // 举报弹窗样式
-  reportModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20 },
-  reportModalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
-  reportModalTitle: { fontSize: 16, fontWeight: '600', color: '#1f2937', textAlign: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  reportItem: { paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#f9fafb' },
-  reportItemText: { fontSize: 15, color: '#1f2937', textAlign: 'center' },
-  reportCancelBtn: { marginTop: 8, marginHorizontal: 16, backgroundColor: '#f3f4f6', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  reportCancelText: { fontSize: 15, color: '#6b7280', fontWeight: '500' },
+  reportModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border },
+  reportModalHandle: { width: 40, height: 4, backgroundColor: modalTokens.border, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
+  reportModalTitle: { fontSize: 16, fontWeight: '600', color: modalTokens.textPrimary, textAlign: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  reportItem: { paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  reportItemText: { fontSize: 15, color: modalTokens.textPrimary, textAlign: 'center' },
+  reportCancelBtn: { marginTop: 8, marginHorizontal: 16, backgroundColor: modalTokens.surfaceMuted, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  reportCancelText: { fontSize: 15, color: modalTokens.textSecondary, fontWeight: '500' },
   // 邀请列表样式
   inviteContainer: { backgroundColor: '#fff' },
   inviteSubTabs: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f3f4f6', paddingHorizontal: 16 },
@@ -5308,32 +5309,32 @@ const styles = StyleSheet.create({
   inviteBtnTwitter: { backgroundColor: '#1DA1F2' },
   inviteBtnFacebook: { backgroundColor: '#4267B2' },
   // 邀请回答弹窗样式
-  inviteModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' },
-  inviteModalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 16 },
-  inviteModalTitle: { fontSize: 18, fontWeight: '600', color: '#1f2937', textAlign: 'center', marginBottom: 16 },
+  inviteModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '80%' },
+  inviteModalHandle: { width: 40, height: 4, backgroundColor: modalTokens.border, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 16 },
+  inviteModalTitle: { fontSize: 18, fontWeight: '600', color: modalTokens.textPrimary, textAlign: 'center', marginBottom: 16 },
   invitePlatformTabs: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 16, gap: 8 },
-  invitePlatformTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 12, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', gap: 4 },
+  invitePlatformTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 12, backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, gap: 4 },
   invitePlatformTabActive: { backgroundColor: '#eff6ff', borderColor: '#3b82f6' },
-  invitePlatformTabText: { fontSize: 14, color: '#6b7280', fontWeight: '500' },
+  invitePlatformTabText: { fontSize: 14, color: modalTokens.textSecondary, fontWeight: '500' },
   invitePlatformTabTextActive: { color: '#3b82f6', fontWeight: '600' },
   inviteSearchContainer: { paddingHorizontal: 16, marginBottom: 16 },
-  inviteSearchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
-  inviteSearchInput: { flex: 1, fontSize: 14, color: '#1f2937', padding: 0 },
+  inviteSearchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
+  inviteSearchInput: { flex: 1, fontSize: 14, color: modalTokens.textPrimary, padding: 0 },
   inviteUserList: { maxHeight: 400, paddingHorizontal: 16 },
-  inviteUserItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  inviteUserItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   inviteUserAvatar: { width: 44, height: 44, borderRadius: 22 },
   inviteUserInfo: { flex: 1, marginLeft: 12 },
-  inviteUserName: { fontSize: 14, fontWeight: '500', color: '#1f2937', marginBottom: 4 },
-  inviteUserDesc: { fontSize: 12, color: '#9ca3af' },
+  inviteUserName: { fontSize: 14, fontWeight: '500', color: modalTokens.textPrimary, marginBottom: 4 },
+  inviteUserDesc: { fontSize: 12, color: modalTokens.textMuted },
   inviteUserBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ef4444', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, gap: 4 },
   inviteUserBtnText: { fontSize: 12, color: '#fff', fontWeight: '600' },
   inviteUserBtnFacebook: { backgroundColor: '#4267B2' },
   inviteUserBtnTwitter: { backgroundColor: '#1DA1F2' },
   // 团队弹窗样式
-  teamModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85%' },
-  teamModalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 12 },
-  teamHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  teamTitle: { fontSize: 18, fontWeight: '600', color: '#1f2937' },
+  teamModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '85%' },
+  teamModalHandle: { width: 40, height: 4, backgroundColor: modalTokens.border, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 12 },
+  teamHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  teamTitle: { fontSize: 18, fontWeight: '600', color: modalTokens.textPrimary },
   // 团队成员区域
   teamMembersSection: { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   teamMembersTitle: { fontSize: 14, fontWeight: '600', color: '#6b7280', paddingHorizontal: 16, marginBottom: 12 },
@@ -5415,8 +5416,8 @@ const styles = StyleSheet.create({
   },
   collapseBtnText: { fontSize: 15, color: '#ef4444', fontWeight: '600', marginRight: 4 },
   // 追加悬赏弹窗样式
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  addRewardModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  modalOverlay: { flex: 1, backgroundColor: modalTokens.overlay, justifyContent: 'flex-end' },
+  addRewardModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border },
   addRewardModalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 16 },
   addRewardModalTitle: { fontSize: 18, fontWeight: '600', color: '#1f2937', textAlign: 'center', marginBottom: 20 },
   addRewardContent: { paddingHorizontal: 20 },
@@ -5437,15 +5438,15 @@ const styles = StyleSheet.create({
   addRewardTips: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#eff6ff', borderRadius: 8, padding: 12, marginBottom: 20 },
   addRewardTipsText: { flex: 1, fontSize: 12, color: '#6b7280', lineHeight: 18 },
   confirmAddRewardBtn: { backgroundColor: '#ef4444', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 12 },
-  confirmAddRewardBtnDisabled: { backgroundColor: '#fca5a5' },
+  confirmAddRewardBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   confirmAddRewardBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
-  cancelAddRewardBtn: { backgroundColor: '#f3f4f6', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  cancelAddRewardBtnText: { fontSize: 15, color: '#6b7280', fontWeight: '500' },
+  cancelAddRewardBtn: { backgroundColor: modalTokens.surfaceMuted, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  cancelAddRewardBtnText: { fontSize: 15, color: modalTokens.textSecondary, fontWeight: '500' },
   // 追加悬赏人员名单弹窗样式
-  contributorsModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%' },
+  contributorsModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '70%' },
   contributorsModalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 12 },
-  contributorsModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  contributorsModalTitle: { fontSize: 18, fontWeight: '600', color: '#1f2937' },
+  contributorsModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  contributorsModalTitle: { fontSize: 18, fontWeight: '600', color: modalTokens.textPrimary },
   contributorsTotalInfo: { backgroundColor: '#fef2f2', marginHorizontal: 20, marginTop: 16, marginBottom: 12, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#fee2e2' },
   contributorsTotalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
   contributorsTotalLabel: { fontSize: 13, color: '#6b7280' },
@@ -5460,8 +5461,8 @@ const styles = StyleSheet.create({
   contributorTime: { fontSize: 11, color: '#9ca3af' },
   contributorAmountBadge: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#fef2f2', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 1, borderColor: '#fee2e2' },
   contributorAmountText: { fontSize: 13, fontWeight: '600', color: '#ef4444' },
-  contributorsCloseBtn: { marginHorizontal: 20, marginTop: 12, backgroundColor: '#f3f4f6', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
-  contributorsCloseBtnText: { fontSize: 15, color: '#6b7280', fontWeight: '500' },
+  contributorsCloseBtn: { marginHorizontal: 20, marginTop: 12, backgroundColor: modalTokens.surfaceMuted, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  contributorsCloseBtnText: { fontSize: 15, color: modalTokens.textSecondary, fontWeight: '500' },
   
   // 超级赞徽章样式
   superLikeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fffbeb', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1, borderColor: '#fef3c7', flexShrink: 0 },
@@ -5470,10 +5471,10 @@ const styles = StyleSheet.create({
   superLikeBadgeTextInactive: { color: '#9ca3af' },
   
   // 购买超级赞弹窗样式
-  superLikeModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85%' },
+  superLikeModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '85%' },
   superLikeModalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 16 },
   superLikeModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 20 },
-  superLikeModalTitle: { fontSize: 20, fontWeight: '700', color: '#1f2937' },
+  superLikeModalTitle: { fontSize: 20, fontWeight: '700', color: modalTokens.textPrimary },
   superLikeScrollContent: { maxHeight: 450 },
   superLikeContentContainer: { paddingHorizontal: 20, paddingBottom: 10 },
   superLikeContent: { paddingHorizontal: 20 },
@@ -5504,82 +5505,82 @@ const styles = StyleSheet.create({
   priceInfoTotalValue: { fontSize: 18, fontWeight: '700', color: '#f59e0b' },
   superLikeTips: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#eff6ff', borderRadius: 8, padding: 12, marginBottom: 20 },
   superLikeTipsText: { flex: 1, fontSize: 12, color: '#6b7280', lineHeight: 18 },
-  superLikeFooter: { paddingHorizontal: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6', backgroundColor: '#fff' },
+  superLikeFooter: { paddingHorizontal: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: modalTokens.border, backgroundColor: modalTokens.surface },
   confirmSuperLikeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#f59e0b', borderRadius: 12, paddingVertical: 14, marginBottom: 12 },
   confirmSuperLikeBtnDisabled: { backgroundColor: '#fcd34d' },
   confirmSuperLikeBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
-  cancelSuperLikeBtn: { backgroundColor: '#f3f4f6', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  cancelSuperLikeBtnText: { fontSize: 15, color: '#6b7280', fontWeight: '500' },
+  cancelSuperLikeBtn: { backgroundColor: modalTokens.surfaceMuted, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  cancelSuperLikeBtnText: { fontSize: 15, color: modalTokens.textSecondary, fontWeight: '500' },
   
   // 仲裁申请弹窗样式
-  arbitrationModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85%' },
-  arbitrationModalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 12 },
-  arbitrationModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  arbitrationModalTitle: { fontSize: 18, fontWeight: '600', color: '#1f2937' },
+  arbitrationModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '85%' },
+  arbitrationModalHandle: { width: 40, height: 4, backgroundColor: modalTokens.border, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 12 },
+  arbitrationModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  arbitrationModalTitle: { fontSize: 18, fontWeight: '600', color: modalTokens.textPrimary },
   arbitrationContent: { maxHeight: 500, paddingHorizontal: 20, paddingTop: 16 },
   arbitrationInfo: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: '#eff6ff', borderRadius: 12, padding: 14, marginBottom: 20, borderWidth: 1, borderColor: '#dbeafe' },
   arbitrationInfoText: { flex: 1, fontSize: 13, color: '#1e40af', lineHeight: 20 },
-  arbitrationSectionTitle: { fontSize: 15, fontWeight: '600', color: '#1f2937', marginBottom: 10 },
-  arbitrationReasonInput: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 12, fontSize: 14, color: '#1f2937', minHeight: 100, marginBottom: 20 },
+  arbitrationSectionTitle: { fontSize: 15, fontWeight: '600', color: modalTokens.textPrimary, marginBottom: 10 },
+  arbitrationReasonInput: { backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 12, padding: 12, fontSize: 14, color: modalTokens.textPrimary, minHeight: 100, marginBottom: 20 },
   arbitrationExpertsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  arbitrationExpertsCount: { fontSize: 13, color: '#6b7280', fontWeight: '500' },
+  arbitrationExpertsCount: { fontSize: 13, color: modalTokens.textSecondary, fontWeight: '500' },
   // 专家搜索框样式
-  expertSearchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16, gap: 8 },
-  expertSearchInput: { flex: 1, fontSize: 14, color: '#1f2937', padding: 0 },
+  expertSearchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16, gap: 8 },
+  expertSearchInput: { flex: 1, fontSize: 14, color: modalTokens.textPrimary, padding: 0 },
   // 推荐专家标题样式
   recommendedExpertsHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
-  recommendedExpertsTitle: { fontSize: 14, fontWeight: '600', color: '#1f2937' },
+  recommendedExpertsTitle: { fontSize: 14, fontWeight: '600', color: modalTokens.textPrimary },
   // 搜索无结果样式
   noExpertsFound: { alignItems: 'center', paddingVertical: 40 },
-  noExpertsFoundText: { fontSize: 15, fontWeight: '500', color: '#6b7280', marginTop: 12 },
-  noExpertsFoundDesc: { fontSize: 13, color: '#9ca3af', marginTop: 4 },
-  expertItem: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#f9fafb', borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#e5e7eb' },
+  noExpertsFoundText: { fontSize: 15, fontWeight: '500', color: modalTokens.textSecondary, marginTop: 12 },
+  noExpertsFoundDesc: { fontSize: 13, color: modalTokens.textMuted, marginTop: 4 },
+  expertItem: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: modalTokens.surfaceSoft, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: modalTokens.border },
   expertItemSelected: { backgroundColor: '#eff6ff', borderColor: '#3b82f6', borderWidth: 2 },
   expertInfo: { flex: 1, marginLeft: 12 },
   expertNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  expertName: { fontSize: 14, fontWeight: '600', color: '#1f2937' },
-  expertTitle: { fontSize: 12, color: '#6b7280', marginBottom: 2 },
-  expertExpertise: { fontSize: 11, color: '#9ca3af' },
-  expertCheckbox: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#d1d5db', alignItems: 'center', justifyContent: 'center' },
+  expertName: { fontSize: 14, fontWeight: '600', color: modalTokens.textPrimary },
+  expertTitle: { fontSize: 12, color: modalTokens.textSecondary, marginBottom: 2 },
+  expertExpertise: { fontSize: 11, color: modalTokens.textMuted },
+  expertCheckbox: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: modalTokens.border, alignItems: 'center', justifyContent: 'center' },
   expertCheckboxSelected: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
-  arbitrationModalFooter: { paddingHorizontal: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
+  arbitrationModalFooter: { paddingHorizontal: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: modalTokens.border },
   submitArbitrationBtn: { backgroundColor: '#ef4444', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 10 },
-  submitArbitrationBtnDisabled: { backgroundColor: '#fca5a5' },
+  submitArbitrationBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   submitArbitrationBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
-  cancelArbitrationBtn: { backgroundColor: '#f3f4f6', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  cancelArbitrationBtnText: { fontSize: 15, color: '#6b7280', fontWeight: '500' },
+  cancelArbitrationBtn: { backgroundColor: modalTokens.surfaceMuted, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  cancelArbitrationBtnText: { fontSize: 15, color: modalTokens.textSecondary, fontWeight: '500' },
   // 仲裁状态弹窗样式
-  arbitrationStatusModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 20 },
-  arbitrationStatusTitle: { fontSize: 18, fontWeight: '600', color: '#1f2937', textAlign: 'center', marginTop: 20, marginBottom: 20 },
-  votingProgress: { backgroundColor: '#f9fafb', borderRadius: 12, padding: 16, marginBottom: 20 },
-  votingProgressBar: { flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', backgroundColor: '#e5e7eb', marginBottom: 12 },
+  arbitrationStatusModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, paddingHorizontal: 20 },
+  arbitrationStatusTitle: { fontSize: 18, fontWeight: '600', color: modalTokens.textPrimary, textAlign: 'center', marginTop: 20, marginBottom: 20 },
+  votingProgress: { backgroundColor: modalTokens.surfaceSoft, borderRadius: 12, borderWidth: 1, borderColor: modalTokens.border, padding: 16, marginBottom: 20 },
+  votingProgressBar: { flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', backgroundColor: modalTokens.border, marginBottom: 12 },
   votingAgreeBar: { backgroundColor: '#22c55e', height: '100%' },
   votingDisagreeBar: { backgroundColor: '#ef4444', height: '100%' },
   votingStats: { gap: 8, marginBottom: 12 },
   votingStatItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   votingAgreeIndicator: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#22c55e' },
   votingDisagreeIndicator: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#ef4444' },
-  votingStatText: { fontSize: 13, color: '#6b7280' },
-  votingPercentage: { fontSize: 16, fontWeight: '700', color: '#1f2937', textAlign: 'center' },
+  votingStatText: { fontSize: 13, color: modalTokens.textSecondary },
+  votingPercentage: { fontSize: 16, fontWeight: '700', color: modalTokens.textPrimary, textAlign: 'center' },
   arbitrationPendingInfo: { alignItems: 'center', paddingVertical: 20 },
-  arbitrationPendingInfoText: { fontSize: 14, color: '#6b7280', marginTop: 10, marginBottom: 16 },
+  arbitrationPendingInfoText: { fontSize: 14, color: modalTokens.textSecondary, marginTop: 10, marginBottom: 16 },
   simulateVoteBtn: { backgroundColor: '#3b82f6', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
   simulateVoteBtnText: { fontSize: 13, color: '#fff', fontWeight: '600' },
   arbitrationApprovedInfo: { alignItems: 'center', paddingVertical: 20 },
   arbitrationRejectedInfo: { alignItems: 'center', paddingVertical: 20 },
-  arbitrationResultTitle: { fontSize: 18, fontWeight: '600', color: '#1f2937', marginTop: 12, marginBottom: 8 },
-  arbitrationResultDesc: { fontSize: 13, color: '#6b7280', textAlign: 'center', lineHeight: 20, paddingHorizontal: 20 },
-  closeArbitrationStatusBtn: { backgroundColor: '#f3f4f6', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 10 },
-  closeArbitrationStatusBtnText: { fontSize: 15, color: '#6b7280', fontWeight: '500' },
+  arbitrationResultTitle: { fontSize: 18, fontWeight: '600', color: modalTokens.textPrimary, marginTop: 12, marginBottom: 8 },
+  arbitrationResultDesc: { fontSize: 13, color: modalTokens.textSecondary, textAlign: 'center', lineHeight: 20, paddingHorizontal: 20 },
+  closeArbitrationStatusBtn: { backgroundColor: modalTokens.surfaceMuted, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 10 },
+  closeArbitrationStatusBtnText: { fontSize: 15, color: modalTokens.textSecondary, fontWeight: '500' },
   // 专家投票详情样式
   expertVotesSection: { marginTop: 20, maxHeight: 400 },
-  expertVotesSectionTitle: { fontSize: 15, fontWeight: '600', color: '#1f2937', marginBottom: 12, paddingHorizontal: 20 },
+  expertVotesSectionTitle: { fontSize: 15, fontWeight: '600', color: modalTokens.textPrimary, marginBottom: 12, paddingHorizontal: 20 },
   expertVotesList: { maxHeight: 350, paddingHorizontal: 20 },
-  expertVoteCard: { backgroundColor: '#f9fafb', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#e5e7eb' },
+  expertVoteCard: { backgroundColor: modalTokens.surfaceSoft, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: modalTokens.border },
   expertVoteHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
   expertVoteInfo: { flex: 1, marginLeft: 12 },
   expertVoteNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  expertVoteName: { fontSize: 14, fontWeight: '600', color: '#1f2937' },
+  expertVoteName: { fontSize: 14, fontWeight: '600', color: modalTokens.textPrimary },
   expertVoteBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   expertVoteAgreeBadge: { backgroundColor: '#22c55e' },
   expertVoteDisagreeBadge: { backgroundColor: '#ef4444' },

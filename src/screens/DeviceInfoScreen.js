@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DeviceInfo from '../utils/deviceInfo';
+import { showToast } from '../utils/toast';
 
 /**
  * 设备信息查看页面
@@ -64,7 +65,7 @@ export default function DeviceInfoScreen({ navigation }) {
     if (deviceInfo) {
       console.log('📋 设备信息已复制到控制台:');
       console.log(JSON.stringify(deviceInfo, null, 2));
-      alert('设备信息已输出到控制台');
+      showToast('设备信息已输出到控制台', 'success');
     }
   };
 

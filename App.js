@@ -60,6 +60,7 @@ import NetworkTestScreen from './src/screens/NetworkTestScreen';
 import DeviceInfoScreen from './src/screens/DeviceInfoScreen';
 import ChangePasswordScreen from './src/screens/ChangePasswordScreen';
 import ConnectionStatusScreen from './src/screens/ConnectionStatusScreen';
+import { modalTokens } from './src/components/modalTokens';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -98,11 +99,11 @@ function EmergencyModal({ visible, onClose, onSubmit }) {
 
   const handleSubmit = () => {
     if (!emergencyForm.title.trim()) {
-      alert(t('emergency.enterTitle'));
+      showToast(t('emergency.enterTitle'), 'warning');
       return;
     }
     const feeInfo = rescuerFee > 0 ? `\n${t('emergency.needPay')}：$${rescuerFee}` : '';
-    alert(`${t('emergency.published')}\n${t('emergency.rescuersNeeded')}${emergencyForm.rescuerCount}${t('emergency.rescuerUnit')}${feeInfo}\n${t('emergency.nearbyNotified')}`);
+    showToast(`${t('emergency.published')}\n${t('emergency.rescuersNeeded')}${emergencyForm.rescuerCount}${t('emergency.rescuerUnit')}${feeInfo}\n${t('emergency.nearbyNotified')}`, 'success', 3000);
     onClose();
     setEmergencyForm({ title: '', description: '', location: '', contact: '', rescuerCount: 1 });
   };
@@ -141,7 +142,7 @@ function EmergencyModal({ visible, onClose, onSubmit }) {
           {remainingFree <= 0 && (
             <TouchableOpacity 
               style={modalStyles.monthlyPayButton}
-              onPress={() => alert(t('emergency.monthlyUnlock'))}
+              onPress={() => showToast(t('emergency.monthlyUnlock'), 'info')}
             >
               <Text style={modalStyles.monthlyPayButtonText}>{t('emergency.payAmount')}</Text>
               <Ionicons name="arrow-forward" size={14} color="#fff" />
@@ -281,7 +282,7 @@ function EmergencyModal({ visible, onClose, onSubmit }) {
                   <Text style={modalStyles.rescuerFeeNote}>{t('emergency.rescuerFeeNote')}</Text>
                   <TouchableOpacity 
                     style={modalStyles.payButton}
-                    onPress={() => alert(`${t('emergency.pay')} $${rescuerFee}\n\n${t('emergency.paymentMethods')}`)}
+                    onPress={() => showToast(`${t('emergency.pay')} $${rescuerFee}\n\n${t('emergency.paymentMethods')}`, 'info', 3000)}
                   >
                     <Ionicons name="card" size={18} color="#fff" />
                     <Text style={modalStyles.payButtonText}>{t('emergency.payNow')} ${rescuerFee}</Text>
@@ -307,17 +308,17 @@ function EmergencyModal({ visible, onClose, onSubmit }) {
 }
 
 const modalStyles = StyleSheet.create({
-  emergencyModal: { flex: 1, backgroundColor: '#fff' },
-  emergencyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  emergencyModal: { flex: 1, backgroundColor: modalTokens.surface },
+  emergencyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   emergencyHeaderCenter: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  emergencyHeaderTitle: { fontSize: 17, fontWeight: '600', color: '#222' },
-  emergencySubmitBtn: { backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4 },
-  emergencySubmitBtnDisabled: { backgroundColor: '#fecaca' },
+  emergencyHeaderTitle: { fontSize: 17, fontWeight: '600', color: modalTokens.textPrimary },
+  emergencySubmitBtn: { backgroundColor: modalTokens.danger, paddingHorizontal: modalTokens.actionPaddingX, paddingVertical: modalTokens.actionPaddingY, borderRadius: modalTokens.actionRadius },
+  emergencySubmitBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   emergencySubmitText: { fontSize: 14, color: '#fff', fontWeight: '600' },
   emergencySubmitTextDisabled: { color: '#fff' },
   emergencyWarning: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fffbeb', paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
   emergencyWarningText: { flex: 1, fontSize: 13, color: '#92400e', lineHeight: 18 },
-  freeCountBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f0fdf4', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  freeCountBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f0fdf4', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   freeCountLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   freeCountText: { fontSize: 14, color: '#374151' },
   freeCountNumber: { fontSize: 16, fontWeight: 'bold', color: '#22c55e' },
@@ -328,7 +329,7 @@ const modalStyles = StyleSheet.create({
   emergencyFormArea: { flex: 1, padding: 16 },
   emergencyFormGroup: { marginBottom: 16 },
   emergencyFormLabel: { fontSize: 14, fontWeight: '500', color: '#374151', marginBottom: 8 },
-  emergencyFormInput: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, fontSize: 15, color: '#1f2937' },
+  emergencyFormInput: { backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, fontSize: 15, color: modalTokens.textPrimary },
   quickTitlesContainer: { marginTop: 12 },
   quickTitlesLabel: { fontSize: 12, color: '#6b7280', marginBottom: 8 },
   quickTitlesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -336,17 +337,17 @@ const modalStyles = StyleSheet.create({
   quickTitleText: { fontSize: 12, color: '#ef4444', fontWeight: '500' },
   emergencyFormTextarea: { minHeight: 100, textAlignVertical: 'top' },
   emergencyLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  emergencyLocationInput: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12, gap: 8 },
-  emergencyLocationText: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#1f2937' },
+  emergencyLocationInput: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 8, paddingHorizontal: 12, gap: 8 },
+  emergencyLocationText: { flex: 1, paddingVertical: 12, fontSize: 15, color: modalTokens.textPrimary },
   emergencyLocationBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#eff6ff', paddingHorizontal: 12, paddingVertical: 12, borderRadius: 8, gap: 4 },
   emergencyLocationBtnText: { fontSize: 13, color: '#3b82f6', fontWeight: '500' },
-  emergencyContactInput: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12, gap: 8 },
-  emergencyContactText: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#1f2937' },
+  emergencyContactInput: { flexDirection: 'row', alignItems: 'center', backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 8, paddingHorizontal: 12, gap: 8 },
+  emergencyContactText: { flex: 1, paddingVertical: 12, fontSize: 15, color: modalTokens.textPrimary },
   rescuerCountHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   rescuerFreeTag: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f0fdf4', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: '#bbf7d0' },
   rescuerFreeText: { fontSize: 12, color: '#16a34a', fontWeight: '500' },
-  rescuerCountInputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12, gap: 8 },
-  rescuerCountInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#1f2937' },
+  rescuerCountInputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 8, paddingHorizontal: 12, gap: 8 },
+  rescuerCountInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: modalTokens.textPrimary },
   rescuerCountUnit: { fontSize: 15, color: '#6b7280', fontWeight: '500' },
   rescuerFeeInfo: { marginTop: 12 },
   rescuerFeeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

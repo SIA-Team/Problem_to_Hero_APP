@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import Avatar from '../components/Avatar';
 import SuperLikeBalance from '../components/SuperLikeBalance';
 import LogoutConfirmModal from '../components/LogoutConfirmModal';
+import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import UserCacheService from '../services/UserCacheService';
 import authApi from '../services/api/authApi';
@@ -1862,18 +1863,18 @@ const styles = StyleSheet.create({
   answerStats: { flexDirection: 'row', gap: 12, marginTop: 8 },
   logoutBtn: { marginHorizontal: 12, marginTop: 12, backgroundColor: '#fff', borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
   logoutText: { fontSize: 15, color: '#ef4444', fontWeight: '500' },
-  listModal: { flex: 1, backgroundColor: '#fff' },
-  listModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  listModalTitle: { fontSize: 17, fontWeight: '600', color: '#1f2937' },
+  listModal: { flex: 1, backgroundColor: modalTokens.surface },
+  listModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  listModalTitle: { fontSize: 17, fontWeight: '600', color: modalTokens.textPrimary },
   clearText: { fontSize: 14, color: '#ef4444' },
   listModalContent: { flex: 1 },
-  listItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  listItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   listItemContent: { flex: 1 },
   listItemTitle: { fontSize: 15, color: '#1f2937', lineHeight: 22 },
   listItemMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 12 },
   listItemAuthor: { fontSize: 12, color: '#6b7280' },
   listItemTime: { fontSize: 12, color: '#9ca3af' },
-  favoriteTabs: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  favoriteTabs: { flexDirection: 'row', backgroundColor: modalTokens.surface, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   favoriteTab: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
   favoriteTabActive: { borderBottomColor: '#ef4444' },
   favoriteTabText: { fontSize: 14, color: '#6b7280' },
@@ -1887,9 +1888,9 @@ const styles = StyleSheet.create({
   draftTime: { fontSize: 12, color: '#9ca3af' },
   draftDeleteBtn: { padding: 8 },
   // 内嵌收藏标签样式
-  favoriteTabsInline: { flexDirection: 'row', backgroundColor: '#f9fafb', borderRadius: 8, padding: 4, margin: 12 },
+  favoriteTabsInline: { flexDirection: 'row', backgroundColor: modalTokens.surfaceSoft, borderRadius: 8, padding: 4, margin: 12 },
   favoriteTabInline: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6 },
-  favoriteTabInlineActive: { backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  favoriteTabInlineActive: { backgroundColor: modalTokens.surface, shadowColor: modalTokens.shadow, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
   favoriteTabInlineText: { fontSize: 13, color: '#6b7280' },
   favoriteTabInlineTextActive: { color: '#ef4444', fontWeight: '600' },
   favoriteItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
@@ -1909,14 +1910,14 @@ const styles = StyleSheet.create({
   favoriteItemTime: { fontSize: 12, color: '#9ca3af' },
   
   // 认证弹窗样式
-  verificationModal: { flex: 1, backgroundColor: '#f9fafb' },
-  verificationHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  verificationTitle: { fontSize: 18, fontWeight: 'bold', color: '#1f2937' },
-  progressContainer: { backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  progressBar: { height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, overflow: 'hidden' },
+  verificationModal: { flex: 1, backgroundColor: modalTokens.surfaceSoft },
+  verificationHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: modalTokens.surface, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  verificationTitle: { fontSize: 18, fontWeight: 'bold', color: modalTokens.textPrimary },
+  progressContainer: { backgroundColor: modalTokens.surface, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  progressBar: { height: 4, backgroundColor: modalTokens.border, borderRadius: 2, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: '#3b82f6', borderRadius: 2 },
-  progressText: { fontSize: 12, color: '#6b7280', marginTop: 8 },
-  verificationContent: { flex: 1, backgroundColor: '#fff' },
+  progressText: { fontSize: 12, color: modalTokens.textSecondary, marginTop: 8 },
+  verificationContent: { flex: 1, backgroundColor: modalTokens.surface },
   
   // 类型选择
   typeSelectionContainer: { padding: 16 },

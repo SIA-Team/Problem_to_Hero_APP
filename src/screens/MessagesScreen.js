@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import { useTranslation } from '../i18n/withTranslation';
+import { modalTokens } from '../components/modalTokens';
 
 // 顶部快捷入口数据
 const quickEntries = [
@@ -632,17 +633,17 @@ const styles = StyleSheet.create({
   privateBadge: { backgroundColor: '#ef4444', minWidth: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 },
   privateBadgeText: { fontSize: 11, color: '#fff', fontWeight: '600' },
   // 发送私信弹窗样式
-  privateModal: { flex: 1, backgroundColor: '#fff' },
-  privateModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  privateModalTitle: { fontSize: 17, fontWeight: '600', color: '#1f2937' },
-  sendBtn: { backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4 },
-  sendBtnDisabled: { backgroundColor: '#fecaca' },
+  privateModal: { flex: 1, backgroundColor: modalTokens.surface },
+  privateModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  privateModalTitle: { fontSize: 17, fontWeight: '700', color: modalTokens.textPrimary },
+  sendBtn: { backgroundColor: modalTokens.danger, paddingHorizontal: modalTokens.actionPaddingX, paddingVertical: modalTokens.actionPaddingY, borderRadius: modalTokens.actionRadius },
+  sendBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   sendBtnText: { fontSize: 14, color: '#fff', fontWeight: '600' },
   sendBtnTextDisabled: { color: '#fff' },
   searchSection: { padding: 12, backgroundColor: '#fff' },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8 },
+  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: modalTokens.surfaceSoft, borderRadius: 14, borderWidth: 1, borderColor: modalTokens.border, paddingHorizontal: 12, paddingVertical: 8 },
   searchInput: { flex: 1, marginLeft: 8, fontSize: 14 },
-  selectedUserSection: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#f9fafb', borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  selectedUserSection: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: modalTokens.surfaceSoft, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   selectedLabel: { fontSize: 13, color: '#6b7280', marginRight: 8 },
   selectedUserTag: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: '#e5e7eb', gap: 6 },
 
@@ -658,7 +659,7 @@ const styles = StyleSheet.create({
   userTitle: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
   messageInputSection: { flex: 1, padding: 16 },
   messageInputLabel: { fontSize: 14, fontWeight: '500', color: '#374151', marginBottom: 8 },
-  messageTextInput: { flex: 1, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 12, fontSize: 15, color: '#1f2937', minHeight: 150 },
+  messageTextInput: { flex: 1, backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 12, padding: 12, fontSize: 15, color: modalTokens.textPrimary, minHeight: 150 },
   // 仲裁邀请样式
   arbitrationSection: { backgroundColor: '#fff', marginTop: 8, padding: 12 },
   arbitrationItem: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
@@ -677,12 +678,12 @@ const styles = StyleSheet.create({
   viewVoteBtn: { backgroundColor: '#f3f4f6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
   viewVoteBtnText: { fontSize: 12, color: '#6b7280', fontWeight: '500' },
   // 专家投票弹窗样式
-  voteModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  voteModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%' },
-  voteModalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 12 },
-  voteModalTitle: { fontSize: 18, fontWeight: '600', color: '#1f2937', textAlign: 'center', marginBottom: 16 },
+  voteModalOverlay: { flex: 1, backgroundColor: modalTokens.overlay, justifyContent: 'flex-end' },
+  voteModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '90%' },
+  voteModalHandle: { width: 44, height: 4, backgroundColor: '#cbd5e1', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 12 },
+  voteModalTitle: { fontSize: 18, fontWeight: '700', color: modalTokens.textPrimary, textAlign: 'center', marginBottom: 16 },
   voteModalContent: { maxHeight: 500, paddingHorizontal: 20 },
-  voteQuestionCard: { backgroundColor: '#f9fafb', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#e5e7eb' },
+  voteQuestionCard: { backgroundColor: modalTokens.surfaceSoft, borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: modalTokens.border },
   voteQuestionLabel: { fontSize: 12, fontWeight: '600', color: '#6b7280', marginBottom: 6 },
   voteQuestionText: { fontSize: 15, fontWeight: '500', color: '#1f2937', lineHeight: 22, marginBottom: 8 },
   voteAnswerRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -707,9 +708,9 @@ const styles = StyleSheet.create({
   voteChoiceDesc: { fontSize: 12, color: '#6b7280', lineHeight: 18 },
   voteReasonInputLabel: { fontSize: 14, fontWeight: '600', color: '#1f2937', marginBottom: 10 },
   voteReasonInput: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 12, fontSize: 14, color: '#1f2937', minHeight: 100, textAlignVertical: 'top', marginBottom: 20 },
-  voteModalFooter: { paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
+  voteModalFooter: { paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: modalTokens.border },
   submitVoteBtn: { backgroundColor: '#ef4444', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 10 },
-  submitVoteBtnDisabled: { backgroundColor: '#fca5a5' },
+  submitVoteBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   submitVoteBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
   cancelVoteBtn: { backgroundColor: '#f3f4f6', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   cancelVoteBtnText: { fontSize: 15, color: '#6b7280', fontWeight: '500' },
