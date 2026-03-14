@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { getRegionData } from '../data/regionData';
+import { showAppAlert } from '../utils/appAlert';
 
 // 地区数据（使用多语言数据）
 // 已移除硬编码数据，改用 getRegionData()
@@ -232,7 +233,7 @@ export default function ChannelManageScreen({ navigation }) {
   const createComboChannel = () => {
     const { categoryType, category } = comboSelection;
     if (!categoryType || !category) {
-      Alert.alert(t('common.ok'), t('channelManage.selectCategoryPrompt'));
+      showAppAlert(t('common.ok'), t('channelManage.selectCategoryPrompt'));
       return;
     }
 
@@ -281,7 +282,7 @@ export default function ChannelManageScreen({ navigation }) {
       category: null
     });
     setShowComboCreator(false);
-    Alert.alert(t('common.ok'), t('channelManage.createSuccess'));
+    showAppAlert(t('common.ok'), t('channelManage.createSuccess'));
   };
 
   const getSelectedPath = () => {
@@ -315,7 +316,7 @@ export default function ChannelManageScreen({ navigation }) {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('channelManage.title')}</Text>
         <TouchableOpacity onPress={() => {
-          Alert.alert(t('common.ok'), t('channelManage.saveSuccess'));
+          showAppAlert(t('common.ok'), t('channelManage.saveSuccess'));
           navigation.goBack();
         }} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
           <Text style={styles.saveBtn}>{t('channelManage.done')}</Text>

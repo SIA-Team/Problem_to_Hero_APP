@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 import * as Updates from 'expo-updates';
+import { showAppAlert } from '../utils/appAlert';
 
 /**
  * 更新检查组件
@@ -34,7 +35,7 @@ const UpdateChecker = () => {
         console.log('✅ 发现新版本');
         
         // 提示用户
-        Alert.alert(
+        showAppAlert(
           '发现新版本',
           '我们发布了新版本，包含功能改进和问题修复。是否立即更新？',
           [
@@ -56,7 +57,7 @@ const UpdateChecker = () => {
                   console.log('开始下载更新...');
                   
                   // 显示下载提示
-                  Alert.alert('正在更新', '正在下载新版本，请稍候...');
+                  showAppAlert('正在更新', '正在下载新版本，请稍候...');
                   
                   // 下载更新
                   await Updates.fetchUpdateAsync();
@@ -67,7 +68,7 @@ const UpdateChecker = () => {
                   await Updates.reloadAsync();
                 } catch (error) {
                   console.error('更新失败:', error);
-                  Alert.alert('更新失败', '下载更新时出错，请稍后重试');
+                  showAppAlert('更新失败', '下载更新时出错，请稍后重试');
                 }
               }
             }

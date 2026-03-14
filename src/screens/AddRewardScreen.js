@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, TextInput, StyleSheet, Alert } from 'reac
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
+import { showAppAlert } from '../utils/appAlert';
 
 export default function AddRewardScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -15,19 +16,19 @@ export default function AddRewardScreen({ navigation, route }) {
   const handleAddReward = () => {
     const amount = selectedAddRewardAmount || parseFloat(addRewardAmount);
     if (!amount || amount <= 0) {
-      Alert.alert(t('screens.addRewardScreen.validation.hint'), t('screens.addRewardScreen.validation.invalidAmount'));
+      showAppAlert(t('screens.addRewardScreen.validation.hint'), t('screens.addRewardScreen.validation.invalidAmount'));
       return;
     }
     if (amount < 0.01) {
-      Alert.alert(t('screens.addRewardScreen.validation.hint'), t('screens.addRewardScreen.validation.minAmount'));
+      showAppAlert(t('screens.addRewardScreen.validation.hint'), t('screens.addRewardScreen.validation.minAmount'));
       return;
     }
     if (amount > 1000) {
-      Alert.alert(t('screens.addRewardScreen.validation.hint'), t('screens.addRewardScreen.validation.maxAmount'));
+      showAppAlert(t('screens.addRewardScreen.validation.hint'), t('screens.addRewardScreen.validation.maxAmount'));
       return;
     }
     
-    Alert.alert(
+    showAppAlert(
       t('screens.addRewardScreen.success.title'),
       t('screens.addRewardScreen.success.message').replace('${amount}', amount),
       [

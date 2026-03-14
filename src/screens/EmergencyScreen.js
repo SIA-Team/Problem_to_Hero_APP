@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import i18n from '../i18n';
 import { modalTokens } from '../components/modalTokens';
+import { showAppAlert } from '../utils/appAlert';
 
 export default function EmergencyScreen({ navigation }) {
   const t = (key) => {
@@ -51,7 +52,7 @@ export default function EmergencyScreen({ navigation }) {
     if (Platform.OS !== 'web') {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('提示', '需要相册访问权限才能上传图片');
+        showAppAlert('提示', '需要相册访问权限才能上传图片');
         return false;
       }
     }
@@ -62,7 +63,7 @@ export default function EmergencyScreen({ navigation }) {
   const pickImage = async () => {
     // 检查图片数量限制
     if (emergencyImages.length >= 3) {
-      Alert.alert(t('common.ok'), '最多只能上传3张图片');
+      showAppAlert(t('common.ok'), '最多只能上传3张图片');
       return;
     }
 
@@ -88,7 +89,7 @@ export default function EmergencyScreen({ navigation }) {
       }
     } catch (error) {
       console.error('选择图片失败:', error);
-      Alert.alert('错误', '选择图片失败，请重试');
+      showAppAlert('错误', '选择图片失败，请重试');
     }
   };
 
@@ -96,7 +97,7 @@ export default function EmergencyScreen({ navigation }) {
   const takePhoto = async () => {
     // 检查图片数量限制
     if (emergencyImages.length >= 3) {
-      Alert.alert(t('common.ok'), '最多只能上传3张图片');
+      showAppAlert(t('common.ok'), '最多只能上传3张图片');
       return;
     }
 
@@ -104,7 +105,7 @@ export default function EmergencyScreen({ navigation }) {
     if (Platform.OS !== 'web') {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('提示', '需要相机访问权限才能拍照');
+        showAppAlert('提示', '需要相机访问权限才能拍照');
         return;
       }
     }
@@ -126,13 +127,13 @@ export default function EmergencyScreen({ navigation }) {
       }
     } catch (error) {
       console.error('拍照失败:', error);
-      Alert.alert('错误', '拍照失败，请重试');
+      showAppAlert('错误', '拍照失败，请重试');
     }
   };
 
   // 显示图片选择选项
   const showImagePickerOptions = () => {
-    Alert.alert(
+    showAppAlert(
       '选择图片',
       '请选择图片来源',
       [
@@ -159,7 +160,7 @@ export default function EmergencyScreen({ navigation }) {
 
   const handleSubmit = () => {
     if (!emergencyForm.title.trim()) {
-      Alert.alert(t('emergency.enterTitle'));
+      showAppAlert(t('emergency.enterTitle'));
       return;
     }
     
@@ -184,7 +185,7 @@ export default function EmergencyScreen({ navigation }) {
         setTimeout(() => {
           setShowProgressModal(false);
           const feeInfo = rescuerFee > 0 ? `\n${t('emergency.needPay')}：${rescuerFee}` : '';
-          Alert.alert(
+          showAppAlert(
             t('emergency.published'),
             `${t('emergency.rescuersNeeded')}${emergencyForm.rescuerCount}${t('emergency.rescuerUnit')}${feeInfo}\n已通知${nearbyUserCount}位附近用户`,
             [{ text: t('emergency.confirm'), onPress: () => navigation.goBack() }]
@@ -238,7 +239,7 @@ export default function EmergencyScreen({ navigation }) {
         {remainingFree <= 0 && (
           <TouchableOpacity 
             style={styles.monthlyPayButton}
-            onPress={() => Alert.alert(t('emergency.monthlyUnlock'))}
+            onPress={() => showAppAlert(t('emergency.monthlyUnlock'))}
           >
             <Text style={styles.monthlyPayButtonText}>{t('emergency.payAmount')}</Text>
             <Ionicons name="arrow-forward" size={14} color="#fff" />
@@ -431,7 +432,7 @@ export default function EmergencyScreen({ navigation }) {
                 <Text style={styles.rescuerFeeNote}>{t('emergency.rescuerFeeNote')}</Text>
                 <TouchableOpacity 
                   style={styles.payButton}
-                  onPress={() => Alert.alert(
+                  onPress={() => showAppAlert(
                     t('emergency.pay') + ' ' + rescuerFee,
                     t('emergency.paymentMethods')
                   )}

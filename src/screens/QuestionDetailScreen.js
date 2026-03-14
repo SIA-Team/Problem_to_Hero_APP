@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image, TextInput, StyleSheet, Modal, Alert, RefreshControl, ActivityIndicator, Animated } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +14,7 @@ import answerApi from '../services/api/answerApi';
 import uploadApi from '../services/api/uploadApi';
 import { loadQuestionSupplements } from '../utils/dataLoader';
 import { showToast } from '../utils/toast';
+import { showAppAlert } from '../utils/appAlert';
 
 const answers = [
   { 
@@ -738,7 +739,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
     } catch (error) {
       console.error('❌ 加载补充列表失败:', error);
       if (isRefresh && cacheData.list.length === 0) {
-        Alert.alert('加载失败', '获取补充列表失败，请稍后重试');
+        showAppAlert('加载失败', '获取补充列表失败，请稍后重试');
       }
     } finally {
       setSupplementsRefreshing(false);
@@ -961,7 +962,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
     } catch (error) {
       console.error('❌ 加载回答列表失败:', error);
       if (isRefresh && cacheData.list.length === 0) {
-        Alert.alert('加载失败', '获取回答列表失败，请稍后重试');
+        showAppAlert('加载失败', '获取回答列表失败，请稍后重试');
       }
     } finally {
       setAnswersRefreshing(false);
@@ -2256,7 +2257,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
                             const balance = await superLikeCreditService.getBalance();
                             
                             if (balance <= 0) {
-                              Alert.alert(
+                              showAppAlert(
                                 '超级赞次数不足',
                                 '您的超级赞次数不足，是否购买？',
                                 [
@@ -2405,7 +2406,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
                         const balance = await superLikeCreditService.getBalance();
                         
                         if (balance <= 0) {
-                          Alert.alert(
+                          showAppAlert(
                             '超级赞次数不足',
                             '您的超级赞次数不足，是否购买？',
                             [
@@ -2763,7 +2764,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
                     const balance = await superLikeCreditService.getBalance();
                     
                     if (balance <= 0) {
-                      Alert.alert(
+                      showAppAlert(
                         '超级赞次数不足',
                         '您的超级赞次数不足，是否购买？',
                         [

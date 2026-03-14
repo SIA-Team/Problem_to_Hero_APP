@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Alert, TextInput, ScrollView,
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
+import { showAppAlert } from '../utils/appAlert';
 
 export default function ReportScreen({ navigation, route }) {
   const { t } = useTranslation();
@@ -31,7 +32,7 @@ export default function ReportScreen({ navigation, route }) {
 
   const handleSubmit = () => {
     if (selectedReasons.length === 0) {
-      Alert.alert(
+      showAppAlert(
         t('screens.report.alerts.selectReasonTitle'), 
         t('screens.report.alerts.selectReasonMessage')
       );
@@ -47,7 +48,7 @@ export default function ReportScreen({ navigation, route }) {
       ? t('screens.report.alerts.remarkNote').replace('{remark}', otherRemark)
       : '';
 
-    Alert.alert(
+    showAppAlert(
       t('screens.report.alerts.successTitle'),
       t('screens.report.alerts.successMessage').replace('{reasons}', selectedLabels) + remarkNote,
       [

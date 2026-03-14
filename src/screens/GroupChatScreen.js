@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
+import { showAppAlert } from '../utils/appAlert';
 
 const initialMessages = [
   { id: 1, author: '技术小白', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=msg1', content: '这个问题我也很想知道答案，关注了！', time: '10', likes: 12, dislikes: 1, shares: 3, bookmarks: 5, isFeatured: false },
@@ -62,7 +63,7 @@ export default function GroupChatScreen({ navigation, route }) {
   };
 
   const handleExitGroup = () => {
-    Alert.alert(
+    showAppAlert(
       t('screens.groupChat.exitConfirmTitle'),
       t('screens.groupChat.exitConfirmMessage'),
       [
@@ -101,9 +102,9 @@ export default function GroupChatScreen({ navigation, route }) {
   };
 
   const handleReport = (msg) => {
-    Alert.alert(t('screens.groupChat.reportTitle'), t('screens.groupChat.reportConfirm'), [
+    showAppAlert(t('screens.groupChat.reportTitle'), t('screens.groupChat.reportConfirm'), [
       { text: t('screens.groupChat.cancel'), style: 'cancel' },
-      { text: t('common.confirm'), onPress: () => Alert.alert(t('screens.groupChat.hint'), t('screens.groupChat.reportSuccess')) }
+      { text: t('common.confirm'), onPress: () => showAppAlert(t('screens.groupChat.hint'), t('screens.groupChat.reportSuccess')) }
     ]);
   };
 

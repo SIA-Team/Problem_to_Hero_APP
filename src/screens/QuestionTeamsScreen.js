@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
+import { showAppAlert } from '../utils/appAlert';
 
 // 模拟该问题下的团队数据
 const questionTeams = [
@@ -106,7 +107,7 @@ export default function QuestionTeamsScreen({ route, navigation }) {
   };
 
   const handleApplyJoin = (teamId, teamName) => {
-    Alert.alert(
+    showAppAlert(
       t('screens.questionTeams.alerts.applyTitle'),
       t('screens.questionTeams.alerts.applyMessage').replace('{name}', teamName),
       [
@@ -124,10 +125,10 @@ export default function QuestionTeamsScreen({ route, navigation }) {
 
   const handleCreateTeam = () => {
     if (!newTeamName.trim()) {
-      Alert.alert(t('screens.questionTeams.alerts.hint'), t('screens.questionTeams.alerts.nameRequired'));
+      showAppAlert(t('screens.questionTeams.alerts.hint'), t('screens.questionTeams.alerts.nameRequired'));
       return;
     }
-    Alert.alert(t('screens.questionTeams.alerts.success'), t('screens.questionTeams.alerts.createSuccess').replace('{name}', newTeamName));
+    showAppAlert(t('screens.questionTeams.alerts.success'), t('screens.questionTeams.alerts.createSuccess').replace('{name}', newTeamName));
     setShowCreateModal(false);
     setNewTeamName('');
     setNewTeamDesc('');

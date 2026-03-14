@@ -13,6 +13,7 @@ import { useTranslation } from '../i18n/withTranslation';
 import UserCacheService from '../services/UserCacheService';
 import authApi from '../services/api/authApi';
 import questionApi from '../services/api/questionApi';
+import { showAppAlert } from '../utils/appAlert';
 
 export default function ProfileScreen({ navigation, onLogout }) {
   const { t } = useTranslation();
@@ -275,7 +276,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
       setVerificationStep(0);
     } else {
       // 已认证，显示认证详情
-      Alert.alert(t('profile.verificationInfo'), `${t('profile.verified')}${verificationInfo.text}\n${t('profile.verificationTime')}2025-12-15\n${t('profile.verificationOrg')}`);
+      showAppAlert(t('profile.verificationInfo'), `${t('profile.verified')}${verificationInfo.text}\n${t('profile.verificationTime')}2025-12-15\n${t('profile.verificationOrg')}`);
     }
   };
 
@@ -283,7 +284,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
     try {
       await Share.share({ message: t('profile.shareProfile') + t('profile.shareUrl'), title: t('profile.share') });
     } catch (error) {
-      Alert.alert(t('profile.shareFailed'), error.message);
+      showAppAlert(t('profile.shareFailed'), error.message);
     }
   };
 
@@ -296,10 +297,10 @@ export default function ProfileScreen({ navigation, onLogout }) {
         navigation.navigate('Follow');
         break;
       case t('profile.likes'):
-        Alert.alert(t('profile.likesStats').replace('{count}', '3.5k'));
+        showAppAlert(t('profile.likesStats').replace('{count}', '3.5k'));
         break;
       case t('profile.friends'):
-        Alert.alert(t('profile.myFriends'), t('profile.youHaveFriends').replace('{count}', '56'));
+        showAppAlert(t('profile.myFriends'), t('profile.youHaveFriends').replace('{count}', '56'));
         break;
       default:
         break;
@@ -346,27 +347,27 @@ export default function ProfileScreen({ navigation, onLogout }) {
   const handleWalletAction = (action) => {
     switch (action) {
       case 'recharge':
-        Alert.alert(t('profile.recharge'), t('profile.selectAmount'), [
-          { text: '$10', onPress: () => Alert.alert(t('profile.rechargeSuccess'), t('profile.rechargeSuccess') + ' $10') },
-          { text: '$50', onPress: () => Alert.alert(t('profile.rechargeSuccess'), t('profile.rechargeSuccess') + ' $50') },
-          { text: '$100', onPress: () => Alert.alert(t('profile.rechargeSuccess'), t('profile.rechargeSuccess') + ' $100') },
+        showAppAlert(t('profile.recharge'), t('profile.selectAmount'), [
+          { text: '$10', onPress: () => showAppAlert(t('profile.rechargeSuccess'), t('profile.rechargeSuccess') + ' $10') },
+          { text: '$50', onPress: () => showAppAlert(t('profile.rechargeSuccess'), t('profile.rechargeSuccess') + ' $50') },
+          { text: '$100', onPress: () => showAppAlert(t('profile.rechargeSuccess'), t('profile.rechargeSuccess') + ' $100') },
           { text: t('common.cancel'), style: 'cancel' }
         ]);
         break;
       case 'withdraw':
-        Alert.alert(t('profile.withdraw'), t('profile.withdrawableAmount') + '：$256.50', [
-          { text: t('profile.withdrawAll'), onPress: () => Alert.alert(t('profile.withdrawSuccess'), t('profile.withdrawSuccess') + '，' + t('profile.withdrawEstimate')) },
+        showAppAlert(t('profile.withdraw'), t('profile.withdrawableAmount') + '：$256.50', [
+          { text: t('profile.withdrawAll'), onPress: () => showAppAlert(t('profile.withdrawSuccess'), t('profile.withdrawSuccess') + '，' + t('profile.withdrawEstimate')) },
           { text: t('common.cancel'), style: 'cancel' }
         ]);
         break;
       case 'expense':
-        Alert.alert(t('profile.expenseDetails'), t('profile.monthlyExpense') + '$150.00\n\n- Python学习问题：$50\n- 职业规划问题：$100');
+        showAppAlert(t('profile.expenseDetails'), t('profile.monthlyExpense') + '$150.00\n\n- Python学习问题：$50\n- 职业规划问题：$100');
         break;
       case 'income':
-        Alert.alert(t('profile.incomeDetails'), t('profile.monthlyIncome') + '$320.00\n\n- 被采纳回答 x 8：$280\n- 优质回答奖励：$40');
+        showAppAlert(t('profile.incomeDetails'), t('profile.monthlyIncome') + '$320.00\n\n- 被采纳回答 x 8：$280\n- 优质回答奖励：$40');
         break;
       case 'pending':
-        Alert.alert(t('profile.pendingAdoption'), t('profile.pendingAnswers').replace('{count}', '12'));
+        showAppAlert(t('profile.pendingAdoption'), t('profile.pendingAnswers').replace('{count}', '12'));
         break;
       default:
         break;
@@ -430,18 +431,18 @@ export default function ProfileScreen({ navigation, onLogout }) {
         navigation.navigate('Publish', { draftData });
       } else {
         console.error('❌ 获取草稿失败:', response);
-        Alert.alert('获取草稿失败', response?.msg || '无法加载草稿数据');
+        showAppAlert('获取草稿失败', response?.msg || '无法加载草稿数据');
       }
     } catch (error) {
       console.error('❌ 获取草稿详情失败:', error);
-      Alert.alert('获取草稿失败', '网络错误，请稍后重试');
+      showAppAlert('获取草稿失败', '网络错误，请稍后重试');
     }
   };
 
   const handleDeleteDraft = (item) => {
-    Alert.alert(t('profile.deleteDraft'), t('profile.deleteDraftConfirm'), [
+    showAppAlert(t('profile.deleteDraft'), t('profile.deleteDraftConfirm'), [
       { text: t('common.cancel'), style: 'cancel' },
-      { text: t('common.delete'), style: 'destructive', onPress: () => Alert.alert(t('profile.draftDeleted'), t('profile.draftDeleted')) }
+      { text: t('common.delete'), style: 'destructive', onPress: () => showAppAlert(t('profile.draftDeleted'), t('profile.draftDeleted')) }
     ]);
   };
 
@@ -464,11 +465,11 @@ export default function ProfileScreen({ navigation, onLogout }) {
         }
       } else {
         console.error('❌ 退出登录失败:', response.msg);
-        Alert.alert('退出失败', response.msg || '退出登录失败，请重试');
+        showAppAlert('退出失败', response.msg || '退出登录失败，请重试');
       }
     } catch (error) {
       console.error('❌ 退出登录异常:', error);
-      Alert.alert('退出失败', '网络错误，请检查连接后重试');
+      showAppAlert('退出失败', '网络错误，请检查连接后重试');
     } finally {
       setIsLoggingOut(false);
       setShowLogoutModal(false);
@@ -505,43 +506,43 @@ export default function ProfileScreen({ navigation, onLogout }) {
     const data = verificationData[selectedVerificationType];
     if (selectedVerificationType === 'personal') {
       if (!data.idNumber) {
-        Alert.alert(t('common.confirm'), t('profile.verificationModal.validationErrors.idNumberRequired'));
+        showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.idNumberRequired'));
         return;
       }
       if (!data.qualifications || data.qualifications.length === 0) {
-        Alert.alert(t('common.confirm'), t('profile.verificationModal.validationErrors.qualificationsRequired'));
+        showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.qualificationsRequired'));
         return;
       }
       // 检查是否所有资质都填写了名称
       const unnamedQualification = data.qualifications.find(q => !q.name || q.name.trim() === '');
       if (unnamedQualification) {
-        Alert.alert(t('common.confirm'), t('profile.verificationModal.validationErrors.qualificationNameRequired'));
+        showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.qualificationNameRequired'));
         return;
       }
     } else if (selectedVerificationType === 'enterprise') {
       if (!data.name || !data.taxNumber || !data.address) {
-        Alert.alert(t('common.confirm'), t('profile.verificationModal.validationErrors.enterpriseInfoRequired'));
+        showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.enterpriseInfoRequired'));
         return;
       }
       if (!data.license) {
-        Alert.alert(t('common.confirm'), t('profile.verificationModal.validationErrors.licenseRequired'));
+        showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.licenseRequired'));
         return;
       }
       if (!data.contactPerson || data.contactPerson.trim() === '') {
-        Alert.alert(t('common.confirm'), t('profile.verificationModal.validationErrors.contactPersonRequired'));
+        showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.contactPersonRequired'));
         return;
       }
       // 验证联系方式：邮箱或电话至少填写一个
       if ((!data.contactPhone || data.contactPhone.trim() === '') && 
           (!data.contactEmail || data.contactEmail.trim() === '')) {
-        Alert.alert(t('common.confirm'), t('profile.verificationModal.validationErrors.contactMethodRequired'));
+        showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.contactMethodRequired'));
         return;
       }
       // 验证电话格式（如果填写了）
       if (data.contactPhone && data.contactPhone.trim() !== '') {
         const phoneRegex = /^1[3-9]\d{9}$/;
         if (!phoneRegex.test(data.contactPhone.trim())) {
-          Alert.alert(t('common.confirm'), t('profile.verificationModal.validationErrors.phoneFormatError'));
+          showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.phoneFormatError'));
           return;
         }
       }
@@ -549,30 +550,30 @@ export default function ProfileScreen({ navigation, onLogout }) {
       if (data.contactEmail && data.contactEmail.trim() !== '') {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(data.contactEmail.trim())) {
-          Alert.alert(t('common.confirm'), t('profile.verificationModal.validationErrors.emailFormatError'));
+          showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.emailFormatError'));
           return;
         }
       }
     } else if (selectedVerificationType === 'government') {
       if (!data.name || !data.department || !data.authorizerName || !data.authorizerPosition) {
-        Alert.alert(t('common.confirm'), t('profile.verificationModal.validationErrors.governmentInfoRequired'));
+        showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.governmentInfoRequired'));
         return;
       }
       if (!data.authorizerIdFront || !data.authorizerIdBack) {
-        Alert.alert(t('common.confirm'), t('profile.verificationModal.validationErrors.authorizerIdRequired'));
+        showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.authorizerIdRequired'));
         return;
       }
       // 验证联系方式：邮箱或电话至少填写一个
       if ((!data.contactPhone || data.contactPhone.trim() === '') && 
           (!data.contactEmail || data.contactEmail.trim() === '')) {
-        Alert.alert(t('common.confirm'), t('profile.verificationModal.validationErrors.contactMethodRequired'));
+        showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.contactMethodRequired'));
         return;
       }
       // 验证电话格式（如果填写了）
       if (data.contactPhone && data.contactPhone.trim() !== '') {
         const phoneRegex = /^1[3-9]\d{9}$/;
         if (!phoneRegex.test(data.contactPhone.trim())) {
-          Alert.alert(t('common.confirm'), t('profile.verificationModal.validationErrors.phoneFormatError'));
+          showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.phoneFormatError'));
           return;
         }
       }
@@ -580,14 +581,14 @@ export default function ProfileScreen({ navigation, onLogout }) {
       if (data.contactEmail && data.contactEmail.trim() !== '') {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(data.contactEmail.trim())) {
-          Alert.alert(t('common.confirm'), t('profile.verificationModal.validationErrors.emailFormatError'));
+          showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.emailFormatError'));
           return;
         }
       }
     }
     
     // 提交认证申请
-    Alert.alert(
+    showAppAlert(
       t('profile.verificationModal.submitSuccess'),
       t('profile.verificationModal.submitSuccessMessage'),
       [
@@ -605,7 +606,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
 
   const handleImageUpload = (field) => {
     // 模拟图片上传
-    Alert.alert(t('profile.verificationModal.selectImage'), t('profile.verificationModal.selectImageSource'), [
+    showAppAlert(t('profile.verificationModal.selectImage'), t('profile.verificationModal.selectImageSource'), [
       { text: t('profile.verificationModal.album'), onPress: () => {
         const mockImageUrl = `https://images.unsplash.com/photo-${Math.floor(Math.random() * 1000000)}?w=800&h=600&fit=crop`;
         setVerificationData({
@@ -632,7 +633,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
 
   // 添加资质证书
   const addQualification = async () => {
-    Alert.alert(t('profile.verificationModal.selectImage'), t('profile.verificationModal.selectImageSource'), [
+    showAppAlert(t('profile.verificationModal.selectImage'), t('profile.verificationModal.selectImageSource'), [
       { 
         text: t('profile.verificationModal.album'), 
         onPress: async () => {
@@ -640,7 +641,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
             // 请求相册权限
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') {
-              Alert.alert(t('common.confirm'), '需要相册访问权限才能上传图片');
+              showAppAlert(t('common.confirm'), '需要相册访问权限才能上传图片');
               return;
             }
 
@@ -667,7 +668,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
               });
             }
           } catch (error) {
-            Alert.alert(t('common.confirm'), '上传图片失败：' + error.message);
+            showAppAlert(t('common.confirm'), '上传图片失败：' + error.message);
           }
         }
       },
@@ -678,7 +679,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
             // 请求相机权限
             const { status } = await ImagePicker.requestCameraPermissionsAsync();
             if (status !== 'granted') {
-              Alert.alert(t('common.confirm'), '需要相机访问权限才能拍照');
+              showAppAlert(t('common.confirm'), '需要相机访问权限才能拍照');
               return;
             }
 
@@ -704,7 +705,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
               });
             }
           } catch (error) {
-            Alert.alert(t('common.confirm'), '拍照失败：' + error.message);
+            showAppAlert(t('common.confirm'), '拍照失败：' + error.message);
           }
         }
       },
@@ -714,7 +715,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
 
   // 删除资质证书
   const removeQualification = (id) => {
-    Alert.alert(t('profile.verificationModal.deleteQualification'), t('profile.verificationModal.deleteQualificationConfirm'), [
+    showAppAlert(t('profile.verificationModal.deleteQualification'), t('profile.verificationModal.deleteQualificationConfirm'), [
       {
         text: t('common.cancel'),
         style: 'cancel'
@@ -1087,7 +1088,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
             ))}
           </View>
           
-          <TouchableOpacity style={styles.viewAllBtn} onPress={() => Alert.alert(t('profile.viewAll'), `${t('profile.viewAll')}${activeTab}`)}><Text style={styles.viewAllText}>{t('profile.viewAll')}</Text><Ionicons name="chevron-forward" size={16} color="#ef4444" /></TouchableOpacity>
+          <TouchableOpacity style={styles.viewAllBtn} onPress={() => showAppAlert(t('profile.viewAll'), `${t('profile.viewAll')}${activeTab}`)}><Text style={styles.viewAllText}>{t('profile.viewAll')}</Text><Ionicons name="chevron-forward" size={16} color="#ef4444" /></TouchableOpacity>
         </View>
 
         {/* 退出登录 */}
@@ -1145,7 +1146,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
               <Ionicons name="arrow-back" size={24} color="#1f2937" />
             </TouchableOpacity>
             <Text style={styles.listModalTitle}>{t('profile.browsingHistory')}</Text>
-            <TouchableOpacity onPress={() => Alert.alert(t('profile.clearHistory'), t('profile.clearHistoryConfirm'), [{ text: t('common.cancel'), style: 'cancel' }, { text: t('profile.clear'), style: 'destructive' }])}>
+            <TouchableOpacity onPress={() => showAppAlert(t('profile.clearHistory'), t('profile.clearHistoryConfirm'), [{ text: t('common.cancel'), style: 'cancel' }, { text: t('profile.clear'), style: 'destructive' }])}>
               <Text style={styles.clearText}>{t('profile.clear')}</Text>
             </TouchableOpacity>
           </View>

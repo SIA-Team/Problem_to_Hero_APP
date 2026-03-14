@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
+import { showAppAlert } from '../utils/appAlert';
 
 const initialActivities = [
   { 
@@ -84,7 +85,7 @@ export default function ActivityScreen({ navigation, route }) {
       setShowImageViewer(true);
     } else {
       // 单张图片或无图片，进入活动详情页
-      Alert.alert(t('common.ok'), t('screens.activity.actions.viewDetail'));
+      showAppAlert(t('common.ok'), t('screens.activity.actions.viewDetail'));
     }
   };
 
@@ -92,7 +93,7 @@ export default function ActivityScreen({ navigation, route }) {
     setActivities(activities.map(a => {
       if (a.id === id) {
         if (a.joined) {
-          Alert.alert(t('common.ok'), t('screens.activity.actions.quitConfirm'), [
+          showAppAlert(t('common.ok'), t('screens.activity.actions.quitConfirm'), [
             { text: t('common.cancel'), style: 'cancel' },
             { text: t('common.confirm'), onPress: () => {
               setActivities(prev => prev.map(item => 

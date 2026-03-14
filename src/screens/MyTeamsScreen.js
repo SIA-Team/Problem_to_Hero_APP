@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import { modalTokens } from '../components/modalTokens';
+import { showAppAlert } from '../utils/appAlert';
 
 // 我的团队数据
 const myTeams = [
@@ -69,15 +70,15 @@ export default function MyTeamsScreen({ navigation }) {
 
   const handleSubmitCreate = () => {
     if (!teamName.trim()) {
-      Alert.alert('提示', '请输入团队名称');
+      showAppAlert('提示', '请输入团队名称');
       return;
     }
     if (!teamDescription.trim()) {
-      Alert.alert('提示', '请输入团队说明');
+      showAppAlert('提示', '请输入团队说明');
       return;
     }
     
-    Alert.alert('成功', `团队"${teamName}"创建成功！${selectedQuestions.length > 0 ? `已关联${selectedQuestions.length}个问题` : ''}`);
+    showAppAlert('成功', `团队"${teamName}"创建成功！${selectedQuestions.length > 0 ? `已关联${selectedQuestions.length}个问题` : ''}`);
     handleCloseCreateModal();
     setTeamName('');
     setSelectedQuestions([]);
@@ -85,7 +86,7 @@ export default function MyTeamsScreen({ navigation }) {
   };
 
   const handleLeaveTeam = (team) => {
-    Alert.alert(
+    showAppAlert(
       '退出团队',
       `确定要退出"${team.name}"吗？`,
       [
@@ -95,7 +96,7 @@ export default function MyTeamsScreen({ navigation }) {
           style: 'destructive',
           onPress: () => {
             setTeams(teams.filter(t => t.id !== team.id));
-            Alert.alert('已退出', '您已退出该团队');
+            showAppAlert('已退出', '您已退出该团队');
           }
         }
       ]
@@ -103,7 +104,7 @@ export default function MyTeamsScreen({ navigation }) {
   };
 
   const handleDismissTeam = (team) => {
-    Alert.alert(
+    showAppAlert(
       '解散团队',
       `确定要解散"${team.name}"吗？此操作不可恢复。`,
       [
@@ -113,7 +114,7 @@ export default function MyTeamsScreen({ navigation }) {
           style: 'destructive',
           onPress: () => {
             setTeams(teams.filter(t => t.id !== team.id));
-            Alert.alert('已解散', '团队已解散');
+            showAppAlert('已解散', '团队已解散');
           }
         }
       ]
@@ -208,12 +209,12 @@ export default function MyTeamsScreen({ navigation }) {
                 style={styles.moreBtn}
                 onPress={(e) => {
                   e.stopPropagation();
-                  Alert.alert(
+                  showAppAlert(
                     '团队操作',
                     `选择操作`,
                     [
                       { text: '查看详情', onPress: () => handleTeamPress(team) },
-                      { text: '团队设置', onPress: () => Alert.alert('团队设置', '打开团队设置页面') },
+                      { text: '团队设置', onPress: () => showAppAlert('团队设置', '打开团队设置页面') },
                       team.role === '队长' 
                         ? { text: '解散团队', style: 'destructive', onPress: () => handleDismissTeam(team) }
                         : { text: '退出团队', style: 'destructive', onPress: () => handleLeaveTeam(team) },

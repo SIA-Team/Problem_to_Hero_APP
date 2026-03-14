@@ -6,6 +6,7 @@ import Avatar from '../components/Avatar';
 import IdentitySelector from '../components/IdentitySelector';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
+import { showAppAlert } from '../utils/appAlert';
 
 // 评论数据
 const initialComments = [
@@ -64,7 +65,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
   // 提交补充回答
   const handleSubmitSupplementAnswer = () => {
     if (!supplementAnswerText.trim()) return;
-    Alert.alert(t('screens.answerDetail.alerts.success'), t('screens.answerDetail.alerts.supplementSubmitted'));
+    showAppAlert(t('screens.answerDetail.alerts.success'), t('screens.answerDetail.alerts.supplementSubmitted'));
     setSupplementAnswerText('');
     setShowSupplementAnswerModal(false);
   };
@@ -99,19 +100,19 @@ export default function AnswerDetailScreen({ navigation, route }) {
   // 处理仲裁申请
   const handleSubmitArbitration = () => {
     if (!arbitrationReason.trim()) {
-      Alert.alert(t('screens.answerDetail.alerts.hint'), t('screens.answerDetail.alerts.arbitrationReasonRequired'));
+      showAppAlert(t('screens.answerDetail.alerts.hint'), t('screens.answerDetail.alerts.arbitrationReasonRequired'));
       return;
     }
     if (selectedExperts.length < 3) {
-      Alert.alert(t('screens.answerDetail.alerts.hint'), t('screens.answerDetail.alerts.minExpertsRequired'));
+      showAppAlert(t('screens.answerDetail.alerts.hint'), t('screens.answerDetail.alerts.minExpertsRequired'));
       return;
     }
     if (selectedExperts.length > 5) {
-      Alert.alert(t('screens.answerDetail.alerts.hint'), t('screens.answerDetail.alerts.maxExpertsExceeded'));
+      showAppAlert(t('screens.answerDetail.alerts.hint'), t('screens.answerDetail.alerts.maxExpertsExceeded'));
       return;
     }
 
-    Alert.alert(t('screens.answerDetail.alerts.success'), t('screens.answerDetail.alerts.arbitrationSubmitted'));
+    showAppAlert(t('screens.answerDetail.alerts.success'), t('screens.answerDetail.alerts.arbitrationSubmitted'));
     setShowArbitrationModal(false);
     setArbitrationReason('');
     setSelectedExperts([]);
@@ -123,7 +124,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
       setSelectedExperts(selectedExperts.filter(id => id !== expertId));
     } else {
       if (selectedExperts.length >= 5) {
-        Alert.alert(t('screens.answerDetail.alerts.hint'), t('screens.answerDetail.alerts.maxExpertsExceeded'));
+        showAppAlert(t('screens.answerDetail.alerts.hint'), t('screens.answerDetail.alerts.maxExpertsExceeded'));
         return;
       }
       setSelectedExperts([...selectedExperts, expertId]);
@@ -144,7 +145,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
 
   const submitReply = () => {
     if (replyText.trim()) {
-      Alert.alert(t('screens.answerDetail.alerts.success'), t('screens.answerDetail.alerts.replyPublished'));
+      showAppAlert(t('screens.answerDetail.alerts.success'), t('screens.answerDetail.alerts.replyPublished'));
       setReplyText('');
       setShowReplyModal(false);
     }
@@ -165,7 +166,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
       };
       setComments([newComment, ...comments]);
       setInputText('');
-      Alert.alert(t('screens.answerDetail.alerts.success'), t('screens.answerDetail.alerts.commentPublished'));
+      showAppAlert(t('screens.answerDetail.alerts.success'), t('screens.answerDetail.alerts.commentPublished'));
     }
   };
 
@@ -202,7 +203,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
                 <TouchableOpacity 
                   style={styles.adoptAnswerBtn}
                   onPress={() => {
-                    Alert.alert(t('screens.answerDetail.alerts.adoptAnswerTitle'), t('screens.answerDetail.alerts.adoptAnswerMessage'), [
+                    showAppAlert(t('screens.answerDetail.alerts.adoptAnswerTitle'), t('screens.answerDetail.alerts.adoptAnswerMessage'), [
                       { text: t('screens.answerDetail.alerts.cancel'), style: 'cancel' },
                       { text: t('screens.answerDetail.alerts.confirm'), onPress: () => console.log('采纳答案') }
                     ]);
@@ -325,7 +326,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
                         <TouchableOpacity 
                           style={styles.adoptAnswerBtn}
                           onPress={() => {
-                            Alert.alert(t('screens.answerDetail.alerts.adoptSupplementTitle'), t('screens.answerDetail.alerts.adoptSupplementMessage'), [
+                            showAppAlert(t('screens.answerDetail.alerts.adoptSupplementTitle'), t('screens.answerDetail.alerts.adoptSupplementMessage'), [
                               { text: t('screens.answerDetail.alerts.cancel'), style: 'cancel' },
                               { text: t('screens.answerDetail.alerts.confirm'), onPress: () => console.log('采纳补充回答') }
                             ]);

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
+import { showAppAlert } from '../utils/appAlert';
 
 // 顶部快捷入口数据
 const quickEntries = [
@@ -123,26 +124,26 @@ export default function MessagesScreen({ navigation }) {
   };
 
   const handleMarkAllRead = () => {
-    Alert.alert(
+    showAppAlert(
       t('screens.messagesScreen.alerts.markAllReadTitle'), 
       t('screens.messagesScreen.alerts.markAllReadMessage'), 
       [
         { text: t('common.cancel'), style: 'cancel' },
-        { text: t('common.confirm'), onPress: () => Alert.alert(t('screens.messagesScreen.alerts.success'), t('screens.messagesScreen.alerts.markAllReadSuccess')) }
+        { text: t('common.confirm'), onPress: () => showAppAlert(t('screens.messagesScreen.alerts.success'), t('screens.messagesScreen.alerts.markAllReadSuccess')) }
       ]
     );
   };
 
   const handleSendMessage = () => {
     if (!selectedUser) {
-      Alert.alert(t('screens.messagesScreen.alerts.hint'), t('screens.messagesScreen.alerts.selectUserHint'));
+      showAppAlert(t('screens.messagesScreen.alerts.hint'), t('screens.messagesScreen.alerts.selectUserHint'));
       return;
     }
     if (!messageContent.trim()) {
-      Alert.alert(t('screens.messagesScreen.alerts.hint'), t('screens.messagesScreen.alerts.enterMessageHint'));
+      showAppAlert(t('screens.messagesScreen.alerts.hint'), t('screens.messagesScreen.alerts.enterMessageHint'));
       return;
     }
-    Alert.alert(t('screens.messagesScreen.alerts.success'), t('screens.messagesScreen.alerts.sendSuccess').replace('{name}', selectedUser.name));
+    showAppAlert(t('screens.messagesScreen.alerts.success'), t('screens.messagesScreen.alerts.sendSuccess').replace('{name}', selectedUser.name));
     setShowPrivateModal(false);
     setSelectedUser(null);
     setMessageContent('');
@@ -156,14 +157,14 @@ export default function MessagesScreen({ navigation }) {
 
   const handleSubmitVote = () => {
     if (!voteChoice) {
-      Alert.alert(t('screens.messagesScreen.alerts.hint'), t('screens.messagesScreen.alerts.selectVoteHint'));
+      showAppAlert(t('screens.messagesScreen.alerts.hint'), t('screens.messagesScreen.alerts.selectVoteHint'));
       return;
     }
     if (!voteReason.trim()) {
-      Alert.alert(t('screens.messagesScreen.alerts.hint'), t('screens.messagesScreen.alerts.enterReasonHint'));
+      showAppAlert(t('screens.messagesScreen.alerts.hint'), t('screens.messagesScreen.alerts.enterReasonHint'));
       return;
     }
-    Alert.alert(t('screens.messagesScreen.alerts.success'), t('screens.messagesScreen.alerts.voteSuccess'));
+    showAppAlert(t('screens.messagesScreen.alerts.success'), t('screens.messagesScreen.alerts.voteSuccess'));
     setShowVoteModal(false);
     setCurrentArbitration(null);
     setVoteChoice(null);

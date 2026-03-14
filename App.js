@@ -15,7 +15,9 @@ import authApi from './src/services/api/authApi';
 import DebugToken from './src/utils/debugToken';
 import UserCacheService from './src/services/UserCacheService';
 import ToastContainer from './src/components/ToastContainer';
+import AppAlertContainer from './src/components/AppAlertContainer';
 import { setToastRef, showToast } from './src/utils/toast';
+import { setAppAlertRef } from './src/utils/appAlert';
 import LocalMockService from './src/services/LocalMockService';
 // import UpdateChecker from './src/components/UpdateChecker'; // 临时注释：构建APK时不需要热更新功能
 
@@ -445,7 +447,12 @@ export default function App() {
   const toastRef = React.useCallback((ref) => {
     if (ref) {
       setToastRef(ref);
-      console.log('✅ Toast ref 已设置');
+    }
+  }, []);
+
+  const appAlertRef = React.useCallback((ref) => {
+    if (ref) {
+      setAppAlertRef(ref);
     }
   }, []);
 
@@ -734,6 +741,7 @@ export default function App() {
             </Stack.Screen>
             <Stack.Screen name="NetworkTest" component={NetworkTestScreen} />
           </Stack.Navigator>
+          <AppAlertContainer ref={appAlertRef} />
           <ToastContainer ref={toastRef} />
         </NavigationContainer>
       </SafeAreaProvider>
@@ -785,8 +793,8 @@ export default function App() {
         <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
         <Stack.Screen name="ConnectionStatus" component={ConnectionStatusScreen} />
         </Stack.Navigator>
-        
-        <ToastContainer ref={toastRef} />
+          <AppAlertContainer ref={appAlertRef} />
+          <ToastContainer ref={toastRef} />
       </NavigationContainer>
     </SafeAreaProvider>
   );

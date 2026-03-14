@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
+import { showAppAlert } from '../utils/appAlert';
 
 const initialMessages = [
   { id: 1, author: '张三', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=member1', content: '大家好，欢迎加入Python学习团队！', time: '2小时前', likes: 15, dislikes: 0, shares: 3, bookmarks: 8 },
@@ -172,10 +173,10 @@ export default function TeamDetailScreen({ navigation, route }) {
 
   const handleSendInvite = () => {
     if (selectedUsers.length === 0) {
-      Alert.alert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.invite.selectUser'));
+      showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.invite.selectUser'));
       return;
     }
-    Alert.alert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.invite.sent').replace('{count}', selectedUsers.length));
+    showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.invite.sent').replace('{count}', selectedUsers.length));
     setShowInviteModal(false);
     setSelectedUsers([]);
     setSearchText('');
@@ -184,10 +185,10 @@ export default function TeamDetailScreen({ navigation, route }) {
   // 申请管理员处理
   const handleApplyAdmin = () => {
     if (!applyReason.trim()) {
-      Alert.alert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.applyAdmin.fillReason'));
+      showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.applyAdmin.fillReason'));
       return;
     }
-    Alert.alert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.applicationSubmitted'));
+    showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.applicationSubmitted'));
     setShowApplyAdminModal(false);
     setHasApplied(true);
     setApplyReason('');
@@ -197,10 +198,10 @@ export default function TeamDetailScreen({ navigation, route }) {
   const handleApproveJoin = (requestId, approve) => {
     const request = joinRequests.find(r => r.id === requestId);
     if (approve) {
-      Alert.alert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.joinApproved').replace('{user}', request.user));
+      showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.joinApproved').replace('{user}', request.user));
       setJoinRequests(joinRequests.filter(r => r.id !== requestId));
     } else {
-      Alert.alert(t('screens.teamDetail.alerts.rejected'), t('screens.teamDetail.alerts.joinRejected').replace('{user}', request.user));
+      showAppAlert(t('screens.teamDetail.alerts.rejected'), t('screens.teamDetail.alerts.joinRejected').replace('{user}', request.user));
       setJoinRequests(joinRequests.filter(r => r.id !== requestId));
     }
   };
@@ -209,10 +210,10 @@ export default function TeamDetailScreen({ navigation, route }) {
   const handleApproveAdmin = (requestId, approve) => {
     const request = adminRequests.find(r => r.id === requestId);
     if (approve) {
-      Alert.alert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.adminApproved').replace('{user}', request.user));
+      showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.adminApproved').replace('{user}', request.user));
       setAdminRequests(adminRequests.filter(r => r.id !== requestId));
     } else {
-      Alert.alert(t('screens.teamDetail.alerts.rejected'), t('screens.teamDetail.alerts.adminRejected').replace('{user}', request.user));
+      showAppAlert(t('screens.teamDetail.alerts.rejected'), t('screens.teamDetail.alerts.adminRejected').replace('{user}', request.user));
       setAdminRequests(adminRequests.filter(r => r.id !== requestId));
     }
   };
@@ -241,13 +242,13 @@ export default function TeamDetailScreen({ navigation, route }) {
   };
 
   const handleExitTeam = () => {
-    Alert.alert(
+    showAppAlert(
       t('screens.teamDetail.exit.title'),
       t('screens.teamDetail.exit.message'),
       [
         { text: t('common.cancel'), style: 'cancel' },
         { text: t('screens.teamDetail.exit.confirmButton'), style: 'destructive', onPress: () => {
-          Alert.alert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.teamExited'));
+          showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.teamExited'));
           navigation.goBack();
         }}
       ]
@@ -260,17 +261,17 @@ export default function TeamDetailScreen({ navigation, route }) {
 
   const handleConfirmDismiss = () => {
     if (dismissConfirmText !== team.name) {
-      Alert.alert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.dismiss.incorrectName'));
+      showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.dismiss.incorrectName'));
       return;
     }
-    Alert.alert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.teamDismissed'));
+    showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.teamDismissed'));
     setShowDismissModal(false);
     setDismissConfirmText('');
     navigation.goBack();
   };
 
   const handleJoinTeam = () => {
-    Alert.alert(
+    showAppAlert(
       t('screens.teamDetail.join.applyTitle'),
       t('screens.teamDetail.join.applyMessage'),
       [
@@ -309,22 +310,22 @@ export default function TeamDetailScreen({ navigation, route }) {
   };
 
   const handleReport = (msg) => {
-    Alert.alert(t('screens.teamDetail.report.title'), t('screens.teamDetail.report.message'), [
+    showAppAlert(t('screens.teamDetail.report.title'), t('screens.teamDetail.report.message'), [
       { text: t('common.cancel'), style: 'cancel' },
-      { text: t('common.confirm'), onPress: () => Alert.alert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.report.submitted')) }
+      { text: t('common.confirm'), onPress: () => showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.report.submitted')) }
     ]);
   };
 
   const handlePublishAnnouncement = () => {
     if (!announcementTitle.trim()) {
-      Alert.alert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.alerts.enterTitle'));
+      showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.alerts.enterTitle'));
       return;
     }
     if (!announcementContent.trim()) {
-      Alert.alert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.alerts.enterContent'));
+      showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.alerts.enterContent'));
       return;
     }
-    Alert.alert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.announcementPublished'));
+    showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.announcementPublished'));
     setAnnouncementTitle('');
     setAnnouncementContent('');
     setIsPinned(false);

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/useTranslation';
+import { showAppAlert } from '../utils/appAlert';
 
 /**
  * 操作按钮组件（今日头条风格）
@@ -35,7 +36,7 @@ export default function ActionButtons({
 
     if (isFollowing) {
       // 显示取消关注确认对话框
-      Alert.alert(
+      showAppAlert(
         t('profile.unfollowConfirmTitle'),
         t('profile.unfollowConfirmMessage'),
         [

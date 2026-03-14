@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import { useTranslation } from '../i18n/withTranslation';
+import { showAppAlert } from '../utils/appAlert';
 
 export default function InviteTeamMemberScreen({ navigation, route }) {
   const { t } = useTranslation();
@@ -52,7 +53,7 @@ export default function InviteTeamMemberScreen({ navigation, route }) {
   const handleSendInvite = () => {
     if (selectedUsers.length === 0) return;
     
-    Alert.alert(
+    showAppAlert(
       t('screens.inviteTeamMember.alerts.successTitle'),
       t('screens.inviteTeamMember.alerts.successMessage').replace('{count}', selectedUsers.length),
       [
