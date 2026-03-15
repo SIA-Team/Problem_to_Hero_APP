@@ -450,29 +450,6 @@ export default function AnswerDetailScreen({ navigation, route }) {
                 </View>
               )}
             </>
-                        </TouchableOpacity>
-                      </View>
-                      <View style={styles.supplementActionsRight}>
-                        <TouchableOpacity style={styles.supplementActionBtn}>
-                          <Ionicons name="thumbs-down-outline" size={16} color="#6b7280" />
-                          <Text style={styles.supplementActionText}>{supplement.dislikes || 0}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.supplementActionBtn}>
-                          <Ionicons name="flag-outline" size={16} color="#ef4444" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                ))
-              )}
-              
-              {/* 加载更多指示器 */}
-              {supplementLoading && supplementAnswers.length > 0 && (
-                <View style={styles.loadingMore}>
-                  <Text style={styles.loadingMoreText}>加载中...</Text>
-                </View>
-              )}
-            </>
           ) : (
             // 评论列表
             <>

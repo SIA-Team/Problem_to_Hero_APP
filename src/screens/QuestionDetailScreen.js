@@ -441,8 +441,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
       return;
     }
     if (activityForm.activityType === 'offline' && !activityForm.location.trim()) {
-      showToast('线下活动请填写活动地址', 'error');
->>>>>>> Stashed changes
+      showToast('线下活动请填写活动地址', 'warning');
       return;
     }
     showToast('活动创建成功！', 'success');
