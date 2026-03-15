@@ -1,13 +1,19 @@
-import ENV from './env';
+import ENV, { getApiServerUrl } from './env';
 
 // API 配置
 export const API_CONFIG = {
-  BASE_URL: ENV.apiUrl,
+  BASE_URL: ENV.apiUrl,  // 默认基础URL
   TIMEOUT: 60000, // 60秒超时（生产环境网络可能较慢）
   HEADERS: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
+};
+
+// 获取指定接口的完整URL
+export const getFullApiUrl = (endpoint) => {
+  const baseUrl = getApiServerUrl(endpoint);
+  return baseUrl + endpoint;
 };
 
 // 注册请求配置（简化请求头，避免触发 CORS 预检）
@@ -72,6 +78,8 @@ export const API_ENDPOINTS = {
   // 回答相关
   ANSWER: {
     LIST: '/app/content/answer/question/:questionId/list',
+    SUPPLEMENT_LIST: '/app/content/answer-supplement/answer/:answerId/list',  // 补充回答列表
+    SUPPLEMENT_PUBLISH: '/app/content/answer-supplement/answer/:answerId',  // 发布补充回答
     PUBLISH: '/app/content/answer/question/:questionId',  // 发布回答
     COLLECT: '/app/content/answer/:id/collect',  // 收藏回答
     UNCOLLECT: '/app/content/answer/:id/uncollect',  // 取消收藏回答

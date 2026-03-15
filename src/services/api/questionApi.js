@@ -22,75 +22,20 @@ const questionApi = {
   getQuestions: async (params) => {
     const { pageNum = 1, pageSize = 20, question = {} } = params;
     
-    // 构建请求参数
     const requestParams = {
       pageNum,
       pageSize,
       question: {
         ...question,
-        // 确保必要的字段存在
         params: question.params || {},
       },
     };
     
-    console.log('📡 请求问题列表:', requestParams);
-    
     const response = await contentApiClient.get(API_ENDPOINTS.QUESTION.LIST, { params: requestParams });
     
-    // 显示后端返回的原始数据（第一条）
-    if (response && response.data && response.data.rows && response.data.rows.length > 0) {
-      console.log('═══════════════════════════════════════════════════════════');
-      console.log('🔍 后端返回的原始数据（第一条问题的所有字段）:');
-      console.log('═══════════════════════════════════════════════════════════');
-      const firstItem = response.data.rows[0];
-      console.log(JSON.stringify(firstItem, null, 2));
-      console.log('═══════════════════════════════════════════════════════════');
-    }
-    
-    // 检查 payViewAmount 字段
-    if (response && response.data && response.data.rows) {
-      console.log('═══════════════════════════════════════════════════════════');
-      console.log('💰 检查 payViewAmount 字段');
-      console.log('═══════════════════════════════════════════════════════════');
-      
-      // 显示所有问题的 payViewAmount 字段
-      console.log('\n所有问题的 payViewAmount 字段:');
-      response.data.rows.forEach((item, index) => {
-        console.log(`${index + 1}. ID:${item.id} - ${item.title}`);
-        console.log(`   payViewAmount: ${item.payViewAmount} (类型: ${typeof item.payViewAmount})`);
-        console.log(`   type: ${item.type}, status: ${item.status}`);
-      });
-      
-      const paidQuestions = response.data.rows.filter(item => item.payViewAmount && item.payViewAmount > 0);
-      
-      console.log(`\n总问题数: ${response.data.rows.length}`);
-      console.log(`付费问题数: ${paidQuestions.length}`);
-      
-      if (paidQuestions.length > 0) {
-        console.log('\n付费问题详情:');
-        paidQuestions.forEach((item, index) => {
-          console.log(`\n${index + 1}. 问题ID: ${item.id}`);
-          console.log(`   标题: ${item.title}`);
-          console.log(`   payViewAmount: ${item.payViewAmount} 分 (${item.payViewAmount / 100} 元)`);
-          console.log(`   type: ${item.type}`);
-          console.log(`   status: ${item.status}`);
-        });
-      } else {
-        console.log('⚠️ 没有找到 payViewAmount > 0 的问题');
-      }
-      
-      console.log('═══════════════════════════════════════════════════════════');
-    }
-    
-    // 过滤掉 status 为 0 的数据
     if (response && response.data && response.data.rows) {
       const originalCount = response.data.rows.length;
       response.data.rows = response.data.rows.filter(item => item.status !== 0);
-      const filteredCount = response.data.rows.length;
-      
-      if (originalCount !== filteredCount) {
-        console.log(`🔍 过滤问题列表: 原始${originalCount}条，过滤后${filteredCount}条（移除了${originalCount - filteredCount}条 status=0 的数据）`);
-      }
     }
     
     return response;
@@ -103,7 +48,6 @@ const questionApi = {
    */
   getQuestionDetail: (questionId) => {
     const url = replaceUrlParams(API_ENDPOINTS.QUESTION.DETAIL, { id: questionId });
-    console.log(`📋 获取问题详情: ID=${questionId}`);
     return contentApiClient.get(url);
   },
 
@@ -130,26 +74,10 @@ const questionApi = {
    * @returns {Promise<Object>}
    */
   publishQuestion: (data) => {
-    console.log('📤 questionApi.publishQuestion 接收到的数据:', JSON.stringify(data, null, 2));
-    console.log('📤 数据验证:');
-    console.log('  - title:', `"${data.title}" (类型: ${typeof data.title}, 长度: ${data.title?.length || 0})`);
-    console.log('  - categoryId:', `${data.categoryId} (类型: ${typeof data.categoryId})`);
-    console.log('  - type:', `${data.type} (类型: ${typeof data.type})`);
-    console.log('  - type详细检查:');
-    console.log('    * 原始值:', data.type);
-    console.log('    * JSON序列化:', JSON.stringify(data.type));
-    console.log('    * 是否为数字:', typeof data.type === 'number');
-    console.log('    * 是否为整数:', Number.isInteger(data.type));
-    console.log('    * 是否在有效范围:', [0, 1, 2].includes(data.type));
-    
-    // 修复 subQuestions 字段：如果为空字符串，改为空数组的 JSON 字符串
     const fixedData = {
       ...data,
       subQuestions: data.subQuestions === '' ? '[]' : data.subQuestions
     };
-    
-    // 直接发送数据，不包装（后端的 @RequestBody 会自动映射到 QuestionPublishRequest 对象）
-    console.log('📤 直接发送数据（不包装）:', JSON.stringify(fixedData, null, 2));
     
     return contentApiClient.post(API_ENDPOINTS.QUESTION.PUBLISH, fixedData);
   },
@@ -177,26 +105,16 @@ const questionApi = {
    * @returns {Promise<Object>}
    */
   saveDraft: (data) => {
-    // 修复 subQuestions 字段：如果为空字符串，改为空数组的 JSON 字符串
     const fixedData = {
       ...data,
       subQuestions: data.subQuestions === '' ? '[]' : data.subQuestions
     };
     
-    console.log('📝 保存问题草稿（直接发送，不包装）:', JSON.stringify(fixedData, null, 2));
-    
-    // 直接发送数据，不包装
     return contentApiClient.post(API_ENDPOINTS.QUESTION.DRAFT, fixedData);
   },
 
-  /**
-   * 获取草稿详情
-   * @param {number} id - 草稿ID
-   * @returns {Promise<Object>}
-   */
   getDraftDetail: (id) => {
     const url = replaceUrlParams(API_ENDPOINTS.QUESTION.DRAFT_DETAIL, { id });
-    console.log(`📋 获取草稿详情: ID=${id}`);
     return contentApiClient.get(url);
   },
 
@@ -224,55 +142,24 @@ const questionApi = {
       pageSize
     };
     
-    console.log(`📋 获取问题补充列表: questionId=${questionId}`, requestParams);
-    
     return contentApiClient.get(url, { params: requestParams });
   },
 
-  /**
-   * 发布补充问题
-   * @param {number} questionId - 问题ID
-   * @param {Object} supplementCreateRequest - 补充问题数据
-   * @param {string} supplementCreateRequest.content - 补充内容
-   * @returns {Promise<Object>}
-   */
   publishSupplement: (questionId, supplementCreateRequest) => {
     const url = replaceUrlParams(API_ENDPOINTS.QUESTION.PUBLISH_SUPPLEMENT, { questionId });
-    console.log('📤 发布补充问题:');
-    console.log('  questionId:', questionId);
-    console.log('  supplementCreateRequest:', JSON.stringify(supplementCreateRequest, null, 2));
     return contentApiClient.post(url, supplementCreateRequest);
   },
 
-  /**
-   * 踩一下/取消踩一下补充问题
-   * @param {number} id - 补充问题ID
-   * @returns {Promise<Object>} 返回 { code: 200, msg: '', data: true/false }
-   */
   dislikeSupplement: (id) => {
     const url = replaceUrlParams(API_ENDPOINTS.QUESTION.DISLIKE_SUPPLEMENT, { id });
-    console.log('👎 踩一下补充问题: id=', id);
     return contentApiClient.post(url);
   },
 
-  /**
-   * 点赞/取消点赞补充问题
-   * @param {number} id - 补充问题ID
-   * @returns {Promise<Object>} 返回 { code: 200, msg: '', data: true/false }
-   */
   likeSupplement: (id) => {
     const url = replaceUrlParams(API_ENDPOINTS.QUESTION.LIKE_SUPPLEMENT, { id });
-    console.log('👍 点赞补充问题: id=', id);
     return contentApiClient.post(url);
   },
 
-  /**
-   * 获取草稿列表
-   * @param {Object} params - 查询参数
-   * @param {number} params.pageNum - 页码（默认1）
-   * @param {number} params.pageSize - 每页数量（默认10）
-   * @returns {Promise<Object>}
-   */
   getDraftsList: (params) => {
     const { pageNum = 1, pageSize = 10 } = params;
     
@@ -280,8 +167,6 @@ const questionApi = {
       pageNum,
       pageSize,
     };
-    
-    console.log('📋 获取草稿列表:', requestParams);
     
     return contentApiClient.get(API_ENDPOINTS.QUESTION.DRAFTS, { params: requestParams });
   },

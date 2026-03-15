@@ -13,16 +13,32 @@ const ToastContainer = forwardRef((props, ref) => {
 
   useImperativeHandle(ref, () => ({
     show: (msg, toastType = 'error', toastDuration = 2000) => {
-      setMessage(msg);
-      setType(toastType);
-      setDuration(toastDuration);
-      setVisible(true);
+      console.log('📦 ToastContainer.show 被调用:', { msg, toastType, toastDuration });
+      
+      // 如果当前有Toast在显示，先隐藏
+      if (visible) {
+        setVisible(false);
+        setTimeout(() => {
+          setMessage(msg);
+          setType(toastType);
+          setDuration(toastDuration);
+          setVisible(true);
+        }, 100);
+      } else {
+        setMessage(msg);
+        setType(toastType);
+        setDuration(toastDuration);
+        setVisible(true);
+      }
     },
   }));
 
   const handleHide = () => {
+    console.log('📦 ToastContainer.handleHide 被调用');
     setVisible(false);
   };
+
+  console.log('📦 ToastContainer 渲染:', { visible, message, type });
 
   return (
     <Toast

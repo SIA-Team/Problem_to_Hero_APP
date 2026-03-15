@@ -1,12 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image, TextInput, StyleSheet, Modal, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import IdentitySelector from '../components/IdentitySelector';
 import { modalTokens } from '../components/modalTokens';
+import SupplementAnswerSkeleton from '../components/SupplementAnswerSkeleton';
+import EmptyState from '../components/EmptyState';
+import { toast } from '../utils/toast';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
+import answerApi from '../services/api/answerApi';
 
 // 评论数据
 const initialComments = [
@@ -16,16 +21,18 @@ const initialComments = [
   { id: 4, author: '编程小白', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=cmt4', content: '廖雪峰的教程确实不错,我也在看', likes: 23, dislikes: 0, shares: 3, bookmarks: 8, time: '3小时前' },
 ];
 
-// 补充回答数据
-const supplementAnswers = [
-  { id: 1, author: '资深开发者', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=sup1', location: '北京', content: '补充一点:学Python的时候一定要多动手写代码,光看不练是学不会的。建议每天至少写100行代码。', likes: 67, dislikes: 1, comments: 8, shares: 15, bookmarks: 28 },
-  { id: 2, author: '培训讲师', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=sup2', location: '上海', content: '关于学习资源,除了廖雪峰的教程,还推荐B站上的黑马程序员Python教程,讲得很详细。', likes: 45, dislikes: 2, comments: 12, shares: 22, bookmarks: 56 },
-];
-
 const answerTabs = ['补充回答 (2)', '全部评论 (128)'];
+
+const INITIAL_SUPPLEMENT_PAGINATION = {
+  pageNum: 1,
+  pageSize: 10,
+  hasMore: true,
+  total: 0
+};
 
 export default function AnswerDetailScreen({ navigation, route }) {
   const { t } = useTranslation();
+  const isFocused = useIsFocused();
   
   // Generate tabs with translations
   const getTabLabel = (index, count) => {
@@ -42,13 +49,31 @@ export default function AnswerDetailScreen({ navigation, route }) {
   const [liked, setLiked] = useState({});
   const [disliked, setDisliked] = useState({});
   const [bookmarked, setBookmarked] = useState({});
+  
+  // 回答的用户状态 - 延迟初始化，避免依赖未完成的answer对象
   const [answerLiked, setAnswerLiked] = useState(false);
   const [answerBookmarked, setAnswerBookmarked] = useState(false);
+  const [answerDisliked, setAnswerDisliked] = useState(false);
   const [comments, setComments] = useState(initialComments);
   const [showReplyModal, setShowReplyModal] = useState(false);
   const [replyTarget, setReplyTarget] = useState(null);
   const [replyText, setReplyText] = useState('');
   const [following, setFollowing] = useState(false);
+
+  // 补充回答相关状态
+  const [supplementAnswers, setSupplementAnswers] = useState([]);
+  const [supplementLoading, setSupplementLoading] = useState(false);
+  const [supplementError, setSupplementError] = useState(null);
+  const [supplementPagination, setSupplementPagination] = useState(INITIAL_SUPPLEMENT_PAGINATION);
+
+  // 回答数据状态 - 用于管理完整的回答数据
+  const [answerData, setAnswerData] = useState(null);
+
+  // 收藏相关状态和防重防抖
+  const [isCollectLoading, setIsCollectLoading] = useState(false);
+  const collectTimeoutRef = useRef(null);
+  const lastCollectTimeRef = useRef(0);
+  const hasFocusedOnceRef = useRef(false);
 
   // 仲裁相关状态
   const [showArbitrationModal, setShowArbitrationModal] = useState(false);
@@ -63,11 +88,28 @@ export default function AnswerDetailScreen({ navigation, route }) {
   const [supplementSelectedTeams, setSupplementSelectedTeams] = useState([]);
 
   // 提交补充回答
-  const handleSubmitSupplementAnswer = () => {
-    if (!supplementAnswerText.trim()) return;
-    showAppAlert(t('screens.answerDetail.alerts.success'), t('screens.answerDetail.alerts.supplementSubmitted'));
-    setSupplementAnswerText('');
-    setShowSupplementAnswerModal(false);
+  const handleSubmitSupplementAnswer = async () => {
+    if (!supplementAnswerText.trim()) {
+      toast.error('请输入补充回答内容');
+      return;
+    }
+
+    try {
+      const response = await answerApi.publishSupplementAnswer(answer.id, {
+        content: supplementAnswerText.trim()
+      });
+
+      if (response?.data?.code === 200) {
+        toast.success('补充回答发布成功');
+        setSupplementAnswerText('');
+        setShowSupplementAnswerModal(false);
+        fetchSupplementAnswers(true);
+      } else {
+        throw new Error(response?.data?.msg || '发布失败');
+      }
+    } catch (error) {
+      toast.error(error.message || '网络错误，请重试');
+    }
   };
 
   // 可邀请的专家列表
@@ -79,8 +121,9 @@ export default function AnswerDetailScreen({ navigation, route }) {
     { id: 5, name: '陈静', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert5', title: '全栈开发', verified: true, expertise: 'Web开发' },
   ];
 
-  // 回答信息(实际应从route.params获取)
-  const answer = route?.params?.answer || {
+  // 获取完整的回答数据（包含统计信息）
+  const answer = answerData || route?.params?.answer || {
+    id: 1, // 默认回答ID
     author: 'Python老司机',
     avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=answer1',
     verified: true,
@@ -100,19 +143,19 @@ export default function AnswerDetailScreen({ navigation, route }) {
   // 处理仲裁申请
   const handleSubmitArbitration = () => {
     if (!arbitrationReason.trim()) {
-      showAppAlert(t('screens.answerDetail.alerts.hint'), t('screens.answerDetail.alerts.arbitrationReasonRequired'));
+      toast.error(t('screens.answerDetail.alerts.arbitrationReasonRequired'));
       return;
     }
     if (selectedExperts.length < 3) {
-      showAppAlert(t('screens.answerDetail.alerts.hint'), t('screens.answerDetail.alerts.minExpertsRequired'));
+      toast.error(t('screens.answerDetail.alerts.minExpertsRequired'));
       return;
     }
     if (selectedExperts.length > 5) {
-      showAppAlert(t('screens.answerDetail.alerts.hint'), t('screens.answerDetail.alerts.maxExpertsExceeded'));
+      toast.error(t('screens.answerDetail.alerts.maxExpertsExceeded'));
       return;
     }
 
-    showAppAlert(t('screens.answerDetail.alerts.success'), t('screens.answerDetail.alerts.arbitrationSubmitted'));
+    toast.success(t('screens.answerDetail.alerts.arbitrationSubmitted'));
     setShowArbitrationModal(false);
     setArbitrationReason('');
     setSelectedExperts([]);
@@ -124,7 +167,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
       setSelectedExperts(selectedExperts.filter(id => id !== expertId));
     } else {
       if (selectedExperts.length >= 5) {
-        showAppAlert(t('screens.answerDetail.alerts.hint'), t('screens.answerDetail.alerts.maxExpertsExceeded'));
+        toast.error(t('screens.answerDetail.alerts.maxExpertsExceeded'));
         return;
       }
       setSelectedExperts([...selectedExperts, expertId]);
@@ -145,7 +188,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
 
   const submitReply = () => {
     if (replyText.trim()) {
-      showAppAlert(t('screens.answerDetail.alerts.success'), t('screens.answerDetail.alerts.replyPublished'));
+      toast.success(t('screens.answerDetail.alerts.replyPublished'));
       setReplyText('');
       setShowReplyModal(false);
     }
@@ -166,7 +209,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
       };
       setComments([newComment, ...comments]);
       setInputText('');
-      showAppAlert(t('screens.answerDetail.alerts.success'), t('screens.answerDetail.alerts.commentPublished'));
+      toast.success(t('screens.answerDetail.alerts.commentPublished'));
     }
   };
 
@@ -181,7 +224,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.shareBtn}>
             <Ionicons name="arrow-redo-outline" size={22} color="#6b7280" />
-            <Text style={styles.shareBtnText}>{answer.shares}</Text>
+            <Text style={styles.shareBtnText}>{answer.shareCount || answer.share_count || answer.shares || 0}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.shareBtn}>
             <Ionicons name="flag-outline" size={22} color="#ef4444" />
@@ -193,10 +236,10 @@ export default function AnswerDetailScreen({ navigation, route }) {
         {/* 回答内容 */}
         <View style={styles.answerSection}>
           <View style={styles.answerHeader}>
-            <Image source={{ uri: answer.avatar }} style={styles.answerAvatar} />
+            <Image source={{ uri: answer.userAvatar || answer.avatar }} style={styles.answerAvatar} />
             <View style={styles.answerAuthorInfo}>
               <View style={styles.answerAuthorRow}>
-                <Text style={styles.answerAuthor}>{answer.author}</Text>
+                <Text style={styles.answerAuthor}>{answer.userName || answer.userNickname || answer.author || '匿名用户'}</Text>
                 {answer.verified && <Ionicons name="checkmark-circle" size={16} color="#3b82f6" />}
                 
                 {/* 采纳按钮 - 放在用户名后面 */}
@@ -205,7 +248,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
                   onPress={() => {
                     showAppAlert(t('screens.answerDetail.alerts.adoptAnswerTitle'), t('screens.answerDetail.alerts.adoptAnswerMessage'), [
                       { text: t('screens.answerDetail.alerts.cancel'), style: 'cancel' },
-                      { text: t('screens.answerDetail.alerts.confirm'), onPress: () => console.log('采纳答案') }
+                      { text: t('screens.answerDetail.alerts.confirm'), onPress: () => {} }
                     ]);
                   }}
                 >
@@ -230,7 +273,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
           <View style={styles.answerMetaWithBadges}>
             <View style={styles.answerMetaLeft}>
               <Ionicons name="eye-outline" size={14} color="#9ca3af" />
-              <Text style={styles.answerViews}>{answer.views || 0} {t('screens.answerDetail.stats.views')}</Text>
+              <Text style={styles.answerViews}>{answer.viewCount || answer.view_count || answer.views || 0} {t('screens.answerDetail.stats.views')}</Text>
               <Text style={styles.answerMetaSeparator}>·</Text>
               <Text style={styles.answerTime}>{answer.time}</Text>
             </View>
@@ -290,14 +333,14 @@ export default function AnswerDetailScreen({ navigation, route }) {
             <View style={styles.sortFilterLeft}>
               <TouchableOpacity 
                 style={[styles.sortFilterBtn, sortFilter === 'featured' && styles.sortFilterBtnActive]}
-                onPress={() => setSortFilter('featured')}
+                onPress={() => handleSortChange('featured')}
               >
                 <Ionicons name="star" size={14} color={sortFilter === 'featured' ? '#ef4444' : '#9ca3af'} />
                 <Text style={[styles.sortFilterText, sortFilter === 'featured' && styles.sortFilterTextActive]}>{t('screens.answerDetail.filter.featured')}</Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.sortFilterBtn, sortFilter === 'latest' && styles.sortFilterBtnActive]}
-                onPress={() => setSortFilter('latest')}
+                onPress={() => handleSortChange('latest')}
               >
                 <Ionicons name="time" size={14} color={sortFilter === 'latest' ? '#ef4444' : '#9ca3af'} />
                 <Text style={[styles.sortFilterText, sortFilter === 'latest' && styles.sortFilterTextActive]}>{t('screens.answerDetail.filter.latest')}</Text>
@@ -314,70 +357,134 @@ export default function AnswerDetailScreen({ navigation, route }) {
           {activeTab === 0 ? (
             // 补充回答列表
             <>
-              {supplementAnswers.map(supplement => (
-                <View key={supplement.id} style={styles.supplementCard}>
-                  <View style={styles.supplementHeader}>
-                    <Image source={{ uri: supplement.avatar }} style={styles.supplementAvatar} />
-                    <View style={styles.supplementAuthorInfo}>
-                      <View style={styles.supplementAuthorRow}>
-                        <Text style={styles.supplementAuthor}>{supplement.author}</Text>
-                        
-                        {/* 采纳按钮 - 放在用户名后面 */}
-                        <TouchableOpacity 
-                          style={styles.adoptAnswerBtn}
-                          onPress={() => {
-                            showAppAlert(t('screens.answerDetail.alerts.adoptSupplementTitle'), t('screens.answerDetail.alerts.adoptSupplementMessage'), [
-                              { text: t('screens.answerDetail.alerts.cancel'), style: 'cancel' },
-                              { text: t('screens.answerDetail.alerts.confirm'), onPress: () => console.log('采纳补充回答') }
-                            ]);
-                          }}
-                        >
-                          <Text style={styles.adoptAnswerBtnText}>{t('screens.answerDetail.actions.adopt')}</Text>
+              {supplementLoading && supplementAnswers.length === 0 ? (
+                // 首次加载显示骨架屏
+                <SupplementAnswerSkeleton count={2} />
+              ) : supplementError && supplementAnswers.length === 0 ? (
+                // 加载失败且无数据时显示错误信息
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
+                  <Text style={styles.errorTitle}>加载失败</Text>
+                  <Text style={styles.errorMessage}>{supplementError}</Text>
+                  <TouchableOpacity 
+                    style={styles.retryButton}
+                    onPress={() => fetchSupplementAnswers(true)}
+                  >
+                    <Text style={styles.retryButtonText}>重试</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : supplementAnswers.length === 0 ? (
+                // 无数据时显示空状态
+                <EmptyState
+                  icon="chatbubbles-outline"
+                  title="暂无补充回答"
+                  description="还没有人发布补充回答"
+                />
+              ) : (
+                // 有数据时显示列表
+                supplementAnswers.map(supplement => (
+                  <View key={supplement.id} style={styles.supplementCard}>
+                    <View style={styles.supplementHeader}>
+                      <Image source={{ uri: supplement.avatar }} style={styles.supplementAvatar} />
+                      <View style={styles.supplementAuthorInfo}>
+                        <View style={styles.supplementAuthorRow}>
+                          <Text style={styles.supplementAuthor}>{supplement.author}</Text>
+                          
+                          {/* 采纳按钮 - 放在用户名后面 */}
+                          <TouchableOpacity 
+                            style={styles.adoptAnswerBtn}
+                            onPress={() => {
+                              showAppAlert(t('screens.answerDetail.alerts.adoptSupplementTitle'), t('screens.answerDetail.alerts.adoptSupplementMessage'), [
+                                { text: t('screens.answerDetail.alerts.cancel'), style: 'cancel' },
+                                { text: t('screens.answerDetail.alerts.confirm'), onPress: () => {} }
+                              ]);
+                            }}
+                          >
+                            <Text style={styles.adoptAnswerBtnText}>{t('screens.answerDetail.actions.adopt')}</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <View style={styles.supplementMeta}>
+                          <Ionicons name="location-outline" size={12} color="#9ca3af" />
+                          <Text style={styles.supplementLocation}>{supplement.location}</Text>
+                        </View>
+                      </View>
+                    </View>
+                    <Text style={styles.supplementContent}>{supplement.content}</Text>
+                    <View style={styles.supplementActions}>
+                      <View style={styles.supplementActionsLeft}>
+                        <TouchableOpacity style={styles.supplementActionBtn}>
+                          <Ionicons name="thumbs-up-outline" size={16} color="#6b7280" />
+                          <Text style={styles.supplementActionText}>{supplement.likes || 0}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.supplementActionBtn}>
+                          <Ionicons name="chatbubble-outline" size={16} color="#6b7280" />
+                          <Text style={styles.supplementActionText}>{supplement.comments || 0}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.supplementActionBtn}>
+                          <Ionicons name="arrow-redo-outline" size={16} color="#6b7280" />
+                          <Text style={styles.supplementActionText}>{supplement.shares || 0}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.supplementActionBtn}>
+                          <Ionicons name="star-outline" size={16} color="#6b7280" />
+                          <Text style={styles.supplementActionText}>{supplement.bookmarks || 0}</Text>
                         </TouchableOpacity>
                       </View>
-                      <View style={styles.supplementMeta}>
-                        <Ionicons name="location-outline" size={12} color="#9ca3af" />
-                        <Text style={styles.supplementLocation}>{supplement.location}</Text>
+                      <View style={styles.supplementActionsRight}>
+                        <TouchableOpacity style={styles.supplementActionBtn}>
+                          <Ionicons name="thumbs-down-outline" size={16} color="#6b7280" />
+                          <Text style={styles.supplementActionText}>{supplement.dislikes || 0}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.supplementActionBtn}>
+                          <Ionicons name="flag-outline" size={16} color="#ef4444" />
+                        </TouchableOpacity>
                       </View>
                     </View>
                   </View>
-                  <Text style={styles.supplementContent}>{supplement.content}</Text>
-                  <View style={styles.supplementActions}>
-                    <View style={styles.supplementActionsLeft}>
-                      <TouchableOpacity style={styles.supplementActionBtn}>
-                        <Ionicons name="thumbs-up-outline" size={16} color="#6b7280" />
-                        <Text style={styles.supplementActionText}>{supplement.likes}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.supplementActionBtn}>
-                        <Ionicons name="chatbubble-outline" size={16} color="#6b7280" />
-                        <Text style={styles.supplementActionText}>{supplement.comments}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.supplementActionBtn}>
-                        <Ionicons name="arrow-redo-outline" size={16} color="#6b7280" />
-                        <Text style={styles.supplementActionText}>{supplement.shares}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.supplementActionBtn}>
-                        <Ionicons name="star-outline" size={16} color="#6b7280" />
-                        <Text style={styles.supplementActionText}>{supplement.bookmarks}</Text>
-                      </TouchableOpacity>
-                    </View>
-                    <View style={styles.supplementActionsRight}>
-                      <TouchableOpacity style={styles.supplementActionBtn}>
-                        <Ionicons name="thumbs-down-outline" size={16} color="#6b7280" />
-                        <Text style={styles.supplementActionText}>{supplement.dislikes}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.supplementActionBtn}>
-                        <Ionicons name="flag-outline" size={16} color="#ef4444" />
-                      </TouchableOpacity>
+                ))
+              )}
+              
+              {/* 加载更多指示器 */}
+              {supplementLoading && supplementAnswers.length > 0 && (
+                <View style={styles.loadingMore}>
+                  <Text style={styles.loadingMoreText}>加载中...</Text>
+                </View>
+              )}
+            </>
+                        </TouchableOpacity>
+                      </View>
+                      <View style={styles.supplementActionsRight}>
+                        <TouchableOpacity style={styles.supplementActionBtn}>
+                          <Ionicons name="thumbs-down-outline" size={16} color="#6b7280" />
+                          <Text style={styles.supplementActionText}>{supplement.dislikes || 0}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.supplementActionBtn}>
+                          <Ionicons name="flag-outline" size={16} color="#ef4444" />
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   </View>
+                ))
+              )}
+              
+              {/* 加载更多指示器 */}
+              {supplementLoading && supplementAnswers.length > 0 && (
+                <View style={styles.loadingMore}>
+                  <Text style={styles.loadingMoreText}>加载中...</Text>
                 </View>
-              ))}
+              )}
             </>
           ) : (
             // 评论列表
             <>
-              {comments.map(comment => (
+              {comments.length === 0 ? (
+                // 评论空状态
+                <EmptyState
+                  icon="chatbubble-outline"
+                  title="暂无评论"
+                  description="快来发表第一条评论吧"
+                />
+              ) : (
+                comments.map(comment => (
                 <View key={comment.id} style={styles.commentCard}>
                   <Image source={{ uri: comment.avatar }} style={styles.commentAvatar} />
                   <View style={styles.commentContent}>
@@ -398,7 +505,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
                             color={liked[comment.id] ? "#ef4444" : "#9ca3af"} 
                           />
                           <Text style={[styles.commentActionText, liked[comment.id] && { color: '#ef4444' }]}>
-                            {comment.likes + (liked[comment.id] ? 1 : 0)}
+                            {(comment.likes || 0) + (liked[comment.id] ? 1 : 0)}
                           </Text>
                         </TouchableOpacity>
                         <TouchableOpacity 
@@ -410,7 +517,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.commentActionBtn}>
                           <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
-                          <Text style={styles.commentActionText}>{comment.shares}</Text>
+                          <Text style={styles.commentActionText}>{comment.shares || 0}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity 
                           style={styles.commentActionBtn}
@@ -422,7 +529,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
                             color={bookmarked[comment.id] ? "#f59e0b" : "#9ca3af"} 
                           />
                           <Text style={[styles.commentActionText, bookmarked[comment.id] && { color: '#f59e0b' }]}>
-                            {comment.bookmarks + (bookmarked[comment.id] ? 1 : 0)}
+                            {(comment.bookmarks || 0) + (bookmarked[comment.id] ? 1 : 0)}
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -436,7 +543,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
                             size={14} 
                             color="#9ca3af" 
                           />
-                          <Text style={styles.commentActionText}>{comment.dislikes + (disliked[comment.id] ? 1 : 0)}</Text>
+                          <Text style={styles.commentActionText}>{(comment.dislikes || 0) + (disliked[comment.id] ? 1 : 0)}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.commentActionBtn}>
                           <Ionicons name="flag-outline" size={14} color="#ef4444" />
@@ -445,7 +552,8 @@ export default function AnswerDetailScreen({ navigation, route }) {
                     </View>
                   </View>
                 </View>
-              ))}
+              ))
+              )}
             </>
           )}
         </View>
@@ -464,12 +572,16 @@ export default function AnswerDetailScreen({ navigation, route }) {
               color={answerLiked ? "#ef4444" : "#6b7280"} 
             />
             <Text style={[styles.bottomIconText, answerLiked && { color: '#ef4444' }]}>
-              {answer.likes + (answerLiked ? 1 : 0)}
+              {(answer.likeCount || answer.like_count || answer.likes || 0) + (answerLiked ? 1 : 0)}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity 
-            style={styles.bottomIconBtn}
-            onPress={() => setAnswerBookmarked(!answerBookmarked)}
+            style={[
+              styles.bottomIconBtn,
+              isCollectLoading && styles.bottomIconBtnDisabled
+            ]}
+            onPress={handleAnswerBookmark}
+            disabled={isCollectLoading}
           >
             <Ionicons 
               name={answerBookmarked ? "star" : "star-outline"} 
@@ -477,12 +589,12 @@ export default function AnswerDetailScreen({ navigation, route }) {
               color={answerBookmarked ? "#f59e0b" : "#6b7280"} 
             />
             <Text style={[styles.bottomIconText, answerBookmarked && { color: '#f59e0b' }]}>
-              {(answer.bookmarks || 0) + (answerBookmarked ? 1 : 0)}
+              {(answer.bookmarkCount || answer.bookmark_count || answer.bookmarks || 0) + (answerBookmarked ? 1 : 0)}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.bottomIconBtn}>
             <Ionicons name="thumbs-down-outline" size={20} color="#6b7280" />
-            <Text style={styles.bottomIconText}>{answer.dislikes || 0}</Text>
+            <Text style={styles.bottomIconText}>{answer.dislikeCount || answer.dislike_count || answer.dislikes || 0}</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.bottomBarRight}>
@@ -718,8 +830,8 @@ export default function AnswerDetailScreen({ navigation, route }) {
               <Text style={styles.supplementAnswerLabel}>原回答</Text>
             </View>
             <View style={styles.supplementAnswerAuthor}>
-              <Avatar uri={answer.avatar} name={answer.author} size={24} />
-              <Text style={styles.supplementAnswerAuthorName}>{answer.author}</Text>
+              <Avatar uri={answer.userAvatar || answer.avatar} name={answer.userName || answer.userNickname || answer.author || '匿名用户'} size={24} />
+              <Text style={styles.supplementAnswerAuthorName}>{answer.userName || answer.userNickname || answer.author || '匿名用户'}</Text>
             </View>
             <Text style={styles.supplementAnswerContent} numberOfLines={3}>{answer.content}</Text>
           </View>
@@ -871,6 +983,7 @@ const styles = StyleSheet.create({
   bottomBarLeft: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   bottomBarRight: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, marginLeft: 16 },
   bottomIconBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  bottomIconBtnDisabled: { opacity: 0.6 },
   bottomIconText: { fontSize: 12, color: '#6b7280' },
   bottomCommentInput: { flex: 1, backgroundColor: '#f9fafb', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderColor: '#e5e7eb' },
   bottomCommentPlaceholder: { fontSize: 13, color: '#9ca3af' },
@@ -941,4 +1054,45 @@ const styles = StyleSheet.create({
   supplementAnswerAuthor: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   supplementAnswerAuthorName: { fontSize: 14, fontWeight: '500', color: '#1f2937' },
   supplementAnswerContent: { fontSize: 14, color: '#6b7280', lineHeight: 20 },
+  
+  // 加载和错误状态样式
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#ef4444',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  loadingMore: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  loadingMoreText: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
 });

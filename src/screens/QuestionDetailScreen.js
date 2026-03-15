@@ -432,6 +432,19 @@ export default function QuestionDetailScreen({ navigation, route }) {
       showToast('线下活动请填写活动地址', 'warning');
       return;
     }
+    if (!activityForm.description.trim()) {
+      showToast('请输入活动内容', 'error');
+      return;
+    }
+    if (!activityForm.startTime || !activityForm.endTime) {
+      showToast('请选择活动时间', 'error');
+      return;
+    }
+    if (activityForm.activityType === 'offline' && !activityForm.location.trim()) {
+      showToast('线下活动请填写活动地址', 'error');
+>>>>>>> Stashed changes
+      return;
+    }
     showToast('活动创建成功！', 'success');
     setShowActivityModal(false);
     setActivityForm({ 
@@ -739,7 +752,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
     } catch (error) {
       console.error('❌ 加载补充列表失败:', error);
       if (isRefresh && cacheData.list.length === 0) {
-        showAppAlert('加载失败', '获取补充列表失败，请稍后重试');
+        showToast('获取补充列表失败，请稍后重试', 'error');
       }
     } finally {
       setSupplementsRefreshing(false);
@@ -889,10 +902,100 @@ export default function QuestionDetailScreen({ navigation, route }) {
           silentRefreshCache(questionId, sortBy);
         }
       });
+      
+      // 检查是否有从回答详情页返回的更新数据
+      const updatedAnswer = route?.params?.updatedAnswer;
+      if (updatedAnswer) {
+        console.log('🔄 检测到回答数据更新，同步到列表:', updatedAnswer.id);
+        syncAnswerData(updatedAnswer);
+        
+        // 清除 params 中的 updatedAnswer，避免重复处理
+        navigation.setParams({ updatedAnswer: undefined });
+      }
     });
 
     return unsubscribe;
-  }, [navigation, answersCache, route?.params?.id]);
+  }, [navigation, answersCache, route?.params?.id, route?.params?.updatedAnswer]);
+
+  // 同步回答数据到列表中
+  const syncAnswerData = (updatedAnswer) => {
+    if (!updatedAnswer || !updatedAnswer.id) return;
+    
+    console.log('🔄 开始同步回答数据:', {
+      answerId: updatedAnswer.id,
+      isLiked: updatedAnswer.isLiked,
+      isBookmarked: updatedAnswer.isBookmarked,
+      isDisliked: updatedAnswer.isDisliked,
+      likeCount: updatedAnswer.likeCount,
+      bookmarkCount: updatedAnswer.bookmarkCount,
+      dislikeCount: updatedAnswer.dislikeCount
+    });
+    
+    // 更新所有排序方式的缓存中的该回答
+    setAnswersCache(prevCache => {
+      const newCache = { ...prevCache };
+      
+      Object.keys(newCache).forEach(sortBy => {
+        const cacheData = newCache[sortBy];
+        if (cacheData.list && cacheData.list.length > 0) {
+          const answerIndex = cacheData.list.findIndex(a => a.id === updatedAnswer.id);
+          
+          if (answerIndex !== -1) {
+            console.log(`✅ 在 ${sortBy} 缓存中找到回答，更新数据`);
+            
+            // 合并更新的数据
+            const updatedList = [...cacheData.list];
+            updatedList[answerIndex] = {
+              ...updatedList[answerIndex],
+              // 用户状态
+              isLiked: updatedAnswer.isLiked,
+              liked: updatedAnswer.isLiked,
+              isBookmarked: updatedAnswer.isBookmarked,
+              bookmarked: updatedAnswer.isBookmarked,
+              collected: updatedAnswer.isBookmarked,
+              isDisliked: updatedAnswer.isDisliked,
+              disliked: updatedAnswer.isDisliked,
+              // 统计数据
+              likeCount: updatedAnswer.likeCount,
+              like_count: updatedAnswer.likeCount,
+              likes: updatedAnswer.likeCount,
+              bookmarkCount: updatedAnswer.bookmarkCount,
+              bookmark_count: updatedAnswer.bookmarkCount,
+              bookmarks: updatedAnswer.bookmarkCount,
+              dislikeCount: updatedAnswer.dislikeCount,
+              dislike_count: updatedAnswer.dislikeCount,
+              dislikes: updatedAnswer.dislikeCount,
+            };
+            
+            newCache[sortBy] = {
+              ...cacheData,
+              list: updatedList
+            };
+          }
+        }
+      });
+      
+      return newCache;
+    });
+    
+    // 同步本地状态
+    setAnswerLiked(prev => ({
+      ...prev,
+      [updatedAnswer.id]: updatedAnswer.isLiked || false
+    }));
+    
+    setAnswerBookmarked(prev => ({
+      ...prev,
+      [updatedAnswer.id]: updatedAnswer.isBookmarked || false
+    }));
+    
+    setAnswerDisliked(prev => ({
+      ...prev,
+      [updatedAnswer.id]: updatedAnswer.isDisliked || false
+    }));
+    
+    console.log('✅ 回答数据同步完成');
+  };
 
   // 加载回答列表 - 优化缓存版本
   const loadAnswersList = async (questionId, isRefresh = false, sortBy = answersSortBy) => {
@@ -962,7 +1065,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
     } catch (error) {
       console.error('❌ 加载回答列表失败:', error);
       if (isRefresh && cacheData.list.length === 0) {
-        showAppAlert('加载失败', '获取回答列表失败，请稍后重试');
+        showToast('获取回答列表失败，请稍后重试', 'error');
       }
     } finally {
       setAnswersRefreshing(false);
@@ -1725,6 +1828,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
     setAnswerSuperLikes({ ...answerSuperLikes, [answerId]: currentCount + amount });
     
     const totalCost = amount * 2; // 每个超级赞 $2
+
     showToast(`成功购买 ${amount} 个超级赞！\n花费：$${totalCost}\n您的回答排名将会提升！`, 'success', 3000);
     setShowSuperLikeModal(false);
     setSuperLikeAmount('');

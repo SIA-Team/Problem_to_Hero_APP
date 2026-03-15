@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_CONFIG } from '../../config/api';
-import ENV, { shouldUseMock } from '../../config/env';
+import ENV, { shouldUseMock, getApiServerUrl } from '../../config/env';
 
 // 真实服务器的 baseURL
 const REAL_BASE_URL = ENV.apiUrl || API_CONFIG.BASE_URL;
@@ -32,9 +32,11 @@ apiClient.interceptors.request.use(
             console.log(`🔧 接口 ${config.url} 使用 Mock 服务器`);
           }
         } else {
-          config.baseURL = REAL_BASE_URL;
+          // 使用多服务器配置获取正确的服务器地址
+          const serverUrl = getApiServerUrl(config.url);
+          config.baseURL = serverUrl;
           if (__DEV__) {
-            console.log(`🌐 接口 ${config.url} 使用真实服务器`);
+            console.log(`🌐 接口 ${config.url} 使用服务器: ${serverUrl}`);
           }
         }
       } else {
