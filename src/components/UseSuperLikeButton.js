@@ -3,6 +3,7 @@ import { TouchableOpacity, Text, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import superLikeCreditService from '../services/SuperLikeCreditService';
 import { useTranslation } from '../i18n/withTranslation';
+import { showAppAlert } from '../utils/appAlert';
 
 export default function UseSuperLikeButton({ 
   answerId, 
@@ -22,7 +23,7 @@ export default function UseSuperLikeButton({
     
     if (balance <= 0) {
       // 余额不足，显示购买提示
-      Alert.alert(
+      showAppAlert(
         t('components.useSuperLikeButton.insufficientBalance.title'),
         t('components.useSuperLikeButton.insufficientBalance.message'),
         [
@@ -41,7 +42,7 @@ export default function UseSuperLikeButton({
     }
 
     // 显示确认对话框
-    Alert.alert(
+    showAppAlert(
       t('components.useSuperLikeButton.confirm.title'),
       t('components.useSuperLikeButton.confirm.message'),
       [
@@ -65,7 +66,7 @@ export default function UseSuperLikeButton({
         setSuperLikes(prev => prev + 1);
         
         // 显示成功提示
-        Alert.alert(
+        showAppAlert(
           t('components.useSuperLikeButton.success.title'),
           t('components.useSuperLikeButton.success.message').replace('{balance}', result.newBalance),
           [{ text: t('components.useSuperLikeButton.success.ok') }]
@@ -76,14 +77,14 @@ export default function UseSuperLikeButton({
           onSuccess(result);
         }
       } else {
-        Alert.alert(
+        showAppAlert(
           t('components.useSuperLikeButton.error.title'), 
           result.error || t('components.useSuperLikeButton.error.message')
         );
       }
     } catch (error) {
       console.error('Use super like error:', error);
-      Alert.alert(
+      showAppAlert(
         t('components.useSuperLikeButton.error.title'), 
         t('components.useSuperLikeButton.error.message')
       );

@@ -1,4 +1,5 @@
 import { Linking, Alert } from 'react-native';
+import { showAppAlert } from './appAlert';
 
 /**
  * Twitter 邀请工具
@@ -39,7 +40,7 @@ export const inviteViaTwitterShare = async (
   } catch (error) {
     console.error('❌ 打开 Twitter 失败:', error);
     
-    Alert.alert(
+    showAppAlert(
       '无法打开 Twitter',
       '请确保已安装 Twitter 应用或使用浏览器',
       [{ text: '确定' }]

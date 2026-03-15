@@ -3,7 +3,9 @@ import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
+import { showAppAlert } from '../utils/appAlert';
 
 const initialMessages = [
   { id: 1, author: '张三', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=member1', content: '大家好，欢迎加入Python学习团队！', time: '2小时前', likes: 15, dislikes: 0, shares: 3, bookmarks: 8 },
@@ -171,10 +173,10 @@ export default function TeamDetailScreen({ navigation, route }) {
 
   const handleSendInvite = () => {
     if (selectedUsers.length === 0) {
-      Alert.alert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.invite.selectUser'));
+      showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.invite.selectUser'));
       return;
     }
-    Alert.alert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.invite.sent').replace('{count}', selectedUsers.length));
+    showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.invite.sent').replace('{count}', selectedUsers.length));
     setShowInviteModal(false);
     setSelectedUsers([]);
     setSearchText('');
@@ -183,10 +185,10 @@ export default function TeamDetailScreen({ navigation, route }) {
   // 申请管理员处理
   const handleApplyAdmin = () => {
     if (!applyReason.trim()) {
-      Alert.alert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.applyAdmin.fillReason'));
+      showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.applyAdmin.fillReason'));
       return;
     }
-    Alert.alert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.applicationSubmitted'));
+    showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.applicationSubmitted'));
     setShowApplyAdminModal(false);
     setHasApplied(true);
     setApplyReason('');
@@ -196,10 +198,10 @@ export default function TeamDetailScreen({ navigation, route }) {
   const handleApproveJoin = (requestId, approve) => {
     const request = joinRequests.find(r => r.id === requestId);
     if (approve) {
-      Alert.alert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.joinApproved').replace('{user}', request.user));
+      showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.joinApproved').replace('{user}', request.user));
       setJoinRequests(joinRequests.filter(r => r.id !== requestId));
     } else {
-      Alert.alert(t('screens.teamDetail.alerts.rejected'), t('screens.teamDetail.alerts.joinRejected').replace('{user}', request.user));
+      showAppAlert(t('screens.teamDetail.alerts.rejected'), t('screens.teamDetail.alerts.joinRejected').replace('{user}', request.user));
       setJoinRequests(joinRequests.filter(r => r.id !== requestId));
     }
   };
@@ -208,10 +210,10 @@ export default function TeamDetailScreen({ navigation, route }) {
   const handleApproveAdmin = (requestId, approve) => {
     const request = adminRequests.find(r => r.id === requestId);
     if (approve) {
-      Alert.alert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.adminApproved').replace('{user}', request.user));
+      showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.adminApproved').replace('{user}', request.user));
       setAdminRequests(adminRequests.filter(r => r.id !== requestId));
     } else {
-      Alert.alert(t('screens.teamDetail.alerts.rejected'), t('screens.teamDetail.alerts.adminRejected').replace('{user}', request.user));
+      showAppAlert(t('screens.teamDetail.alerts.rejected'), t('screens.teamDetail.alerts.adminRejected').replace('{user}', request.user));
       setAdminRequests(adminRequests.filter(r => r.id !== requestId));
     }
   };
@@ -240,13 +242,13 @@ export default function TeamDetailScreen({ navigation, route }) {
   };
 
   const handleExitTeam = () => {
-    Alert.alert(
+    showAppAlert(
       t('screens.teamDetail.exit.title'),
       t('screens.teamDetail.exit.message'),
       [
         { text: t('common.cancel'), style: 'cancel' },
         { text: t('screens.teamDetail.exit.confirmButton'), style: 'destructive', onPress: () => {
-          Alert.alert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.teamExited'));
+          showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.teamExited'));
           navigation.goBack();
         }}
       ]
@@ -259,17 +261,17 @@ export default function TeamDetailScreen({ navigation, route }) {
 
   const handleConfirmDismiss = () => {
     if (dismissConfirmText !== team.name) {
-      Alert.alert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.dismiss.incorrectName'));
+      showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.dismiss.incorrectName'));
       return;
     }
-    Alert.alert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.teamDismissed'));
+    showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.teamDismissed'));
     setShowDismissModal(false);
     setDismissConfirmText('');
     navigation.goBack();
   };
 
   const handleJoinTeam = () => {
-    Alert.alert(
+    showAppAlert(
       t('screens.teamDetail.join.applyTitle'),
       t('screens.teamDetail.join.applyMessage'),
       [
@@ -308,22 +310,22 @@ export default function TeamDetailScreen({ navigation, route }) {
   };
 
   const handleReport = (msg) => {
-    Alert.alert(t('screens.teamDetail.report.title'), t('screens.teamDetail.report.message'), [
+    showAppAlert(t('screens.teamDetail.report.title'), t('screens.teamDetail.report.message'), [
       { text: t('common.cancel'), style: 'cancel' },
-      { text: t('common.confirm'), onPress: () => Alert.alert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.report.submitted')) }
+      { text: t('common.confirm'), onPress: () => showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.report.submitted')) }
     ]);
   };
 
   const handlePublishAnnouncement = () => {
     if (!announcementTitle.trim()) {
-      Alert.alert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.alerts.enterTitle'));
+      showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.alerts.enterTitle'));
       return;
     }
     if (!announcementContent.trim()) {
-      Alert.alert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.alerts.enterContent'));
+      showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.alerts.enterContent'));
       return;
     }
-    Alert.alert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.announcementPublished'));
+    showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.announcementPublished'));
     setAnnouncementTitle('');
     setAnnouncementContent('');
     setIsPinned(false);
@@ -1138,44 +1140,44 @@ const styles = StyleSheet.create({
   approvalEmptyText: { fontSize: 16, fontWeight: '500', color: '#6b7280', marginTop: 16 },
   approvalEmptyHint: { fontSize: 13, color: '#9ca3af', marginTop: 8 },
   // 回复弹窗
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  replyModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, maxHeight: '60%' },
+  modalOverlay: { flex: 1, backgroundColor: modalTokens.overlay, justifyContent: 'flex-end' },
+  replyModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, padding: 16, maxHeight: '60%' },
   replyModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  replyModalTitle: { fontSize: 16, fontWeight: '600', color: '#1f2937' },
-  replyInput: { backgroundColor: '#f9fafb', borderRadius: 12, padding: 12, fontSize: 14, color: '#1f2937', minHeight: 100, textAlignVertical: 'top', marginBottom: 16 },
+  replyModalTitle: { fontSize: 16, fontWeight: '600', color: modalTokens.textPrimary },
+  replyInput: { backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 12, padding: 12, fontSize: 14, color: modalTokens.textPrimary, minHeight: 100, textAlignVertical: 'top', marginBottom: 16 },
   replySubmitBtn: { backgroundColor: '#f59e0b', paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   replySubmitBtnDisabled: { backgroundColor: '#fcd34d' },
   replySubmitText: { fontSize: 15, color: '#fff', fontWeight: '600' },
   // 成员列表弹窗
-  membersModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, maxHeight: '70%' },
-  membersModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  membersModalTitle: { fontSize: 16, fontWeight: '600', color: '#1f2937' },
+  membersModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, padding: 16, maxHeight: '70%' },
+  membersModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  membersModalTitle: { fontSize: 16, fontWeight: '600', color: modalTokens.textPrimary },
   membersModalList: { flex: 1 },
-  memberModalItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  memberModalAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#f3f4f6' },
+  memberModalItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  memberModalAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: modalTokens.surfaceMuted },
   memberModalInfo: { flex: 1, marginLeft: 12 },
   memberModalNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  memberModalName: { fontSize: 15, fontWeight: '500', color: '#1f2937' },
-  memberModalRole: { fontSize: 13, color: '#9ca3af' },
+  memberModalName: { fontSize: 15, fontWeight: '500', color: modalTokens.textPrimary },
+  memberModalRole: { fontSize: 13, color: modalTokens.textMuted },
   leaderBadgeLarge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fef3c7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
   leaderBadgeText: { fontSize: 11, color: '#f59e0b', fontWeight: '600' },
   // 发布公告弹窗
-  publishAnnouncementModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, maxHeight: '80%' },
-  publishAnnouncementHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  publishAnnouncementTitle: { fontSize: 16, fontWeight: '600', color: '#1f2937' },
+  publishAnnouncementModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, padding: 16, maxHeight: '80%' },
+  publishAnnouncementHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  publishAnnouncementTitle: { fontSize: 16, fontWeight: '600', color: modalTokens.textPrimary },
   publishAnnouncementForm: { marginBottom: 16 },
   formLabel: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 8 },
-  formInput: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1f2937', marginBottom: 16 },
+  formInput: { backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: modalTokens.textPrimary, marginBottom: 16 },
   formTextarea: { minHeight: 120, textAlignVertical: 'top' },
   pinnedCheckbox: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   pinnedCheckboxText: { fontSize: 14, color: '#374151' },
   publishAnnouncementSubmitBtn: { backgroundColor: '#f59e0b', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   publishAnnouncementSubmitText: { fontSize: 15, color: '#fff', fontWeight: '600' },
   // 等待审核弹窗
-  pendingModal: { backgroundColor: '#fff', borderRadius: 20, padding: 24, marginHorizontal: 32, alignItems: 'center' },
+  pendingModal: { backgroundColor: modalTokens.surface, borderRadius: 24, borderWidth: 1, borderColor: modalTokens.border, padding: 24, marginHorizontal: 32, alignItems: 'center' },
   pendingModalIcon: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#fef3c7', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  pendingModalTitle: { fontSize: 20, fontWeight: '600', color: '#1f2937', marginBottom: 12 },
-  pendingModalDesc: { fontSize: 14, color: '#6b7280', lineHeight: 22, textAlign: 'center', marginBottom: 24 },
+  pendingModalTitle: { fontSize: 20, fontWeight: '600', color: modalTokens.textPrimary, marginBottom: 12 },
+  pendingModalDesc: { fontSize: 14, color: modalTokens.textSecondary, lineHeight: 22, textAlign: 'center', marginBottom: 24 },
   pendingModalBtn: { backgroundColor: '#f59e0b', paddingVertical: 12, paddingHorizontal: 32, borderRadius: 12, width: '100%', alignItems: 'center' },
   pendingModalBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
 
@@ -1186,69 +1188,69 @@ const styles = StyleSheet.create({
   applyAdminBtnTextDisabled: { color: '#9ca3af' },
 
   // 邀请弹窗
-  inviteModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85%', paddingBottom: 20 },
-  inviteModalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginTop: 8, marginBottom: 16 },
+  inviteModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '85%', paddingBottom: 20 },
+  inviteModalHandle: { width: 40, height: 4, backgroundColor: modalTokens.border, borderRadius: 2, alignSelf: 'center', marginTop: 8, marginBottom: 16 },
   inviteModalHeader: { paddingHorizontal: 20, marginBottom: 16 },
-  inviteModalTitle: { fontSize: 20, fontWeight: 'bold', color: '#1f2937', marginBottom: 4 },
-  inviteModalSubtitle: { fontSize: 13, color: '#6b7280' },
+  inviteModalTitle: { fontSize: 20, fontWeight: 'bold', color: modalTokens.textPrimary, marginBottom: 4 },
+  inviteModalSubtitle: { fontSize: 13, color: modalTokens.textSecondary },
   
   inviteTabBar: { flexDirection: 'row', paddingHorizontal: 20, marginBottom: 16, gap: 8 },
-  inviteTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 8, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb' },
+  inviteTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 8, backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border },
   inviteTabActive: { backgroundColor: '#fef3c7', borderColor: '#f59e0b' },
-  inviteTabText: { fontSize: 13, color: '#9ca3af', fontWeight: '500' },
+  inviteTabText: { fontSize: 13, color: modalTokens.textMuted, fontWeight: '500' },
   inviteTabTextActive: { color: '#f59e0b', fontWeight: '600' },
   
-  inviteSearchBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f9fafb', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, marginHorizontal: 20, marginBottom: 12 },
-  inviteSearchInput: { flex: 1, fontSize: 14, color: '#1f2937' },
+  inviteSearchBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, marginHorizontal: 20, marginBottom: 12 },
+  inviteSearchInput: { flex: 1, fontSize: 14, color: modalTokens.textPrimary },
   
   selectedCountBadge: { backgroundColor: '#eff6ff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginHorizontal: 20, marginBottom: 12, alignSelf: 'flex-start' },
   selectedCountText: { fontSize: 12, color: '#3b82f6', fontWeight: '600' },
   
   inviteUserList: { maxHeight: 350, paddingHorizontal: 20 },
-  inviteUserItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, marginBottom: 8, backgroundColor: '#f9fafb' },
+  inviteUserItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, marginBottom: 8, backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border },
   inviteUserItemSelected: { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#3b82f6' },
   inviteUserLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   inviteUserInfo: { flex: 1 },
   inviteUserNameRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
-  inviteUserName: { fontSize: 14, fontWeight: '500', color: '#1f2937' },
-  inviteUserMeta: { fontSize: 12, color: '#9ca3af' },
-  inviteCheckbox: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' },
+  inviteUserName: { fontSize: 14, fontWeight: '500', color: modalTokens.textPrimary },
+  inviteUserMeta: { fontSize: 12, color: modalTokens.textMuted },
+  inviteCheckbox: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: modalTokens.border, alignItems: 'center', justifyContent: 'center' },
   inviteCheckboxSelected: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
   
-  inviteModalFooter: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  cancelInviteBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center' },
-  cancelInviteBtnText: { fontSize: 15, color: '#6b7280', fontWeight: '500' },
+  inviteModalFooter: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: modalTokens.border },
+  cancelInviteBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: modalTokens.border, alignItems: 'center' },
+  cancelInviteBtnText: { fontSize: 15, color: modalTokens.textSecondary, fontWeight: '500' },
   sendInviteBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#22c55e', paddingVertical: 12, borderRadius: 12 },
   sendInviteBtnDisabled: { backgroundColor: '#d1d5db' },
   sendInviteBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
 
   // 申请管理员弹窗
-  applyAdminModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%', paddingBottom: 20 },
-  applyAdminModalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginTop: 8, marginBottom: 16 },
+  applyAdminModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '70%', paddingBottom: 20 },
+  applyAdminModalHandle: { width: 40, height: 4, backgroundColor: modalTokens.border, borderRadius: 2, alignSelf: 'center', marginTop: 8, marginBottom: 16 },
   applyAdminModalHeader: { paddingHorizontal: 20, marginBottom: 16 },
-  applyAdminModalTitle: { fontSize: 20, fontWeight: 'bold', color: '#1f2937', marginBottom: 4 },
-  applyAdminModalSubtitle: { fontSize: 13, color: '#6b7280' },
+  applyAdminModalTitle: { fontSize: 20, fontWeight: 'bold', color: modalTokens.textPrimary, marginBottom: 4 },
+  applyAdminModalSubtitle: { fontSize: 13, color: modalTokens.textSecondary },
   applyAdminModalContent: { maxHeight: 300, paddingHorizontal: 20 },
   applyAdminSection: { marginBottom: 16 },
   applyAdminLabel: { fontSize: 14, fontWeight: '500', color: '#374151', marginBottom: 8 },
-  applyAdminTextarea: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1f2937', minHeight: 120, textAlignVertical: 'top' },
+  applyAdminTextarea: { backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: modalTokens.textPrimary, minHeight: 120, textAlignVertical: 'top' },
   applyAdminTips: { backgroundColor: '#f0fdf4', borderRadius: 8, padding: 12, marginTop: 8 },
   applyAdminTipsTitle: { fontSize: 13, fontWeight: '500', color: '#166534', marginBottom: 8 },
   applyAdminTipsText: { fontSize: 12, color: '#15803d', lineHeight: 20 },
-  applyAdminModalFooter: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  cancelApplyBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center' },
-  cancelApplyBtnText: { fontSize: 15, color: '#6b7280', fontWeight: '500' },
+  applyAdminModalFooter: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: modalTokens.border },
+  cancelApplyBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: modalTokens.border, alignItems: 'center' },
+  cancelApplyBtnText: { fontSize: 15, color: modalTokens.textSecondary, fontWeight: '500' },
   submitApplyBtn: { flex: 1, backgroundColor: '#8b5cf6', paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   submitApplyBtnDisabled: { backgroundColor: '#d1d5db' },
   submitApplyBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
 
   // 解散团队弹窗
-  dismissModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%', paddingBottom: 20 },
-  dismissModalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginTop: 8, marginBottom: 16 },
+  dismissModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '80%', paddingBottom: 20 },
+  dismissModalHandle: { width: 40, height: 4, backgroundColor: modalTokens.border, borderRadius: 2, alignSelf: 'center', marginTop: 8, marginBottom: 16 },
   dismissModalHeader: { alignItems: 'center', paddingHorizontal: 20, marginBottom: 20 },
   dismissModalIconWrapper: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#fef2f2', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  dismissModalTitle: { fontSize: 22, fontWeight: 'bold', color: '#1f2937', marginBottom: 8 },
-  dismissModalSubtitle: { fontSize: 14, color: '#6b7280', textAlign: 'center' },
+  dismissModalTitle: { fontSize: 22, fontWeight: 'bold', color: modalTokens.textPrimary, marginBottom: 8 },
+  dismissModalSubtitle: { fontSize: 14, color: modalTokens.textSecondary, textAlign: 'center' },
   dismissModalContent: { paddingHorizontal: 20, marginBottom: 20 },
   dismissWarningBox: { backgroundColor: '#fef2f2', borderRadius: 12, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#fecaca' },
   dismissWarningTitle: { fontSize: 14, fontWeight: '600', color: '#991b1b', marginBottom: 12 },
@@ -1256,11 +1258,11 @@ const styles = StyleSheet.create({
   dismissConfirmSection: { marginTop: 8 },
   dismissConfirmLabel: { fontSize: 14, color: '#374151', marginBottom: 12, lineHeight: 20 },
   dismissTeamNameHighlight: { fontWeight: '600', color: '#ef4444' },
-  dismissConfirmInput: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: '#1f2937' },
-  dismissModalFooter: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  cancelDismissBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center' },
-  cancelDismissBtnText: { fontSize: 15, color: '#6b7280', fontWeight: '500' },
+  dismissConfirmInput: { backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: modalTokens.textPrimary },
+  dismissModalFooter: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: modalTokens.border },
+  cancelDismissBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: modalTokens.border, alignItems: 'center' },
+  cancelDismissBtnText: { fontSize: 15, color: modalTokens.textSecondary, fontWeight: '500' },
   confirmDismissBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#ef4444', paddingVertical: 14, borderRadius: 12 },
-  confirmDismissBtnDisabled: { backgroundColor: '#fca5a5' },
+  confirmDismissBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   confirmDismissBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
 });

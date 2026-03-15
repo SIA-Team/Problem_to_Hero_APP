@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Modal, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { modalTokens } from './modalTokens';
 
 /**
  * 性别选择弹窗组件（底部弹出式 ActionSheet 风格）
@@ -89,31 +90,35 @@ export default function GenderPickerModal({ visible, onClose, currentGender, onS
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: modalTokens.overlay,
     justifyContent: 'flex-end',
   },
   modalContainer: {
-    backgroundColor: '#f7f7f7',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingTop: 8,
+    backgroundColor: modalTokens.surfaceSoft,
+    borderTopLeftRadius: modalTokens.sheetRadius,
+    borderTopRightRadius: modalTokens.sheetRadius,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderColor: modalTokens.border,
   },
   header: {
     paddingVertical: 16,
     paddingHorizontal: 16,
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: modalTokens.surface,
+    borderTopLeftRadius: modalTokens.sheetRadius,
+    borderTopRightRadius: modalTokens.sheetRadius,
   },
   title: {
-    fontSize: 14,
-    color: '#8e8e93',
-    fontWeight: '400',
+    fontSize: 15,
+    color: modalTokens.textSecondary,
+    fontWeight: '600',
   },
   optionsList: {
-    backgroundColor: '#fff',
+    backgroundColor: modalTokens.surface,
     marginBottom: 8,
+    borderTopWidth: 1,
+    borderTopColor: modalTokens.border,
   },
   optionItem: {
     flexDirection: 'row',
@@ -121,31 +126,33 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 16,
     paddingHorizontal: 16,
-    backgroundColor: '#fff',
+    backgroundColor: modalTokens.surface,
   },
   optionItemBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e5ea',
+    borderBottomColor: modalTokens.border,
   },
   optionText: {
     fontSize: 17,
-    color: '#000',
-    fontWeight: '400',
-  },
-  optionTextSelected: {
-    color: '#ef4444',
+    color: modalTokens.textPrimary,
     fontWeight: '500',
   },
+  optionTextSelected: {
+    color: modalTokens.danger,
+    fontWeight: '700',
+  },
   cancelButton: {
-    backgroundColor: '#fff',
+    backgroundColor: modalTokens.surface,
     paddingVertical: 16,
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 14,
     marginHorizontal: 8,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
   },
   cancelText: {
     fontSize: 17,
-    color: '#000',
-    fontWeight: '500',
+    color: modalTokens.textSecondary,
+    fontWeight: '600',
   },
 });

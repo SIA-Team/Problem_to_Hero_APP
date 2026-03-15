@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Modal, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { modalTokens } from './modalTokens';
 
 /**
  * 退出登录确认弹窗组件
@@ -87,22 +88,29 @@ export default function LogoutConfirmModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: modalTokens.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   modalContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
+    backgroundColor: modalTokens.surface,
+    borderRadius: 24,
     width: '100%',
     maxWidth: 340,
     padding: 24,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
+    shadowColor: modalTokens.shadow,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.16,
+    shadowRadius: 20,
+    elevation: 12,
   },
   title: {
     fontSize: 20,
-    fontWeight: '600',
-    color: '#1f2937',
+    fontWeight: '700',
+    color: modalTokens.textPrimary,
     marginBottom: 16,
     textAlign: 'center',
   },
@@ -112,18 +120,18 @@ const styles = StyleSheet.create({
   },
   message: {
     fontSize: 15,
-    color: '#6b7280',
+    color: modalTokens.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 16,
   },
   infoBox: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: modalTokens.surfaceSoft,
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: modalTokens.border,
     marginBottom: 12,
   },
   infoRow: {
@@ -134,12 +142,12 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 13,
-    color: '#6b7280',
+    color: modalTokens.textSecondary,
     fontWeight: '500',
   },
   infoValue: {
     fontSize: 16,
-    color: '#1f2937',
+    color: modalTokens.textPrimary,
     fontWeight: '600',
     marginLeft: 22,
   },
@@ -156,20 +164,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cancelButton: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: modalTokens.surfaceMuted,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: modalTokens.border,
   },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#6b7280',
+    color: modalTokens.textSecondary,
   },
   confirmButton: {
-    backgroundColor: '#ef4444',
+    backgroundColor: modalTokens.danger,
   },
   confirmButtonDisabled: {
-    backgroundColor: '#fca5a5',
+    backgroundColor: '#fda4af',
   },
   confirmButtonText: {
     fontSize: 16,

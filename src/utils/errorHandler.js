@@ -1,4 +1,5 @@
 import { Alert } from 'react-native';
+import { showAppAlert } from './appAlert';
 
 /**
  * 统一错误处理工具
@@ -12,7 +13,7 @@ class ErrorHandler {
   static showError(error, title = '错误') {
     const message = typeof error === 'string' ? error : error?.message || '操作失败';
     
-    Alert.alert(title, message, [{ text: '确定' }]);
+    showAppAlert(title, message, [{ text: '确定' }]);
   }
 
   /**
@@ -21,7 +22,7 @@ class ErrorHandler {
    * @param {string} title - 提示标题
    */
   static showSuccess(message, title = '成功') {
-    Alert.alert(title, message, [{ text: '确定' }]);
+    showAppAlert(title, message, [{ text: '确定' }]);
   }
 
   /**
@@ -31,7 +32,7 @@ class ErrorHandler {
    * @param {string} title - 提示标题
    */
   static showConfirm(message, onConfirm, title = '确认') {
-    Alert.alert(
+    showAppAlert(
       title,
       message,
       [

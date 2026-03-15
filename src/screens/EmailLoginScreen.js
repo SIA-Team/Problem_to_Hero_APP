@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authApi } from '../services/api';
+import { showToast } from '../utils/toast';
+import { showAppAlert } from '../utils/appAlert';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -28,7 +30,7 @@ export default function LoginScreen({ navigation, onLogin }) {
   const handleSendCode = () => {
     // 取消邮箱验证
     // if (!email || !validateEmail(email)) {
-    //   alert('Please enter a valid email address');
+    //   showToast('Please enter a valid email address', 'warning');
     //   return;
     // }
     setCountdown(60);
@@ -41,7 +43,7 @@ export default function LoginScreen({ navigation, onLogin }) {
         return prev - 1;
       });
     }, 1000);
-    alert('Verification code sent to your email');
+    showToast('Verification code sent to your email', 'success');
   };
 
   const handleSubmit = async () => {
@@ -53,7 +55,7 @@ export default function LoginScreen({ navigation, onLogin }) {
         await AsyncStorage.setItem('authToken', testToken);
         console.log('✅ Test token set:', testToken);
         
-        Alert.alert('登录成功', '已设置测试 token，可以测试修改密码功能', [
+        showAppAlert('登录成功', '已设置测试 token，可以测试修改密码功能', [
           {
             text: '确定',
             onPress: () => {
@@ -73,12 +75,12 @@ export default function LoginScreen({ navigation, onLogin }) {
     /*
     // 基本验证
     if (!email || !email.trim()) {
-      Alert.alert('提示', '请输入邮箱或手机号');
+      showAppAlert('提示', '请输入邮箱或手机号');
       return;
     }
     
     if (!password || !password.trim()) {
-      Alert.alert('提示', '请输入密码');
+      showAppAlert('提示', '请输入密码');
       return;
     }
 
@@ -96,7 +98,7 @@ export default function LoginScreen({ navigation, onLogin }) {
       // 检查响应
       if (response.code === 200 || response.token) {
         // 登录成功，token 已在 authApi.login 中保存
-        Alert.alert('登录成功', '欢迎回来！', [
+        showAppAlert('登录成功', '欢迎回来！', [
           {
             text: '确定',
             onPress: () => {
@@ -107,7 +109,7 @@ export default function LoginScreen({ navigation, onLogin }) {
           },
         ]);
       } else {
-        Alert.alert('登录失败', response.msg || '登录失败，请检查账号密码');
+        showAppAlert('登录失败', response.msg || '登录失败，请检查账号密码');
       }
     } catch (error) {
       setLoading(false);
@@ -120,7 +122,7 @@ export default function LoginScreen({ navigation, onLogin }) {
         errorMessage = error.message;
       }
       
-      Alert.alert('登录失败', errorMessage);
+      showAppAlert('登录失败', errorMessage);
       console.error('Login error:', error);
     }
     */

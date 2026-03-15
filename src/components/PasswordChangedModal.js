@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Modal, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { modalTokens } from './modalTokens';
 
 /**
  * 密码修改成功提示模态框
@@ -65,18 +66,25 @@ export default function PasswordChangedModal({ visible, username, onConfirm }) {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: modalTokens.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   container: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: modalTokens.surface,
+    borderRadius: 24,
     padding: 24,
     width: '100%',
     maxWidth: 340,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: modalTokens.border,
+    shadowColor: modalTokens.shadow,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.16,
+    shadowRadius: 20,
+    elevation: 12,
   },
   iconContainer: {
     marginBottom: 20,
@@ -97,13 +105,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#1f2937',
+    color: modalTokens.textPrimary,
     marginBottom: 16,
   },
   infoBox: {
     width: '100%',
-    backgroundColor: '#eff6ff',
-    borderRadius: 8,
+    backgroundColor: modalTokens.primarySoft,
+    borderRadius: 12,
     padding: 12,
     marginBottom: 20,
   },
@@ -115,21 +123,21 @@ const styles = StyleSheet.create({
   infoText: {
     flex: 1,
     fontSize: 14,
-    color: '#1e40af',
+    color: '#1d4ed8',
     lineHeight: 20,
   },
   usernameBox: {
     width: '100%',
-    backgroundColor: '#f9fafb',
+    backgroundColor: modalTokens.surfaceSoft,
     borderRadius: 12,
     padding: 16,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: modalTokens.border,
   },
   usernameLabel: {
     fontSize: 12,
-    color: '#6b7280',
+    color: modalTokens.textSecondary,
     marginBottom: 8,
     fontWeight: '500',
   },
@@ -142,11 +150,11 @@ const styles = StyleSheet.create({
   usernameValue: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1f2937',
+    color: modalTokens.textPrimary,
     flex: 1,
   },
   badge: {
-    backgroundColor: '#fef3c7',
+    backgroundColor: modalTokens.warningSoft,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
@@ -158,20 +166,20 @@ const styles = StyleSheet.create({
   },
   usernameHint: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: modalTokens.textMuted,
     fontStyle: 'italic',
   },
   confirmButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ef4444',
+    backgroundColor: modalTokens.danger,
     paddingVertical: 14,
     paddingHorizontal: 24,
     borderRadius: 10,
     width: '100%',
     gap: 8,
-    shadowColor: '#ef4444',
+    shadowColor: modalTokens.danger,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,

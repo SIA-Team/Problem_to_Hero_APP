@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { modalTokens } from './modalTokens';
 
 /**
  * 日期选择弹窗组件（纯 JS 实现，无需原生包）
@@ -131,13 +132,15 @@ export default function DatePickerModal({ visible, onClose, currentDate, onSelec
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: modalTokens.overlay,
     justifyContent: 'flex-end',
   },
   modalContainer: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: modalTokens.surface,
+    borderTopLeftRadius: modalTokens.sheetRadius,
+    borderTopRightRadius: modalTokens.sheetRadius,
+    borderTopWidth: 1,
+    borderColor: modalTokens.border,
   },
   header: {
     flexDirection: 'row',
@@ -146,7 +149,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e5ea',
+    borderBottomColor: modalTokens.border,
   },
   headerButton: {
     paddingVertical: 4,
@@ -156,20 +159,20 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000',
+    color: modalTokens.textPrimary,
   },
   cancelText: {
     fontSize: 16,
-    color: '#8e8e93',
+    color: modalTokens.textSecondary,
   },
   confirmText: {
     fontSize: 16,
-    color: '#ef4444',
-    fontWeight: '500',
+    color: modalTokens.danger,
+    fontWeight: '700',
     textAlign: 'right',
   },
   pickerContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: modalTokens.surface,
     paddingVertical: 16,
   },
   pickerRow: {
@@ -188,16 +191,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pickerItemSelected: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: modalTokens.surfaceSoft,
+    borderRadius: 12,
   },
   pickerItemText: {
     fontSize: 16,
-    color: '#9ca3af',
+    color: modalTokens.textMuted,
   },
   pickerItemTextSelected: {
     fontSize: 18,
-    color: '#000',
-    fontWeight: '500',
+    color: modalTokens.textPrimary,
+    fontWeight: '700',
   },
   unitText: {
     fontSize: 14,

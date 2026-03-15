@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
+import { showAppAlert } from '../utils/appAlert';
 
 const searchHistory = ['Python学习', '养猫攻略', '职业规划', '数据分析'];
 const hotSearches = [
@@ -39,7 +40,7 @@ export default function SearchScreen({ navigation }) {
   };
 
   const clearHistory = () => {
-    Alert.alert(t('screens.search.alerts.clearHistoryTitle'), t('screens.search.alerts.clearHistoryMessage'), [
+    showAppAlert(t('screens.search.alerts.clearHistoryTitle'), t('screens.search.alerts.clearHistoryMessage'), [
       { text: t('common.cancel'), style: 'cancel' },
       { text: t('common.confirm'), onPress: () => setHistory([]) }
     ]);
@@ -132,7 +133,7 @@ export default function SearchScreen({ navigation }) {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{t('screens.search.hotTopics.title')}</Text>
-            <TouchableOpacity onPress={() => Alert.alert(t('screens.search.alerts.viewMoreTitle'), t('screens.search.alerts.viewMoreMessage'))}><Text style={styles.moreText}>{t('screens.search.hotTopics.viewMore')}</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => showAppAlert(t('screens.search.alerts.viewMoreTitle'), t('screens.search.alerts.viewMoreMessage'))}><Text style={styles.moreText}>{t('screens.search.hotTopics.viewMore')}</Text></TouchableOpacity>
           </View>
           <View style={styles.tagList}>
             {hotTopics.map((topic, index) => (

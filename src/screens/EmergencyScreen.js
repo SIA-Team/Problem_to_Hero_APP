@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import i18n from '../i18n';
+import { modalTokens } from '../components/modalTokens';
+import { showAppAlert } from '../utils/appAlert';
 
 export default function EmergencyScreen({ navigation }) {
   const t = (key) => {
@@ -50,7 +52,7 @@ export default function EmergencyScreen({ navigation }) {
     if (Platform.OS !== 'web') {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('提示', '需要相册访问权限才能上传图片');
+        showAppAlert('提示', '需要相册访问权限才能上传图片');
         return false;
       }
     }
@@ -61,7 +63,7 @@ export default function EmergencyScreen({ navigation }) {
   const pickImage = async () => {
     // 检查图片数量限制
     if (emergencyImages.length >= 3) {
-      Alert.alert(t('common.ok'), '最多只能上传3张图片');
+      showAppAlert(t('common.ok'), '最多只能上传3张图片');
       return;
     }
 
@@ -87,7 +89,7 @@ export default function EmergencyScreen({ navigation }) {
       }
     } catch (error) {
       console.error('选择图片失败:', error);
-      Alert.alert('错误', '选择图片失败，请重试');
+      showAppAlert('错误', '选择图片失败，请重试');
     }
   };
 
@@ -95,7 +97,7 @@ export default function EmergencyScreen({ navigation }) {
   const takePhoto = async () => {
     // 检查图片数量限制
     if (emergencyImages.length >= 3) {
-      Alert.alert(t('common.ok'), '最多只能上传3张图片');
+      showAppAlert(t('common.ok'), '最多只能上传3张图片');
       return;
     }
 
@@ -103,7 +105,7 @@ export default function EmergencyScreen({ navigation }) {
     if (Platform.OS !== 'web') {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('提示', '需要相机访问权限才能拍照');
+        showAppAlert('提示', '需要相机访问权限才能拍照');
         return;
       }
     }
@@ -125,13 +127,13 @@ export default function EmergencyScreen({ navigation }) {
       }
     } catch (error) {
       console.error('拍照失败:', error);
-      Alert.alert('错误', '拍照失败，请重试');
+      showAppAlert('错误', '拍照失败，请重试');
     }
   };
 
   // 显示图片选择选项
   const showImagePickerOptions = () => {
-    Alert.alert(
+    showAppAlert(
       '选择图片',
       '请选择图片来源',
       [
@@ -158,7 +160,7 @@ export default function EmergencyScreen({ navigation }) {
 
   const handleSubmit = () => {
     if (!emergencyForm.title.trim()) {
-      Alert.alert(t('emergency.enterTitle'));
+      showAppAlert(t('emergency.enterTitle'));
       return;
     }
     
@@ -183,7 +185,7 @@ export default function EmergencyScreen({ navigation }) {
         setTimeout(() => {
           setShowProgressModal(false);
           const feeInfo = rescuerFee > 0 ? `\n${t('emergency.needPay')}：${rescuerFee}` : '';
-          Alert.alert(
+          showAppAlert(
             t('emergency.published'),
             `${t('emergency.rescuersNeeded')}${emergencyForm.rescuerCount}${t('emergency.rescuerUnit')}${feeInfo}\n已通知${nearbyUserCount}位附近用户`,
             [{ text: t('emergency.confirm'), onPress: () => navigation.goBack() }]
@@ -237,7 +239,7 @@ export default function EmergencyScreen({ navigation }) {
         {remainingFree <= 0 && (
           <TouchableOpacity 
             style={styles.monthlyPayButton}
-            onPress={() => Alert.alert(t('emergency.monthlyUnlock'))}
+            onPress={() => showAppAlert(t('emergency.monthlyUnlock'))}
           >
             <Text style={styles.monthlyPayButtonText}>{t('emergency.payAmount')}</Text>
             <Ionicons name="arrow-forward" size={14} color="#fff" />
@@ -430,7 +432,7 @@ export default function EmergencyScreen({ navigation }) {
                 <Text style={styles.rescuerFeeNote}>{t('emergency.rescuerFeeNote')}</Text>
                 <TouchableOpacity 
                   style={styles.payButton}
-                  onPress={() => Alert.alert(
+                  onPress={() => showAppAlert(
                     t('emergency.pay') + ' ' + rescuerFee,
                     t('emergency.paymentMethods')
                   )}
@@ -516,12 +518,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, 
     paddingVertical: 12, 
     borderBottomWidth: 1, 
-    borderBottomColor: '#f0f0f0' 
+    borderBottomColor: modalTokens.border 
   },
   headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  headerTitle: { fontSize: 17, fontWeight: '600', color: '#222' },
-  submitBtn: { backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4 },
-  submitBtnDisabled: { backgroundColor: '#fecaca' },
+  headerTitle: { fontSize: 17, fontWeight: '600', color: modalTokens.textPrimary },
+  submitBtn: { backgroundColor: modalTokens.danger, paddingHorizontal: modalTokens.actionPaddingX, paddingVertical: modalTokens.actionPaddingY, borderRadius: modalTokens.actionRadius },
+  submitBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   submitText: { fontSize: 14, color: '#fff', fontWeight: '600' },
   submitTextDisabled: { color: '#fff' },
   warning: { 
@@ -765,18 +767,20 @@ const styles = StyleSheet.create({
   // 进度模态框样式
   progressModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: modalTokens.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   progressModalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: modalTokens.surface,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
     borderRadius: 16,
     padding: 24,
     width: '100%',
     maxWidth: 340,
-    shadowColor: '#000',
+    shadowColor: modalTokens.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -789,7 +793,7 @@ const styles = StyleSheet.create({
   progressTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1f2937',
+    color: modalTokens.textPrimary,
     marginTop: 12,
   },
   progressBody: {
@@ -809,18 +813,18 @@ const styles = StyleSheet.create({
   progressTotal: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#9ca3af',
+    color: modalTokens.textMuted,
     marginLeft: 4,
   },
   progressLabel: {
     fontSize: 14,
-    color: '#6b7280',
+    color: modalTokens.textSecondary,
     marginBottom: 20,
   },
   progressBarContainer: {
     width: '100%',
     height: 8,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: modalTokens.surfaceMuted,
     borderRadius: 4,
     overflow: 'hidden',
     marginBottom: 16,
@@ -834,14 +838,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#f9fafb',
+    backgroundColor: modalTokens.surfaceSoft,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
   },
   progressInfoText: {
     fontSize: 13,
-    color: '#6b7280',
+    color: modalTokens.textSecondary,
   },
   progressComplete: {
     flexDirection: 'row',
@@ -851,7 +857,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingTop: 20,
     borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
+    borderTopColor: modalTokens.border,
   },
   progressCompleteText: {
     fontSize: 16,

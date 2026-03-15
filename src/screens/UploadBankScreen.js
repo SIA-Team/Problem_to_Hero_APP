@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
+import { showToast } from '../utils/toast';
 
 export default function UploadBankScreen({ navigation }) {
   const { t } = useTranslation();
@@ -59,11 +60,7 @@ export default function UploadBankScreen({ navigation }) {
 
   const removeQuestion = (id) => {
     if (questions.length === 1) {
-      if (Platform.OS === 'web') {
-        alert(t('screens.uploadBank.alerts.minQuestions'));
-      } else {
-        Alert.alert(t('screens.uploadBank.alerts.hint'), t('screens.uploadBank.alerts.minQuestions'));
-      }
+      showToast(t('screens.uploadBank.alerts.minQuestions'), 'warning');
       return;
     }
     setQuestions(questions.filter(q => q.id !== id));
@@ -138,40 +135,23 @@ export default function UploadBankScreen({ navigation }) {
 
   const handleSubmit = () => {
     if (!bankName.trim()) {
-      if (Platform.OS === 'web') {
-        alert(t('screens.uploadBank.alerts.enterBankName'));
-      } else {
-        Alert.alert(t('screens.uploadBank.alerts.hint'), t('screens.uploadBank.alerts.enterBankName'));
-      }
+      showToast(t('screens.uploadBank.alerts.enterBankName'), 'warning');
       return;
     }
 
     if (!selectedMainCategory || !selectedSubCategory) {
-      if (Platform.OS === 'web') {
-        alert(t('screens.uploadBank.alerts.selectCategory'));
-      } else {
-        Alert.alert(t('screens.uploadBank.alerts.hint'), t('screens.uploadBank.alerts.selectCategory'));
-      }
+      showToast(t('screens.uploadBank.alerts.selectCategory'), 'warning');
       return;
     }
 
     const invalidQuestions = questions.filter(q => !q.title.trim());
     if (invalidQuestions.length > 0) {
-      if (Platform.OS === 'web') {
-        alert(t('screens.uploadBank.alerts.completeQuestions'));
-      } else {
-        Alert.alert(t('screens.uploadBank.alerts.hint'), t('screens.uploadBank.alerts.completeQuestions'));
-      }
+      showToast(t('screens.uploadBank.alerts.completeQuestions'), 'warning');
       return;
     }
 
-    if (Platform.OS === 'web') {
-      alert(t('screens.uploadBank.alerts.uploadSuccess'));
-    } else {
-      Alert.alert(t('screens.uploadBank.alerts.success'), t('screens.uploadBank.alerts.uploadSuccess'), [
-        { text: t('screens.uploadBank.alerts.confirm'), onPress: () => navigation.goBack() }
-      ]);
-    }
+    showToast(t('screens.uploadBank.alerts.uploadSuccess'), 'success');
+    navigation.goBack();
   };
 
   const renderQuestion = (question, index) => (

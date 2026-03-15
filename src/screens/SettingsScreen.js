@@ -11,9 +11,11 @@ import BindContactModal from '../components/BindContactModal';
 import GenderPickerModal from '../components/GenderPickerModal';
 import DatePickerModal from '../components/DatePickerModal';
 import Toast from '../components/Toast';
+import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import UserCacheService from '../services/UserCacheService';
 import userApi from '../services/api/userApi';
+import { showAppAlert } from '../utils/appAlert';
 
 export default function SettingsScreen({ navigation }) {
   const { t } = useTranslation();
@@ -148,7 +150,7 @@ export default function SettingsScreen({ navigation }) {
   const handleSaveEdit = () => {
     setUserProfile({ ...userProfile, [editField]: editValue });
     setShowEditModal(false);
-    Alert.alert(t('screens.settings.alerts.saveSuccess.title'), t('screens.settings.alerts.saveSuccess.message'));
+    showAppAlert(t('screens.settings.alerts.saveSuccess.title'), t('screens.settings.alerts.saveSuccess.message'));
   };
 
   // 打开通用编辑弹窗
@@ -179,7 +181,7 @@ export default function SettingsScreen({ navigation }) {
 
     const apiFieldName = fieldMapping[field];
     if (!apiFieldName) {
-      Alert.alert('错误', '未知的字段类型');
+      showAppAlert('错误', '未知的字段类型');
       return;
     }
 
@@ -336,7 +338,7 @@ export default function SettingsScreen({ navigation }) {
       console.log(`📊 图片大小: ${sizeInMB.toFixed(2)} MB`);
       
       if (sizeInMB > 5) {
-        Alert.alert('图片过大', '请选择小于 5MB 的图片');
+        showAppAlert('图片过大', '请选择小于 5MB 的图片');
         return null;
       }
       
@@ -904,7 +906,7 @@ export default function SettingsScreen({ navigation }) {
 
             <TouchableOpacity 
               style={[styles.menuItem, styles.menuItemLast]}
-              onPress={() => Alert.alert(t('screens.settings.alerts.blacklist.title'), t('screens.settings.alerts.blacklist.message'))}
+              onPress={() => showAppAlert(t('screens.settings.alerts.blacklist.title'), t('screens.settings.alerts.blacklist.message'))}
             >
               <View style={styles.menuLeft}>
                 <Ionicons name="ban-outline" size={22} color="#6b7280" />
@@ -921,9 +923,9 @@ export default function SettingsScreen({ navigation }) {
           <View style={styles.section}>
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => Alert.alert(t('screens.settings.alerts.clearCache.title'), t('screens.settings.alerts.clearCache.message'), [
+              onPress={() => showAppAlert(t('screens.settings.alerts.clearCache.title'), t('screens.settings.alerts.clearCache.message'), [
                 { text: t('common.cancel'), style: 'cancel' },
-                { text: t('common.confirm'), onPress: () => Alert.alert(t('common.ok'), t('screens.settings.alerts.clearCache.success')) }
+                { text: t('common.confirm'), onPress: () => showAppAlert(t('common.ok'), t('screens.settings.alerts.clearCache.success')) }
               ])}
             >
               <View style={styles.menuLeft}>
@@ -938,7 +940,7 @@ export default function SettingsScreen({ navigation }) {
 
             <TouchableOpacity 
               style={[styles.menuItem, styles.menuItemLast]}
-              onPress={() => Alert.alert(t('screens.settings.alerts.language.title'), t('screens.settings.alerts.language.message'))}
+              onPress={() => showAppAlert(t('screens.settings.alerts.language.title'), t('screens.settings.alerts.language.message'))}
             >
               <View style={styles.menuLeft}>
                 <Ionicons name="language-outline" size={22} color="#6b7280" />
@@ -986,7 +988,7 @@ export default function SettingsScreen({ navigation }) {
           <View style={styles.section}>
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => Alert.alert(t('screens.settings.alerts.faq.title'), t('screens.settings.alerts.faq.message'))}
+              onPress={() => showAppAlert(t('screens.settings.alerts.faq.title'), t('screens.settings.alerts.faq.message'))}
             >
               <View style={styles.menuLeft}>
                 <Ionicons name="help-circle-outline" size={22} color="#6b7280" />
@@ -997,7 +999,7 @@ export default function SettingsScreen({ navigation }) {
 
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => Alert.alert(t('screens.settings.alerts.customerService.title'), t('screens.settings.alerts.customerService.message'))}
+              onPress={() => showAppAlert(t('screens.settings.alerts.customerService.title'), t('screens.settings.alerts.customerService.message'))}
             >
               <View style={styles.menuLeft}>
                 <Ionicons name="chatbubbles-outline" size={22} color="#6b7280" />
@@ -1012,7 +1014,7 @@ export default function SettingsScreen({ navigation }) {
 
             <TouchableOpacity 
               style={[styles.menuItem, styles.menuItemLast]}
-              onPress={() => Alert.alert(t('screens.settings.alerts.feedback.title'), t('screens.settings.alerts.feedback.message'))}
+              onPress={() => showAppAlert(t('screens.settings.alerts.feedback.title'), t('screens.settings.alerts.feedback.message'))}
             >
               <View style={styles.menuLeft}>
                 <Ionicons name="create-outline" size={22} color="#6b7280" />
@@ -1029,7 +1031,7 @@ export default function SettingsScreen({ navigation }) {
           <View style={styles.section}>
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => Alert.alert(t('screens.settings.alerts.checkUpdate.title'), t('screens.settings.alerts.checkUpdate.message'))}
+              onPress={() => showAppAlert(t('screens.settings.alerts.checkUpdate.title'), t('screens.settings.alerts.checkUpdate.message'))}
             >
               <View style={styles.menuLeft}>
                 <Ionicons name="refresh-outline" size={22} color="#6b7280" />
@@ -1043,7 +1045,7 @@ export default function SettingsScreen({ navigation }) {
 
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => Alert.alert(t('screens.settings.alerts.userAgreement.title'), t('screens.settings.alerts.userAgreement.message'))}
+              onPress={() => showAppAlert(t('screens.settings.alerts.userAgreement.title'), t('screens.settings.alerts.userAgreement.message'))}
             >
               <View style={styles.menuLeft}>
                 <Ionicons name="document-text-outline" size={22} color="#6b7280" />
@@ -1054,7 +1056,7 @@ export default function SettingsScreen({ navigation }) {
 
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => Alert.alert(t('screens.settings.alerts.privacyPolicy.title'), t('screens.settings.alerts.privacyPolicy.message'))}
+              onPress={() => showAppAlert(t('screens.settings.alerts.privacyPolicy.title'), t('screens.settings.alerts.privacyPolicy.message'))}
             >
               <View style={styles.menuLeft}>
                 <Ionicons name="shield-outline" size={22} color="#6b7280" />
@@ -1087,7 +1089,7 @@ export default function SettingsScreen({ navigation }) {
 
             <TouchableOpacity 
               style={[styles.menuItem, styles.menuItemLast]}
-              onPress={() => Alert.alert(t('screens.settings.alerts.aboutUs.title'), t('screens.settings.alerts.aboutUs.message'))}
+              onPress={() => showAppAlert(t('screens.settings.alerts.aboutUs.title'), t('screens.settings.alerts.aboutUs.message'))}
             >
               <View style={styles.menuLeft}>
                 <Ionicons name="information-circle-outline" size={22} color="#6b7280" />
@@ -1101,7 +1103,7 @@ export default function SettingsScreen({ navigation }) {
         {/* 退出登录 */}
         <TouchableOpacity 
           style={styles.logoutBtn}
-          onPress={() => Alert.alert(
+          onPress={() => showAppAlert(
             t('screens.settings.alerts.logout.title'),
             t('screens.settings.alerts.logout.message'),
             [
@@ -1332,13 +1334,15 @@ const styles = StyleSheet.create({
   // 编辑弹窗样式
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: modalTokens.overlay,
     justifyContent: 'flex-end'
   },
   editModal: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: modalTokens.surface,
+    borderTopLeftRadius: modalTokens.sheetRadius,
+    borderTopRightRadius: modalTokens.sheetRadius,
+    borderTopWidth: 1,
+    borderColor: modalTokens.border,
     paddingBottom: 40
   },
   editModalHeader: {
@@ -1348,34 +1352,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6'
+    borderBottomColor: modalTokens.border
   },
   editModalCancel: {
     fontSize: 15,
-    color: '#6b7280'
+    color: modalTokens.textSecondary
   },
   editModalTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937'
+    fontWeight: '700',
+    color: modalTokens.textPrimary
   },
   editModalSave: {
     fontSize: 15,
-    color: '#ef4444',
-    fontWeight: '600'
+    color: modalTokens.danger,
+    fontWeight: '700'
   },
   editModalContent: {
     padding: 16
   },
   editInput: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: modalTokens.surfaceSoft,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
+    borderColor: modalTokens.border,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 12,
     fontSize: 15,
-    color: '#1f2937'
+    color: modalTokens.textPrimary
   },
   editInputMultiline: {
     minHeight: 100,
@@ -1383,7 +1387,7 @@ const styles = StyleSheet.create({
   },
   editHint: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: modalTokens.textMuted,
     marginTop: 8
   }
 });

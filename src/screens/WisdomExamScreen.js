@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { formatDuration } from '../utils/timeFormatter';
+import { modalTokens } from '../components/modalTokens';
 
 // 模拟题库
 const questionBank = [
@@ -558,19 +559,19 @@ const styles = StyleSheet.create({
   explanationBtnText: { fontSize: 16, color: '#fff', fontWeight: '600', textAlign: 'center' },
 
   // 提交确认弹窗
-  confirmModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  confirmModal: { backgroundColor: '#fff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 400, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
+  confirmModalOverlay: { flex: 1, backgroundColor: modalTokens.overlay, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  confirmModal: { backgroundColor: modalTokens.surface, borderRadius: 20, borderWidth: 1, borderColor: modalTokens.border, padding: 28, width: '100%', maxWidth: 400, alignItems: 'center', shadowColor: modalTokens.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
   confirmModalIcon: { width: 88, height: 88, borderRadius: 44, backgroundColor: '#fef3c7', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
-  confirmModalTitle: { fontSize: 22, fontWeight: 'bold', color: '#1f2937', marginBottom: 12 },
-  confirmModalDesc: { fontSize: 15, color: '#6b7280', textAlign: 'center', lineHeight: 24, marginBottom: 24 },
-  confirmModalStats: { flexDirection: 'row', backgroundColor: '#f9fafb', borderRadius: 12, padding: 16, width: '100%', marginBottom: 24 },
+  confirmModalTitle: { fontSize: 22, fontWeight: 'bold', color: modalTokens.textPrimary, marginBottom: 12 },
+  confirmModalDesc: { fontSize: 15, color: modalTokens.textSecondary, textAlign: 'center', lineHeight: 24, marginBottom: 24 },
+  confirmModalStats: { flexDirection: 'row', backgroundColor: modalTokens.surfaceSoft, borderRadius: 12, borderWidth: 1, borderColor: modalTokens.border, padding: 16, width: '100%', marginBottom: 24 },
   confirmModalStatItem: { flex: 1, alignItems: 'center' },
-  confirmModalStatLabel: { fontSize: 13, color: '#9ca3af', marginBottom: 6 },
-  confirmModalStatValue: { fontSize: 18, fontWeight: 'bold', color: '#1f2937' },
-  confirmModalStatDivider: { width: 1, backgroundColor: '#e5e7eb', marginHorizontal: 16 },
+  confirmModalStatLabel: { fontSize: 13, color: modalTokens.textMuted, marginBottom: 6 },
+  confirmModalStatValue: { fontSize: 18, fontWeight: 'bold', color: modalTokens.textPrimary },
+  confirmModalStatDivider: { width: 1, backgroundColor: modalTokens.border, marginHorizontal: 16 },
   confirmModalButtons: { flexDirection: 'row', gap: 12, width: '100%' },
-  confirmModalCancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#f3f4f6', alignItems: 'center', borderWidth: 1, borderColor: '#e5e7eb' },
-  confirmModalCancelText: { fontSize: 15, color: '#6b7280', fontWeight: '600' },
+  confirmModalCancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: modalTokens.surfaceMuted, alignItems: 'center', borderWidth: 1, borderColor: modalTokens.border },
+  confirmModalCancelText: { fontSize: 15, color: modalTokens.textSecondary, fontWeight: '600' },
   confirmModalConfirmBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#f59e0b', alignItems: 'center', shadowColor: '#f59e0b', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 3 },
   confirmModalConfirmText: { fontSize: 15, color: '#fff', fontWeight: '600' },
 });

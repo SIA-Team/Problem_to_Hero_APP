@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import superLikeCreditService from '../services/SuperLikeCreditService';
 import { useTranslation } from '../i18n/withTranslation';
+import { showAppAlert } from '../utils/appAlert';
 
 export default function SuperLikePurchaseScreen({ navigation }) {
   const { t } = useTranslation();
@@ -44,12 +45,12 @@ export default function SuperLikePurchaseScreen({ navigation }) {
       const amount = getCurrentAmount();
 
       if (!amount || amount <= 0) {
-        Alert.alert(t('superLike.purchase.alertTitle'), t('superLike.purchase.alertInvalidAmount'));
+        showAppAlert(t('superLike.purchase.alertTitle'), t('superLike.purchase.alertInvalidAmount'));
         return;
       }
 
       if (amount < 1 || amount > 100) {
-        Alert.alert(t('superLike.purchase.alertTitle'), t('superLike.purchase.alertInvalidRange'));
+        showAppAlert(t('superLike.purchase.alertTitle'), t('superLike.purchase.alertInvalidRange'));
         return;
       }
 
@@ -65,7 +66,7 @@ export default function SuperLikePurchaseScreen({ navigation }) {
           setBalance(result.newBalance);
 
           // 显示成功提示
-          Alert.alert(
+          showAppAlert(
             t('superLike.purchase.successTitle'),
             t('superLike.purchase.successMessage')
               .replace('{amount}', amount)
@@ -82,11 +83,11 @@ export default function SuperLikePurchaseScreen({ navigation }) {
             ]
           );
         } else {
-          Alert.alert(t('superLike.purchase.alertTitle'), result.error || t('superLike.purchase.alertPurchaseFailed'));
+          showAppAlert(t('superLike.purchase.alertTitle'), result.error || t('superLike.purchase.alertPurchaseFailed'));
         }
       } catch (error) {
         console.error('Purchase error:', error);
-        Alert.alert(t('superLike.purchase.alertTitle'), t('superLike.purchase.alertPurchaseFailed'));
+        showAppAlert(t('superLike.purchase.alertTitle'), t('superLike.purchase.alertPurchaseFailed'));
       } finally {
         setLoading(false);
       }

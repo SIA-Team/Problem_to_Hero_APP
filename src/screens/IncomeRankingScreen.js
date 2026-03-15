@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import { useTranslation } from '../i18n/withTranslation';
+import { showToast } from '../utils/toast';
 
 // 收入榜数据
 const incomeRankingData = [
@@ -258,7 +259,7 @@ export default function IncomeRankingScreen({ navigation }) {
           style={styles.infoBtn}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           activeOpacity={0.7}
-          onPress={() => alert(t('screens.incomeRankingScreen.infoContent'))}
+          onPress={() => showToast(t('screens.incomeRankingScreen.infoContent'), 'info')}
         >
           <Ionicons name="information-circle-outline" size={22} color="#6b7280" />
         </TouchableOpacity>

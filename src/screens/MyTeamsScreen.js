@@ -3,6 +3,8 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import { modalTokens } from '../components/modalTokens';
+import { showAppAlert } from '../utils/appAlert';
 
 // 我的团队数据
 const myTeams = [
@@ -68,15 +70,15 @@ export default function MyTeamsScreen({ navigation }) {
 
   const handleSubmitCreate = () => {
     if (!teamName.trim()) {
-      Alert.alert('提示', '请输入团队名称');
+      showAppAlert('提示', '请输入团队名称');
       return;
     }
     if (!teamDescription.trim()) {
-      Alert.alert('提示', '请输入团队说明');
+      showAppAlert('提示', '请输入团队说明');
       return;
     }
     
-    Alert.alert('成功', `团队"${teamName}"创建成功！${selectedQuestions.length > 0 ? `已关联${selectedQuestions.length}个问题` : ''}`);
+    showAppAlert('成功', `团队"${teamName}"创建成功！${selectedQuestions.length > 0 ? `已关联${selectedQuestions.length}个问题` : ''}`);
     handleCloseCreateModal();
     setTeamName('');
     setSelectedQuestions([]);
@@ -84,7 +86,7 @@ export default function MyTeamsScreen({ navigation }) {
   };
 
   const handleLeaveTeam = (team) => {
-    Alert.alert(
+    showAppAlert(
       '退出团队',
       `确定要退出"${team.name}"吗？`,
       [
@@ -94,7 +96,7 @@ export default function MyTeamsScreen({ navigation }) {
           style: 'destructive',
           onPress: () => {
             setTeams(teams.filter(t => t.id !== team.id));
-            Alert.alert('已退出', '您已退出该团队');
+            showAppAlert('已退出', '您已退出该团队');
           }
         }
       ]
@@ -102,7 +104,7 @@ export default function MyTeamsScreen({ navigation }) {
   };
 
   const handleDismissTeam = (team) => {
-    Alert.alert(
+    showAppAlert(
       '解散团队',
       `确定要解散"${team.name}"吗？此操作不可恢复。`,
       [
@@ -112,7 +114,7 @@ export default function MyTeamsScreen({ navigation }) {
           style: 'destructive',
           onPress: () => {
             setTeams(teams.filter(t => t.id !== team.id));
-            Alert.alert('已解散', '团队已解散');
+            showAppAlert('已解散', '团队已解散');
           }
         }
       ]
@@ -207,12 +209,12 @@ export default function MyTeamsScreen({ navigation }) {
                 style={styles.moreBtn}
                 onPress={(e) => {
                   e.stopPropagation();
-                  Alert.alert(
+                  showAppAlert(
                     '团队操作',
                     `选择操作`,
                     [
                       { text: '查看详情', onPress: () => handleTeamPress(team) },
-                      { text: '团队设置', onPress: () => Alert.alert('团队设置', '打开团队设置页面') },
+                      { text: '团队设置', onPress: () => showAppAlert('团队设置', '打开团队设置页面') },
                       team.role === '队长' 
                         ? { text: '解散团队', style: 'destructive', onPress: () => handleDismissTeam(team) }
                         : { text: '退出团队', style: 'destructive', onPress: () => handleLeaveTeam(team) },
@@ -380,33 +382,33 @@ const styles = StyleSheet.create({
   emptyHint: { fontSize: 13, color: '#9ca3af', marginTop: 8, textAlign: 'center', paddingHorizontal: 40 },
   
   // Modal 样式
-  modalContainer: { flex: 1, backgroundColor: '#fff' },
-  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  sheetTitle: { fontSize: 17, fontWeight: '600', color: '#1f2937' },
+  modalContainer: { flex: 1, backgroundColor: modalTokens.surface },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  sheetTitle: { fontSize: 17, fontWeight: '600', color: modalTokens.textPrimary },
   sheetCloseBtn: { position: 'absolute', right: 16, padding: 4 },
   sheetContent: { flex: 1 },
   sheetContentContainer: { paddingHorizontal: 16, paddingTop: 16 },
-  sheetFooter: { paddingHorizontal: 16, paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6', backgroundColor: '#fff' },
+  sheetFooter: { paddingHorizontal: 16, paddingVertical: 16, borderTopWidth: 1, borderTopColor: modalTokens.border, backgroundColor: modalTokens.surface },
   
   formGroup: { marginBottom: 20 },
   formLabel: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 8 },
   formHint: { fontSize: 12, color: '#9ca3af', marginBottom: 12 },
-  textInput: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 12, fontSize: 14, color: '#1f2937' },
-  charCount: { fontSize: 11, color: '#9ca3af', textAlign: 'right', marginTop: 4 },
-  questionOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 12, marginBottom: 8 },
+  textInput: { backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 12, padding: 12, fontSize: 14, color: modalTokens.textPrimary },
+  charCount: { fontSize: 11, color: modalTokens.textMuted, textAlign: 'right', marginTop: 4 },
+  questionOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 12, padding: 12, marginBottom: 8 },
   questionOptionSelected: { borderColor: '#ef4444', backgroundColor: '#fef2f2' },
   questionOptionContent: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   rewardTagSmall: { backgroundColor: '#ef4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   rewardTagSmallText: { fontSize: 10, color: '#fff', fontWeight: '600' },
-  questionOptionTitle: { flex: 1, fontSize: 13, color: '#374151', lineHeight: 18 },
-  radioBtn: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#d1d5db', alignItems: 'center', justifyContent: 'center' },
+  questionOptionTitle: { flex: 1, fontSize: 13, color: modalTokens.textPrimary, lineHeight: 18 },
+  radioBtn: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: modalTokens.border, alignItems: 'center', justifyContent: 'center' },
   radioBtnSelected: { borderColor: '#ef4444' },
   radioBtnInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#ef4444' },
-  checkBox: { width: 20, height: 20, borderRadius: 4, borderWidth: 2, borderColor: '#d1d5db', alignItems: 'center', justifyContent: 'center' },
+  checkBox: { width: 20, height: 20, borderRadius: 4, borderWidth: 2, borderColor: modalTokens.border, alignItems: 'center', justifyContent: 'center' },
   checkBoxSelected: { borderColor: '#ef4444', backgroundColor: '#ef4444' },
-  textArea: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 12, fontSize: 14, color: '#1f2937', minHeight: 100, textAlignVertical: 'top' },
-  createModalFooter: { paddingHorizontal: 16, paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
+  textArea: { backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 12, padding: 12, fontSize: 14, color: modalTokens.textPrimary, minHeight: 100, textAlignVertical: 'top' },
+  createModalFooter: { paddingHorizontal: 16, paddingVertical: 16, borderTopWidth: 1, borderTopColor: modalTokens.border },
   submitBtn: { backgroundColor: '#ef4444', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  submitBtnDisabled: { backgroundColor: '#fca5a5' },
+  submitBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   submitBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
 });

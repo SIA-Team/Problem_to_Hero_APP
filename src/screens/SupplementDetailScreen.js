@@ -3,7 +3,9 @@ import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Modal,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
+import { showToast } from '../utils/toast';
 
 const supplementAnswers = [
   { id: 1, author: '数学老师', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=matht1', verified: true, title: '高中数学教师 · 8年经验', content: '学Python其实不需要太高深的数学基础。基础的加减乘除、简单的逻辑思维就够了。如果要做数据分析,了解一些统计学知识会更好,但这些都可以边学边补。', likes: 89, bookmarks: 34, shares: 18, comments: 12, time: '1小时前' },
@@ -91,7 +93,7 @@ export default function SupplementDetailScreen({ navigation, route }) {
 
   const handleSubmitAnswer = () => {
     if (!answerText.trim()) return;
-    alert(t('screens.supplementDetail.alerts.answerSubmitted'));
+    showToast(t('screens.supplementDetail.alerts.answerSubmitted'), 'success');
     setAnswerText('');
     setShowAnswerModal(false);
   };
@@ -111,14 +113,14 @@ export default function SupplementDetailScreen({ navigation, route }) {
         <View style={styles.headerRight}>
           <TouchableOpacity 
             style={styles.shareBtn} 
-            onPress={() => alert(t('screens.supplementDetail.alerts.shareFunction'))}
+            onPress={() => showToast(t('screens.supplementDetail.alerts.shareFunction'), 'info')}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             activeOpacity={0.7}
           >
             <Ionicons name="arrow-redo-outline" size={22} color="#6b7280" />
             <Text style={styles.shareBtnText}>{supplementQuestion.shares}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.shareBtn} onPress={() => alert(t('screens.supplementDetail.alerts.reportFunction'))}>
+          <TouchableOpacity style={styles.shareBtn} onPress={() => showToast(t('screens.supplementDetail.alerts.reportFunction'), 'info')}>
             <Ionicons name="flag-outline" size={22} color="#ef4444" />
           </TouchableOpacity>
         </View>
@@ -451,7 +453,7 @@ export default function SupplementDetailScreen({ navigation, route }) {
                           </TouchableOpacity>
                           <TouchableOpacity 
                             style={styles.commentActionBtn}
-                            onPress={() => alert(t('screens.supplementDetail.alerts.forwardFunction'))}
+                            onPress={() => showToast(t('screens.supplementDetail.alerts.forwardFunction'), 'info')}
                           >
                             <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
                             <Text style={styles.commentActionText}>{comment.shares}</Text>
@@ -584,7 +586,7 @@ export default function SupplementDetailScreen({ navigation, route }) {
               style={[styles.commentPublishBtn, !commentText.trim() && styles.commentPublishBtnDisabled]}
               onPress={() => {
                 if (commentText.trim()) {
-                  alert(t('screens.supplementDetail.alerts.commentPublished'));
+                  showToast(t('screens.supplementDetail.alerts.commentPublished'), 'success');
                   setCommentText('');
                   setShowCommentModal(false);
                 }
@@ -723,24 +725,24 @@ const styles = StyleSheet.create({
   bottomIconText: { fontSize: 12, color: '#6b7280' },
   bottomCommentInput: { flex: 1, backgroundColor: '#f9fafb', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderColor: '#e5e7eb' },
   bottomCommentPlaceholder: { fontSize: 13, color: '#9ca3af' },
-  bottomAnswerBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  bottomAnswerBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: modalTokens.danger, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
   bottomAnswerText: { fontSize: 13, color: '#fff', fontWeight: '600' },
-  answerModal: { flex: 1, backgroundColor: '#fff' },
-  answerModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  answerModal: { flex: 1, backgroundColor: modalTokens.surface },
+  answerModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   answerCloseBtn: { padding: 4 },
-  answerModalTitle: { fontSize: 17, fontWeight: '600', color: '#222' },
-  answerPublishBtn: { backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4 },
-  answerPublishBtnDisabled: { backgroundColor: '#ffcdd2' },
+  answerModalTitle: { fontSize: 17, fontWeight: '600', color: modalTokens.textPrimary },
+  answerPublishBtn: { backgroundColor: modalTokens.danger, paddingHorizontal: modalTokens.actionPaddingX, paddingVertical: modalTokens.actionPaddingY, borderRadius: modalTokens.actionRadius },
+  answerPublishBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   answerPublishText: { fontSize: 14, color: '#fff', fontWeight: '600' },
-  answerContentArea: { flex: 1, backgroundColor: '#fff' },
-  answerTextInput: { padding: 16, fontSize: 16, color: '#333', lineHeight: 26, minHeight: 300 },
-  commentModal: { flex: 1, backgroundColor: '#fff' },
-  commentModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  answerContentArea: { flex: 1, backgroundColor: modalTokens.surface },
+  answerTextInput: { padding: 16, fontSize: 16, color: modalTokens.textPrimary, lineHeight: 26, minHeight: 300 },
+  commentModal: { flex: 1, backgroundColor: modalTokens.surface },
+  commentModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   commentCloseBtn: { padding: 4 },
-  commentModalTitle: { fontSize: 17, fontWeight: '600', color: '#222' },
-  commentPublishBtn: { backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4 },
-  commentPublishBtnDisabled: { backgroundColor: '#ffcdd2' },
+  commentModalTitle: { fontSize: 17, fontWeight: '600', color: modalTokens.textPrimary },
+  commentPublishBtn: { backgroundColor: modalTokens.danger, paddingHorizontal: modalTokens.actionPaddingX, paddingVertical: modalTokens.actionPaddingY, borderRadius: modalTokens.actionRadius },
+  commentPublishBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   commentPublishText: { fontSize: 14, color: '#fff', fontWeight: '600' },
-  commentContentArea: { flex: 1, backgroundColor: '#fff' },
-  commentTextInput: { padding: 16, fontSize: 16, color: '#333', lineHeight: 26, minHeight: 200 },
+  commentContentArea: { flex: 1, backgroundColor: modalTokens.surface },
+  commentTextInput: { padding: 16, fontSize: 16, color: modalTokens.textPrimary, lineHeight: 26, minHeight: 200 },
 });

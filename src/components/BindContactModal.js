@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Modal, TouchableOpacity, TextInput, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { modalTokens } from './modalTokens';
 
 /**
  * 绑定联系方式弹窗组件（居中弹出）
@@ -404,16 +405,23 @@ export default function BindContactModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: modalTokens.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   modalContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: modalTokens.surface,
+    borderRadius: 24,
     width: '100%',
     maxWidth: 400,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
+    shadowColor: modalTokens.shadow,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.16,
+    shadowRadius: 20,
+    elevation: 12,
   },
   header: {
     flexDirection: 'row',
@@ -422,7 +430,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: modalTokens.border,
   },
   backBtn: {
     padding: 4,
@@ -430,8 +438,8 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
+    fontWeight: '700',
+    color: modalTokens.textPrimary,
     flex: 1,
     textAlign: 'center',
   },
@@ -455,25 +463,25 @@ const styles = StyleSheet.create({
   inputLabelText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#374151',
+    color: modalTokens.textSecondary,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
+    backgroundColor: modalTokens.surfaceSoft,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: modalTokens.border,
     paddingHorizontal: 16,
   },
   inputWrapperError: {
-    borderColor: '#ef4444',
-    backgroundColor: '#fef2f2',
+    borderColor: modalTokens.danger,
+    backgroundColor: modalTokens.dangerSoft,
   },
   input: {
     flex: 1,
     fontSize: 16,
-    color: '#1f2937',
+    color: modalTokens.textPrimary,
     paddingVertical: 12,
   },
   clearBtn: {
@@ -487,15 +495,15 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 13,
-    color: '#ef4444',
+    color: modalTokens.danger,
     flex: 1,
   },
   currentInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#eff6ff',
+    backgroundColor: modalTokens.primarySoft,
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 16,
     gap: 8,
   },
@@ -505,7 +513,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tips: {
-    backgroundColor: '#fef3c7',
+    backgroundColor: modalTokens.warningSoft,
     padding: 14,
     borderRadius: 12,
     marginBottom: 20,
@@ -529,13 +537,13 @@ const styles = StyleSheet.create({
   },
   verifyInfoText: {
     fontSize: 14,
-    color: '#6b7280',
+    color: modalTokens.textSecondary,
     marginTop: 12,
   },
   verifyInfoContact: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: modalTokens.textPrimary,
     marginTop: 6,
   },
   resendSection: {
@@ -547,25 +555,25 @@ const styles = StyleSheet.create({
   },
   resendText: {
     fontSize: 13,
-    color: '#6b7280',
+    color: modalTokens.textSecondary,
   },
   resendBtn: {
     fontSize: 13,
-    color: '#ef4444',
+    color: modalTokens.danger,
     fontWeight: '500',
   },
   resendBtnDisabled: {
-    color: '#9ca3af',
+    color: modalTokens.textMuted,
   },
   submitBtn: {
-    backgroundColor: '#ef4444',
+    backgroundColor: modalTokens.danger,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   submitBtnDisabled: {
-    backgroundColor: '#fca5a5',
+    backgroundColor: '#fda4af',
   },
   submitBtnText: {
     fontSize: 16,

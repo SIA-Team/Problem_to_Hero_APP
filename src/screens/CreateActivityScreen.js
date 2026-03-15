@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, TextInput,
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
+import { showAppAlert } from '../utils/appAlert';
 
 export default function CreateActivityScreen({ navigation, route }) {
   const { t } = useTranslation();
@@ -35,27 +36,27 @@ export default function CreateActivityScreen({ navigation, route }) {
 
   const handleCreateActivity = () => {
     if (!newActivity.title.trim()) {
-      Alert.alert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.titleRequired'));
+      showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.titleRequired'));
       return;
     }
     if (!newActivity.desc.trim()) {
-      Alert.alert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.descriptionRequired'));
+      showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.descriptionRequired'));
       return;
     }
     if (!newActivity.startTime || !newActivity.endTime) {
-      Alert.alert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.timeRequired'));
+      showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.timeRequired'));
       return;
     }
     if (newActivity.type === 'offline' && !newActivity.address.trim()) {
-      Alert.alert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.locationRequired'));
+      showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.locationRequired'));
       return;
     }
     if (newActivity.organizerType === 'team' && !newActivity.teamName) {
-      Alert.alert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.teamRequired'));
+      showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.teamRequired'));
       return;
     }
 
-    Alert.alert(t('screens.createActivity.success.title'), t('screens.createActivity.success.message'), [
+    showAppAlert(t('screens.createActivity.success.title'), t('screens.createActivity.success.message'), [
       {
         text: t('screens.createActivity.success.confirm'),
         onPress: () => {
@@ -72,7 +73,7 @@ export default function CreateActivityScreen({ navigation, route }) {
         images: [...newActivity.images, `https://images.unsplash.com/photo-${Math.floor(Math.random() * 1000000)}?w=800&h=600&fit=crop`]
       });
     } else {
-      Alert.alert(t('screens.createActivity.validation.hint'), t('screens.createActivity.images.maxLimit'));
+      showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.images.maxLimit'));
     }
   };
 
