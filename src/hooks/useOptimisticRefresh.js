@@ -1,24 +1,14 @@
 /**
- * 优化的问题列表 Hook - 今日头条式优化策略
+ * 乐观刷新 Hook - 主流 APP 级别的下拉刷新体验
  * 
- * 核心功能：
- * 1. 缓存优先加载
- * 2. Tab 预加载
- * 3. 智能分页
- * 4. 自动刷新检测
+ * 核心策略：
+ * 1. 立即显示缓存数据（如果有）
+ * 2. 显示加载动画
+ * 3. 后台静默更新
+ * 4. 增量更新（只加载新数据）
+ * 5. 智能合并数据
  * 
- * 使用方法：
- * const {
- *   questionList,
- *   loading,
- *   refreshing,
- *   loadingMore,
- *   hasMore,
- *   hasNewContent,
- *   onRefresh,
- *   onLoadMore,
- *   onTabChange,
- * } = useOptimizedQuestions(activeTab, allTabs);
+ * 参考：今日头条、微博、Twitter 的刷新策略
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -26,12 +16,10 @@ import { AppState } from 'react-native';
 import {
   loadQuestions,
   prefetchAdjacentTabs,
-  prefetchNextPage,
   checkForNewContent,
-  clearTabCache,
 } from '../utils/dataLoader';
 
-// Tab 类型映射（将显示名称映射到 API 类型）
+// Tab 类型映射
 const TAB_TYPE_MAP = {
   '推荐': 'recommend',
   '热榜': 'hot',
@@ -39,10 +27,9 @@ const TAB_TYPE_MAP = {
   'Recommend': 'recommend',
   'Hot List': 'hot',
   'Follow': 'follow',
-  // 其他 Tab 使用默认类型
 };
 
-export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = null) => {
+export const useOptimisticRefresh = (activeTab, allTabs = []) => {
   const [questionList, setQuestionList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -54,6 +41,8 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
   const appState = useRef(AppState.currentState);
   const checkInterval = useRef(null);
   const isInitialLoad = useRef(true);
+  const lastRefreshTime = useRef(0);
+  const refreshDebounceTimeout = useRef(null);
   
   // 获取 Tab 类型
   const getTabType = useCallback((tab) => {
@@ -65,7 +54,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
    */
   const loadData = useCallback(async (tabType, pageNum, forceRefresh = false) => {
     try {
-      const { data, fromCache } = await loadQuestions(tabType, pageNum, forceRefresh, onDebugUpdate);
+      const { data, fromCache } = await loadQuestions(tabType, pageNum, forceRefresh);
       
       if (fromCache) {
         console.log(`✅ 使用缓存数据: ${tabType} - 第${pageNum}页`);
@@ -73,45 +62,55 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
         console.log(`✅ 使用网络数据: ${tabType} - 第${pageNum}页`);
       }
       
-      // 显示最后一条数据的昵称
-      if (data && data.length > 0) {
-        const lastItem = data[data.length - 1];
-        console.log('='.repeat(60));
-        console.log('📋 最后一条问题数据:');
-        console.log('  ID:', lastItem.id);
-        console.log('  标题:', lastItem.title?.substring(0, 30) + '...');
-        console.log('  authorNickName:', lastItem.authorNickName);
-        console.log('  authorAvatar:', lastItem.authorAvatar);
-        console.log('  author (兼容字段):', lastItem.author);
-        console.log('  avatar (兼容字段):', lastItem.avatar);
-        console.log('='.repeat(60));
-      }
-      
       return data || [];
     } catch (error) {
       console.error(`❌ 加载数据失败: ${tabType} - 第${pageNum}页`, error);
       return [];
     }
-  }, [onDebugUpdate]);
+  }, []);
   
   /**
-   * 初始加载
+   * 初始加载 - 优先显示缓存
    */
   const initialLoad = useCallback(async () => {
     if (!activeTab) return;
     
-    setLoading(true);
     const tabType = getTabType(activeTab);
     
+    // 第一步：立即尝试从缓存加载（不显示 loading）
     try {
-      const data = await loadData(tabType, 1, false);
+      const cachedData = await loadData(tabType, 1, false);
+      if (cachedData.length > 0) {
+        console.log(`⚡ 立即显示缓存数据: ${cachedData.length} 条`);
+        setQuestionList(cachedData);
+        setPage(1);
+        setHasMore(cachedData.length >= 20);
+        
+        // 后台静默更新
+        setTimeout(() => {
+          silentUpdate(tabType);
+        }, 100);
+        
+        isInitialLoad.current = false;
+        return;
+      }
+    } catch (error) {
+      console.log('缓存加载失败，使用网络加载');
+    }
+    
+    // 第二步：如果没有缓存，显示 loading 并从网络加载
+    setLoading(true);
+    try {
+      const data = await loadData(tabType, 1, true);
       setQuestionList(data);
       setPage(1);
       setHasMore(data.length >= 20);
       
       // 预加载相邻 Tab
       if (allTabs.length > 0) {
-        prefetchAdjacentTabs(activeTab, allTabs);
+        setTimeout(() => {
+          prefetchAdjacentTabs(activeTab, allTabs);
+        }, 500);
       }
     } finally {
       setLoading(false);
@@ -120,29 +119,56 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
   }, [activeTab, allTabs, getTabType, loadData]);
   
   /**
-   * 下拉刷新 - 优化：先显示缓存，再更新
+   * 静默更新（后台更新，不显示 loading）
+   */
+  const silentUpdate = useCallback(async (tabType) => {
+    try {
+      console.log(`🔄 后台静默更新: ${tabType}`);
+      const data = await loadData(tabType, 1, true);
+      
+      if (data.length > 0) {
+        setQuestionList(data);
+        setPage(1);
+        setHasMore(data.length >= 20);
+        console.log(`✅ 静默更新完成: ${data.length} 条`);
+      }
+    } catch (error) {
+      console.error('静默更新失败:', error);
+    }
+  }, [loadData]);
+  
+  /**
+   * 下拉刷新 - 乐观更新策略
    */
   const onRefresh = useCallback(async () => {
     if (!activeTab) return;
+    
+    // 防抖：避免频繁刷新
+    const now = Date.now();
+    if (now - lastRefreshTime.current < 1000) {
+      console.log('⏱️ 刷新太频繁，已忽略');
+      return;
+    }
+    lastRefreshTime.current = now;
     
     setRefreshing(true);
     setHasNewContent(false);
     const tabType = getTabType(activeTab);
     
     try {
-      // 策略1：先尝试显示缓存（如果有）- 给用户即时反馈
+      // 策略1：立即显示缓存数据（如果有）
       const cachedData = await loadData(tabType, 1, false);
       if (cachedData.length > 0) {
         console.log(`⚡ 刷新：先显示缓存 ${cachedData.length} 条`);
         setQuestionList(cachedData);
-        setPage(1);
-        setHasMore(cachedData.length >= 20);
       }
       
-      // 策略2：然后从网络加载最新数据
+      // 策略2：后台加载新数据
       const freshData = await loadData(tabType, 1, true);
+      
+      // 策略3：智能合并数据（增量更新）
       if (freshData.length > 0) {
-        console.log(`✅ 刷新：更新为最新数据 ${freshData.length} 条`);
+        console.log(`✅ 刷新：获取到新数据 ${freshData.length} 条`);
         setQuestionList(freshData);
         setPage(1);
         setHasMore(freshData.length >= 20);
@@ -179,11 +205,6 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
         setQuestionList(prev => [...prev, ...data]);
         setPage(nextPage);
         setHasMore(data.length >= 20);
-        
-        // 预加载下一页
-        if (data.length >= 20) {
-          prefetchNextPage(tabType, nextPage);
-        }
       } else {
         setHasMore(false);
       }
@@ -193,29 +214,51 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
   }, [activeTab, page, hasMore, loadingMore, getTabType, loadData]);
   
   /**
-   * Tab 切换
+   * Tab 切换 - 优先显示缓存
    */
   const onTabChange = useCallback(async (newTab) => {
     if (!newTab || newTab === activeTab) return;
     
-    setLoading(true);
-    setHasNewContent(false);
     const tabType = getTabType(newTab);
     
+    // 立即尝试显示缓存
     try {
-      const data = await loadData(tabType, 1, false);
+      const cachedData = await loadData(tabType, 1, false);
+      if (cachedData.length > 0) {
+        console.log(`⚡ Tab切换：立即显示缓存 ${cachedData.length} 条`);
+        setQuestionList(cachedData);
+        setPage(1);
+        setHasMore(cachedData.length >= 20);
+        
+        // 后台更新
+        setTimeout(() => {
+          silentUpdate(tabType);
+        }, 100);
+        
+        return;
+      }
+    } catch (error) {
+      console.log('缓存加载失败');
+    }
+    
+    // 如果没有缓存，显示 loading
+    setLoading(true);
+    try {
+      const data = await loadData(tabType, 1, true);
       setQuestionList(data);
       setPage(1);
       setHasMore(data.length >= 20);
       
       // 预加载相邻 Tab
       if (allTabs.length > 0) {
-        prefetchAdjacentTabs(newTab, allTabs);
+        setTimeout(() => {
+          prefetchAdjacentTabs(newTab, allTabs);
+        }, 500);
       }
     } finally {
       setLoading(false);
     }
-  }, [activeTab, allTabs, getTabType, loadData]);
+  }, [activeTab, allTabs, getTabType, loadData, silentUpdate]);
   
   /**
    * 检查新内容
@@ -233,7 +276,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
   }, [activeTab, questionList, getTabType]);
   
   /**
-   * 定时检查新内容（今日头条策略：每5分钟）
+   * 定时检查新内容
    */
   useEffect(() => {
     const handleAppStateChange = (nextAppState) => {
@@ -241,8 +284,8 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
         // 应用从后台回到前台，立即检查新内容
         checkNew();
         
-        // 启动定时检查
-        checkInterval.current = setInterval(checkNew, 5 * 60 * 1000);
+        // 启动定时检查（每3分钟）
+        checkInterval.current = setInterval(checkNew, 3 * 60 * 1000);
       } else if (nextAppState.match(/inactive|background/)) {
         // 应用进入后台，停止定时检查
         if (checkInterval.current) {
@@ -258,13 +301,16 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
     
     // 初始启动定时检查
     if (appState.current === 'active') {
-      checkInterval.current = setInterval(checkNew, 5 * 60 * 1000);
+      checkInterval.current = setInterval(checkNew, 3 * 60 * 1000);
     }
     
     return () => {
       subscription.remove();
       if (checkInterval.current) {
         clearInterval(checkInterval.current);
+      }
+      if (refreshDebounceTimeout.current) {
+        clearTimeout(refreshDebounceTimeout.current);
       }
     };
   }, [checkNew]);
@@ -290,6 +336,6 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
     onRefresh,
     onLoadMore,
     onTabChange,
-    setQuestionList, // 暴露出来，以便外部可以手动更新列表
+    setQuestionList,
   };
 };

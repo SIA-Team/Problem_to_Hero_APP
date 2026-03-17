@@ -61,7 +61,17 @@
     "state": "省份",
     "district": "区",
     "fullText": "全文",
-    "hasNewContent": "有新内容，点击刷新"
+    "hasNewContent": "有新内容，点击刷新",
+    "anonymous": "匿名",
+    "likeSuccess": "点赞成功",
+    "unlikeSuccess": "已取消点赞",
+    "likeFailed": "操作失败，请重试",
+    "collectSuccess": "收藏成功",
+    "uncollectSuccess": "已取消收藏",
+    "collectFailed": "操作失败，请重试",
+    "dislikeSuccess": "已踩",
+    "undislikeSuccess": "已取消踩",
+    "dislikeFailed": "操作失败，请重试"
   },
   "emergency": {
     "title": "紧急求助",

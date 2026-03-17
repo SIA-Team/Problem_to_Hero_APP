@@ -7,6 +7,7 @@ import Avatar from '../components/Avatar';
 import IdentitySelector from '../components/IdentitySelector';
 import { modalTokens } from '../components/modalTokens';
 import SupplementAnswerSkeleton from '../components/SupplementAnswerSkeleton';
+import SupplementAnswerModal from '../components/SupplementAnswerModal';
 import EmptyState from '../components/EmptyState';
 import { toast } from '../utils/toast';
 import { useTranslation } from '../i18n/withTranslation';
@@ -83,34 +84,8 @@ export default function AnswerDetailScreen({ navigation, route }) {
 
   // 补充回答相关状态
   const [showSupplementAnswerModal, setShowSupplementAnswerModal] = useState(false);
-  const [supplementAnswerText, setSupplementAnswerText] = useState('');
-  const [supplementIdentity, setSupplementIdentity] = useState('personal');
-  const [supplementSelectedTeams, setSupplementSelectedTeams] = useState([]);
 
-  // 提交补充回答
-  const handleSubmitSupplementAnswer = async () => {
-    if (!supplementAnswerText.trim()) {
-      toast.error('请输入补充回答内容');
-      return;
-    }
-
-    try {
-      const response = await answerApi.publishSupplementAnswer(answer.id, {
-        content: supplementAnswerText.trim()
-      });
-
-      if (response?.data?.code === 200) {
-        toast.success('补充回答发布成功');
-        setSupplementAnswerText('');
-        setShowSupplementAnswerModal(false);
-        fetchSupplementAnswers(true);
-      } else {
-        throw new Error(response?.data?.msg || '发布失败');
-      }
-    } catch (error) {
-      toast.error(error.message || '网络错误，请重试');
-    }
-  };
+  // 提交补充回答 - 已移至 SupplementAnswerModal 组件
 
   // 可邀请的专家列表
   const expertsList = [
@@ -212,6 +187,327 @@ export default function AnswerDetailScreen({ navigation, route }) {
       toast.success(t('screens.answerDetail.alerts.commentPublished'));
     }
   };
+
+  // 处理回答收藏/取消收藏 - 带防抖和请求去重
+  const handleAnswerBookmark = async () => {
+    console.log('🔍 收藏操作:');
+    console.log('  answerId:', answer.id);
+    
+    if (!answer.id) {
+      console.error('❌ 回答ID不存在');
+      toast.error('操作失败：回答ID不存在');
+      return;
+    }
+
+    // 防止重复请求
+    if (isCollectLoading) {
+      console.log('🚫 收藏请求进行中，忽略重复点击');
+      return;
+    }
+
+    // 清除之前的防抖定时器
+    if (collectTimeoutRef.current) {
+      clearTimeout(collectTimeoutRef.current);
+    }
+
+    // 立即更新UI状态，提供即时反馈
+    const currentState = answerBookmarked;
+    const newState = !currentState;
+    
+    setAnswerBookmarked(newState);
+
+    // 设置防抖定时器
+    collectTimeoutRef.current = setTimeout(async () => {
+      try {
+        // 设置加载状态，防止重复请求
+        setIsCollectLoading(true);
+
+        console.log(`📤 ${newState ? '收藏' : '取消收藏'}回答: id=${answer.id}`);
+        
+        // 根据当前状态调用不同的接口
+        const response = newState 
+          ? await answerApi.collectAnswer(answer.id)
+          : await answerApi.uncollectAnswer(answer.id);
+        
+        console.log('📥 收藏响应:', response);
+        
+        if (response && response.code === 200) {
+          // 服务器返回成功，保持UI状态
+          toast.success(newState ? '已收藏' : '已取消收藏');
+          
+          // 同步数据到问题详情页
+          syncDataToQuestionDetail();
+        } else {
+          // 服务器返回失败，回滚UI状态
+          console.error('❌ 收藏操作失败:', response);
+          setAnswerBookmarked(currentState); // 回滚到原状态
+          toast.error(response?.msg || '操作失败');
+        }
+      } catch (error) {
+        console.error('❌ 收藏请求异常:', error);
+        
+        // 网络错误，回滚UI状态
+        setAnswerBookmarked(currentState); // 回滚到原状态
+        toast.error('网络错误，请稍后重试');
+      } finally {
+        // 清除加载状态
+        setIsCollectLoading(false);
+        collectTimeoutRef.current = null;
+      }
+    }, 300); // 300ms防抖延迟
+  };
+
+  // 同步数据到问题详情页（不跳转，只更新参数）
+  const syncDataToQuestionDetail = () => {
+    if (!answer || !navigation) return;
+    
+    console.log('🔄 同步回答数据到问题详情页:', answer.id);
+    
+    const routes = navigation.getState()?.routes;
+    const questionDetailRoute = routes?.find(r => r.name === 'QuestionDetail');
+    
+    if (questionDetailRoute) {
+      const updatedAnswer = {
+        id: answer.id,
+        // 用户状态
+        isLiked: answerLiked,
+        liked: answerLiked,
+        isBookmarked: answerBookmarked,
+        bookmarked: answerBookmarked,
+        collected: answerBookmarked,
+        isDisliked: answerDisliked,
+        disliked: answerDisliked,
+        // 统计数据 - 支持多种字段名
+        likeCount: (answer.likeCount || answer.like_count || answer.likes || 0) + (answerLiked ? 1 : 0),
+        like_count: (answer.likeCount || answer.like_count || answer.likes || 0) + (answerLiked ? 1 : 0),
+        likes: (answer.likeCount || answer.like_count || answer.likes || 0) + (answerLiked ? 1 : 0),
+        bookmarkCount: (answer.bookmarkCount || answer.bookmark_count || answer.bookmarks || 0) + (answerBookmarked ? 1 : 0),
+        bookmark_count: (answer.bookmarkCount || answer.bookmark_count || answer.bookmarks || 0) + (answerBookmarked ? 1 : 0),
+        bookmarks: (answer.bookmarkCount || answer.bookmark_count || answer.bookmarks || 0) + (answerBookmarked ? 1 : 0),
+        dislikeCount: (answer.dislikeCount || answer.dislike_count || answer.dislikes || 0) + (answerDisliked ? 1 : 0),
+        dislike_count: (answer.dislikeCount || answer.dislike_count || answer.dislikes || 0) + (answerDisliked ? 1 : 0),
+        dislikes: (answer.dislikeCount || answer.dislike_count || answer.dislikes || 0) + (answerDisliked ? 1 : 0),
+      };
+      
+      console.log('📤 更新参数:', updatedAnswer);
+      
+      // 使用 setParams 更新参数，不触发导航跳转
+      navigation.setParams({
+        updatedAnswer: updatedAnswer
+      });
+    } else {
+      console.log('⚠️  未找到问题详情页路由');
+    }
+  };
+
+  // 处理点赞/取消点赞
+  const handleAnswerLike = async () => {
+    if (!answer.id) {
+      toast.error('操作失败：回答ID不存在');
+      return;
+    }
+
+    const currentState = answerLiked;
+    const newState = !currentState;
+    
+    // 立即更新UI
+    setAnswerLiked(newState);
+    
+    // 如果之前是点踩状态，取消点踩
+    if (answerDisliked) {
+      setAnswerDisliked(false);
+    }
+
+    try {
+      const response = newState 
+        ? await answerApi.likeAnswer(answer.id)
+        : await answerApi.unlikeAnswer(answer.id);
+      
+      if (response && response.code === 200) {
+        toast.success(newState ? '已点赞' : '已取消点赞');
+        syncDataToQuestionDetail();
+      } else {
+        setAnswerLiked(currentState);
+        toast.error(response?.msg || '操作失败');
+      }
+    } catch (error) {
+      console.error('❌ 点赞操作失败:', error);
+      setAnswerLiked(currentState);
+      toast.error('网络错误，请稍后重试');
+    }
+  };
+
+  // 处理点踩/取消点踩
+  const handleAnswerDislike = async () => {
+    if (!answer.id) {
+      toast.error('操作失败：回答ID不存在');
+      return;
+    }
+
+    const currentState = answerDisliked;
+    const newState = !currentState;
+    
+    // 立即更新UI
+    setAnswerDisliked(newState);
+    
+    // 如果之前是点赞状态，取消点赞
+    if (answerLiked) {
+      setAnswerLiked(false);
+    }
+
+    try {
+      const response = newState 
+        ? await answerApi.dislikeAnswer(answer.id)
+        : await answerApi.undislikeAnswer(answer.id);
+      
+      if (response && response.code === 200) {
+        toast.success(newState ? '已点踩' : '已取消点踩');
+        syncDataToQuestionDetail();
+      } else {
+        setAnswerDisliked(currentState);
+        toast.error(response?.msg || '操作失败');
+      }
+    } catch (error) {
+      console.error('❌ 点踩操作失败:', error);
+      setAnswerDisliked(currentState);
+      toast.error('网络错误，请稍后重试');
+    }
+  };
+
+  // 获取补充回答列表
+  const fetchSupplementAnswers = async (reset = false) => {
+    if (!answer.id) {
+      console.error('❌ 回答ID不存在');
+      return;
+    }
+
+    // 如果正在加载，不重复请求
+    if (supplementLoading) {
+      console.log('🚫 补充回答加载中，忽略重复请求');
+      return;
+    }
+
+    // 如果是加载更多，检查是否还有更多数据
+    if (!reset && !supplementPagination.hasMore) {
+      console.log('📋 没有更多补充回答了');
+      return;
+    }
+
+    try {
+      setSupplementLoading(true);
+      setSupplementError(null);
+
+      const pageNum = reset ? 1 : supplementPagination.pageNum;
+      
+      console.log(`📤 获取补充回答列表: answerId=${answer.id}, pageNum=${pageNum}, sortBy=${sortFilter}`);
+      
+      const response = await answerApi.getSupplementAnswers(answer.id, {
+        sortBy: sortFilter,
+        pageNum,
+        pageSize: supplementPagination.pageSize
+      });
+
+      console.log('📥 补充回答响应:', response);
+
+      if (response && response.code === 200) {
+        const data = response.data || {};
+        const list = data.list || [];
+        const total = data.total || 0;
+        
+        // 更新补充回答列表
+        setSupplementAnswers(reset ? list : [...supplementAnswers, ...list]);
+        
+        // 更新分页信息
+        setSupplementPagination({
+          pageNum: pageNum + 1,
+          pageSize: supplementPagination.pageSize,
+          hasMore: list.length >= supplementPagination.pageSize,
+          total
+        });
+      } else {
+        throw new Error(response?.msg || '获取补充回答失败');
+      }
+    } catch (error) {
+      console.error('❌ 获取补充回答异常:', error);
+      setSupplementError(error.message || '网络错误，请稍后重试');
+    } finally {
+      setSupplementLoading(false);
+    }
+  };
+
+  // 处理排序切换
+  const handleSortChange = (newSortBy) => {
+    if (sortFilter !== newSortBy) {
+      console.log(`📋 切换排序方式: ${sortFilter} -> ${newSortBy}`);
+      setSortFilter(newSortBy);
+      
+      // 重新加载补充回答列表
+      if (activeTab === 0) {
+        fetchSupplementAnswers(true);
+      }
+    }
+  };
+
+  // 获取回答详情数据(包含最新的点赞、收藏、点踩状态)
+  const fetchAnswerDetail = async () => {
+    if (!answer?.id) {
+      console.log('⚠️ 回答ID不存在,跳过获取详情');
+      return;
+    }
+
+    try {
+      console.log(`📤 获取回答详情: answerId=${answer.id}`);
+      const response = await answerApi.getAnswerDetail(answer.id);
+      
+      console.log('📥 回答详情响应:', JSON.stringify(response, null, 2));
+      
+      if (response && response.code === 200 && response.data) {
+        const detailData = response.data;
+        
+        // 更新回答数据
+        setAnswerData(detailData);
+        
+        // 初始化交互状态
+        if (detailData.isLiked !== undefined) {
+          setAnswerLiked(detailData.isLiked);
+        }
+        if (detailData.isCollected !== undefined) {
+          setAnswerBookmarked(detailData.isCollected);
+        } else if (detailData.isBookmarked !== undefined) {
+          setAnswerBookmarked(detailData.isBookmarked);
+        }
+        if (detailData.isDisliked !== undefined) {
+          setAnswerDisliked(detailData.isDisliked);
+        }
+        
+        console.log('✅ 回答详情加载成功,交互状态已初始化:', {
+          isLiked: detailData.isLiked,
+          isCollected: detailData.isCollected || detailData.isBookmarked,
+          isDisliked: detailData.isDisliked,
+          likeCount: detailData.likeCount,
+          collectCount: detailData.collectCount,
+          dislikeCount: detailData.dislikeCount,
+        });
+      }
+    } catch (error) {
+      console.error('❌ 获取回答详情失败:', error);
+      // 失败时使用传递过来的数据
+      console.log('使用导航参数传递的回答数据');
+    }
+  };
+
+  // 初始化加载补充回答
+  useEffect(() => {
+    if (isFocused && answer.id) {
+      // 获取回答详情(包含最新的交互状态)
+      fetchAnswerDetail();
+      
+      // 如果当前在补充回答tab,加载补充回答列表
+      if (activeTab === 0) {
+        fetchSupplementAnswers(true);
+      }
+    }
+  }, [isFocused, answer.id, activeTab]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -541,7 +837,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
         <View style={styles.bottomBarLeft}>
           <TouchableOpacity 
             style={styles.bottomIconBtn}
-            onPress={() => setAnswerLiked(!answerLiked)}
+            onPress={handleAnswerLike}
           >
             <Ionicons 
               name={answerLiked ? "thumbs-up" : "thumbs-up-outline"} 
@@ -569,9 +865,18 @@ export default function AnswerDetailScreen({ navigation, route }) {
               {(answer.bookmarkCount || answer.bookmark_count || answer.bookmarks || 0) + (answerBookmarked ? 1 : 0)}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.bottomIconBtn}>
-            <Ionicons name="thumbs-down-outline" size={20} color="#6b7280" />
-            <Text style={styles.bottomIconText}>{answer.dislikeCount || answer.dislike_count || answer.dislikes || 0}</Text>
+          <TouchableOpacity 
+            style={styles.bottomIconBtn}
+            onPress={handleAnswerDislike}
+          >
+            <Ionicons 
+              name={answerDisliked ? "thumbs-down" : "thumbs-down-outline"} 
+              size={20} 
+              color={answerDisliked ? "#6b7280" : "#6b7280"} 
+            />
+            <Text style={styles.bottomIconText}>
+              {(answer.dislikeCount || answer.dislike_count || answer.dislikes || 0) + (answerDisliked ? 1 : 0)}
+            </Text>
           </TouchableOpacity>
         </View>
         <View style={styles.bottomBarRight}>
@@ -777,81 +1082,16 @@ export default function AnswerDetailScreen({ navigation, route }) {
       </Modal>
 
       {/* 补充回答弹窗 */}
-      <Modal visible={showSupplementAnswerModal} animationType="slide">
-        <SafeAreaView style={styles.answerModal}>
-          <View style={styles.answerModalHeader}>
-            <TouchableOpacity 
-              onPress={() => { 
-                setShowSupplementAnswerModal(false); 
-                setSupplementAnswerText('');
-              }} 
-              style={styles.answerCloseBtn}
-            >
-              <Ionicons name="close" size={26} color="#333" />
-            </TouchableOpacity>
-            <View style={styles.answerHeaderCenter}>
-              <Text style={styles.answerModalTitle}>补充回答</Text>
-            </View>
-            <TouchableOpacity 
-              style={[styles.answerPublishBtn, !supplementAnswerText.trim() && styles.answerPublishBtnDisabled]}
-              onPress={handleSubmitSupplementAnswer}
-              disabled={!supplementAnswerText.trim()}
-            >
-              <Text style={[styles.answerPublishText, !supplementAnswerText.trim() && styles.answerPublishTextDisabled]}>发布</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.supplementAnswerContext}>
-            <View style={styles.supplementAnswerHeader}>
-              <Ionicons name="document-text" size={18} color="#3b82f6" />
-              <Text style={styles.supplementAnswerLabel}>原回答</Text>
-            </View>
-            <View style={styles.supplementAnswerAuthor}>
-              <Avatar uri={answer.userAvatar || answer.avatar} name={answer.userName || answer.userNickname || answer.author || '匿名用户'} size={24} />
-              <Text style={styles.supplementAnswerAuthorName}>{answer.userName || answer.userNickname || answer.author || '匿名用户'}</Text>
-            </View>
-            <Text style={styles.supplementAnswerContent} numberOfLines={3}>{answer.content}</Text>
-          </View>
-
-          <ScrollView style={styles.answerContentArea} keyboardShouldPersistTaps="handled">
-            <TextInput
-              style={styles.answerTextInput}
-              placeholder="补充你的回答，提供更多信息..."
-              placeholderTextColor="#bbb"
-              value={supplementAnswerText}
-              onChangeText={setSupplementAnswerText}
-              multiline
-              autoFocus
-              textAlignVertical="top"
-            />
-            
-            {/* 身份选择器 */}
-            <View style={styles.answerIdentitySection}>
-              <IdentitySelector
-                selectedIdentity={supplementIdentity}
-                selectedTeams={supplementSelectedTeams}
-                onIdentityChange={setSupplementIdentity}
-                onTeamsChange={setSupplementSelectedTeams}
-              />
-            </View>
-          </ScrollView>
-
-          <View style={styles.answerToolbar}>
-            <View style={styles.answerToolsLeft}>
-              <TouchableOpacity style={styles.answerToolItem}>
-                <Ionicons name="image-outline" size={24} color="#666" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.answerToolItem}>
-                <Ionicons name="at-outline" size={24} color="#666" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.answerToolItem}>
-                <Ionicons name="pricetag-outline" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.answerWordCount}>{supplementAnswerText.length}/2000</Text>
-          </View>
-        </SafeAreaView>
-      </Modal>
+      <SupplementAnswerModal
+        visible={showSupplementAnswerModal}
+        onClose={() => setShowSupplementAnswerModal(false)}
+        answer={answer}
+        questionId={route?.params?.questionId || answer?.questionId}
+        onSuccess={() => {
+          // 补充回答发布成功后刷新列表
+          fetchSupplementAnswers(true);
+        }}
+      />
     </SafeAreaView>
   );
 }

@@ -3,7 +3,7 @@ import ENV, { getApiServerUrl } from './env';
 // API 配置
 export const API_CONFIG = {
   BASE_URL: ENV.apiUrl,  // 默认基础URL
-  TIMEOUT: 60000, // 60秒超时（生产环境网络可能较慢）
+  TIMEOUT: 10000, // 10秒超时（优化：从60秒降低到10秒，提升响应速度）
   HEADERS: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -55,10 +55,20 @@ export const API_ENDPOINTS = {
     LIST: '/app/content/question/list',  // 问题列表（新接口）
     DETAIL: '/app/content/question/:id',  // 问题详情
     DRAFT_DETAIL: '/app/content/question/:id',  // 获取草稿详情
+    LIKE: '/app/content/question/:id/like',  // 点赞问题
+    UNLIKE: '/app/content/question/:id/unlike',  // 取消点赞问题
+    DISLIKE: '/app/content/question/:id/dislike',  // 点踩问题
+    UNDISLIKE: '/app/content/question/:id/undislike',  // 取消点踩问题
+    COLLECT: '/app/content/question/:id/collect',  // 收藏问题
+    UNCOLLECT: '/app/content/question/:id/uncollect',  // 取消收藏问题
     SUPPLEMENTS: '/app/content/supplement/question/:questionId/list',  // 问题补充列表
     PUBLISH_SUPPLEMENT: '/app/content/supplement/question/:questionId',  // 发布补充问题
     DISLIKE_SUPPLEMENT: '/app/content/supplement/:id/dislike',  // 踩一下补充问题
+    UNDISLIKE_SUPPLEMENT: '/app/content/supplement/:id/undislike',  // 取消踩补充问题
     LIKE_SUPPLEMENT: '/app/content/supplement/:id/like',  // 点赞补充问题
+    UNLIKE_SUPPLEMENT: '/app/content/supplement/:id/unlike',  // 取消点赞补充问题
+    COLLECT_SUPPLEMENT: '/app/content/supplement/:id/collect',  // 收藏补充问题
+    UNCOLLECT_SUPPLEMENT: '/app/content/supplement/:id/uncollect',  // 取消收藏补充问题
     CREATE: '/app/content/question',
     PUBLISH: '/app/content/question/publish',  // 发布问题
     UPDATE: '/questions/:id',
@@ -78,6 +88,7 @@ export const API_ENDPOINTS = {
   // 回答相关
   ANSWER: {
     LIST: '/app/content/answer/question/:questionId/list',
+    DETAIL: '/app/content/answer/:id',  // 回答详情
     SUPPLEMENT_LIST: '/app/content/answer-supplement/answer/:answerId/list',  // 补充回答列表
     SUPPLEMENT_PUBLISH: '/app/content/answer-supplement/answer/:answerId',  // 发布补充回答
     PUBLISH: '/app/content/answer/question/:questionId',  // 发布回答

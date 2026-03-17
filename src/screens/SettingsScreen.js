@@ -11,6 +11,7 @@ import BindContactModal from '../components/BindContactModal';
 import GenderPickerModal from '../components/GenderPickerModal';
 import DatePickerModal from '../components/DatePickerModal';
 import Toast from '../components/Toast';
+import ServerSwitcher from '../components/ServerSwitcher';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import UserCacheService from '../services/UserCacheService';
@@ -66,6 +67,9 @@ export default function SettingsScreen({ navigation }) {
 
   // 用户名编辑弹窗状态
   const [showUsernameModal, setShowUsernameModal] = useState(false);
+
+  // 服务器切换器状态
+  const [showServerSwitcher, setShowServerSwitcher] = useState(false);
 
   // 用户资料数据
   const [userProfile, setUserProfile] = useState({
@@ -921,6 +925,20 @@ export default function SettingsScreen({ navigation }) {
         <View style={styles.sectionGroup}>
           <Text style={styles.groupTitle}>{t('screens.settings.general.groupTitle')}</Text>
           <View style={styles.section}>
+            {/* 开发阶段：服务器切换 */}
+            {__DEV__ && (
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={() => setShowServerSwitcher(true)}
+              >
+                <View style={styles.menuLeft}>
+                  <Ionicons name="server-outline" size={22} color="#ef4444" />
+                  <Text style={[styles.menuLabel, { color: '#ef4444' }]}>切换服务器 (开发)</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity 
               style={styles.menuItem}
               onPress={() => showAppAlert(t('screens.settings.alerts.clearCache.title'), t('screens.settings.alerts.clearCache.message'), [

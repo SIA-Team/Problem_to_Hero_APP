@@ -155,8 +155,88 @@ const questionApi = {
     return contentApiClient.post(url);
   },
 
+  undislikeSupplement: (id) => {
+    const url = replaceUrlParams(API_ENDPOINTS.QUESTION.UNDISLIKE_SUPPLEMENT, { id });
+    return contentApiClient.post(url);
+  },
+
   likeSupplement: (id) => {
     const url = replaceUrlParams(API_ENDPOINTS.QUESTION.LIKE_SUPPLEMENT, { id });
+    return contentApiClient.post(url);
+  },
+
+  unlikeSupplement: (id) => {
+    const url = replaceUrlParams(API_ENDPOINTS.QUESTION.UNLIKE_SUPPLEMENT, { id });
+    return contentApiClient.post(url);
+  },
+
+  collectSupplement: (id) => {
+    const url = replaceUrlParams(API_ENDPOINTS.QUESTION.COLLECT_SUPPLEMENT, { id });
+    return contentApiClient.post(url);
+  },
+
+  uncollectSupplement: (id) => {
+    const url = replaceUrlParams(API_ENDPOINTS.QUESTION.UNCOLLECT_SUPPLEMENT, { id });
+    return contentApiClient.post(url);
+  },
+
+  /**
+   * 点赞问题
+   * @param {string} id - 问题ID
+   * @returns {Promise<Object>}
+   */
+  likeQuestion: (id) => {
+    const url = replaceUrlParams(API_ENDPOINTS.QUESTION.LIKE, { id });
+    return contentApiClient.post(url);
+  },
+
+  /**
+   * 取消点赞问题
+   * @param {string} id - 问题ID
+   * @returns {Promise<Object>}
+   */
+  unlikeQuestion: (id) => {
+    const url = replaceUrlParams(API_ENDPOINTS.QUESTION.UNLIKE, { id });
+    return contentApiClient.post(url);
+  },
+
+  /**
+   * 点踩问题
+   * @param {string} id - 问题ID
+   * @returns {Promise<Object>}
+   */
+  dislikeQuestion: (id) => {
+    const url = replaceUrlParams(API_ENDPOINTS.QUESTION.DISLIKE, { id });
+    return contentApiClient.post(url);
+  },
+
+  /**
+   * 取消点踩问题
+   * @param {string} id - 问题ID
+   * @returns {Promise<Object>}
+   */
+  undislikeQuestion: (id) => {
+    const url = replaceUrlParams(API_ENDPOINTS.QUESTION.UNDISLIKE, { id });
+    return contentApiClient.post(url);
+  },
+
+  /**
+   * 收藏问题
+   * @param {string} id - 问题ID
+   * @returns {Promise<Object>}
+   */
+  collectQuestion: (id) => {
+    const url = replaceUrlParams(API_ENDPOINTS.QUESTION.COLLECT, { id });
+    return contentApiClient.post(url);
+  },
+
+  /**
+   * 取消收藏问题
+   * @param {string} id - 问题ID
+   * @returns {Promise<Object>}
+   */
+  uncollectQuestion: (id) => {
+    const url = replaceUrlParams(API_ENDPOINTS.QUESTION.UNCOLLECT, { id });
     return contentApiClient.post(url);
   },
 

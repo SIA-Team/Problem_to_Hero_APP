@@ -5,11 +5,13 @@ import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import Avatar from '../components/Avatar';
 import TranslateButton from '../components/TranslateButton';
+import WriteCommentModal from '../components/WriteCommentModal';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/useTranslation';
 import { getRegionData } from '../data/regionData';
 import { useOptimizedQuestions } from '../hooks/useOptimizedQuestions';
 import { showToast } from '../utils/toast';
+import questionApi from '../services/api/questionApi';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -87,6 +89,7 @@ export default function HomeScreen({ navigation }) {
   }, [activeTab, handleOptimizedTabChange]);
   
   const [likedItems, setLikedItems] = useState({});
+  const [dislikedItems, setDislikedItems] = useState({});
   const [bookmarkedItems, setBookmarkedItems] = useState({});
   const [showRegionModal, setShowRegionModal] = useState(false);
   const [showActionModal, setShowActionModal] = useState(false);
@@ -101,6 +104,10 @@ export default function HomeScreen({ navigation }) {
   
   // 话题关注状态
   const [topicFollowState, setTopicFollowState] = useState({});
+  
+  // 评论弹窗状态
+  const [showCommentModal, setShowCommentModal] = useState(false);
+  const [currentQuestionForComment, setCurrentQuestionForComment] = useState(null);
   
   // 列表状态 - 使用优化 Hook（今日头条式优化）
   const {
@@ -369,8 +376,134 @@ export default function HomeScreen({ navigation }) {
     user.handle.toLowerCase().includes(socialSearchText.toLowerCase())
   ) || [];
 
-  const toggleLike = (id) => setLikedItems(prev => ({ ...prev, [id]: !prev[id] }));
-  const toggleBookmark = (id) => setBookmarkedItems(prev => ({ ...prev, [id]: !prev[id] }));
+  // 点赞问题
+  const toggleLike = async (id) => {
+    const currentState = likedItems[id];
+    const newState = !currentState;
+    
+    // 乐观更新UI
+    setLikedItems(prev => ({ ...prev, [id]: newState }));
+    
+    // 更新问题列表中的点赞数
+    setQuestionList(prevList => 
+      prevList.map(item => 
+        item.id === id 
+          ? { ...item, likeCount: (item.likeCount || 0) + (newState ? 1 : -1) }
+          : item
+      )
+    );
+    
+    try {
+      if (newState) {
+        // 点赞
+        await questionApi.likeQuestion(id);
+        showToast(t('home.likeSuccess') || '点赞成功', 'success');
+      } else {
+        // 取消点赞
+        await questionApi.unlikeQuestion(id);
+        showToast(t('home.unlikeSuccess') || '已取消点赞', 'success');
+      }
+    } catch (error) {
+      console.error('点赞操作失败:', error);
+      // 失败时回滚UI
+      setLikedItems(prev => ({ ...prev, [id]: currentState }));
+      setQuestionList(prevList => 
+        prevList.map(item => 
+          item.id === id 
+            ? { ...item, likeCount: (item.likeCount || 0) + (currentState ? 1 : -1) }
+            : item
+        )
+      );
+      showToast(t('home.likeFailed') || '操作失败，请重试', 'error');
+    }
+  };
+
+  // 收藏问题
+  const toggleBookmark = async (id) => {
+    const currentState = bookmarkedItems[id];
+    const newState = !currentState;
+    
+    // 乐观更新UI
+    setBookmarkedItems(prev => ({ ...prev, [id]: newState }));
+    
+    // 更新问题列表中的收藏数
+    setQuestionList(prevList => 
+      prevList.map(item => 
+        item.id === id 
+          ? { ...item, collectCount: (item.collectCount || 0) + (newState ? 1 : -1) }
+          : item
+      )
+    );
+    
+    try {
+      if (newState) {
+        // 收藏
+        await questionApi.collectQuestion(id);
+        showToast(t('home.collectSuccess') || '收藏成功', 'success');
+      } else {
+        // 取消收藏
+        await questionApi.uncollectQuestion(id);
+        showToast(t('home.uncollectSuccess') || '已取消收藏', 'success');
+      }
+    } catch (error) {
+      console.error('收藏操作失败:', error);
+      // 失败时回滚UI
+      setBookmarkedItems(prev => ({ ...prev, [id]: currentState }));
+      setQuestionList(prevList => 
+        prevList.map(item => 
+          item.id === id 
+            ? { ...item, collectCount: (item.collectCount || 0) + (currentState ? 1 : -1) }
+            : item
+        )
+      );
+      showToast(t('home.collectFailed') || '操作失败，请重试', 'error');
+    }
+  };
+
+  // 点踩问题
+  const toggleDislike = async (id) => {
+    const currentState = dislikedItems[id];
+    const newState = !currentState;
+    
+    // 乐观更新UI
+    setDislikedItems(prev => ({ ...prev, [id]: newState }));
+    
+    // 更新问题列表中的点踩数
+    setQuestionList(prevList => 
+      prevList.map(item => 
+        item.id === id 
+          ? { ...item, dislikeCount: (item.dislikeCount || 0) + (newState ? 1 : -1) }
+          : item
+      )
+    );
+    
+    try {
+      if (newState) {
+        // 点踩
+        await questionApi.dislikeQuestion(id);
+        showToast(t('home.dislikeSuccess') || '已踩', 'success');
+      } else {
+        // 取消点踩
+        await questionApi.undislikeQuestion(id);
+        showToast(t('home.undislikeSuccess') || '已取消踩', 'success');
+      }
+      // 点踩成功后关闭弹窗
+      setShowActionModal(false);
+    } catch (error) {
+      console.error('点踩操作失败:', error);
+      // 失败时回滚UI
+      setDislikedItems(prev => ({ ...prev, [id]: currentState }));
+      setQuestionList(prevList => 
+        prevList.map(item => 
+          item.id === id 
+            ? { ...item, dislikeCount: (item.dislikeCount || 0) + (currentState ? 1 : -1) }
+            : item
+        )
+      );
+      showToast(t('home.dislikeFailed') || '操作失败，请重试', 'error');
+    }
+  };
+
   const toggleFollowTopic = (topicId) => setTopicFollowState(prev => ({ ...prev, [topicId]: !prev[topicId] }));
   const formatNumber = (num) => num >= 1000 ? (num / 1000).toFixed(1) + 'k' : num;
 
@@ -793,8 +926,14 @@ export default function HomeScreen({ navigation }) {
                   {/* 头像、姓名、时间、地区 - 全部放在一行,右侧放点赞和评论 */}
                   <View style={styles.cardHeader}>
                     <View style={styles.cardHeaderLeft}>
-                      <Avatar uri={item.avatar} name={item.author} size={17} />
-                      <Text style={styles.authorName}>{item.author}</Text>
+                      <Avatar 
+                        uri={item.authorAvatar} 
+                        name={item.authorNickName || t('home.anonymous')} 
+                        size={17} 
+                      />
+                      <Text style={styles.authorName}>
+                        {item.authorNickName || t('home.anonymous')}
+                      </Text>
                       {item.verified && <Ionicons name="checkmark-circle" size={10} color="#3b82f6" style={{ marginLeft: 2 }} />}
                       <Text style={styles.metaSeparator}>·</Text>
                       <Text style={styles.postTime}>{formatTime(item.time)}</Text>
@@ -805,11 +944,17 @@ export default function HomeScreen({ navigation }) {
                     <View style={styles.cardHeaderRight}>
                       <TouchableOpacity style={styles.headerActionBtn} onPress={() => toggleLike(item.id)}>
                         <Ionicons name={isLiked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={isLiked ? "#ef4444" : "#9ca3af"} />
-                        <Text style={[styles.headerActionText, isLiked && { color: '#ef4444' }]}>{formatNumber(item.likes + (isLiked ? 1 : 0))}</Text>
+                        <Text style={[styles.headerActionText, isLiked && { color: '#ef4444' }]}>{formatNumber(item.likeCount || 0)}</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.headerActionBtn}>
+                      <TouchableOpacity 
+                        style={styles.headerActionBtn} 
+                        onPress={() => {
+                          setCurrentQuestionForComment(item);
+                          setShowCommentModal(true);
+                        }}
+                      >
                         <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
-                        <Text style={styles.headerActionText}>{item.answers}</Text>
+                        <Text style={styles.headerActionText}>{item.answerCount || 0}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.headerMoreBtn} onPress={() => openActionModal(item)}>
                         <Ionicons name="ellipsis-horizontal" size={16} color="#9ca3af" />
@@ -958,17 +1103,21 @@ export default function HomeScreen({ navigation }) {
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowActionModal(false)}>
           <View style={styles.actionModal}>
             <View style={styles.actionModalHandle} />
-            <TouchableOpacity style={styles.actionItem}>
-              <Ionicons name="thumbs-down-outline" size={22} color="#6b7280" />
-              <Text style={styles.actionItemText}>踩一下</Text>
+            <TouchableOpacity style={styles.actionItem} onPress={() => { if (selectedQuestion) toggleDislike(selectedQuestion.id); }}>
+              <Ionicons name={selectedQuestion && dislikedItems[selectedQuestion.id] ? "thumbs-down" : "thumbs-down-outline"} size={22} color={selectedQuestion && dislikedItems[selectedQuestion.id] ? "#6b7280" : "#6b7280"} />
+              <Text style={styles.actionItemText}>
+                {selectedQuestion && dislikedItems[selectedQuestion.id] ? '已踩' : '踩一下'}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionItem}>
               <Ionicons name="arrow-redo-outline" size={22} color="#1f2937" />
-              <Text style={styles.actionItemText}>分享 ({formatNumber(selectedQuestion?.shares || 0)})</Text>
+              <Text style={styles.actionItemText}>分享 ({formatNumber(selectedQuestion?.shareCount || 0)})</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionItem} onPress={() => { if (selectedQuestion) toggleBookmark(selectedQuestion.id); setShowActionModal(false); }}>
-              <Ionicons name={selectedQuestion && bookmarkedItems[selectedQuestion.id] ? "bookmark" : "star-outline"} size={22} color={selectedQuestion && bookmarkedItems[selectedQuestion.id] ? "#f59e0b" : "#1f2937"} />
-              <Text style={styles.actionItemText}>收藏 ({formatNumber(selectedQuestion?.bookmarks || 0)})</Text>
+              <Ionicons name={selectedQuestion && bookmarkedItems[selectedQuestion.id] ? "star" : "star-outline"} size={22} color={selectedQuestion && bookmarkedItems[selectedQuestion.id] ? "#f59e0b" : "#1f2937"} />
+              <Text style={[styles.actionItemText, selectedQuestion && bookmarkedItems[selectedQuestion.id] && { color: '#f59e0b' }]}>
+                {selectedQuestion && bookmarkedItems[selectedQuestion.id] ? '已收藏' : '收藏'} ({formatNumber(selectedQuestion?.collectCount || 0)})
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); navigation.navigate('GroupChat', { question: selectedQuestion }); }}>
               <Ionicons name="people-outline" size={22} color="#1f2937" />
@@ -1106,6 +1255,20 @@ export default function HomeScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* 评论弹窗 */}
+      <WriteCommentModal
+        visible={showCommentModal}
+        onClose={() => setShowCommentModal(false)}
+        onPublish={async (text, asTeam, images = []) => {
+          console.log('发布评论:', { text, asTeam, images });
+          showToast('评论发布成功！', 'success');
+          setShowCommentModal(false);
+          setCurrentQuestionForComment(null);
+        }}
+        placeholder="写下你的评论..."
+        title="写评论"
+      />
     </SafeAreaView>
   );
 }

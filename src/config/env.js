@@ -1,5 +1,33 @@
 ﻿import Constants from 'expo-constants';
 import { SIMULATE_PRODUCTION } from './debugMode';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// 动态服务器选择（用于开发阶段切换服务器）
+let DYNAMIC_SERVER = 'server2'; // 默认使用生产服务器
+
+// 从AsyncStorage加载服务器选择
+const loadServerSelection = async () => {
+  try {
+    const server = await AsyncStorage.getItem('@app_server_selection');
+    if (server) {
+      DYNAMIC_SERVER = server;
+      console.log('📡 使用服务器:', server === 'server1' ? '开发服务器 (123.144.149.59:30560)' : '生产服务器 (8.146.230.62:8080)');
+    } else {
+      console.log('📡 使用默认服务器: 生产服务器 (8.146.230.62:8080)');
+    }
+  } catch (error) {
+    console.error('加载服务器配置失败:', error);
+  }
+};
+
+// 立即加载服务器选择
+loadServerSelection();
+
+// 导出函数供外部更新
+export const updateDynamicServer = (server) => {
+  DYNAMIC_SERVER = server;
+  console.log('📡 切换服务器:', server === 'server1' ? '开发服务器 (123.144.149.59:30560)' : '生产服务器 (8.146.230.62:8080)');
+};
 
 /**
  * 环境切换配置
@@ -21,48 +49,70 @@ const USE_MOCK = false;  // 改为 false 使用真实服务器
  * 当前状态：所有接口都使用生产服务器，开发服务器配置已准备好供将来使用
  */
 const API_SERVER_CONFIG = {
-  // ========== 当前所有接口都使用生产服务器 (http://8.146.230.62:8080) ==========
-  
-  // 如需将特定接口切换到开发服务器，取消下面的注释并修改对应接口：
+  // ========== 使用动态服务器选择（通过ServerSwitcher组件切换） ==========
   
   // 认证相关接口
-  // '/app/user/auth/register': 'server1',      // 注册接口
-  // '/app/user/auth/login': 'server1',         // 登录接口
-  // '/app/user/auth/token-login': 'server1',   // Token登录
-  // '/app/user/auth/logout': 'server1',        // 退出登录
-  // '/app/user/auth/password': 'server1',      // 修改密码
+  '/app/user/auth/register': () => DYNAMIC_SERVER,
+  '/app/user/auth/login': () => DYNAMIC_SERVER,
+  '/app/user/auth/token-login': () => DYNAMIC_SERVER,
+  '/app/user/auth/logout': () => DYNAMIC_SERVER,
+  '/app/user/auth/password': () => DYNAMIC_SERVER,
   
   // 用户相关接口
-  // '/app/user/profile': 'server1',            // 用户资料
-  // '/app/user/profile/me': 'server1',         // 当前用户信息
-  // '/app/user/profile/username': 'server1',   // 修改用户名
-  // '/app/user/profile/avatar': 'server1',     // 上传头像
+  '/app/user/profile': () => DYNAMIC_SERVER,
+  '/app/user/profile/me': () => DYNAMIC_SERVER,
+  '/app/user/profile/username': () => DYNAMIC_SERVER,
+  '/app/user/profile/avatar': () => DYNAMIC_SERVER,
   
   // 分类相关接口
-  // '/app/content/category/list': 'server1',   // 分类列表
+  '/app/content/category/list': () => DYNAMIC_SERVER,
   
   // 问题相关接口
-  // '/app/content/question/list': 'server1',           // 问题列表
-  // '/app/content/question/detail': 'server1',         // 问题详情
-  // '/app/content/question/publish': 'server1',        // 发布问题
-  // '/app/content/question/draft': 'server1',          // 草稿相关
+  '/app/content/question/list': () => DYNAMIC_SERVER,
+  '/app/content/question/detail': () => DYNAMIC_SERVER,
+  '/app/content/question/publish': () => DYNAMIC_SERVER,
+  '/app/content/question/draft': () => DYNAMIC_SERVER,
+  '/app/content/question/drafts': () => DYNAMIC_SERVER,
+  '/app/content/question': () => DYNAMIC_SERVER,
+  
+  // 问题互动接口
+  '/app/content/question/*/like': () => DYNAMIC_SERVER,
+  '/app/content/question/*/unlike': () => DYNAMIC_SERVER,
+  '/app/content/question/*/dislike': () => DYNAMIC_SERVER,
+  '/app/content/question/*/undislike': () => DYNAMIC_SERVER,
+  '/app/content/question/*/collect': () => DYNAMIC_SERVER,
+  '/app/content/question/*/uncollect': () => DYNAMIC_SERVER,
   
   // 回答相关接口
-  // '/app/content/answer/list': 'server1',             // 回答列表
-  // '/app/content/answer/detail': 'server1',           // 回答详情
-  // '/app/content/answer/like': 'server1',             // 点赞回答
-  // '/app/content/answer/dislike': 'server1',          // 点踩回答
-  // '/app/content/answer/collect': 'server1',          // 收藏回答
-  // '/app/content/answer/question/*/accept/*': 'server1', // 采纳回答（支持动态路径）
+  '/app/content/answer/question/*/list': () => DYNAMIC_SERVER,
+  '/app/content/answer/*': () => DYNAMIC_SERVER,
+  '/app/content/answer/question/*': () => DYNAMIC_SERVER,
+  
+  // 回答互动接口
+  '/app/content/answer/*/like': () => DYNAMIC_SERVER,
+  '/app/content/answer/*/unlike': () => DYNAMIC_SERVER,
+  '/app/content/answer/*/dislike': () => DYNAMIC_SERVER,
+  '/app/content/answer/*/undislike': () => DYNAMIC_SERVER,
+  '/app/content/answer/*/collect': () => DYNAMIC_SERVER,
+  '/app/content/answer/*/uncollect': () => DYNAMIC_SERVER,
+  '/app/content/answer/question/*/accept/*': () => DYNAMIC_SERVER,
   
   // 补充相关接口
-  // '/app/content/supplement/list': 'server1',         // 补充列表
+  '/app/content/supplement/question/*/list': () => DYNAMIC_SERVER,
+  '/app/content/supplement/question/*': () => DYNAMIC_SERVER,
+  '/app/content/supplement/*/dislike': () => DYNAMIC_SERVER,
+  '/app/content/supplement/*/undislike': () => DYNAMIC_SERVER,
+  '/app/content/supplement/*/like': () => DYNAMIC_SERVER,
+  '/app/content/supplement/*/unlike': () => DYNAMIC_SERVER,
+  '/app/content/supplement/*/collect': () => DYNAMIC_SERVER,
+  '/app/content/supplement/*/uncollect': () => DYNAMIC_SERVER,
   
-  // ========== 如需使用 Mock 的接口，在这里配置为 'mock' ==========
-  // 例如：
-  // '/some/api': 'mock',
+  // 补充回答相关接口
+  '/app/content/answer-supplement/answer/*/list': () => DYNAMIC_SERVER,
+  '/app/content/answer-supplement/answer/*': () => DYNAMIC_SERVER,
   
-  // 其他接口不配置，使用默认服务器地址 (当前为生产服务器)
+  // 上传相关接口
+  '/app/content/image/upload': () => DYNAMIC_SERVER,
 };
 
 /**
@@ -77,7 +127,12 @@ export const getApiServerUrl = (url) => {
   }
   
   // 检查是否有特定的服务器配置
-  const serverConfig = API_SERVER_CONFIG[url];
+  let serverConfig = API_SERVER_CONFIG[url];
+  
+  // 如果配置是函数，调用它获取实际的服务器类型
+  if (typeof serverConfig === 'function') {
+    serverConfig = serverConfig();
+  }
   
   if (serverConfig) {
     const currentEnv = getEnvVars();
@@ -100,7 +155,9 @@ export const getApiServerUrl = (url) => {
       const regex = new RegExp(pattern.replace(/\*/g, '[^/]+'));
       if (regex.test(url)) {
         const currentEnv = getEnvVars();
-        switch (serverType) {
+        // 如果配置是函数，调用它获取实际的服务器类型
+        const actualServerType = typeof serverType === 'function' ? serverType() : serverType;
+        switch (actualServerType) {
           case 'server1':
             return currentEnv.server1Url;
           case 'server2':

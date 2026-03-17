@@ -14,6 +14,7 @@ import UserCacheService from '../services/UserCacheService';
 import authApi from '../services/api/authApi';
 import questionApi from '../services/api/questionApi';
 import { showAppAlert } from '../utils/appAlert';
+import ServerSwitcher from '../components/ServerSwitcher';
 
 export default function ProfileScreen({ navigation, onLogout }) {
   const { t } = useTranslation();
@@ -947,6 +948,9 @@ export default function ProfileScreen({ navigation, onLogout }) {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* 开发工具 - 服务器切换 */}
+        {__DEV__ && <ServerSwitcher />}
 
         {/* 我的内容 */}
         <View style={styles.contentSection}>

@@ -6,6 +6,9 @@ import Avatar from '../components/Avatar';
 import IdentitySelector from '../components/IdentitySelector';
 import ImagePickerSheet from '../components/ImagePickerSheet';
 import QuestionDetailSkeleton from '../components/QuestionDetailSkeleton';
+import SupplementAnswerModal from '../components/SupplementAnswerModal';
+import CommentModal from '../components/CommentModal';
+import WriteCommentModal from '../components/WriteCommentModal';
 import superLikeCreditService from '../services/SuperLikeCreditService';
 import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
@@ -201,6 +204,10 @@ export default function QuestionDetailScreen({ navigation, route }) {
   const [suppLiked, setSuppLiked] = useState({});
   const [suppDisliked, setSuppDisliked] = useState({});
   const [suppBookmarked, setSuppBookmarked] = useState({});
+  const [suppCollectLoading, setSuppCollectLoading] = useState({}); // 补充收藏请求中状态
+  const [suppCollectDebounce, setSuppCollectDebounce] = useState({}); // 补充收藏防抖定时器
+  const [suppDislikeLoading, setSuppDislikeLoading] = useState({}); // 补充点踩请求中状态
+  const [suppDislikeDebounce, setSuppDislikeDebounce] = useState({}); // 补充点踩防抖定时器
   const [liked, setLiked] = useState({});
   const [bookmarked, setBookmarked] = useState(false);
   const [hearted, setHearted] = useState(false);
@@ -232,7 +239,6 @@ export default function QuestionDetailScreen({ navigation, route }) {
   const [showSuppMoreModal, setShowSuppMoreModal] = useState(false);
   const [currentSuppId, setCurrentSuppId] = useState(null);
   const [showCommentModal, setShowCommentModal] = useState(false);
-  const [commentText, setCommentText] = useState('');
   const [currentAnswerId, setCurrentAnswerId] = useState(null);
   const [answerLiked, setAnswerLiked] = useState({});
   const [answerDisliked, setAnswerDisliked] = useState({});
@@ -256,15 +262,12 @@ export default function QuestionDetailScreen({ navigation, route }) {
   const [currentSupplement, setCurrentSupplement] = useState(null); // 当前要回答的补充问题
   const [showSupplementAnswerModal, setShowSupplementAnswerModal] = useState(false); // 补充回答弹窗
   const [currentAnswer, setCurrentAnswer] = useState(null); // 当前要补充回答的答案
-  const [supplementAnswerText, setSupplementAnswerText] = useState(''); // 补充回答内容
   
   // 身份选择
   const [answerIdentity, setAnswerIdentity] = useState('personal'); // 回答身份
   const [answerSelectedTeams, setAnswerSelectedTeams] = useState([]); // 回答选中的团队
   const [supplementQuestionIdentity, setSupplementQuestionIdentity] = useState('personal'); // 补充问题身份
   const [supplementQuestionSelectedTeams, setSupplementQuestionSelectedTeams] = useState([]); // 补充问题选中的团队
-  const [supplementIdentity, setSupplementIdentity] = useState('personal'); // 补充回答身份
-  const [supplementSelectedTeams, setSupplementSelectedTeams] = useState([]); // 补充回答选中的团队
   const [commentIdentity, setCommentIdentity] = useState('personal'); // 评论身份
   const [commentSelectedTeams, setCommentSelectedTeams] = useState([]); // 评论选中的团队
   
@@ -718,6 +721,31 @@ export default function QuestionDetailScreen({ navigation, route }) {
       const { data } = await loadQuestionSupplements(questionId, sortBy, currentPage, isRefresh);
       const newSupplements = data || [];
       
+      // 初始化补充问题的点赞状态
+      if (newSupplements.length > 0) {
+        const initialLikedState = {};
+        const initialDislikedState = {};
+        const initialBookmarkedState = {};
+        
+        newSupplements.forEach(item => {
+          // 从后端数据初始化点赞状态
+          initialLikedState[item.id] = item.isLiked || item.liked || false;
+          initialDislikedState[item.id] = item.isDisliked || item.disliked || false;
+          initialBookmarkedState[item.id] = item.isBookmarked || item.bookmarked || false;
+        });
+        
+        // 更新状态
+        setSuppLiked(prev => ({ ...prev, ...initialLikedState }));
+        setSuppDisliked(prev => ({ ...prev, ...initialDislikedState }));
+        setSuppBookmarked(prev => ({ ...prev, ...initialBookmarkedState }));
+        
+        console.log('📋 初始化补充问题状态:', {
+          liked: initialLikedState,
+          disliked: initialDislikedState,
+          bookmarked: initialBookmarkedState
+        });
+      }
+      
       // 更新对应排序方式的缓存
       setSupplementsCache(prevCache => {
         const updatedCache = { ...prevCache };
@@ -1024,11 +1052,85 @@ export default function QuestionDetailScreen({ navigation, route }) {
         pageSize: 10
       });
       
-      console.log('📥 回答列表响应:', response);
+      // 🔍 显示完整的接口返回数据
+      console.log('\n\n');
+      console.log('╔═══════════════════════════════════════════════════════════════╗');
+      console.log('║           回答列表接口返回数据 - 完整结构                      ║');
+      console.log('╚═══════════════════════════════════════════════════════════════╝');
+      console.log('\n【完整响应对象】');
+      console.log(JSON.stringify(response, null, 2));
       
       if (response && response.code === 200 && response.data) {
         const newAnswers = response.data.rows || [];
         const total = response.data.total || 0;
+        
+        console.log('\n\n');
+        console.log('╔═══════════════════════════════════════════════════════════════╗');
+        console.log(`║           回答数据详情 (共 ${newAnswers.length} 条)                              ║`);
+        console.log('╚═══════════════════════════════════════════════════════════════╝');
+        
+        newAnswers.forEach((answer, index) => {
+          console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+          console.log(`【回答 ${index + 1}】ID: ${answer.id}`);
+          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+          console.log(JSON.stringify(answer, null, 2));
+        });
+        
+        console.log('\n\n');
+        console.log('╔═══════════════════════════════════════════════════════════════╗');
+        console.log('║                    统计字段汇总                                ║');
+        console.log('╚═══════════════════════════════════════════════════════════════╝');
+        newAnswers.forEach((answer, index) => {
+          console.log(`\n【回答 ${index + 1}】ID: ${answer.id}`);
+          console.log(`  likeCount: ${answer.likeCount}`);
+          console.log(`  commentCount: ${answer.commentCount}`);
+          console.log(`  collectCount: ${answer.collectCount}`);
+          console.log(`  shareCount: ${answer.shareCount}`);
+          console.log(`  dislikeCount: ${answer.dislikeCount}`);
+          console.log(`  viewCount: ${answer.viewCount}`);
+          console.log(`  answerCount: ${answer.answerCount}`);
+        });
+        console.log('\n\n');
+        
+        // 🔧 初始化回答的交互状态(点赞、收藏、点踩)
+        const likedState = {};
+        const bookmarkedState = {};
+        const dislikedState = {};
+        
+        newAnswers.forEach(answer => {
+          // 初始化点赞状态
+          if (answer.isLiked !== undefined) {
+            likedState[answer.id] = answer.isLiked;
+          }
+          // 初始化收藏状态 - 检查多个可能的字段名
+          if (answer.isCollected !== undefined) {
+            bookmarkedState[answer.id] = answer.isCollected;
+          } else if (answer.isBookmarked !== undefined) {
+            bookmarkedState[answer.id] = answer.isBookmarked;
+          } else if (answer.collected !== undefined) {
+            bookmarkedState[answer.id] = answer.collected;
+          }
+          // 初始化点踩状态
+          if (answer.isDisliked !== undefined) {
+            dislikedState[answer.id] = answer.isDisliked;
+          }
+        });
+        
+        // 更新状态
+        if (Object.keys(likedState).length > 0) {
+          setAnswerLiked(prev => ({ ...prev, ...likedState }));
+        }
+        if (Object.keys(bookmarkedState).length > 0) {
+          setAnswerBookmarked(prev => ({ ...prev, ...bookmarkedState }));
+        }
+        if (Object.keys(dislikedState).length > 0) {
+          setAnswerDisliked(prev => ({ ...prev, ...dislikedState }));
+        }
+        
+        console.log('✅ 初始化回答交互状态:');
+        console.log('  点赞状态:', likedState);
+        console.log('  收藏状态:', bookmarkedState);
+        console.log('  点踩状态:', dislikedState);
         
         // 更新对应排序方式的缓存
         setAnswersCache(prevCache => {
@@ -1211,6 +1313,18 @@ export default function QuestionDetailScreen({ navigation, route }) {
 
   // 处理回答点赞/取消点赞 - 带防抖和请求去重
   const handleAnswerLike = async (answerId) => {
+    console.log('🔍 ===== 回答点赞调试开始 =====');
+    console.log('📊 调试信息:');
+    console.log('  回答ID:', answerId);
+    console.log('  回答ID类型:', typeof answerId);
+    console.log('  回答ID字符串:', String(answerId));
+    console.log('');
+    
+    console.log('📋 当前状态:');
+    console.log('  回答点赞状态:', JSON.stringify(answerLiked, null, 2));
+    console.log('  补充点赞状态:', JSON.stringify(suppLiked, null, 2));
+    console.log('');
+    
     console.log('🔍 点赞操作:');
     console.log('  answerId:', answerId);
     
@@ -1256,7 +1370,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
           ? await answerApi.likeAnswer(answerId)
           : await answerApi.unlikeAnswer(answerId);
         
-        console.log('📥 点赞响应:', response);
+        console.log('📥 回答点赞响应:', response);
         
         if (response && response.code === 200) {
           // 服务器返回成功，保持UI状态
@@ -1300,6 +1414,8 @@ export default function QuestionDetailScreen({ navigation, route }) {
       ...prev,
       [answerId]: debounceTimer
     }));
+    
+    console.log('🔍 ===== 回答点赞调试结束 =====\n');
   };
 
   // 处理回答点踩/取消点踩 - 带防抖和请求去重
@@ -1715,71 +1831,294 @@ export default function QuestionDetailScreen({ navigation, route }) {
     }
   };
 
-  const handleSubmitSupplementAnswer = () => {
-    if (!supplementAnswerText.trim()) return;
-    showToast('补充回答提交成功！', 'success');
-    setSupplementAnswerText('');
-    setShowSupplementAnswerModal(false);
-    setCurrentAnswer(null);
-  };
 
-  // 处理补充问题的踩一下/取消踩一下
-  const handleSupplementDislike = async (supplementId) => {
-    try {
-      console.log('👎 处理补充问题踩一下: id=', supplementId);
-      const response = await questionApi.dislikeSupplement(supplementId);
-      
-      console.log('📥 踩一下响应:', response);
-      
-      if (response && response.code === 200) {
-        const isDisliked = response.data; // true表示已踩，false表示取消踩
-        
-        // 更新本地状态
-        setSuppDisliked({
-          ...suppDisliked,
-          [supplementId]: isDisliked
-        });
-        
-        // 显示提示
-        showToast(isDisliked ? '已踩' : '已取消踩', 'success');
-        
-        // 关闭弹窗
-        setShowSuppMoreModal(false);
-      } else {
-        showToast(response?.msg || '操作失败', 'error');
-      }
-    } catch (error) {
-      console.error('踩一下补充问题失败:', error);
-      showToast('网络错误，请稍后重试', 'error');
-    }
-  };
 
   // 处理补充问题的点赞/取消点赞
   const handleSupplementLike = async (supplementId) => {
+    console.log('🔍 ===== 补充点赞调试开始 =====');
+    console.log('📊 调试信息:');
+    console.log('  补充ID:', supplementId);
+    console.log('  补充ID类型:', typeof supplementId);
+    console.log('  当前状态:', suppLiked[supplementId]);
+    console.log('');
+    
+    if (!supplementId) {
+      console.error('❌ 补充ID不存在');
+      showToast('操作失败：补充ID不存在', 'error');
+      return;
+    }
+
     try {
-      console.log('👍 处理补充问题点赞: id=', supplementId);
-      const response = await questionApi.likeSupplement(supplementId);
+      // 获取当前状态
+      const currentState = suppLiked[supplementId] || false;
+      const newState = !currentState;
       
-      console.log('📥 点赞响应:', response);
+      console.log('📋 状态切换:');
+      console.log('  当前状态:', currentState, '→', newState);
+      console.log('');
+
+      // 立即更新UI状态，提供即时反馈
+      setSuppLiked(prev => ({
+        ...prev,
+        [supplementId]: newState
+      }));
+
+      console.log(`📤 ${newState ? '点赞' : '取消点赞'}补充: id=${supplementId}`);
+      
+      // 根据当前状态调用不同的接口
+      const response = newState 
+        ? await questionApi.likeSupplement(supplementId)
+        : await questionApi.unlikeSupplement(supplementId);
+      
+      console.log('📥 补充点赞响应:', response);
       
       if (response && response.code === 200) {
-        const isLiked = response.data; // true表示已点赞，false表示取消点赞
+        console.log('✅ 点赞操作成功');
         
-        // 更新本地状态
-        setSuppLiked({
-          ...suppLiked,
-          [supplementId]: isLiked
-        });
+        // 服务器返回成功，保持UI状态
+        showToast(newState ? '已点赞' : '已取消点赞', 'success');
         
-        // 显示提示
-        showToast(isLiked ? '已点赞' : '已取消点赞', 'success');
+        console.log('  🔧 状态切换完成:', currentState, '→', newState);
       } else {
+        console.error('❌ 点赞操作失败:', response);
+        
+        // 服务器返回失败，回滚UI状态
+        setSuppLiked(prev => ({
+          ...prev,
+          [supplementId]: currentState // 回滚到原状态
+        }));
         showToast(response?.msg || '操作失败', 'error');
       }
     } catch (error) {
-      console.error('点赞补充问题失败:', error);
+      console.error('❌ 点赞补充问题失败:', error);
+      
+      // 网络错误，回滚UI状态
+      const currentState = suppLiked[supplementId] || false;
+      setSuppLiked(prev => ({
+        ...prev,
+        [supplementId]: currentState // 回滚到原状态
+      }));
       showToast('网络错误，请稍后重试', 'error');
     }
+    
+    console.log('🔍 ===== 补充点赞调试结束 =====\n');
+  };
+
+  // 处理补充问题的收藏/取消收藏 - 带防抖和请求去重
+  const handleSupplementCollect = async (supplementId) => {
+    console.log('🔍 ===== 补充收藏调试开始 =====');
+    console.log('📊 调试信息:');
+    console.log('  补充ID:', supplementId);
+    console.log('  补充ID类型:', typeof supplementId);
+    console.log('  补充ID字符串:', String(supplementId));
+    console.log('');
+    
+    if (!supplementId) {
+      console.error('❌ 补充ID不存在');
+      showToast('操作失败：补充ID不存在', 'error');
+      return;
+    }
+
+    // 防止重复请求
+    if (suppCollectLoading[supplementId]) {
+      console.log('🚫 补充收藏请求进行中，忽略重复点击:', supplementId);
+      return;
+    }
+
+    // 清除之前的防抖定时器
+    if (suppCollectDebounce[supplementId]) {
+      clearTimeout(suppCollectDebounce[supplementId]);
+    }
+
+    // 立即更新UI状态，提供即时反馈
+    const currentState = suppBookmarked[supplementId] || false;
+    const newState = !currentState;
+    
+    setSuppBookmarked(prev => ({
+      ...prev,
+      [supplementId]: newState
+    }));
+
+    console.log('📋 当前状态:');
+    console.log('  补充收藏状态:', JSON.stringify(suppBookmarked, null, 2));
+    console.log('  当前状态:', currentState, '→', newState);
+    console.log('');
+
+    // 设置防抖定时器
+    const debounceTimer = setTimeout(async () => {
+      try {
+        // 设置加载状态，防止重复请求
+        setSuppCollectLoading(prev => ({
+          ...prev,
+          [supplementId]: true
+        }));
+
+        console.log(`📤 ${newState ? '收藏' : '取消收藏'}补充: id=${supplementId}`);
+        
+        // 根据当前状态调用不同的接口
+        const response = newState 
+          ? await questionApi.collectSupplement(supplementId)
+          : await questionApi.uncollectSupplement(supplementId);
+        
+        console.log('📥 补充收藏响应:', response);
+        
+        if (response && response.code === 200) {
+          console.log('✅ 收藏操作成功');
+          
+          // 服务器返回成功，保持UI状态
+          showToast(newState ? '已收藏' : '已取消收藏', 'success');
+          
+          console.log('  🔧 状态切换完成:', currentState, '→', newState);
+        } else {
+          console.error('❌ 收藏操作失败:', response);
+          
+          // 服务器返回失败，回滚UI状态
+          setSuppBookmarked(prev => ({
+            ...prev,
+            [supplementId]: currentState // 回滚到原状态
+          }));
+          showToast(response?.msg || '操作失败', 'error');
+        }
+      } catch (error) {
+        console.error('❌ 收藏补充问题失败:', error);
+        
+        // 网络错误，回滚UI状态
+        setSuppBookmarked(prev => ({
+          ...prev,
+          [supplementId]: currentState // 回滚到原状态
+        }));
+        showToast('网络错误，请稍后重试', 'error');
+      } finally {
+        // 清除加载状态
+        setSuppCollectLoading(prev => ({
+          ...prev,
+          [supplementId]: false
+        }));
+        
+        // 清除防抖定时器引用
+        setSuppCollectDebounce(prev => {
+          const newState = { ...prev };
+          delete newState[supplementId];
+          return newState;
+        });
+      }
+    }, 300); // 300ms防抖延迟
+
+    // 保存防抖定时器引用
+    setSuppCollectDebounce(prev => ({
+      ...prev,
+      [supplementId]: debounceTimer
+    }));
+    
+    console.log('🔍 ===== 补充收藏调试结束 =====\n');
+  };
+
+  // 处理补充问题的点踩/取消点踩 - 带防抖和请求去重
+  const handleSupplementDislike = async (supplementId) => {
+    console.log('🔍 ===== 补充点踩调试开始 =====');
+    console.log('📊 调试信息:');
+    console.log('  补充ID:', supplementId);
+    console.log('  补充ID类型:', typeof supplementId);
+    console.log('  当前状态:', suppDisliked[supplementId]);
+    console.log('');
+    
+    if (!supplementId) {
+      console.error('❌ 补充ID不存在');
+      showToast('操作失败：补充ID不存在', 'error');
+      return;
+    }
+
+    // 防止重复请求
+    if (suppDislikeLoading[supplementId]) {
+      console.log('🚫 补充点踩请求进行中，忽略重复点击:', supplementId);
+      return;
+    }
+
+    // 清除之前的防抖定时器
+    if (suppDislikeDebounce[supplementId]) {
+      clearTimeout(suppDislikeDebounce[supplementId]);
+    }
+
+    // 立即更新UI状态，提供即时反馈
+    const currentState = suppDisliked[supplementId] || false;
+    const newState = !currentState;
+    
+    setSuppDisliked(prev => ({
+      ...prev,
+      [supplementId]: newState
+    }));
+
+    console.log('📋 状态切换:');
+    console.log('  当前状态:', currentState, '→', newState);
+    console.log('');
+
+    // 设置防抖定时器
+    const debounceTimer = setTimeout(async () => {
+      try {
+        // 设置加载状态，防止重复请求
+        setSuppDislikeLoading(prev => ({
+          ...prev,
+          [supplementId]: true
+        }));
+
+        console.log(`📤 ${newState ? '点踩' : '取消点踩'}补充: id=${supplementId}`);
+        
+        // 根据当前状态调用不同的接口
+        const response = newState 
+          ? await questionApi.dislikeSupplement(supplementId)
+          : await questionApi.undislikeSupplement(supplementId);
+        
+        console.log('📥 补充点踩响应:', response);
+        
+        if (response && response.code === 200) {
+          console.log('✅ 点踩操作成功');
+          
+          // 服务器返回成功，保持UI状态
+          showToast(newState ? '已点踩' : '已取消点踩', 'success');
+          
+          console.log('  🔧 状态切换完成:', currentState, '→', newState);
+        } else {
+          console.error('❌ 点踩操作失败:', response);
+          
+          // 服务器返回失败，回滚UI状态
+          setSuppDisliked(prev => ({
+            ...prev,
+            [supplementId]: currentState // 回滚到原状态
+          }));
+          showToast(response?.msg || '操作失败', 'error');
+        }
+      } catch (error) {
+        console.error('❌ 点踩补充问题失败:', error);
+        
+        // 网络错误，回滚UI状态
+        setSuppDisliked(prev => ({
+          ...prev,
+          [supplementId]: currentState // 回滚到原状态
+        }));
+        showToast('网络错误，请稍后重试', 'error');
+      } finally {
+        // 清除加载状态
+        setSuppDislikeLoading(prev => ({
+          ...prev,
+          [supplementId]: false
+        }));
+        
+        // 清除防抖定时器引用
+        setSuppDislikeDebounce(prev => {
+          const newState = { ...prev };
+          delete newState[supplementId];
+          return newState;
+        });
+      }
+    }, 300); // 300ms防抖延迟
+
+    // 保存防抖定时器引用
+    setSuppDislikeDebounce(prev => ({
+      ...prev,
+      [supplementId]: debounceTimer
+    }));
+    
+    console.log('🔍 ===== 补充点踩调试结束 =====\n');
   };
 
   // 处理追加悬赏
@@ -2342,6 +2681,9 @@ export default function QuestionDetailScreen({ navigation, route }) {
                       <View style={styles.suppAuthorRow}>
                         <Text style={styles.suppAuthor}>{item.author}</Text>
                         
+                        {/* 时间显示 */}
+                        <Text style={styles.suppTime}>{formatTime(item.time)}</Text>
+                        
                         <View style={styles.suppLocationRow}>
                           <Ionicons name="location-outline" size={12} color="#9ca3af" />
                           <Text style={styles.suppLocation}>{item.location}</Text>
@@ -2445,11 +2787,27 @@ export default function QuestionDetailScreen({ navigation, route }) {
                         <Text style={styles.suppActionText}>{item.shares}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity 
-                        style={styles.suppActionBtn}
-                        onPress={(e) => { e.stopPropagation(); setSuppBookmarked({ ...suppBookmarked, [item.id]: !suppBookmarked[item.id] }); }}
+                        style={[
+                          styles.suppActionBtn,
+                          suppCollectLoading[item.id] && styles.suppActionBtnLoading
+                        ]}
+                        onPress={(e) => { 
+                          e.stopPropagation(); 
+                          handleSupplementCollect(item.id);
+                        }}
+                        disabled={suppCollectLoading[item.id]}
                       >
-                        <Ionicons name={suppBookmarked[item.id] ? "star" : "star-outline"} size={16} color={suppBookmarked[item.id] ? "#f59e0b" : "#6b7280"} />
-                        <Text style={[styles.suppActionText, suppBookmarked[item.id] && { color: '#f59e0b' }]}>{item.bookmarks + (suppBookmarked[item.id] ? 1 : 0)}</Text>
+                        <Ionicons 
+                          name={suppBookmarked[item.id] ? "star" : "star-outline"} 
+                          size={16} 
+                          color={suppBookmarked[item.id] ? "#f59e0b" : "#6b7280"} 
+                        />
+                        <Text style={[styles.suppActionText, suppBookmarked[item.id] && { color: '#f59e0b' }]}>
+                          {item.bookmarks + (suppBookmarked[item.id] ? 1 : 0)}
+                        </Text>
+                        {suppCollectLoading[item.id] && (
+                          <ActivityIndicator size="small" color="#f59e0b" style={styles.suppActionLoader} />
+                        )}
                       </TouchableOpacity>
                       <TouchableOpacity 
                         style={styles.suppActionBtn}
@@ -2808,7 +3166,44 @@ export default function QuestionDetailScreen({ navigation, route }) {
               ) : (
                 <>
                   {answersList.map(answer => (
-            <TouchableOpacity key={answer.id} style={[styles.answerCard, answer.adopted && styles.answerCardAdopted]} onPress={() => navigation.navigate('AnswerDetail', { answer, defaultTab: 'supplements' })}>
+            <TouchableOpacity 
+              key={answer.id} 
+              style={[styles.answerCard, answer.adopted && styles.answerCardAdopted]} 
+              onPress={() => {
+                // 准备传递给回答详情页的数据,包含当前的交互状态
+                const answerWithState = {
+                  ...answer,
+                  // 传递当前的点赞状态
+                  isLiked: answerLiked[answer.id] !== undefined ? answerLiked[answer.id] : answer.isLiked,
+                  likeCount: answer.likeCount || answer.like_count || answer.likes || 0,
+                  // 传递当前的收藏状态
+                  isCollected: answerBookmarked[answer.id] !== undefined ? answerBookmarked[answer.id] : (answer.isCollected || answer.isBookmarked),
+                  collectCount: answer.collectCount || answer.bookmarkCount || answer.bookmark_count || answer.bookmarks || 0,
+                  // 传递当前的点踩状态
+                  isDisliked: answerDisliked[answer.id] !== undefined ? answerDisliked[answer.id] : answer.isDisliked,
+                  dislikeCount: answer.dislikeCount || answer.dislike_count || answer.dislikes || 0,
+                  // 传递其他统计数据
+                  commentCount: answer.commentCount || answer.comment_count || answer.comments || 0,
+                  shareCount: answer.shareCount || answer.share_count || answer.shares || 0,
+                };
+                
+                console.log('🔄 跳转到回答详情页,传递状态:', {
+                  answerId: answer.id,
+                  isLiked: answerWithState.isLiked,
+                  isCollected: answerWithState.isCollected,
+                  isDisliked: answerWithState.isDisliked,
+                  likeCount: answerWithState.likeCount,
+                  collectCount: answerWithState.collectCount,
+                  dislikeCount: answerWithState.dislikeCount,
+                });
+                
+                navigation.navigate('AnswerDetail', { 
+                  answer: answerWithState, 
+                  questionId: route?.params?.id || questionData?.id, 
+                  defaultTab: 'supplements' 
+                });
+              }}
+            >
               <View style={styles.answerHeader}>
                 <Avatar uri={answer.userAvatar || answer.avatar} name={answer.userName || answer.userNickname || answer.author || '匿名用户'} size={24} />
                 <View style={styles.answerAuthorInfo}>
@@ -3076,7 +3471,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.answerActionBtn} onPress={(e) => e.stopPropagation()}>
                     <Ionicons name="arrow-redo-outline" size={16} color="#6b7280" />
-                    <Text style={styles.answerActionText}>{answer.shareCount || answer.share_count || answer.shares || 34}</Text>
+                    <Text style={styles.answerActionText}>{answer.shareCount || answer.share_count || answer.shares || 0}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
                     style={[
@@ -3095,7 +3490,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
                       color={answerBookmarked[answer.id] ? "#f59e0b" : "#6b7280"} 
                     />
                     <Text style={[styles.answerActionText, answerBookmarked[answer.id] && { color: '#f59e0b' }]}>
-                      {(answer.bookmarkCount || answer.bookmark_count || answer.bookmarks || 89) + (answerBookmarked[answer.id] ? 1 : 0)}
+                      {(answer.collectCount || answer.bookmarkCount || answer.bookmark_count || answer.bookmarks || 0) + (answerBookmarked[answer.id] ? 1 : 0)}
                     </Text>
                     {answerCollectLoading[answer.id] && (
                       <ActivityIndicator size="small" color="#f59e0b" style={styles.answerActionLoader} />
@@ -3112,7 +3507,7 @@ export default function QuestionDetailScreen({ navigation, route }) {
                   >
                     <Ionicons name={answerDisliked[answer.id] ? "thumbs-down" : "thumbs-down-outline"} size={16} color={answerDisliked[answer.id] ? "#6b7280" : "#6b7280"} />
                     <Text style={[styles.answerActionText, answerDisliked[answer.id] && { color: '#6b7280' }]}>
-                      {(answer.dislikeCount || answer.dislike_count || answer.dislikes || 3) + (answerDisliked[answer.id] ? 1 : 0)}
+                      {(answer.dislikeCount || answer.dislike_count || answer.dislikes || 0) + (answerDisliked[answer.id] ? 1 : 0)}
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
@@ -3489,79 +3884,17 @@ export default function QuestionDetailScreen({ navigation, route }) {
       </Modal>
 
       {/* 评论弹窗 */}
-      <Modal 
-        visible={showCommentModal} 
-        animationType="slide"
-        presentationStyle="fullScreen"
-        onShow={() => console.log('评论弹窗已显示')}
-        onRequestClose={() => {
-          console.log('评论弹窗请求关闭');
+      <WriteCommentModal
+        visible={showCommentModal}
+        onClose={() => setShowCommentModal(false)}
+        onPublish={async (text, asTeam, images = []) => {
+          console.log('发布评论:', { text, asTeam, images });
+          showToast('评论发布成功！', 'success');
           setShowCommentModal(false);
-          setCommentText('');
         }}
-      >
-        <SafeAreaView style={styles.commentModal}>
-          <View style={styles.commentModalHeader}>
-            <TouchableOpacity onPress={() => { setShowCommentModal(false); setCommentText(''); }} style={styles.commentCloseBtn}>
-              <Ionicons name="close" size={26} color="#333" />
-            </TouchableOpacity>
-            <View style={styles.commentHeaderCenter}>
-              <Text style={styles.commentModalTitle}>写评论</Text>
-            </View>
-            <TouchableOpacity 
-              style={[styles.commentPublishBtn, !commentText.trim() && styles.commentPublishBtnDisabled]}
-              onPress={() => {
-                if (commentText.trim()) {
-                  showToast('评论发布成功！', 'success');
-                  setCommentText('');
-                  setShowCommentModal(false);
-                }
-              }}
-              disabled={!commentText.trim()}
-            >
-              <Text style={[styles.commentPublishText, !commentText.trim() && styles.commentPublishTextDisabled]}>发布</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.commentContentArea} keyboardShouldPersistTaps="handled">
-            <TextInput
-              style={styles.commentTextInput}
-              placeholder="写下你的评论..."
-              placeholderTextColor="#bbb"
-              value={commentText}
-              onChangeText={setCommentText}
-              multiline
-              autoFocus
-              textAlignVertical="top"
-            />
-            
-            {/* 身份选择器 */}
-            <View style={styles.commentIdentitySection}>
-              <IdentitySelector
-                selectedIdentity={commentIdentity}
-                selectedTeams={commentSelectedTeams}
-                onIdentityChange={setCommentIdentity}
-                onTeamsChange={setCommentSelectedTeams}
-              />
-            </View>
-          </ScrollView>
-
-          <View style={styles.commentToolbar}>
-            <View style={styles.commentToolsLeft}>
-              <TouchableOpacity style={styles.commentToolItem}>
-                <Ionicons name="image-outline" size={24} color="#666" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.commentToolItem}>
-                <Ionicons name="at-outline" size={24} color="#666" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.commentToolItem}>
-                <Ionicons name="happy-outline" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.commentWordCount}>{commentText.length}/500</Text>
-          </View>
-        </SafeAreaView>
-      </Modal>
+        placeholder="写下你的评论..."
+        title="写评论"
+      />
 
       {/* 评论回复列表弹窗 - 今日头条风格 */}
       <Modal visible={showCommentReplyModal} transparent animationType="slide">
@@ -4141,81 +4474,19 @@ export default function QuestionDetailScreen({ navigation, route }) {
       </Modal>
 
       {/* 补充回答弹窗 */}
-      <Modal visible={showSupplementAnswerModal} animationType="slide">
-        <SafeAreaView style={styles.answerModal}>
-          <View style={styles.answerModalHeader}>
-            <TouchableOpacity 
-              onPress={() => { 
-                setShowSupplementAnswerModal(false); 
-                setCurrentAnswer(null); 
-                setSupplementAnswerText('');
-              }} 
-              style={styles.answerCloseBtn}
-            >
-              <Ionicons name="close" size={26} color="#333" />
-            </TouchableOpacity>
-            <View style={styles.answerHeaderCenter}>
-              <Text style={styles.answerModalTitle}>补充回答</Text>
-            </View>
-            <TouchableOpacity 
-              style={[styles.answerPublishBtn, !supplementAnswerText.trim() && styles.answerPublishBtnDisabled]}
-              onPress={handleSubmitSupplementAnswer}
-              disabled={!supplementAnswerText.trim()}
-            >
-              <Text style={[styles.answerPublishText, !supplementAnswerText.trim() && styles.answerPublishTextDisabled]}>发布</Text>
-            </TouchableOpacity>
-          </View>
-
-          {currentAnswer && (
-            <View style={styles.supplementAnswerContext}>
-              <View style={styles.supplementAnswerHeader}>
-                <Ionicons name="document-text" size={18} color="#3b82f6" />
-                <Text style={styles.supplementAnswerLabel}>原回答</Text>
-              </View>
-              <View style={styles.supplementAnswerAuthor}>
-                <Avatar uri={currentAnswer.avatar} name={currentAnswer.author} size={24} />
-                <Text style={styles.supplementAnswerAuthorName}>{currentAnswer.author}</Text>
-              </View>
-              <Text style={styles.supplementAnswerContent} numberOfLines={3}>{currentAnswer.content}</Text>
-            </View>
-          )}
-
-          <ScrollView style={styles.answerContentArea} keyboardShouldPersistTaps="handled">
-            <TextInput
-              style={styles.answerTextInput}
-              placeholder="补充你的回答，提供更多信息..."
-              placeholderTextColor="#bbb"
-              value={supplementAnswerText}
-              onChangeText={setSupplementAnswerText}
-              multiline
-              autoFocus
-              textAlignVertical="top"
-            />
-            
-            {/* 身份选择器 */}
-            <View style={styles.answerIdentitySection}>
-              <IdentitySelector
-                selectedIdentity={supplementIdentity}
-                selectedTeams={supplementSelectedTeams}
-                onIdentityChange={setSupplementIdentity}
-                onTeamsChange={setSupplementSelectedTeams}
-              />
-            </View>
-          </ScrollView>
-
-          <View style={styles.answerToolbar}>
-            <View style={styles.answerToolsLeft}>
-              <TouchableOpacity style={styles.answerToolItem}>
-                <Ionicons name="image-outline" size={24} color="#666" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.answerToolItem}>
-                <Ionicons name="at-outline" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.answerWordCount}>{supplementAnswerText.length}/2000</Text>
-          </View>
-        </SafeAreaView>
-      </Modal>
+      <SupplementAnswerModal
+        visible={showSupplementAnswerModal}
+        onClose={() => {
+          setShowSupplementAnswerModal(false);
+          setCurrentAnswer(null);
+        }}
+        answer={currentAnswer}
+        questionId={route?.params?.id || questionData?.id}
+        onSuccess={() => {
+          // 补充回答发布成功后的回调
+          // 可以在这里刷新补充回答列表
+        }}
+      />
 
       {/* 追加悬赏弹窗 */}
       <Modal visible={showAddRewardModal} animationType="slide" transparent>
@@ -5152,6 +5423,7 @@ const styles = StyleSheet.create({
   suppAuthorInfo: { flex: 1, marginLeft: 12 },
   suppAuthorRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   suppAuthor: { fontSize: 12, fontWeight: '500', color: '#1f2937' },
+  suppTime: { fontSize: 11, color: '#9ca3af', marginLeft: 4 },
   suppLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   suppLocation: { fontSize: 12, color: '#9ca3af' },
   suppAnswerBtnTop: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#ef4444', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 },

@@ -125,14 +125,16 @@ const transformApiDataToHomeFormat = (apiData) => {
     const transformedItem = {
       id: item.id,
       title: processTitle(item.title) || '无标题',
-      author: item.userName || item.userNickname || '匿名用户',
-      avatar: item.userAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${item.id}`,
+      author: item.authorNickName || item.userName || item.userNickname || '匿名用户',
+      authorNickName: item.authorNickName || item.userName || item.userNickname || null,
+      avatar: item.authorAvatar || item.userAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${item.id}`,
+      authorAvatar: item.authorAvatar || item.userAvatar || null,
       time: timeDisplay,
-      likes: item.likeCount || 0,
-      dislikes: item.dislikeCount || 0,
-      answers: item.answerCount || 0,
-      shares: item.shareCount || 0,
-      bookmarks: item.collectCount || 0,
+      likeCount: item.likeCount || 0,
+      dislikeCount: item.dislikeCount || 0,
+      answerCount: item.answerCount || 0,
+      shareCount: item.shareCount || 0,
+      collectCount: item.collectCount || 0,
       country: '中国',
       city: item.location || '北京',
       solvedPercent: item.solvedPercent || Math.floor(Math.random() * 100),
@@ -331,21 +333,55 @@ const backgroundUpdateSupplements = async (questionId, sortBy, page) => {
  */
 const fetchSupplementsByQuestion = async (questionId, sortBy, page) => {
   try {
+    console.log('\n🔍 ==================== 补充列表API调用 ====================');
+    console.log('📊 调用参数:');
+    console.log('  questionId:', questionId);
+    console.log('  sortBy:', sortBy);
+    console.log('  page:', page);
+    
     const response = await questionApi.getQuestionSupplements(questionId, {
       sortBy,
       pageNum: page,
       pageSize: 10,
     });
     
+    console.log('📥 API原始响应:');
+    console.log(JSON.stringify(response, null, 2));
+    
     // 处理响应数据
     if (response && response.code === 200) {
       const rawData = response.data?.rows || response.data?.list || response.data || [];
+      
+      console.log('📋 提取的数据:');
+      console.log('  数据路径: response.data?.rows || response.data?.list || response.data');
+      console.log('  提取结果:', JSON.stringify(rawData, null, 2));
+      console.log('  数据条数:', Array.isArray(rawData) ? rawData.length : 0);
+      
+      if (Array.isArray(rawData) && rawData.length > 0) {
+        console.log('\n📄 第一条数据详细分析:');
+        const firstItem = rawData[0];
+        console.log('  完整数据:', JSON.stringify(firstItem, null, 2));
+        console.log('\n  字段检查:');
+        Object.keys(firstItem).forEach(key => {
+          console.log(`    ${key}: ${firstItem[key]} (${typeof firstItem[key]})`);
+        });
+      }
+      
       const transformedData = transformSupplementDataToFormat(rawData);
+      
+      console.log('\n📊 转换后数据:');
+      console.log(JSON.stringify(transformedData, null, 2));
+      console.log('🔍 ==================== API调用结束 ====================\n');
+      
       return transformedData;
     } else {
+      console.log('⚠️  API响应异常:', response);
+      console.log('🔍 ==================== API调用结束 ====================\n');
       return [];
     }
   } catch (error) {
+    console.error('❌ API调用失败:', error);
+    console.log('🔍 ==================== API调用结束 ====================\n');
     throw error;
   }
 };
@@ -370,14 +406,25 @@ export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onD
   // 创建请求 Promise
   const requestPromise = (async () => {
     try {
-      // 1. 如果不是强制刷新，先尝试从缓存获取
-      if (!forceRefresh) {
-        const cached = await getCache('questions', { tabType, page });
-        if (cached) {
-          // 返回缓存数据，同时在后台更新
-          backgroundUpdate(tabType, page, onDebugUpdate);
-          return { data: cached, fromCache: true };
+      // 优化：如果是强制刷新，直接从网络加载，不检查缓存
+      if (forceRefresh) {
+        console.log(`⚡ 强制刷新: ${tabType} - 第${page}页 (跳过缓存检查)`);
+        const response = await fetchQuestionsByTab(tabType, page, onDebugUpdate);
+        
+        // 保存到缓存
+        if (response && response.length > 0) {
+          await setCache('questions', { tabType, page }, response);
         }
+        
+        return { data: response, fromCache: false };
+      }
+      
+      // 1. 如果不是强制刷新，先尝试从缓存获取
+      const cached = await getCache('questions', { tabType, page });
+      if (cached) {
+        // 返回缓存数据，同时在后台更新
+        backgroundUpdate(tabType, page, onDebugUpdate);
+        return { data: cached, fromCache: true };
       }
       
       // 2. 从网络加载数据
@@ -393,6 +440,7 @@ export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onD
       // 如果网络请求失败，尝试返回缓存数据
       const cached = await getCache('questions', { tabType, page });
       if (cached) {
+        console.log(`⚠️ 网络请求失败，使用缓存数据: ${tabType} - 第${page}页`);
         return { data: cached, fromCache: true };
       }
       

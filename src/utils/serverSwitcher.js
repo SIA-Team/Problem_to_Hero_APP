@@ -1,0 +1,94 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const SERVER_KEY = '@app_server_selection';
+const CUSTOM_SERVER_URL_KEY = '@app_custom_server_url';
+
+export const SERVERS = {
+  SERVER1: {
+    name: '开发服务器',
+    url: 'http://123.144.149.59:30560',
+    key: 'server1'
+  },
+  SERVER2: {
+    name: '生产服务器',
+    url: 'http://8.146.230.62:8080',
+    key: 'server2'
+  },
+  CUSTOM: {
+    name: '自定义服务器',
+    url: '',
+    key: 'custom'
+  }
+};
+
+/**
+ * 获取当前选择的服务器
+ */
+export const getCurrentServer = async () => {
+  try {
+    const server = await AsyncStorage.getItem(SERVER_KEY);
+    return server || 'server2'; // 默认使用生产服务器
+  } catch (error) {
+    console.error('获取服务器配置失败:', error);
+    return 'server2';
+  }
+};
+
+/**
+ * 设置当前服务器
+ */
+export const setCurrentServer = async (serverKey) => {
+  try {
+    await AsyncStorage.setItem(SERVER_KEY, serverKey);
+    return true;
+  } catch (error) {
+    console.error('保存服务器配置失败:', error);
+    return false;
+  }
+};
+
+/**
+ * 获取自定义服务器地址
+ */
+export const getCustomServerUrl = async () => {
+  try {
+    const url = await AsyncStorage.getItem(CUSTOM_SERVER_URL_KEY);
+    return url || '';
+  } catch (error) {
+    console.error('获取自定义服务器地址失败:', error);
+    return '';
+  }
+};
+
+/**
+ * 设置自定义服务器地址
+ */
+export const setCustomServerUrl = async (url) => {
+  try {
+    await AsyncStorage.setItem(CUSTOM_SERVER_URL_KEY, url);
+    return true;
+  } catch (error) {
+    console.error('保存自定义服务器地址失败:', error);
+    return false;
+  }
+};
+
+/**
+ * 切换服务器并重新加载应用
+ */
+export const switchServerAndReload = async (serverKey, customUrl = '') => {
+  try {
+    await setCurrentServer(serverKey);
+    
+    // 如果是自定义服务器，保存自定义地址
+    if (serverKey === 'custom' && customUrl) {
+      await setCustomServerUrl(customUrl);
+    }
+    
+    // 提示用户手动重启应用
+    return true;
+  } catch (error) {
+    console.error('切换服务器失败:', error);
+    return false;
+  }
+};

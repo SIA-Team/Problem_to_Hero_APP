@@ -7,12 +7,12 @@ import { API_ENDPOINTS, replaceUrlParams } from '../../config/api';
  */
 const answerApi = {
   /**
-   * 获取问题的回答列�?
+   * 获取问题的回答列�?
    * @param {string} questionId - 问题ID
    * @param {Object} params - 查询参数
    * @param {string} params.sortBy - 排序方式（featured=精选，latest=最新），默认featured
-   * @param {number} params.pageNum - 页码，默�?
-   * @param {number} params.pageSize - 每页数量，默�?0
+   * @param {number} params.pageNum - 页码，默�?
+   * @param {number} params.pageSize - 每页数量，默�?0
    * @returns {Promise<Object>}
    */
   getAnswers: (questionId, params = {}) => {
@@ -34,12 +34,12 @@ const answerApi = {
   },
 
   /**
-   * 获取回答的补充回答列�?
+   * 获取回答的补充回答列�?
    * @param {string|number} answerId - 回答ID
    * @param {Object} params - 查询参数
    * @param {string} params.sortBy - 排序方式（featured=精选，newest=最新），默认featured
-   * @param {number} params.pageNum - 页码，默�?
-   * @param {number} params.pageSize - 每页数量，默�?0
+   * @param {number} params.pageNum - 页码，默�?
+   * @param {number} params.pageSize - 每页数量，默�?0
    * @returns {Promise<Object>}
    */
   getSupplementAnswers: (answerId, params = {}) => {
@@ -78,10 +78,17 @@ const answerApi = {
 
     const url = replaceUrlParams(API_ENDPOINTS.ANSWER.SUPPLEMENT_PUBLISH, { answerId });
     
+    console.log('📤 发布补充回答 API调用:');
+    console.log('  answerId:', answerId);
+    console.log('  请求数据:', JSON.stringify(data, null, 2));
+    console.log('  URL:', url);
+    
     try {
       const response = await contentApiClient.post(url, data);
+      console.log('✅ 补充回答发布成功:', response?.data);
       return response;
     } catch (error) {
+      console.error('❌ 补充回答发布失败:', error);
       throw error;
     }
   },
@@ -101,9 +108,9 @@ const answerApi = {
    * @param {string} questionId - 问题ID
    * @param {Object} answerCreateRequest - 回答数据
    * @param {string} answerCreateRequest.content - 回答内容（必传）
-   * @param {number} answerCreateRequest.supplementId - 补充ID（非必传�?
-   * @param {number} answerCreateRequest.invitedBy - 邀请人ID（非必传�?
-   * @param {Array<string>} answerCreateRequest.imageUrls - 图片URL数组（非必传�?
+   * @param {number} answerCreateRequest.supplementId - 补充ID（非必传�?
+   * @param {number} answerCreateRequest.invitedBy - 邀请人ID（非必传�?
+   * @param {Array<string>} answerCreateRequest.imageUrls - 图片URL数组（非必传�?
    * @returns {Promise<Object>}
    */
   publishAnswer: (questionId, answerCreateRequest) => {
@@ -126,7 +133,7 @@ const answerApi = {
   /**
    * 更新回答
    * @param {string} answerId - 回答ID
-   * @param {Object} data - 更新的数�?
+   * @param {Object} data - 更新的数�?
    * @returns {Promise<Object>}
    */
   updateAnswer: (answerId, data) => {
@@ -151,7 +158,7 @@ const answerApi = {
    * @returns {Promise<Object>}
    */
   adoptAnswer: async (questionId, answerId) => {
-    // 确保参数为数字类�?
+    // 确保参数为数字类�?
     const numQuestionId = parseInt(questionId, 10);
     const numAnswerId = parseInt(answerId, 10);
     
@@ -265,7 +272,7 @@ const answerApi = {
   },
 
   /**
-   * 取消踩回�?
+   * 取消踩回�?
    * @param {string} answerId - 回答ID
    * @returns {Promise<Object>}
    */

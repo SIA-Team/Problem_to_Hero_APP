@@ -61,7 +61,17 @@
     "state": "State",
     "district": "District",
     "fullText": "Full Text",
-    "hasNewContent": "New content available, tap to refresh"
+    "hasNewContent": "New content available, tap to refresh",
+    "anonymous": "Anonymous",
+    "likeSuccess": "Liked successfully",
+    "unlikeSuccess": "Like removed",
+    "likeFailed": "Operation failed, please try again",
+    "collectSuccess": "Bookmarked successfully",
+    "uncollectSuccess": "Bookmark removed",
+    "collectFailed": "Operation failed, please try again",
+    "dislikeSuccess": "Disliked",
+    "undislikeSuccess": "Dislike removed",
+    "dislikeFailed": "Operation failed, please try again"
   },
   "emergency": {
     "title": "Emergency Help",
