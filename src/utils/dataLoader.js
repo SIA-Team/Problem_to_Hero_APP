@@ -62,6 +62,36 @@ const transformSupplementDataToFormat = (apiData) => {
   }
   
   return apiData.map((item) => {
+    const normalizedId = item.id ?? item.supplementId ?? item.supplement_id ?? null;
+    const normalizedAuthor =
+      item.author ||
+      item.authorNickName ||
+      item.userName ||
+      item.userNickname ||
+      item.nickname ||
+      '匿名用户';
+    const normalizedAvatar =
+      item.avatar ||
+      item.authorAvatar ||
+      item.userAvatar ||
+      item.user_avatar ||
+      null;
+    const normalizedLocation =
+      item.location ||
+      item.ipLocation ||
+      item.city ||
+      '未知';
+    const normalizedLikeCount = Number(item.likeCount ?? item.likes ?? item.like_count) || 0;
+    const normalizedDislikeCount = Number(item.dislikeCount ?? item.dislikes ?? item.dislike_count) || 0;
+    const normalizedCommentCount = Number(item.commentCount ?? item.comments ?? item.comment_count) || 0;
+    const normalizedShareCount = Number(item.shareCount ?? item.shares ?? item.share_count) || 0;
+    const normalizedCollectCount = Number(item.collectCount ?? item.bookmarkCount ?? item.bookmarks ?? item.collect_count) || 0;
+    const normalizedAnswerCount = Number(item.answerCount ?? item.answers ?? item.answer_count) || 0;
+    const normalizedSuperLikeCount = Number(item.superLikeCount ?? item.superLikes ?? item.super_like_count) || 0;
+    const normalizedLiked = item.liked ?? item.isLiked ?? false;
+    const normalizedDisliked = item.disliked ?? item.isDisliked ?? false;
+    const normalizedCollected = item.collected ?? item.isCollected ?? false;
+    const normalizedCanEdit = item.canEdit ?? item.editable ?? false;
     // 生成一个合理的时间（如果API没有提供时间字段）
     let timeDisplay = '刚刚';
     
@@ -71,9 +101,15 @@ const transformSupplementDataToFormat = (apiData) => {
     
     // 基础数据转换
     const transformedItem = {
-      id: item.id,
+      ...item,
+      id: normalizedId,
       author: item.userName || item.userNickname || '匿名用户',
-      avatar: item.userAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${item.id}`,
+      supplementId: normalizedId,
+      questionId: item.questionId ?? item.question_id ?? null,
+      userId: item.userId ?? item.user_id ?? null,
+      authorNickName: item.authorNickName ?? item.author_nick_name ?? normalizedAuthor,
+      avatar: normalizedAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${normalizedId ?? 'supplement'}`,
+      authorAvatar: normalizedAvatar,
       location: item.location || '未知',
       content: item.content || item.description || '',
       likes: item.likeCount || 0,
@@ -82,11 +118,33 @@ const transformSupplementDataToFormat = (apiData) => {
       shares: item.shareCount || 0,
       bookmarks: item.collectCount || 0,
       superLikes: item.superLikeCount || 0,
+      author: normalizedAuthor,
+      location: normalizedLocation,
+      content: item.content || item.description || item.text || '',
+      liked: normalizedLiked,
+      disliked: normalizedDisliked,
+      collected: normalizedCollected,
+      canEdit: normalizedCanEdit,
+      likeCount: normalizedLikeCount,
+      likes: normalizedLikeCount,
+      dislikeCount: normalizedDislikeCount,
+      dislikes: normalizedDislikeCount,
+      commentCount: normalizedCommentCount,
+      comments: normalizedCommentCount,
+      shareCount: normalizedShareCount,
+      shares: normalizedShareCount,
+      collectCount: normalizedCollectCount,
+      bookmarkCount: normalizedCollectCount,
+      bookmarks: normalizedCollectCount,
+      answerCount: normalizedAnswerCount,
+      superLikeCount: normalizedSuperLikeCount,
+      superLikes: normalizedSuperLikeCount,
       time: timeDisplay,
     };
     
     // 处理图片
     if (item.imageUrls && Array.isArray(item.imageUrls) && item.imageUrls.length > 0) {
+      transformedItem.imageUrls = item.imageUrls;
       transformedItem.images = item.imageUrls;
     }
     

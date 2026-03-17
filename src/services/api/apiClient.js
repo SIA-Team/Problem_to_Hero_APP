@@ -2,6 +2,50 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_CONFIG } from '../../config/api';
 import ENV, { shouldUseMock, getApiServerUrl } from '../../config/env';
+import { showToast } from '../../utils/toast';
+
+// 处理 token 过期的统一函数
+const handleTokenExpired = async () => {
+  try {
+    // 获取用户信息用于显示
+    const userInfo = await AsyncStorage.getItem('userInfo');
+    let username = '';
+    
+    if (userInfo) {
+      try {
+        const user = JSON.parse(userInfo);
+        username = user.username || '';
+      } catch (e) {
+        console.error('解析用户信息失败:', e);
+      }
+    }
+    
+    // 清除认证信息
+    await AsyncStorage.multiRemove(['authToken', 'refreshToken', 'userInfo']);
+    
+    // 显示登录过期提示，包含用户名信息
+    const { showAppAlert } = require('../../utils/appAlert');
+    
+    const message = username 
+      ? `登录已过期，请重新登录\n\n用户名：${username}\n默认密码：12345678`
+      : '登录已过期，请重新登录';
+    
+    showAppAlert(
+      '登录过期',
+      message,
+      [{ 
+        text: '确定', 
+        onPress: () => {
+          // 用户点击确定后才继续执行
+        }
+      }]
+    );
+    
+    console.log('🚪 Token expired, user logged out');
+  } catch (error) {
+    console.error('❌ 处理登录过期失败:', error);
+  }
+};
 
 // 真实服务器的 baseURL
 const REAL_BASE_URL = ENV.apiUrl || API_CONFIG.BASE_URL;
@@ -102,7 +146,7 @@ apiClient.interceptors.request.use(
 
 // 响应拦截器
 apiClient.interceptors.response.use(
-  (response) => {
+  async (response) => {
     // 打印响应信息（开发环境）
     if (__DEV__) {
       console.log('API Response:', {
@@ -118,6 +162,21 @@ apiClient.interceptors.response.use(
     let responseData = response.data;
     if (responseData && responseData.data !== undefined && responseData.code !== undefined) {
       responseData = responseData;
+    }
+    
+    // 检查业务层面的401错误（HTTP状态码200但业务code是401）
+    if (responseData && responseData.code === 401) {
+      console.log('🚪 检测到业务层面401错误，触发登出');
+      await handleTokenExpired();
+      
+      // 创建一个401错误并抛出，让错误处理逻辑接管
+      const error = new Error('登录已过期');
+      error.response = {
+        status: 401,
+        data: responseData
+      };
+      error.config = response.config;
+      throw error;
     }
     
     // 判断当前接口是否使用 Mock
@@ -178,12 +237,15 @@ apiClient.interceptors.response.use(
           // 重试原始请求
           originalRequest.headers.Authorization = `Bearer ${token}`;
           return apiClient(originalRequest);
+        } else {
+          // 没有 refreshToken，直接触发登出
+          console.log('❌ No refresh token found, clearing storage');
+          await handleTokenExpired();
         }
       } catch (refreshError) {
-        // 刷新 token 失败，清除本地存储并跳转到登录页
-        await AsyncStorage.multiRemove(['authToken', 'refreshToken', 'userInfo']);
-        // 这里可以触发全局登出事件
-        console.log('Token refresh failed, user needs to login again');
+        // 刷新 token 失败，清除本地存储并触发登出
+        console.log('❌ Token refresh failed, clearing storage and showing user info');
+        await handleTokenExpired();
       }
     }
     

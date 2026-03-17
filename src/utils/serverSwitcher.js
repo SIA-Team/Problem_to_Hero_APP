@@ -3,6 +3,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const SERVER_KEY = '@app_server_selection';
 const CUSTOM_SERVER_URL_KEY = '@app_custom_server_url';
 
+const normalizeServerUrl = (url) => {
+  if (!url) {
+    return '';
+  }
+
+  return url.trim().replace(/\/+$/, '');
+};
+
 export const SERVERS = {
   SERVER1: {
     name: '开发服务器',
@@ -53,7 +61,7 @@ export const setCurrentServer = async (serverKey) => {
 export const getCustomServerUrl = async () => {
   try {
     const url = await AsyncStorage.getItem(CUSTOM_SERVER_URL_KEY);
-    return url || '';
+    return normalizeServerUrl(url);
   } catch (error) {
     console.error('获取自定义服务器地址失败:', error);
     return '';
@@ -65,7 +73,7 @@ export const getCustomServerUrl = async () => {
  */
 export const setCustomServerUrl = async (url) => {
   try {
-    await AsyncStorage.setItem(CUSTOM_SERVER_URL_KEY, url);
+    await AsyncStorage.setItem(CUSTOM_SERVER_URL_KEY, normalizeServerUrl(url));
     return true;
   } catch (error) {
     console.error('保存自定义服务器地址失败:', error);
@@ -81,8 +89,12 @@ export const switchServerAndReload = async (serverKey, customUrl = '') => {
     await setCurrentServer(serverKey);
     
     // 如果是自定义服务器，保存自定义地址
-    if (serverKey === 'custom' && customUrl) {
-      await setCustomServerUrl(customUrl);
+    if (serverKey === 'custom') {
+      const normalizedCustomUrl = normalizeServerUrl(customUrl);
+      if (!normalizedCustomUrl) {
+        return false;
+      }
+      await setCustomServerUrl(normalizedCustomUrl);
     }
     
     // 提示用户手动重启应用

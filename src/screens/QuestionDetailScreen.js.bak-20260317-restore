@@ -1,0 +1,1049 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Image, TextInput, StyleSheet, Modal, Alert, RefreshControl, ActivityIndicator, Animated } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import Avatar from '../components/Avatar';
+import IdentitySelector from '../components/IdentitySelector';
+import ImagePickerSheet from '../components/ImagePickerSheet';
+import QuestionDetailSkeleton from '../components/QuestionDetailSkeleton';
+import SupplementAnswerModal from '../components/SupplementAnswerModal';
+import CommentModal from '../components/CommentModal';
+import WriteCommentModal from '../components/WriteCommentModal';
+import superLikeCreditService from '../services/SuperLikeCreditService';
+import { useTranslation } from '../i18n/withTranslation';
+import { modalTokens } from '../components/modalTokens';
+import questionApi from '../services/api/questionApi';
+import answerApi from '../services/api/answerApi';
+import commentApi from '../services/api/commentApi';
+import uploadApi from '../services/api/uploadApi';
+import { loadQuestionSupplements } from '../utils/dataLoader';
+import { showToast } from '../utils/toast';
+import { showAppAlert } from '../utils/appAlert';
+
+const answers = [
+  { 
+    id: 1, 
+    author: 'Python老司机', 
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=answer1', 
+    verified: true, 
+    adopted: true, 
+    title: '资深Python开发 · 10年经验', 
+    content: '作为一个从零开始学Python的过来人，我来分享一下我的经验：\n\n1. 学习时间：如果每天能保证2-3小时的学习时间，3个月完全可以入门并做一些简单的项目。\n\n2. 学习路线：\n- 第1个月：Python基础语法、数据类型、函数、面向对象\n- 第2个月：常用库（NumPy、Pandas）、数据处理\n- 第3个月：实战项目、数据可视化\n\n3. 推荐资源：廖雪峰的Python教程（免费）、《Python编程从入门到实践》', 
+    likes: 256, 
+    dislikes: 3, 
+    comments: 23, 
+    time: '1小时前',
+    invitedBy: { name: '张三丰', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=inviter1' },
+    superLikes: 5, // 超级赞数量
+    isMyAnswer: false // 是否是我的回答
+  },
+  { 
+    id: 2, 
+    author: '数据分析师小王', 
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=answer2', 
+    verified: false, 
+    adopted: false, 
+    adoptedCount: 3, // 被采纳的次数
+    title: '数据分析师 · 3年经验', 
+    content: '我也是文科转行的，现在在做数据分析。给你几点建议：\n\n1. 不要一开始就啃书，先跟着视频教程敲代码\n2. 多做项目，边学边练\n3. 加入一些学习群，有问题可以随时问', 
+    likes: 89, 
+    dislikes: 1, 
+    comments: 12, 
+    time: '30分钟前',
+    // 添加仲裁信息
+    hasArbitration: true,
+    arbitrationResult: 'completed', // 'completed': 仲裁已完成
+    arbitrationData: {
+      status: 'rejected', // 'approved': 推翻, 'rejected': 维持
+      votes: { agree: 1, disagree: 2, total: 3 },
+      experts: [
+        { 
+          id: 1, 
+          name: '李明', 
+          avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert1', 
+          title: 'Python架构师', 
+          vote: 'agree', 
+          reason: '答案过于简单，缺少具体的学习方法和资源推荐，建议推翻。', 
+          time: '2小时前' 
+        },
+        { 
+          id: 2, 
+          name: '王芳', 
+          avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert2', 
+          title: '数据科学家', 
+          vote: 'disagree', 
+          reason: '答案虽然简短，但给出了实用的建议，适合初学者，建议维持。', 
+          time: '1小时前' 
+        },
+        { 
+          id: 3, 
+          name: '赵强', 
+          avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert3', 
+          title: '技术总监', 
+          vote: 'disagree', 
+          reason: '答案简洁明了，重点突出，对于文科转行者来说很有参考价值。', 
+          time: '30分钟前' 
+        },
+      ]
+    },
+    superLikes: 12, // 超级赞数量
+    isMyAnswer: true // 是我的回答，可以购买超级赞
+  },
+  { 
+    id: 3, 
+    author: '编程新手', 
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=answer3', 
+    verified: false, 
+    adopted: false, 
+    title: '学生', 
+    content: '同问！我也想学Python，坐等大佬回答~', 
+    likes: 5, 
+    dislikes: 2, 
+    comments: 0, 
+    time: '10分钟前',
+    superLikes: 0,
+    isMyAnswer: false
+  },
+];
+
+// 评论数据
+const commentsData = [
+  { id: 1, author: '技术爱好者', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=comment1', content: '这个问题问得好，我也想知道答案！', likes: 23, time: '2小时前', replies: 3, superLikes: 5 },
+  { id: 2, author: '编程小白', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=comment2', content: '同问，坐等大佬回复', likes: 15, time: '1小时前', replies: 1, superLikes: 2 },
+  { id: 3, author: '数据分析师', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=comment3', content: 'Python确实是入门数据分析的好选择，加油！', likes: 45, time: '30分钟前', replies: 5, superLikes: 15 },
+  { id: 4, author: '前端开发者', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=comment4', content: '建议先从基础语法开始，不要急于求成', likes: 32, time: '20分钟前', replies: 2, superLikes: 0 },
+];
+
+// 回复数据
+const repliesData = {
+  1: [
+    { id: 101, author: '回复者A', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=reply1', content: '我也是这么想的！', likes: 5, time: '1小时前' },
+    { id: 102, author: '回复者B', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=reply2', content: '确实是个好问题', likes: 3, time: '50分钟前' },
+    { id: 103, author: '回复者C', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=reply3', content: '期待大佬解答', likes: 8, time: '40分钟前' },
+  ],
+  2: [
+    { id: 201, author: '回复者D', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=reply4', content: '一起等', likes: 2, time: '30分钟前' },
+  ],
+  3: [
+    { id: 301, author: '回复者E', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=reply5', content: '说得对！', likes: 10, time: '25分钟前' },
+    { id: 302, author: '回复者F', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=reply6', content: '我也在学Python', likes: 7, time: '20分钟前' },
+    { id: 303, author: '回复者G', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=reply7', content: '加油加油！', likes: 4, time: '15分钟前' },
+    { id: 304, author: '回复者H', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=reply8', content: '一起进步', likes: 6, time: '10分钟前' },
+    { id: 305, author: '回复者I', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=reply9', content: '有问题可以互相交流', likes: 9, time: '5分钟前' },
+  ],
+  4: [
+    { id: 401, author: '回复者J', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=reply10', content: '同意这个观点', likes: 12, time: '15分钟前' },
+    { id: 402, author: '回复者K', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=reply11', content: '基础很重要', likes: 8, time: '10分钟前' },
+  ],
+};
+
+// 活动数据
+const activitiesData = [
+  { id: 1, title: 'Python学习交流会', type: '线上活动', date: '2026-01-20', time: '19:00-21:00', location: '腾讯会议', participants: 45, maxParticipants: 100, organizer: '张三丰', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user1', status: '报名中' },
+  { id: 2, title: 'Python实战项目分享', type: '线下活动', date: '2026-01-25', time: '14:00-17:00', location: '北京市海淀区中关村创业大街', participants: 28, maxParticipants: 50, organizer: 'Python老司机', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=answer1', status: '报名中' },
+  { id: 3, title: '数据分析入门讲座', type: '线上活动', date: '2026-01-18', time: '20:00-21:30', location: 'Zoom会议', participants: 120, maxParticipants: 200, organizer: '数据分析师小王', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=answer2', status: '即将开始' },
+];
+
+// 补充问题数据
+const supplementQuestions = [
+  { id: 1, author: '学习者小李', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=supp1', location: '上海', content: '请问学Python需要先学什么数学基础吗？我高中数学不太好，会不会影响学习？', likes: 45, dislikes: 2, comments: 8, shares: 12, bookmarks: 23, superLikes: 8 },
+  { id: 2, author: '转行程序员', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=supp2', location: '深圳', content: '想问一下，学完Python基础后，做数据分析还需要学哪些工具？比如SQL、Excel这些需要吗？', likes: 32, dislikes: 1, comments: 5, shares: 8, bookmarks: 15, superLikes: 3 },
+  { id: 3, author: '大学生小张', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=supp3', location: '广州', content: '有没有推荐的Python练手项目？最好是那种能写进简历的', likes: 28, dislikes: 0, comments: 12, shares: 18, bookmarks: 34, superLikes: 12 },
+  { id: 4, author: '职场新人', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=supp4', location: '杭州', content: '自学和报班哪个更好？有没有性价比高的网课推荐？', likes: 19, dislikes: 3, comments: 6, shares: 5, bookmarks: 11, superLikes: 0 },
+];
+
+export default function QuestionDetailScreen({ navigation, route }) {
+  const { t } = useTranslation();
+  
+  // 淡入动画
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  
+  // 问题详情数据状态
+  const [questionData, setQuestionData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // 补充列表状态 - 优化为分排序方式缓存
+  const [supplementsCache, setSupplementsCache] = useState({
+    featured: { list: [], total: 0, pageNum: 1, hasMore: true, loaded: false, lastUpdated: null },
+    newest: { list: [], total: 0, pageNum: 1, hasMore: true, loaded: false, lastUpdated: null }
+  });
+  const [supplementsLoading, setSupplementsLoading] = useState(false);
+  const [supplementsRefreshing, setSupplementsRefreshing] = useState(false);
+  const [supplementsLoadingMore, setSupplementsLoadingMore] = useState(false);
+  const [supplementsSortBy, setSupplementsSortBy] = useState('featured');
+  
+  // 从缓存中获取当前排序的补充数据
+  const currentSupplementsData = supplementsCache[supplementsSortBy];
+  const supplementsList = currentSupplementsData.list;
+  const supplementsPage = currentSupplementsData.pageNum;
+  const supplementsHasMore = currentSupplementsData.hasMore;
+  
+  // 回答列表状态 - 优化为分排序方式缓存
+  const [answersCache, setAnswersCache] = useState({
+    featured: { list: [], total: 0, pageNum: 1, hasMore: true, loaded: false, lastUpdated: null },
+    newest: { list: [], total: 0, pageNum: 1, hasMore: true, loaded: false, lastUpdated: null }
+  });
+  const [answersLoading, setAnswersLoading] = useState(false);
+  const [answersRefreshing, setAnswersRefreshing] = useState(false);
+  const [answersLoadingMore, setAnswersLoadingMore] = useState(false);
+  const [answersSortBy, setAnswersSortBy] = useState('featured');
+  
+  // 缓存配置
+  const CACHE_EXPIRE_TIME = 5 * 60 * 1000; // 5分钟缓存过期时间
+  const AUTO_REFRESH_INTERVAL = 30 * 1000; // 30秒自动检查间隔
+  
+  // 从缓存中获取当前排序的数据
+  const currentAnswersData = answersCache[answersSortBy];
+  const answersList = currentAnswersData.list;
+  const answersTotal = currentAnswersData.total;
+  const answersPageNum = currentAnswersData.pageNum;
+  const answersHasMore = currentAnswersData.hasMore;
+  
+  // 评论列表状态 - 优化为分排序方式缓存
+  const [commentsCache, setCommentsCache] = useState({
+    newest: { list: [], total: 0, pageNum: 1, hasMore: true, loaded: false, lastUpdated: null },
+    likes: { list: [], total: 0, pageNum: 1, hasMore: true, loaded: false, lastUpdated: null }
+  });
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentsRefreshing, setCommentsRefreshing] = useState(false);
+  const [commentsLoadingMore, setCommentsLoadingMore] = useState(false);
+  const [commentsSortBy, setCommentsSortBy] = useState('newest');
+  
+  // 从缓存中获取当前排序的评论数据
+  const currentCommentsData = commentsCache[commentsSortBy];
+  const commentsList = currentCommentsData.list;
+  const commentsPageNum = currentCommentsData.pageNum;
+  const commentsHasMore = currentCommentsData.hasMore;
+  
+  // 其他状态
+  const [activeTab, setActiveTab] = useState('answers');
+  const [showCommentModal, setShowCommentModal] = useState(false);
+  const [showWriteCommentModal, setShowWriteCommentModal] = useState(false);
+  const [showSupplementModal, setShowSupplementModal] = useState(false);
+  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // 获取路由参数
+  const { questionId } = route.params || {};
+  
+  // 加载评论列表
+  const loadComments = async (sortBy = commentsSortBy, pageNum = 1, isRefresh = false, isLoadMore = false) => {
+    if (!questionId) return;
+    
+    try {
+      console.log('🔄 Loading comments:', { questionId, sortBy, pageNum, isRefresh, isLoadMore });
+      
+      if (isRefresh) {
+        setCommentsRefreshing(true);
+      } else if (isLoadMore) {
+        setCommentsLoadingMore(true);
+      } else {
+        setCommentsLoading(true);
+      }
+      
+      const params = {
+        targetType: 1,
+        targetId: parseInt(questionId),
+        parentId: 0,
+        sortBy: sortBy,
+        pageNum: pageNum,
+        pageSize: 10
+      };
+      
+      console.log('📤 Comment API request params:', params);
+      
+      const response = await commentApi.getComments(params);
+      console.log('📥 Comment API response:', response);
+      
+      if (response && response.data) {
+        const { list = [], total = 0 } = response.data;
+        const hasMore = list.length >= 10; // 如果返回的数据等于pageSize，说明可能还有更多数据
+        
+        console.log('📊 Comment data processed:', { 
+          listLength: list.length, 
+          total, 
+          hasMore, 
+          sortBy, 
+          pageNum 
+        });
+        
+        setCommentsCache(prev => {
+          const newCache = { ...prev };
+          
+          if (isRefresh || pageNum === 1) {
+            // 刷新或首次加载，替换数据
+            newCache[sortBy] = {
+              list: list,
+              total: total,
+              pageNum: pageNum,
+              hasMore: hasMore,
+              loaded: true,
+              lastUpdated: Date.now()
+            };
+          } else {
+            // 加载更多，追加数据
+            const existingList = newCache[sortBy].list || [];
+            newCache[sortBy] = {
+              ...newCache[sortBy],
+              list: [...existingList, ...list],
+              pageNum: pageNum,
+              hasMore: hasMore,
+              lastUpdated: Date.now()
+            };
+          }
+          
+          return newCache;
+        });
+        
+        console.log('✅ Comments loaded successfully');
+      } else {
+        console.warn('⚠️ Invalid comment response format:', response);
+      }
+    } catch (error) {
+      console.error('❌ Failed to load comments:', error);
+      showToast('加载评论失败');
+    } finally {
+      setCommentsLoading(false);
+      setCommentsRefreshing(false);
+      setCommentsLoadingMore(false);
+    }
+  };
+  
+  // 切换评论排序
+  const handleCommentSortChange = (sortBy) => {
+    console.log('🔄 Changing comment sort to:', sortBy);
+    setCommentsSortBy(sortBy);
+    
+    // 检查缓存是否存在且未过期
+    const cacheData = commentsCache[sortBy];
+    const now = Date.now();
+    const isExpired = !cacheData.lastUpdated || (now - cacheData.lastUpdated) > CACHE_EXPIRE_TIME;
+    
+    if (!cacheData.loaded || isExpired) {
+      console.log('📥 Loading fresh data for sort:', sortBy);
+      loadComments(sortBy, 1, false, false);
+    } else {
+      console.log('📋 Using cached data for sort:', sortBy);
+    }
+  };
+  
+  // 刷新评论
+  const handleCommentsRefresh = () => {
+    console.log('🔄 Refreshing comments');
+    loadComments(commentsSortBy, 1, true, false);
+  };
+  
+  // 加载更多评论
+  const handleCommentsLoadMore = () => {
+    if (commentsHasMore && !commentsLoadingMore) {
+      console.log('📥 Loading more comments, page:', commentsPageNum + 1);
+      loadComments(commentsSortBy, commentsPageNum + 1, false, true);
+    }
+  };
+  
+  // 发布评论成功后刷新列表
+  const handleCommentPublished = () => {
+    console.log('✅ Comment published, refreshing list');
+    handleCommentsRefresh();
+  };
+  
+  // 初始化加载
+  useEffect(() => {
+    if (questionId) {
+      console.log('🚀 Initializing QuestionDetailScreen with questionId:', questionId);
+      
+      // 启动淡入动画
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+      
+      // 加载问题详情
+      // loadQuestionDetail();
+      
+      // 加载评论列表
+      loadComments('newest', 1, false, false);
+    }
+  }, [questionId]);
+  
+  // 渲染评论排序按钮
+  const renderCommentSortButtons = () => (
+    <View style={styles.sortContainer}>
+      <TouchableOpacity
+        style={[
+          styles.sortButton,
+          commentsSortBy === 'newest' && styles.sortButtonActive
+        ]}
+        onPress={() => handleCommentSortChange('newest')}
+      >
+        <Text style={[
+          styles.sortButtonText,
+          commentsSortBy === 'newest' && styles.sortButtonTextActive
+        ]}>
+          最新
+        </Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity
+        style={[
+          styles.sortButton,
+          commentsSortBy === 'likes' && styles.sortButtonActive
+        ]}
+        onPress={() => handleCommentSortChange('likes')}
+      >
+        <Text style={[
+          styles.sortButtonText,
+          commentsSortBy === 'likes' && styles.sortButtonTextActive
+        ]}>
+          点赞量
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+  
+  // 渲染评论项
+  const renderCommentItem = ({ item, index }) => (
+    <View style={styles.commentItem}>
+      <View style={styles.commentHeader}>
+        <Avatar source={{ uri: item.avatar }} size={32} />
+        <View style={styles.commentAuthorInfo}>
+          <Text style={styles.commentAuthor}>{item.author}</Text>
+          <Text style={styles.commentTime}>{item.time}</Text>
+        </View>
+      </View>
+      <Text style={styles.commentContent}>{item.content}</Text>
+      <View style={styles.commentActions}>
+        <TouchableOpacity style={styles.commentAction}>
+          <Ionicons name="heart-outline" size={16} color="#666" />
+          <Text style={styles.commentActionText}>{item.likes}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.commentAction}>
+          <Ionicons name="chatbubble-outline" size={16} color="#666" />
+          <Text style={styles.commentActionText}>{item.replies || 0}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+  
+  // 渲染评论列表
+  const renderCommentsList = () => (
+    <View style={styles.commentsContainer}>
+      {renderCommentSortButtons()}
+      
+      {commentsLoading && commentsList.length === 0 ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.loadingText}>加载评论中...</Text>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.commentsScrollView}
+          refreshControl={
+            <RefreshControl
+              refreshing={commentsRefreshing}
+              onRefresh={handleCommentsRefresh}
+              colors={['#007AFF']}
+              tintColor="#007AFF"
+            />
+          }
+          onScroll={({ nativeEvent }) => {
+            const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+            const paddingToBottom = 20;
+            if (layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom) {
+              handleCommentsLoadMore();
+            }
+          }}
+          scrollEventThrottle={400}
+        >
+          {commentsList.length > 0 ? (
+            <>
+              {commentsList.map((item, index) => (
+                <View key={item.id || index}>
+                  {renderCommentItem({ item, index })}
+                </View>
+              ))}
+              
+              {commentsLoadingMore && (
+                <View style={styles.loadMoreContainer}>
+                  <ActivityIndicator size="small" color="#007AFF" />
+                  <Text style={styles.loadMoreText}>加载更多...</Text>
+                </View>
+              )}
+              
+              {!commentsHasMore && commentsList.length > 0 && (
+                <View style={styles.noMoreContainer}>
+                  <Text style={styles.noMoreText}>没有更多评论了</Text>
+                </View>
+              )}
+            </>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>暂无评论</Text>
+              <Text style={styles.emptySubText}>快来发表第一条评论吧</Text>
+            </View>
+          )}
+        </ScrollView>
+      )}
+    </View>
+  );
+  
+  return (
+    <SafeAreaView style={styles.container}>
+      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+        {/* 头部导航 */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#000" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>问题详情</Text>
+          <View style={styles.headerRight} />
+        </View>
+        
+        {/* 主要内容区域 */}
+        <ScrollView 
+          style={styles.scrollView}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                // 这里可以添加刷新逻辑
+                setTimeout(() => setRefreshing(false), 1000);
+              }}
+              colors={['#007AFF']}
+              tintColor="#007AFF"
+            />
+          }
+        >
+          {/* 问题内容区域 */}
+          <View style={styles.questionContainer}>
+            <Text style={styles.questionTitle}>
+              文科生零基础学Python需要多长时间？有什么好的学习路线推荐吗？
+            </Text>
+            <Text style={styles.questionContent}>
+              我是文科专业的大学生，对编程完全零基础，但是对数据分析很感兴趣，想学Python。请问需要多长时间能够入门？有什么好的学习资源和路线推荐吗？
+            </Text>
+            
+            <View style={styles.questionMeta}>
+              <View style={styles.authorInfo}>
+                <Avatar source={{ uri: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user1' }} size={24} />
+                <Text style={styles.authorName}>学习者小李</Text>
+                <Text style={styles.questionTime}>2小时前</Text>
+              </View>
+              
+              <View style={styles.questionStats}>
+                <View style={styles.statItem}>
+                  <Ionicons name="eye-outline" size={16} color="#666" />
+                  <Text style={styles.statText}>1.2k</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Ionicons name="heart-outline" size={16} color="#666" />
+                  <Text style={styles.statText}>45</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Ionicons name="chatbubble-outline" size={16} color="#666" />
+                  <Text style={styles.statText}>{commentsList.length}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+          
+          {/* 标签页切换 */}
+          <View style={styles.tabContainer}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'answers' && styles.activeTab]}
+              onPress={() => setActiveTab('answers')}
+            >
+              <Text style={[styles.tabText, activeTab === 'answers' && styles.activeTabText]}>
+                回答 ({answers.length})
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'comments' && styles.activeTab]}
+              onPress={() => setActiveTab('comments')}
+            >
+              <Text style={[styles.tabText, activeTab === 'comments' && styles.activeTabText]}>
+                评论 ({commentsList.length})
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'supplements' && styles.activeTab]}
+              onPress={() => setActiveTab('supplements')}
+            >
+              <Text style={[styles.tabText, activeTab === 'supplements' && styles.activeTabText]}>
+                补充 ({supplementQuestions.length})
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          {/* 内容区域 */}
+          {activeTab === 'answers' && (
+            <View style={styles.answersContainer}>
+              {answers.map((answer, index) => (
+                <View key={answer.id} style={styles.answerItem}>
+                  <View style={styles.answerHeader}>
+                    <Avatar source={{ uri: answer.avatar }} size={40} />
+                    <View style={styles.answerAuthorInfo}>
+                      <View style={styles.answerAuthorRow}>
+                        <Text style={styles.answerAuthor}>{answer.author}</Text>
+                        {answer.verified && (
+                          <Ionicons name="checkmark-circle" size={16} color="#007AFF" />
+                        )}
+                        {answer.adopted && (
+                          <View style={styles.adoptedBadge}>
+                            <Text style={styles.adoptedText}>已采纳</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.answerTitle}>{answer.title}</Text>
+                    </View>
+                  </View>
+                  
+                  <Text style={styles.answerContent}>{answer.content}</Text>
+                  
+                  <View style={styles.answerActions}>
+                    <TouchableOpacity style={styles.answerAction}>
+                      <Ionicons name="heart-outline" size={20} color="#666" />
+                      <Text style={styles.answerActionText}>{answer.likes}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.answerAction}>
+                      <Ionicons name="chatbubble-outline" size={20} color="#666" />
+                      <Text style={styles.answerActionText}>{answer.comments}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.answerAction}>
+                      <Ionicons name="share-outline" size={20} color="#666" />
+                      <Text style={styles.answerActionText}>分享</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+          
+          {activeTab === 'comments' && renderCommentsList()}
+          
+          {activeTab === 'supplements' && (
+            <View style={styles.supplementsContainer}>
+              {supplementQuestions.map((supplement, index) => (
+                <View key={supplement.id} style={styles.supplementItem}>
+                  <View style={styles.supplementHeader}>
+                    <Avatar source={{ uri: supplement.avatar }} size={32} />
+                    <View style={styles.supplementAuthorInfo}>
+                      <Text style={styles.supplementAuthor}>{supplement.author}</Text>
+                      <Text style={styles.supplementLocation}>{supplement.location}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.supplementContent}>{supplement.content}</Text>
+                  <View style={styles.supplementActions}>
+                    <TouchableOpacity style={styles.supplementAction}>
+                      <Ionicons name="heart-outline" size={16} color="#666" />
+                      <Text style={styles.supplementActionText}>{supplement.likes}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.supplementAction}>
+                      <Ionicons name="chatbubble-outline" size={16} color="#666" />
+                      <Text style={styles.supplementActionText}>{supplement.comments}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </ScrollView>
+        
+        {/* 底部操作栏 */}
+        <View style={styles.bottomBar}>
+          <TouchableOpacity 
+            style={styles.bottomAction}
+            onPress={() => setShowWriteCommentModal(true)}
+          >
+            <Ionicons name="chatbubble-outline" size={24} color="#666" />
+            <Text style={styles.bottomActionText}>评论</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.bottomAction}>
+            <Ionicons name="heart-outline" size={24} color="#666" />
+            <Text style={styles.bottomActionText}>点赞</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.bottomAction}>
+            <Ionicons name="bookmark-outline" size={24} color="#666" />
+            <Text style={styles.bottomActionText}>收藏</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.bottomAction}>
+            <Ionicons name="share-outline" size={24} color="#666" />
+            <Text style={styles.bottomActionText}>分享</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+      
+      {/* 写评论弹窗 */}
+      <WriteCommentModal
+        visible={showWriteCommentModal}
+        onClose={() => setShowWriteCommentModal(false)}
+        onPublish={handleCommentPublished}
+        targetType={1}
+        targetId={questionId}
+        parentId={0}
+      />
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  content: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000',
+  },
+  headerRight: {
+    width: 40,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  questionContainer: {
+    padding: 16,
+    borderBottomWidth: 8,
+    borderBottomColor: '#f8f8f8',
+  },
+  questionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#000',
+    lineHeight: 28,
+    marginBottom: 12,
+  },
+  questionContent: {
+    fontSize: 16,
+    color: '#333',
+    lineHeight: 24,
+    marginBottom: 16,
+  },
+  questionMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  authorInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  authorName: {
+    fontSize: 14,
+    color: '#333',
+    marginLeft: 8,
+    marginRight: 12,
+  },
+  questionTime: {
+    fontSize: 12,
+    color: '#999',
+  },
+  questionStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 16,
+  },
+  statText: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 4,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  activeTab: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#007AFF',
+  },
+  tabText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  activeTabText: {
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+  answersContainer: {
+    backgroundColor: '#fff',
+  },
+  answerItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  answerHeader: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  answerAuthorInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  answerAuthorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  answerAuthor: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+    marginRight: 8,
+  },
+  adoptedBadge: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  adoptedText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '500',
+  },
+  answerTitle: {
+    fontSize: 14,
+    color: '#666',
+  },
+  answerContent: {
+    fontSize: 16,
+    color: '#333',
+    lineHeight: 24,
+    marginBottom: 16,
+  },
+  answerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  answerAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 24,
+  },
+  answerActionText: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 4,
+  },
+  commentsContainer: {
+    backgroundColor: '#fff',
+  },
+  sortContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  sortButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 12,
+    backgroundColor: '#f8f8f8',
+  },
+  sortButtonActive: {
+    backgroundColor: '#007AFF',
+  },
+  sortButtonText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  sortButtonTextActive: {
+    color: '#fff',
+    fontWeight: '500',
+  },
+  commentsScrollView: {
+    flex: 1,
+  },
+  commentItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  commentAuthorInfo: {
+    marginLeft: 8,
+  },
+  commentAuthor: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#000',
+  },
+  commentTime: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 2,
+  },
+  commentContent: {
+    fontSize: 14,
+    color: '#333',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  commentActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  commentAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 20,
+  },
+  commentActionText: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 4,
+  },
+  supplementsContainer: {
+    backgroundColor: '#fff',
+  },
+  supplementItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  supplementHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  supplementAuthorInfo: {
+    marginLeft: 8,
+  },
+  supplementAuthor: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#000',
+  },
+  supplementLocation: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 2,
+  },
+  supplementContent: {
+    fontSize: 14,
+    color: '#333',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  supplementActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  supplementAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 20,
+  },
+  supplementActionText: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 4,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 12,
+  },
+  loadMoreContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  loadMoreText: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 8,
+  },
+  noMoreContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  noMoreText: {
+    fontSize: 14,
+    color: '#999',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 8,
+  },
+  emptySubText: {
+    fontSize: 14,
+    color: '#999',
+  },
+  bottomBar: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  bottomAction: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  bottomActionText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+  },
+});

@@ -12,10 +12,12 @@ import GenderPickerModal from '../components/GenderPickerModal';
 import DatePickerModal from '../components/DatePickerModal';
 import Toast from '../components/Toast';
 import ServerSwitcher from '../components/ServerSwitcher';
+import LogoutConfirmModal from '../components/LogoutConfirmModal';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import UserCacheService from '../services/UserCacheService';
 import userApi from '../services/api/userApi';
+import authApi from '../services/api/authApi';
 import { showAppAlert } from '../utils/appAlert';
 
 export default function SettingsScreen({ navigation }) {
@@ -71,6 +73,10 @@ export default function SettingsScreen({ navigation }) {
   // 服务器切换器状态
   const [showServerSwitcher, setShowServerSwitcher] = useState(false);
 
+  // 退出登录弹窗状态
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
   // 用户资料数据
   const [userProfile, setUserProfile] = useState({
     userId: '',
@@ -85,6 +91,7 @@ export default function SettingsScreen({ navigation }) {
     avatar: null, // 头像 URL
     email: '',
     phone: '',
+    passwordChanged: false, // 是否修改过密码（默认 false，表示未修改，会显示默认密码）
   });
 
   // 上传头像加载状态
@@ -100,6 +107,9 @@ export default function SettingsScreen({ navigation }) {
     const loadUserProfile = async () => {
       // 读取本地保存的用户名修改时间
       const savedModifiedTime = await AsyncStorage.getItem('usernameLastModified');
+      // 读取密码修改标记
+      const passwordChangedFlag = await AsyncStorage.getItem('passwordChanged');
+      const hasChangedPassword = passwordChangedFlag === 'true';
       
       await UserCacheService.loadUserProfileWithCache(
         // 缓存加载完成回调（立即显示）
@@ -118,6 +128,7 @@ export default function SettingsScreen({ navigation }) {
             avatar: cachedProfile.avatar || null,
             email: cachedProfile.email || '',
             phone: cachedProfile.phonenumber || '',
+            passwordChanged: cachedProfile.passwordChanged === true || hasChangedPassword,
           });
         },
         // 最新数据加载完成回调（静默更新）
@@ -136,6 +147,7 @@ export default function SettingsScreen({ navigation }) {
             avatar: freshProfile.avatar || null,
             email: freshProfile.email || '',
             phone: freshProfile.phonenumber || '',
+            passwordChanged: freshProfile.passwordChanged === true || hasChangedPassword,
           });
         }
       );
@@ -322,6 +334,46 @@ export default function SettingsScreen({ navigation }) {
     } catch (error) {
       // 只记录错误类型，不显示详细信息
       console.error('❌ 刷新用户信息失败');
+    }
+  };
+
+  /**
+   * 处理退出登录确认
+   */
+  const handleConfirmLogout = async () => {
+    setIsLoggingOut(true);
+    
+    try {
+      // 调用退出登录 API
+      await authApi.logout();
+      
+      // 清除本地存储
+      await AsyncStorage.multiRemove([
+        'authToken',
+        'refreshToken', 
+        'userInfo',
+        'userProfileCache',
+        'usernameLastModified'
+      ]);
+      
+      // 清除用户缓存
+      await UserCacheService.clearCache();
+      
+      // 跳转到登录页面
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
+    } catch (error) {
+      console.error('退出登录失败:', error);
+      // 即使失败也跳转到登录页面
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
+    } finally {
+      setIsLoggingOut(false);
+      setShowLogoutModal(false);
     }
   };
 
@@ -1121,14 +1173,7 @@ export default function SettingsScreen({ navigation }) {
         {/* 退出登录 */}
         <TouchableOpacity 
           style={styles.logoutBtn}
-          onPress={() => showAppAlert(
-            t('screens.settings.alerts.logout.title'),
-            t('screens.settings.alerts.logout.message'),
-            [
-              { text: t('common.cancel'), style: 'cancel' },
-              { text: t('screens.settings.alerts.logout.button'), style: 'destructive', onPress: () => navigation.navigate('Login') }
-            ]
-          )}
+          onPress={() => setShowLogoutModal(true)}
         >
           <Text style={styles.logoutText}>{t('screens.settings.logout')}</Text>
         </TouchableOpacity>
@@ -1234,6 +1279,16 @@ export default function SettingsScreen({ navigation }) {
         message={toast.message}
         type={toast.type}
         onHide={() => setToast({ ...toast, visible: false })}
+      />
+
+      {/* 退出登录确认弹窗 */}
+      <LogoutConfirmModal
+        visible={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        onConfirm={handleConfirmLogout}
+        username={userProfile.username || userProfile.name}
+        isLoading={isLoggingOut}
+        showDefaultPassword={!userProfile.passwordChanged}
       />
     </SafeAreaView>
   );

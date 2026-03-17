@@ -1,4 +1,16 @@
-import ENV, { getApiServerUrl } from './env';
+import ENV, { shouldUseMock, getApiServerUrl } from './env';
+
+// 微服务配置
+export const SERVICES = {
+  CONTENT: 'qa-hero-content',  // 内容服务
+  USER: 'qa-hero-app-user',    // 用户服务
+  // 可以继续添加其他服务
+};
+
+// 构建带服务前缀的 API 路径
+export const buildApiPath = (serviceName, path) => {
+  return `/${serviceName}${path}`;
+};
 
 // API 配置
 export const API_CONFIG = {
@@ -27,23 +39,23 @@ export const REGISTER_CONFIG = {
 export const API_ENDPOINTS = {
   // 认证相关
   AUTH: {
-    LOGIN: '/app/user/auth/login',
-    TOKEN_LOGIN: '/app/user/auth/token-login',  // Token 自动登录
-    REGISTER: '/app/user/auth/register',
-    LOGOUT: '/app/user/auth/logout',
+    LOGIN: buildApiPath(SERVICES.USER, '/app/user/auth/login'),
+    TOKEN_LOGIN: buildApiPath(SERVICES.USER, '/app/user/auth/token-login'),  // Token 自动登录
+    REGISTER: buildApiPath(SERVICES.USER, '/app/user/auth/register'),
+    LOGOUT: buildApiPath(SERVICES.USER, '/app/user/auth/logout'),
     REFRESH_TOKEN: '/auth/refresh',
     VERIFY_CODE: '/auth/verify-code',
     RESET_PASSWORD: '/auth/reset-password',
-    CHANGE_PASSWORD: '/app/user/auth/password',
+    CHANGE_PASSWORD: buildApiPath(SERVICES.USER, '/app/user/auth/password'),
   },
   
   // 用户相关
   USER: {
-    PROFILE: '/app/user/profile',
-    PROFILE_ME: '/app/user/profile/me',  // 获取当前用户详细信息
-    UPDATE_PROFILE: '/app/user/profile',
-    UPDATE_USERNAME: '/app/user/profile/username',  // 修改用户名
-    AVATAR: '/app/user/profile/avatar',  // 上传头像
+    PROFILE: buildApiPath(SERVICES.USER, '/app/user/profile'),
+    PROFILE_ME: buildApiPath(SERVICES.USER, '/app/user/profile/me'),  // 获取当前用户详细信息
+    UPDATE_PROFILE: buildApiPath(SERVICES.USER, '/app/user/profile'),
+    UPDATE_USERNAME: buildApiPath(SERVICES.USER, '/app/user/profile/username'),  // 修改用户名
+    AVATAR: buildApiPath(SERVICES.USER, '/app/user/profile/avatar'),  // 上传头像
     FOLLOW: '/user/follow',
     UNFOLLOW: '/user/unfollow',
     FOLLOWERS: '/user/followers',
@@ -52,29 +64,29 @@ export const API_ENDPOINTS = {
   
   // 问题相关
   QUESTION: {
-    LIST: '/app/content/question/list',  // 问题列表（新接口）
-    DETAIL: '/app/content/question/:id',  // 问题详情
-    DRAFT_DETAIL: '/app/content/question/:id',  // 获取草稿详情
-    LIKE: '/app/content/question/:id/like',  // 点赞问题
-    UNLIKE: '/app/content/question/:id/unlike',  // 取消点赞问题
-    DISLIKE: '/app/content/question/:id/dislike',  // 点踩问题
-    UNDISLIKE: '/app/content/question/:id/undislike',  // 取消点踩问题
-    COLLECT: '/app/content/question/:id/collect',  // 收藏问题
-    UNCOLLECT: '/app/content/question/:id/uncollect',  // 取消收藏问题
-    SUPPLEMENTS: '/app/content/supplement/question/:questionId/list',  // 问题补充列表
-    PUBLISH_SUPPLEMENT: '/app/content/supplement/question/:questionId',  // 发布补充问题
-    DISLIKE_SUPPLEMENT: '/app/content/supplement/:id/dislike',  // 踩一下补充问题
-    UNDISLIKE_SUPPLEMENT: '/app/content/supplement/:id/undislike',  // 取消踩补充问题
-    LIKE_SUPPLEMENT: '/app/content/supplement/:id/like',  // 点赞补充问题
-    UNLIKE_SUPPLEMENT: '/app/content/supplement/:id/unlike',  // 取消点赞补充问题
-    COLLECT_SUPPLEMENT: '/app/content/supplement/:id/collect',  // 收藏补充问题
-    UNCOLLECT_SUPPLEMENT: '/app/content/supplement/:id/uncollect',  // 取消收藏补充问题
-    CREATE: '/app/content/question',
-    PUBLISH: '/app/content/question/publish',  // 发布问题
+    LIST: buildApiPath(SERVICES.CONTENT, '/app/content/question/list'),  // 问题列表（新接口）
+    DETAIL: buildApiPath(SERVICES.CONTENT, '/app/content/question/:id'),  // 问题详情
+    DRAFT_DETAIL: buildApiPath(SERVICES.CONTENT, '/app/content/question/:id'),  // 获取草稿详情
+    LIKE: buildApiPath(SERVICES.CONTENT, '/app/content/question/:id/like'),  // 点赞问题
+    UNLIKE: buildApiPath(SERVICES.CONTENT, '/app/content/question/:id/unlike'),  // 取消点赞问题
+    DISLIKE: buildApiPath(SERVICES.CONTENT, '/app/content/question/:id/dislike'),  // 点踩问题
+    UNDISLIKE: buildApiPath(SERVICES.CONTENT, '/app/content/question/:id/undislike'),  // 取消点踩问题
+    COLLECT: buildApiPath(SERVICES.CONTENT, '/app/content/question/:id/collect'),  // 收藏问题
+    UNCOLLECT: buildApiPath(SERVICES.CONTENT, '/app/content/question/:id/uncollect'),  // 取消收藏问题
+    SUPPLEMENTS: buildApiPath(SERVICES.CONTENT, '/app/content/supplement/question/:questionId/list'),  // 问题补充列表
+    PUBLISH_SUPPLEMENT: buildApiPath(SERVICES.CONTENT, '/app/content/supplement/question/:questionId'),  // 发布补充问题
+    DISLIKE_SUPPLEMENT: buildApiPath(SERVICES.CONTENT, '/app/content/supplement/:id/dislike'),  // 踩一下补充问题
+    UNDISLIKE_SUPPLEMENT: buildApiPath(SERVICES.CONTENT, '/app/content/supplement/:id/undislike'),  // 取消踩补充问题
+    LIKE_SUPPLEMENT: buildApiPath(SERVICES.CONTENT, '/app/content/supplement/:id/like'),  // 点赞补充问题
+    UNLIKE_SUPPLEMENT: buildApiPath(SERVICES.CONTENT, '/app/content/supplement/:id/unlike'),  // 取消点赞补充问题
+    COLLECT_SUPPLEMENT: buildApiPath(SERVICES.CONTENT, '/app/content/supplement/:id/collect'),  // 收藏补充问题
+    UNCOLLECT_SUPPLEMENT: buildApiPath(SERVICES.CONTENT, '/app/content/supplement/:id/uncollect'),  // 取消收藏补充问题
+    CREATE: buildApiPath(SERVICES.CONTENT, '/app/content/question'),
+    PUBLISH: buildApiPath(SERVICES.CONTENT, '/app/content/question/publish'),  // 发布问题
     UPDATE: '/questions/:id',
     DELETE: '/questions/:id',
-    DRAFT: '/app/content/question/draft',  // 保存草稿
-    DRAFTS: '/app/content/question/drafts',  // 获取草稿列表
+    DRAFT: buildApiPath(SERVICES.CONTENT, '/app/content/question/draft'),  // 保存草稿
+    DRAFTS: buildApiPath(SERVICES.CONTENT, '/app/content/question/drafts'),  // 获取草稿列表
     HOT: '/questions/hot',
     RANKING: '/questions/ranking',
     SEARCH: '/questions/search',
@@ -82,23 +94,23 @@ export const API_ENDPOINTS = {
   
   // 分类相关
   CATEGORY: {
-    LIST: '/app/content/category/list',
+    LIST: buildApiPath(SERVICES.CONTENT, '/app/content/category/list'),
   },
   
   // 回答相关
   ANSWER: {
-    LIST: '/app/content/answer/question/:questionId/list',
-    DETAIL: '/app/content/answer/:id',  // 回答详情
-    SUPPLEMENT_LIST: '/app/content/answer-supplement/answer/:answerId/list',  // 补充回答列表
-    SUPPLEMENT_PUBLISH: '/app/content/answer-supplement/answer/:answerId',  // 发布补充回答
-    PUBLISH: '/app/content/answer/question/:questionId',  // 发布回答
-    COLLECT: '/app/content/answer/:id/collect',  // 收藏回答
-    UNCOLLECT: '/app/content/answer/:id/uncollect',  // 取消收藏回答
-    LIKE: '/app/content/answer/:id/like',  // 点赞回答
-    UNLIKE: '/app/content/answer/:id/unlike',  // 取消点赞回答
-    DISLIKE: '/app/content/answer/:id/dislike',  // 点踩回答
-    UNDISLIKE: '/app/content/answer/:id/undislike',  // 取消踩回答
-    ADOPT: '/app/content/answer/question/:questionId/accept/:answerId',  // 采纳回答
+    LIST: buildApiPath(SERVICES.CONTENT, '/app/content/answer/question/:questionId/list'),
+    DETAIL: buildApiPath(SERVICES.CONTENT, '/app/content/answer/:id'),  // 回答详情
+    SUPPLEMENT_LIST: buildApiPath(SERVICES.CONTENT, '/app/content/answer-supplement/answer/:answerId/list'),  // 补充回答列表
+    SUPPLEMENT_PUBLISH: buildApiPath(SERVICES.CONTENT, '/app/content/answer-supplement/answer/:answerId'),  // 发布补充回答
+    PUBLISH: buildApiPath(SERVICES.CONTENT, '/app/content/answer/question/:questionId'),  // 发布回答
+    COLLECT: buildApiPath(SERVICES.CONTENT, '/app/content/answer/:id/collect'),  // 收藏回答
+    UNCOLLECT: buildApiPath(SERVICES.CONTENT, '/app/content/answer/:id/uncollect'),  // 取消收藏回答
+    LIKE: buildApiPath(SERVICES.CONTENT, '/app/content/answer/:id/like'),  // 点赞回答
+    UNLIKE: buildApiPath(SERVICES.CONTENT, '/app/content/answer/:id/unlike'),  // 取消点赞回答
+    DISLIKE: buildApiPath(SERVICES.CONTENT, '/app/content/answer/:id/dislike'),  // 点踩回答
+    UNDISLIKE: buildApiPath(SERVICES.CONTENT, '/app/content/answer/:id/undislike'),  // 取消踩回答
+    ADOPT: buildApiPath(SERVICES.CONTENT, '/app/content/answer/question/:questionId/accept/:answerId'),  // 采纳回答
   },
   
   // 活动相关
@@ -143,9 +155,21 @@ export const API_ENDPOINTS = {
     INVITED_USERS: '/api/twitter/invited',           // 获取已邀请的用户列表
   },
   
+  // 评论相关
+  COMMENT: {
+    CREATE: buildApiPath(SERVICES.CONTENT, '/app/content/comment'),  // 发布评论
+    LIST: buildApiPath(SERVICES.CONTENT, '/app/content/comment/list'),  // 评论列表
+    LIKE: buildApiPath(SERVICES.CONTENT, '/app/content/comment/:id/like'),  // 点赞评论
+    UNLIKE: buildApiPath(SERVICES.CONTENT, '/app/content/comment/:id/unlike'),  // 取消点赞评论
+    COLLECT: buildApiPath(SERVICES.CONTENT, '/app/content/comment/:id/collect'),  // 收藏评论
+    UNCOLLECT: buildApiPath(SERVICES.CONTENT, '/app/content/comment/:id/uncollect'),  // 取消收藏评论
+    DISLIKE: buildApiPath(SERVICES.CONTENT, '/app/content/comment/:id/dislike'),  // 点踩评论
+    UNDISLIKE: buildApiPath(SERVICES.CONTENT, '/app/content/comment/:id/undislike'),  // 取消点踩评论
+  },
+  
   // 上传相关
   UPLOAD: {
-    IMAGE: '/app/content/image/upload',
+    IMAGE: buildApiPath(SERVICES.CONTENT, '/app/content/image/upload'),
     FILE: '/upload/file',
   },
 };

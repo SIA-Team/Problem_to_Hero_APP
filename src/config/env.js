@@ -2,31 +2,88 @@
 import { SIMULATE_PRODUCTION } from './debugMode';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+const SERVER_SELECTION_KEY = '@app_server_selection';
+const CUSTOM_SERVER_URL_KEY = '@app_custom_server_url';
+
+// 微服务名称配置
+const SERVICES = {
+  CONTENT: 'qa-hero-content',
+  USER: 'qa-hero-app-user',
+};
+
+// 构建带服务前缀的路径
+const buildServicePath = (serviceName, path) => `/${serviceName}${path}`;
+
 // 动态服务器选择（用于开发阶段切换服务器）
 let DYNAMIC_SERVER = 'server2'; // 默认使用生产服务器
+let CUSTOM_SERVER_URL = '';
+let serverLoaded = false;
+
+const normalizeServerUrl = (url) => {
+  if (!url) {
+    return '';
+  }
+
+  return url.trim().replace(/\/+$/, '');
+};
+
+const getServerLabel = (server) => {
+  switch (server) {
+    case 'server1':
+      return '开发服务器 (123.144.149.59:30560)';
+    case 'server2':
+      return '生产服务器 (8.146.230.62:8080)';
+    case 'custom':
+      return CUSTOM_SERVER_URL
+        ? `自定义服务器 (${CUSTOM_SERVER_URL})`
+        : '自定义服务器 (未配置地址)';
+    default:
+      return `未知服务器 (${server})`;
+  }
+};
 
 // 从AsyncStorage加载服务器选择
 const loadServerSelection = async () => {
   try {
-    const server = await AsyncStorage.getItem('@app_server_selection');
+    const [server, customUrl] = await Promise.all([
+      AsyncStorage.getItem(SERVER_SELECTION_KEY),
+      AsyncStorage.getItem(CUSTOM_SERVER_URL_KEY),
+    ]);
+
+    CUSTOM_SERVER_URL = normalizeServerUrl(customUrl);
+
     if (server) {
       DYNAMIC_SERVER = server;
-      console.log('📡 使用服务器:', server === 'server1' ? '开发服务器 (123.144.149.59:30560)' : '生产服务器 (8.146.230.62:8080)');
+      console.log('📡 使用服务器:', getServerLabel(server));
     } else {
       console.log('📡 使用默认服务器: 生产服务器 (8.146.230.62:8080)');
     }
+    serverLoaded = true;
   } catch (error) {
     console.error('加载服务器配置失败:', error);
+    serverLoaded = true; // 即使失败也标记为已加载，使用默认值
   }
+};
+
+// 获取当前服务器配置（同步版本，用于配置中的函数调用）
+const getCurrentServerSync = () => {
+  return DYNAMIC_SERVER;
+};
+
+const getCustomServerUrlSync = () => {
+  return CUSTOM_SERVER_URL;
 };
 
 // 立即加载服务器选择
 loadServerSelection();
 
 // 导出函数供外部更新
-export const updateDynamicServer = (server) => {
+export const updateDynamicServer = (server, customUrl = '') => {
   DYNAMIC_SERVER = server;
-  console.log('📡 切换服务器:', server === 'server1' ? '开发服务器 (123.144.149.59:30560)' : '生产服务器 (8.146.230.62:8080)');
+  if (server === 'custom') {
+    CUSTOM_SERVER_URL = normalizeServerUrl(customUrl);
+  }
+  console.log('📡 切换服务器:', getServerLabel(server));
 };
 
 /**
@@ -52,67 +109,92 @@ const API_SERVER_CONFIG = {
   // ========== 使用动态服务器选择（通过ServerSwitcher组件切换） ==========
   
   // 认证相关接口
-  '/app/user/auth/register': () => DYNAMIC_SERVER,
-  '/app/user/auth/login': () => DYNAMIC_SERVER,
-  '/app/user/auth/token-login': () => DYNAMIC_SERVER,
-  '/app/user/auth/logout': () => DYNAMIC_SERVER,
-  '/app/user/auth/password': () => DYNAMIC_SERVER,
+  [buildServicePath(SERVICES.USER, '/app/user/auth/register')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/user/auth/login')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/user/auth/token-login')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/user/auth/logout')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/user/auth/password')]: getCurrentServerSync,
   
   // 用户相关接口
-  '/app/user/profile': () => DYNAMIC_SERVER,
-  '/app/user/profile/me': () => DYNAMIC_SERVER,
-  '/app/user/profile/username': () => DYNAMIC_SERVER,
-  '/app/user/profile/avatar': () => DYNAMIC_SERVER,
+  [buildServicePath(SERVICES.USER, '/app/user/profile')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/user/profile/me')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/user/profile/username')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/user/profile/avatar')]: getCurrentServerSync,
   
   // 分类相关接口
-  '/app/content/category/list': () => DYNAMIC_SERVER,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/category/list')]: getCurrentServerSync,
   
   // 问题相关接口
-  '/app/content/question/list': () => DYNAMIC_SERVER,
-  '/app/content/question/detail': () => DYNAMIC_SERVER,
-  '/app/content/question/publish': () => DYNAMIC_SERVER,
-  '/app/content/question/draft': () => DYNAMIC_SERVER,
-  '/app/content/question/drafts': () => DYNAMIC_SERVER,
-  '/app/content/question': () => DYNAMIC_SERVER,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/question/list')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/question/detail')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/question/*')]: getCurrentServerSync,  // 添加动态路径支持问题详情
+  [buildServicePath(SERVICES.CONTENT, '/app/content/question/publish')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/question/draft')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/question/drafts')]: getCurrentServerSync,
   
   // 问题互动接口
-  '/app/content/question/*/like': () => DYNAMIC_SERVER,
-  '/app/content/question/*/unlike': () => DYNAMIC_SERVER,
-  '/app/content/question/*/dislike': () => DYNAMIC_SERVER,
-  '/app/content/question/*/undislike': () => DYNAMIC_SERVER,
-  '/app/content/question/*/collect': () => DYNAMIC_SERVER,
-  '/app/content/question/*/uncollect': () => DYNAMIC_SERVER,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/question/*/like')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/question/*/unlike')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/question/*/dislike')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/question/*/undislike')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/question/*/collect')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/question/*/uncollect')]: getCurrentServerSync,
   
   // 回答相关接口
-  '/app/content/answer/question/*/list': () => DYNAMIC_SERVER,
-  '/app/content/answer/*': () => DYNAMIC_SERVER,
-  '/app/content/answer/question/*': () => DYNAMIC_SERVER,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/answer/question/*/list')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/answer/*')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/answer/question/*')]: getCurrentServerSync,
   
   // 回答互动接口
-  '/app/content/answer/*/like': () => DYNAMIC_SERVER,
-  '/app/content/answer/*/unlike': () => DYNAMIC_SERVER,
-  '/app/content/answer/*/dislike': () => DYNAMIC_SERVER,
-  '/app/content/answer/*/undislike': () => DYNAMIC_SERVER,
-  '/app/content/answer/*/collect': () => DYNAMIC_SERVER,
-  '/app/content/answer/*/uncollect': () => DYNAMIC_SERVER,
-  '/app/content/answer/question/*/accept/*': () => DYNAMIC_SERVER,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/answer/*/like')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/answer/*/unlike')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/answer/*/dislike')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/answer/*/undislike')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/answer/*/collect')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/answer/*/uncollect')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/answer/question/*/accept/*')]: getCurrentServerSync,
   
   // 补充相关接口
-  '/app/content/supplement/question/*/list': () => DYNAMIC_SERVER,
-  '/app/content/supplement/question/*': () => DYNAMIC_SERVER,
-  '/app/content/supplement/*/dislike': () => DYNAMIC_SERVER,
-  '/app/content/supplement/*/undislike': () => DYNAMIC_SERVER,
-  '/app/content/supplement/*/like': () => DYNAMIC_SERVER,
-  '/app/content/supplement/*/unlike': () => DYNAMIC_SERVER,
-  '/app/content/supplement/*/collect': () => DYNAMIC_SERVER,
-  '/app/content/supplement/*/uncollect': () => DYNAMIC_SERVER,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/supplement/question/*/list')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/supplement/question/*')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/supplement/*/dislike')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/supplement/*/undislike')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/supplement/*/like')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/supplement/*/unlike')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/supplement/*/collect')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/supplement/*/uncollect')]: getCurrentServerSync,
   
   // 补充回答相关接口
-  '/app/content/answer-supplement/answer/*/list': () => DYNAMIC_SERVER,
-  '/app/content/answer-supplement/answer/*': () => DYNAMIC_SERVER,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/answer-supplement/answer/*/list')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/answer-supplement/answer/*')]: getCurrentServerSync,
   
   // 上传相关接口
-  '/app/content/image/upload': () => DYNAMIC_SERVER,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/image/upload')]: getCurrentServerSync,
+  
+  // 评论相关接口
+  [buildServicePath(SERVICES.CONTENT, '/app/content/comment')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/comment/list')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/comment/*/like')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/comment/*/unlike')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/comment/*/collect')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/comment/*/uncollect')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/comment/*/dislike')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/comment/*/undislike')]: getCurrentServerSync,
+};
+
+const resolveServerUrl = (serverType, currentEnv) => {
+  switch (serverType) {
+    case 'server1':
+      return currentEnv.server1Url;
+    case 'server2':
+      return currentEnv.server2Url;
+    case 'custom':
+      return getCustomServerUrlSync() || currentEnv.apiUrl;
+    case 'mock':
+      return ENV.mock.apiUrl;
+    default:
+      return currentEnv.apiUrl;
+  }
 };
 
 /**
@@ -136,17 +218,7 @@ export const getApiServerUrl = (url) => {
   
   if (serverConfig) {
     const currentEnv = getEnvVars();
-    
-    switch (serverConfig) {
-      case 'server1':
-        return currentEnv.server1Url;
-      case 'server2':
-        return currentEnv.server2Url;
-      case 'mock':
-        return ENV.mock.apiUrl;
-      default:
-        return currentEnv.apiUrl;
-    }
+    return resolveServerUrl(serverConfig, currentEnv);
   }
   
   // 支持通配符匹配（用于动态路径如 /app/content/answer/question/123/accept/456）
@@ -157,22 +229,14 @@ export const getApiServerUrl = (url) => {
         const currentEnv = getEnvVars();
         // 如果配置是函数，调用它获取实际的服务器类型
         const actualServerType = typeof serverType === 'function' ? serverType() : serverType;
-        switch (actualServerType) {
-          case 'server1':
-            return currentEnv.server1Url;
-          case 'server2':
-            return currentEnv.server2Url;
-          case 'mock':
-            return ENV.mock.apiUrl;
-          default:
-            return currentEnv.apiUrl;
-        }
+        return resolveServerUrl(actualServerType, currentEnv);
       }
     }
   }
   
   // 默认使用主服务器地址
-  return getEnvVars().apiUrl;
+  const currentEnv = getEnvVars();
+  return resolveServerUrl(getCurrentServerSync(), currentEnv);
 };
 
 /**

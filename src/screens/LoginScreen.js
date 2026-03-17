@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import authApi from '../services/api/authApi';
 import DeviceInfo from '../utils/deviceInfo';
 import { showToast } from '../utils/toast';
@@ -28,6 +29,23 @@ export default function LoginScreen({ navigation, onLogin }) {
   const [loading, setLoading] = useState(false);
   const [deviceLoading, setDeviceLoading] = useState(false);
   const [errors, setErrors] = useState({ username: '', password: '' });
+
+  // 组件加载时尝试恢复上次登录的用户名
+  useEffect(() => {
+    const loadSavedUsername = async () => {
+      try {
+        const savedUsername = await AsyncStorage.getItem('lastLoginUsername');
+        if (savedUsername) {
+          setUsername(savedUsername);
+          console.log('✅ 恢复上次登录用户名:', savedUsername);
+        }
+      } catch (error) {
+        console.error('❌ 加载保存的用户名失败:', error);
+      }
+    };
+    
+    loadSavedUsername();
+  }, []);
 
   // 验证用户名
   const validateUsername = (value) => {
@@ -83,6 +101,14 @@ export default function LoginScreen({ navigation, onLogin }) {
       if (response.code === 200 && response.data) {
         console.log('✅ 登录成功！');
         console.log('   Token:', response.data.token);
+        
+        // 保存用户名以便下次登录时自动填充
+        try {
+          await AsyncStorage.setItem('lastLoginUsername', username.trim());
+          console.log('✅ 用户名已保存，下次登录时自动填充');
+        } catch (error) {
+          console.error('❌ 保存用户名失败:', error);
+        }
         
         // 显示成功提示
         showToast('登录成功', 'success');
