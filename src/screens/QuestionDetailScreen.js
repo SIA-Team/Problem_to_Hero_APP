@@ -780,8 +780,9 @@ export default function QuestionDetailScreen({ navigation, route }) {
         }));
       }
     } catch (error) {
-      console.error('❌ 补充列表静默刷新失败:', error);
-      // 静默失败，不影响用户体验
+      const errorMessage = getErrorMessage(error);
+      console.log(`⚠️ 补充列表静默刷新已跳过: ${errorMessage || '未知错误'}`);
+      touchSupplementCacheTimestamp(sortBy);
     }
   };
 
@@ -1394,6 +1395,38 @@ export default function QuestionDetailScreen({ navigation, route }) {
     });
   };
 
+  const getErrorMessage = (error) => {
+    if (!error) {
+      return '';
+    }
+
+    if (typeof error === 'string') {
+      return error;
+    }
+
+    return error.message || error.msg || String(error);
+  };
+
+  const touchAnswerCacheTimestamp = (sortBy) => {
+    setAnswersCache(prevCache => ({
+      ...prevCache,
+      [sortBy]: {
+        ...prevCache[sortBy],
+        lastUpdated: Date.now()
+      }
+    }));
+  };
+
+  const touchSupplementCacheTimestamp = (sortBy) => {
+    setSupplementsCache(prevCache => ({
+      ...prevCache,
+      [sortBy]: {
+        ...prevCache[sortBy],
+        lastUpdated: Date.now()
+      }
+    }));
+  };
+
   // 静默刷新缓存（后台更新，不显示loading）
   const silentRefreshCache = async (questionId, sortBy) => {
     try {
@@ -1452,8 +1485,9 @@ export default function QuestionDetailScreen({ navigation, route }) {
         }
       }
     } catch (error) {
-      console.error('❌ 静默刷新失败:', error);
-      // 静默失败，不影响用户体验
+      const errorMessage = getErrorMessage(error);
+      console.log(`⚠️ 静默刷新已跳过: ${errorMessage || '未知错误'}`);
+      touchAnswerCacheTimestamp(sortBy);
     }
   };
 
