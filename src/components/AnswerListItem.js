@@ -22,9 +22,9 @@ export default function AnswerListItem({ item, onPress }) {
       
       <Text style={styles.questionTitle} numberOfLines={1}>
         {item.adopted && (
-          <View style={styles.adoptedTag}>
+          <Text style={styles.adoptedTag}>
             <Text style={styles.adoptedTagText}>{t('components.answerListItem.adopted')}</Text>
-          </View>
+          </Text>
         )}
         {' '}{item.questionTitle}
       </Text>

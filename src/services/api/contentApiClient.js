@@ -204,7 +204,7 @@ contentApiClient.interceptors.response.use(
     
     // 打印错误信息
     if (__DEV__) {
-      console.error('❌ [内容服务] API Error:', {
+      console.log('⚠️ [内容服务] API Error:', {
         url: error.config?.url,
         status: error.response?.status,
         message: error.message,
@@ -213,11 +213,11 @@ contentApiClient.interceptors.response.use(
       
       // 特别处理发布问题的错误
       if (error.config?.url?.includes('/question/publish')) {
-        console.error('❌ 发布问题失败详情:');
-        console.error('   状态码:', error.response?.status);
-        console.error('   错误数据:', JSON.stringify(error.response?.data, null, 2));
+        console.log('⚠️ 发布问题失败详情:');
+        console.log('   状态码:', error.response?.status);
+        console.log('   错误数据:', JSON.stringify(error.response?.data, null, 2));
         if (error.response?.data?.msg) {
-          console.error('   服务器错误消息:', error.response.data.msg);
+          console.log('   服务器错误消息:', error.response.data.msg);
         }
       }
     }

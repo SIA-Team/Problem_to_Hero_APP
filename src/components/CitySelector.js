@@ -9,13 +9,18 @@ import { modalTokens } from './modalTokens';
  * 城市选择器组件
  * 支持自动定位、热门城市、多语言
  */
-export default function CitySelector({ visible, currentCity, onSelect, onClose }) {
+export default function CitySelector({
+  visible,
+  currentCity,
+  onSelect,
+  onClose
+}) {
   const [locating, setLocating] = useState(false);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [detectedCountry, setDetectedCountry] = useState(null);
   const [cityList, setCityList] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // 获取多语言区域数据
   const regionData = getRegionData();
 
@@ -25,7 +30,7 @@ export default function CitySelector({ visible, currentCity, onSelect, onClose }
       getCurrentLocation();
     }
   }, [visible]);
-  
+
   // 根据检测到的国家更新城市列表
   useEffect(() => {
     if (detectedCountry && regionData.cities[detectedCountry]) {
@@ -36,14 +41,14 @@ export default function CitySelector({ visible, currentCity, onSelect, onClose }
       setCityList(regionData.cities[firstCountry] || []);
     }
   }, [detectedCountry, regionData]);
-
   const getCurrentLocation = async () => {
     try {
       setLocating(true);
-      
+
       // 请求位置权限
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      
+      const {
+        status
+      } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         console.log('位置权限被拒绝');
         setLocating(false);
@@ -52,23 +57,23 @@ export default function CitySelector({ visible, currentCity, onSelect, onClose }
 
       // 获取当前位置
       const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
+        accuracy: Location.Accuracy.Balanced
       });
 
       // 反向地理编码获取城市信息
       const address = await Location.reverseGeocodeAsync({
         latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
+        longitude: location.coords.longitude
       });
-
       if (address && address.length > 0) {
         const city = address[0].city || address[0].subregion || address[0].region;
         const country = address[0].country;
-        
         setCurrentLocation(city);
         setDetectedCountry(country);
-        
-        console.log('检测到的位置:', { city, country });
+        console.log('检测到的位置:', {
+          city,
+          country
+        });
       }
     } catch (error) {
       console.error('获取位置失败:', error);
@@ -76,36 +81,20 @@ export default function CitySelector({ visible, currentCity, onSelect, onClose }
       setLocating(false);
     }
   };
-
-  const handleSelect = (city) => {
+  const handleSelect = city => {
     onSelect(city);
     onClose();
   };
-  
+
   // 过滤城市列表（根据搜索关键词）
-  const filteredCities = searchQuery.trim()
-    ? cityList.filter(city => 
-        city.toLowerCase().includes(searchQuery.toLowerCase().trim())
-      )
-    : cityList;
-  
+  const filteredCities = searchQuery.trim() ? cityList.filter(city => city.toLowerCase().includes(searchQuery.toLowerCase().trim())) : cityList;
+
   // 获取热门城市（取前10个）
   const hotCities = filteredCities.slice(0, 10);
   const allCities = filteredCities;
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}
-    >
+  return <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
-        <TouchableOpacity 
-          style={styles.modalBackdrop}
-          activeOpacity={1}
-          onPress={onClose}
-        />
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={onClose} />
         <View style={styles.modal}>
           {/* 头部 */}
           <View style={styles.header}>
@@ -113,7 +102,9 @@ export default function CitySelector({ visible, currentCity, onSelect, onClose }
               <Ionicons name="close" size={24} color="#1f2937" />
             </TouchableOpacity>
             <Text style={styles.title}>选择城市</Text>
-            <View style={{ width: 40 }} />
+            <View style={{
+            width: 40
+          }} />
           </View>
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -121,130 +112,76 @@ export default function CitySelector({ visible, currentCity, onSelect, onClose }
             <View style={styles.searchSection}>
               <View style={styles.searchContainer}>
                 <Ionicons name="search" size={20} color="#9ca3af" />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="搜索城市..."
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  placeholderTextColor="#9ca3af"
-                />
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <TextInput style={styles.searchInput} placeholder="搜索城市..." value={searchQuery} onChangeText={setSearchQuery} placeholderTextColor="#9ca3af" />
+                {searchQuery.length > 0 && <TouchableOpacity onPress={() => setSearchQuery('')}>
                     <Ionicons name="close-circle" size={20} color="#9ca3af" />
-                  </TouchableOpacity>
-                )}
+                  </TouchableOpacity>}
               </View>
             </View>
 
             {/* 当前定位 */}
-            {!searchQuery && (
-              <View style={styles.section}>
+            {!searchQuery && <View style={styles.section}>
                 <Text style={styles.sectionTitle}>当前定位</Text>
-                <TouchableOpacity 
-                  style={styles.locationItem}
-                  onPress={() => currentLocation && handleSelect(currentLocation)}
-                  disabled={!currentLocation}
-                >
-                  <Ionicons 
-                    name={locating ? "hourglass-outline" : "location"} 
-                    size={20} 
-                    color={currentLocation ? "#ef4444" : "#9ca3af"} 
-                  />
-                  <Text style={[
-                    styles.locationText,
-                    !currentLocation && styles.locationTextDisabled
-                  ]}>
+                <TouchableOpacity style={styles.locationItem} onPress={() => currentLocation && handleSelect(currentLocation)} disabled={!currentLocation}>
+                  <Ionicons name={locating ? "hourglass-outline" : "location"} size={20} color={currentLocation ? "#ef4444" : "#9ca3af"} />
+                  <Text style={[styles.locationText, !currentLocation && styles.locationTextDisabled]}>
                     {locating ? '定位中...' : currentLocation || '定位失败'}
                   </Text>
-                  {currentLocation && (
-                    <Ionicons name="checkmark-circle" size={20} color="#ef4444" />
-                  )}
+                  {Boolean(currentLocation) && <Ionicons name="checkmark-circle" size={20} color="#ef4444" />}
                 </TouchableOpacity>
-              </View>
-            )}
+              </View>}
 
             {/* 热门城市 */}
-            {!searchQuery && hotCities.length > 0 && (
-              <View style={styles.section}>
+            {!searchQuery && hotCities.length > 0 && <View style={styles.section}>
                 <Text style={styles.sectionTitle}>热门城市</Text>
                 <View style={styles.cityGrid}>
-                  {hotCities.map((city) => (
-                    <TouchableOpacity
-                      key={city}
-                      style={[
-                        styles.cityItem,
-                        currentCity === city && styles.cityItemActive
-                      ]}
-                      onPress={() => handleSelect(city)}
-                    >
-                      <Text style={[
-                        styles.cityText,
-                        currentCity === city && styles.cityTextActive
-                      ]}>
+                  {hotCities.map(city => <TouchableOpacity key={city} style={[styles.cityItem, currentCity === city && styles.cityItemActive]} onPress={() => handleSelect(city)}>
+                      <Text style={[styles.cityText, currentCity === city && styles.cityTextActive]}>
                         {city}
                       </Text>
-                    </TouchableOpacity>
-                  ))}
+                    </TouchableOpacity>)}
                 </View>
-              </View>
-            )}
+              </View>}
 
             {/* 所有城市 / 搜索结果 */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>
                 {searchQuery ? `搜索结果 (${allCities.length})` : '所有城市'}
               </Text>
-              {allCities.length > 0 ? (
-                <View style={styles.cityList}>
-                  {allCities.map((city) => (
-                    <TouchableOpacity
-                      key={city}
-                      style={styles.cityListItem}
-                      onPress={() => handleSelect(city)}
-                    >
+              {allCities.length > 0 ? <View style={styles.cityList}>
+                  {allCities.map(city => <TouchableOpacity key={city} style={styles.cityListItem} onPress={() => handleSelect(city)}>
                       <Text style={styles.cityListText}>{city}</Text>
-                      {currentCity === city && (
-                        <Ionicons name="checkmark" size={20} color="#ef4444" />
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ) : (
-                <View style={styles.noResultsContainer}>
+                      {currentCity === city && <Ionicons name="checkmark" size={20} color="#ef4444" />}
+                    </TouchableOpacity>)}
+                </View> : <View style={styles.noResultsContainer}>
                   <Ionicons name="search-outline" size={48} color="#d1d5db" />
                   <Text style={styles.noResultsText}>未找到匹配的城市</Text>
                   <Text style={styles.noResultsHint}>试试其他关键词</Text>
-                </View>
-              )}
+                </View>}
             </View>
 
             {/* 不显示位置 */}
-            {!searchQuery && (
-              <TouchableOpacity
-                style={styles.noLocationBtn}
-                onPress={() => handleSelect('不显示')}
-              >
+            {!searchQuery && <TouchableOpacity style={styles.noLocationBtn} onPress={() => handleSelect('不显示')}>
                 <Ionicons name="close-circle-outline" size={20} color="#6b7280" />
                 <Text style={styles.noLocationText}>不显示位置</Text>
-              </TouchableOpacity>
-            )}
+              </TouchableOpacity>}
 
-            <View style={{ height: 30 }} />
+            <View style={{
+            height: 30
+          }} />
           </ScrollView>
         </View>
       </View>
-    </Modal>
-  );
+    </Modal>;
 }
-
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: modalTokens.overlay,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-end'
   },
   modalBackdrop: {
-    flex: 1,
+    flex: 1
   },
   modal: {
     backgroundColor: modalTokens.surface,
@@ -256,14 +193,17 @@ const styles = StyleSheet.create({
     ...Platform.select({
       ios: {
         shadowColor: modalTokens.shadow,
-        shadowOffset: { width: 0, height: -2 },
+        shadowOffset: {
+          width: 0,
+          height: -2
+        },
         shadowOpacity: 0.15,
-        shadowRadius: 12,
+        shadowRadius: 12
       },
       android: {
-        elevation: 10,
-      },
-    }),
+        elevation: 10
+      }
+    })
   },
   header: {
     flexDirection: 'row',
@@ -272,26 +212,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: modalTokens.border,
+    borderBottomColor: modalTokens.border
   },
   closeBtn: {
     width: 40,
     height: 40,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'center'
   },
   title: {
     fontSize: 16,
     fontWeight: '700',
-    color: modalTokens.textPrimary,
+    color: modalTokens.textPrimary
   },
   content: {
-    flex: 1,
+    flex: 1
   },
   searchSection: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 8,
+    paddingBottom: 8
   },
   searchContainer: {
     flexDirection: 'row',
@@ -301,39 +241,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: modalTokens.border,
+    borderColor: modalTokens.border
   },
   searchInput: {
     flex: 1,
     fontSize: 15,
     color: modalTokens.textPrimary,
     marginLeft: 8,
-    padding: 0,
+    padding: 0
   },
   noResultsContainer: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 40
   },
   noResultsText: {
     fontSize: 15,
     fontWeight: '600',
     color: '#6b7280',
-    marginTop: 12,
+    marginTop: 12
   },
   noResultsHint: {
     fontSize: 13,
     color: '#9ca3af',
-    marginTop: 4,
+    marginTop: 4
   },
   section: {
     paddingHorizontal: 16,
-    paddingTop: 20,
+    paddingTop: 20
   },
   sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: modalTokens.textSecondary,
-    marginBottom: 12,
+    marginBottom: 12
   },
   locationItem: {
     flexDirection: 'row',
@@ -341,20 +281,20 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: modalTokens.surfaceSoft,
     borderRadius: 12,
-    gap: 10,
+    gap: 10
   },
   locationText: {
     flex: 1,
     fontSize: 15,
-    color: modalTokens.textPrimary,
+    color: modalTokens.textPrimary
   },
   locationTextDisabled: {
-    color: modalTokens.textMuted,
+    color: modalTokens.textMuted
   },
   cityGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 10
   },
   cityItem: {
     paddingHorizontal: 16,
@@ -362,22 +302,22 @@ const styles = StyleSheet.create({
     backgroundColor: modalTokens.surfaceMuted,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: 'transparent'
   },
   cityItemActive: {
     backgroundColor: modalTokens.dangerSoft,
-    borderColor: modalTokens.danger,
+    borderColor: modalTokens.danger
   },
   cityText: {
     fontSize: 14,
-    color: modalTokens.textSecondary,
+    color: modalTokens.textSecondary
   },
   cityTextActive: {
     color: modalTokens.danger,
-    fontWeight: '700',
+    fontWeight: '700'
   },
   cityList: {
-    gap: 1,
+    gap: 1
   },
   cityListItem: {
     flexDirection: 'row',
@@ -386,11 +326,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 4,
     borderBottomWidth: 1,
-    borderBottomColor: modalTokens.border,
+    borderBottomColor: modalTokens.border
   },
   cityListText: {
     fontSize: 15,
-    color: modalTokens.textPrimary,
+    color: modalTokens.textPrimary
   },
   noLocationBtn: {
     flexDirection: 'row',
@@ -401,10 +341,10 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: modalTokens.surfaceSoft,
     borderRadius: 12,
-    gap: 8,
+    gap: 8
   },
   noLocationText: {
     fontSize: 14,
-    color: modalTokens.textSecondary,
-  },
+    color: modalTokens.textSecondary
+  }
 });

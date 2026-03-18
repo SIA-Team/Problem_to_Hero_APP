@@ -1,40 +1,153 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image, TextInput, StyleSheet, Modal, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useIsFocused } from '@react-navigation/native';
+import { CommonActions, useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import IdentitySelector from '../components/IdentitySelector';
 import { modalTokens } from '../components/modalTokens';
 import SupplementAnswerSkeleton from '../components/SupplementAnswerSkeleton';
 import SupplementAnswerModal from '../components/SupplementAnswerModal';
+import WriteCommentModal from '../components/WriteCommentModal';
 import EmptyState from '../components/EmptyState';
 import { toast } from '../utils/toast';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
 import answerApi from '../services/api/answerApi';
 
-// 评论数据
-const initialComments = [
-  { id: 1, author: '学习者小王', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=cmt1', content: '写得太好了!我正好在学Python,这个学习路线很清晰,收藏了!', likes: 89, dislikes: 2, shares: 12, bookmarks: 34, time: '30分钟前' },
-  { id: 2, author: '数据分析新手', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=cmt2', content: '请问NumPy和Pandas哪个应该先学?', likes: 45, dislikes: 1, shares: 5, bookmarks: 18, time: '1小时前' },
-  { id: 3, author: '转行成功', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=cmt3', content: '我就是按照类似的路线学的,现在已经入职数据分析岗位了,感谢分享!', likes: 156, dislikes: 3, shares: 28, bookmarks: 67, time: '2小时前' },
-  { id: 4, author: '编程小白', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=cmt4', content: '廖雪峰的教程确实不错,我也在看', likes: 23, dislikes: 0, shares: 3, bookmarks: 8, time: '3小时前' },
-];
-
-const answerTabs = ['补充回答 (2)', '全部评论 (128)'];
-
+// 评论 mock 数据
+const initialComments = [{
+  id: 1,
+  author: '学习者小王',
+  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=cmt1',
+  content: '这条回答很有帮助，我已经按这个思路开始整理资料了。',
+  likes: 89,
+  dislikes: 2,
+  shares: 12,
+  bookmarks: 34,
+  time: '30分钟前'
+}, {
+  id: 2,
+  author: '数据分析新手',
+  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=cmt2',
+  content: '请问 NumPy 和 Pandas 应该先学哪个？',
+  likes: 45,
+  dislikes: 1,
+  shares: 5,
+  bookmarks: 18,
+  time: '1小时前'
+}, {
+  id: 3,
+  author: '转行成功',
+  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=cmt3',
+  content: '我就是按类似路线学的，现在已经顺利入职了。',
+  likes: 156,
+  dislikes: 3,
+  shares: 28,
+  bookmarks: 67,
+  time: '2小时前'
+}, {
+  id: 4,
+  author: '编程小白',
+  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=cmt4',
+  content: '这个经验分享很实用，我也在跟着看。',
+  likes: 23,
+  dislikes: 0,
+  shares: 3,
+  bookmarks: 8,
+  time: '3小时前'
+}];
+const answerTabs = ['琛ュ厖鍥炵瓟 (2)', '鍏ㄩ儴璇勮 (128)'];
 const INITIAL_SUPPLEMENT_PAGINATION = {
   pageNum: 1,
   pageSize: 10,
   hasMore: true,
   total: 0
 };
-
-export default function AnswerDetailScreen({ navigation, route }) {
-  const { t } = useTranslation();
+const DEFAULT_ANSWER_DETAIL = {
+  id: 1,
+  author: 'Python 老司机',
+  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=answer1',
+  verified: true,
+  title: '资深 Python 开发 · 10 年经验',
+  content: '如果你是从零开始学 Python，建议先打好语法基础，再逐步做一些小项目来巩固。',
+  likes: 256,
+  dislikes: 3,
+  shares: 45,
+  bookmarks: 89,
+  comments: 128,
+  views: 1234,
+  time: '1小时前',
+  adopted: true,
+  invitedBy: {
+    name: '张三',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=inviter1'
+  }
+};
+const normalizeCount = (...values) => {
+  for (const value of values) {
+    const normalized = Number(value);
+    if (!Number.isNaN(normalized)) {
+      return normalized;
+    }
+  }
+  return 0;
+};
+const normalizeFlag = (...values) => {
+  for (const value of values) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'number') {
+      return value === 1;
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === '1' || normalized === 'true') {
+        return true;
+      }
+      if (normalized === '0' || normalized === 'false') {
+        return false;
+      }
+    }
+  }
+  return false;
+};
+const pickDisplayText = (...values) => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return '';
+};
+const getInteractionDisplayCount = (baseCount, serverState, localState) => {
+  const normalizedBase = normalizeCount(baseCount);
+  const safeLocalState = localState === undefined ? serverState : localState;
+  if (!!safeLocalState === !!serverState) {
+    return normalizedBase;
+  }
+  return Math.max(normalizedBase + (safeLocalState ? 1 : -1), 0);
+};
+const getResolvedViewerInteractionCount = (baseCount, isActive, isResolved = false) => {
+  const normalizedBase = normalizeCount(baseCount);
+  if (!isActive || isResolved) {
+    return normalizedBase;
+  }
+  return normalizedBase + 1;
+};
+export default function AnswerDetailScreen({
+  navigation,
+  route
+}) {
+  const {
+    t
+  } = useTranslation();
   const isFocused = useIsFocused();
-  
+
   // Generate tabs with translations
   const getTabLabel = (index, count) => {
     if (index === 0) {
@@ -43,15 +156,16 @@ export default function AnswerDetailScreen({ navigation, route }) {
       return `${t('screens.answerDetail.tabs.comments')} (${count})`;
     }
   };
-  
-  const [inputText, setInputText] = useState('');
   const [activeTab, setActiveTab] = useState(0); // 0 for supplements, 1 for comments - default to supplements
-  const [sortFilter, setSortFilter] = useState('featured'); // featured or latest
+  const [sortFilter, setSortFilter] = useState('featured'); // featured or newest
   const [liked, setLiked] = useState({});
   const [disliked, setDisliked] = useState({});
   const [bookmarked, setBookmarked] = useState({});
-  
-  // 回答的用户状态 - 延迟初始化，避免依赖未完成的answer对象
+  const [supplementCollectLoading, setSupplementCollectLoading] = useState({});
+  const [supplementLikeLoading, setSupplementLikeLoading] = useState({});
+  const [supplementDislikeLoading, setSupplementDislikeLoading] = useState({});
+
+  // 鍥炵瓟鐨勭敤鎴风姸鎬?- 寤惰繜鍒濆鍖栵紝閬垮厤渚濊禆鏈畬鎴愮殑answer瀵硅薄
   const [answerLiked, setAnswerLiked] = useState(false);
   const [answerBookmarked, setAnswerBookmarked] = useState(false);
   const [answerDisliked, setAnswerDisliked] = useState(false);
@@ -61,61 +175,293 @@ export default function AnswerDetailScreen({ navigation, route }) {
   const [replyText, setReplyText] = useState('');
   const [following, setFollowing] = useState(false);
 
-  // 补充回答相关状态
+  // 琛ュ厖鍥炵瓟鐩稿叧鐘舵€?
   const [supplementAnswers, setSupplementAnswers] = useState([]);
   const [supplementLoading, setSupplementLoading] = useState(false);
   const [supplementError, setSupplementError] = useState(null);
   const [supplementPagination, setSupplementPagination] = useState(INITIAL_SUPPLEMENT_PAGINATION);
 
-  // 回答数据状态 - 用于管理完整的回答数据
+  // 鍥炵瓟鏁版嵁鐘舵€?- 鐢ㄤ簬绠＄悊瀹屾暣鐨勫洖绛旀暟鎹?
   const [answerData, setAnswerData] = useState(null);
 
-  // 收藏相关状态和防重防抖
+  // 鏀惰棌鐩稿叧鐘舵€佸拰闃查噸闃叉姈
   const [isCollectLoading, setIsCollectLoading] = useState(false);
   const collectTimeoutRef = useRef(null);
   const lastCollectTimeRef = useRef(0);
   const hasFocusedOnceRef = useRef(false);
 
-  // 仲裁相关状态
+  // 浠茶鐩稿叧鐘舵€?
   const [showArbitrationModal, setShowArbitrationModal] = useState(false);
   const [arbitrationReason, setArbitrationReason] = useState('');
   const [selectedExperts, setSelectedExperts] = useState([]);
   const [expertSearchText, setExpertSearchText] = useState('');
 
-  // 补充回答相关状态
+  // 琛ュ厖鍥炵瓟鐩稿叧鐘舵€?
   const [showSupplementAnswerModal, setShowSupplementAnswerModal] = useState(false);
+  const [showWriteCommentModal, setShowWriteCommentModal] = useState(false);
 
-  // 提交补充回答 - 已移至 SupplementAnswerModal 组件
+  // 鎻愪氦琛ュ厖鍥炵瓟 - 宸茬Щ鑷?SupplementAnswerModal 缁勪欢
 
   // 可邀请的专家列表
-  const expertsList = [
-    { id: 1, name: '李明', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert1', title: 'Python架构师', verified: true, expertise: 'Python开发' },
-    { id: 2, name: '王芳', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert2', title: '数据科学家', verified: true, expertise: '数据分析' },
-    { id: 3, name: '赵强', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert3', title: '技术总监', verified: true, expertise: '技术管理' },
-    { id: 4, name: '刘洋', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert4', title: 'AI工程师', verified: true, expertise: '机器学习' },
-    { id: 5, name: '陈静', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert5', title: '全栈开发', verified: true, expertise: 'Web开发' },
-  ];
-
-  // 获取完整的回答数据（包含统计信息）
-  const answer = answerData || route?.params?.answer || {
-    id: 1, // 默认回答ID
-    author: 'Python老司机',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=answer1',
+  const expertsList = [{
+    id: 1,
+    name: '李明',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert1',
+    title: 'Python 架构师',
     verified: true,
-    title: '资深Python开发 · 10年经验',
-    content: '作为一个从零开始学Python的过来人,我来分享一下我的经验:\n\n1. 学习时间:如果每天能保证2-3小时的学习时间,3个月完全可以入门并做一些简单的项目。\n\n2. 学习路线:\n- 第1个月:Python基础语法、数据类型、函数、面向对象\n- 第2个月:常用库(NumPy、Pandas)、数据处理\n- 第3个月:实战项目、数据可视化\n\n3. 推荐资源:廖雪峰的Python教程(免费)、《Python编程从入门到实践》',
-    likes: 256,
-    dislikes: 3,
-    shares: 45,
-    bookmarks: 89,
-    comments: 128,
-    views: 1234,
-    time: '1小时前',
-    adopted: true,
-    invitedBy: { name: '张三丰', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=inviter1' }
+    expertise: 'Python 开发'
+  }, {
+    id: 2,
+    name: '王芳',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert2',
+    title: '数据科学家',
+    verified: true,
+    expertise: '数据分析'
+  }, {
+    id: 3,
+    name: '赵强',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert3',
+    title: '技术总监',
+    verified: true,
+    expertise: '技术管理'
+  }, {
+    id: 4,
+    name: '刘洋',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert4',
+    title: 'AI 工程师',
+    verified: true,
+    expertise: '机器学习'
+  }, {
+    id: 5,
+    name: '陈静',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert5',
+    title: '全栈开发',
+    verified: true,
+    expertise: 'Web 开发'
+  }];
+  const formatSupplementAnswerTime = timeValue => {
+    if (!timeValue) {
+      return t('screens.answerDetail.time.justNow');
+    }
+    if (typeof timeValue === 'string') {
+      const directText = timeValue.trim();
+      const maybeTimestamp = new Date(directText);
+      if (directText && Number.isNaN(maybeTimestamp.getTime())) {
+        return directText;
+      }
+    }
+    try {
+      const time = new Date(timeValue);
+      const now = new Date();
+      const diff = now - time;
+      if (Number.isNaN(time.getTime()) || diff < 0) {
+        return t('screens.answerDetail.time.justNow');
+      }
+      const seconds = Math.floor(diff / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const hours = Math.floor(minutes / 60);
+      const days = Math.floor(hours / 24);
+      if (days >= 1) {
+        return `${days}${t('screens.answerDetail.time.daysAgo')}`;
+      }
+      if (hours >= 1) {
+        return `${hours}${t('screens.answerDetail.time.hoursAgo')}`;
+      }
+      if (minutes >= 1) {
+        return `${minutes}${t('screens.answerDetail.time.minutesAgo')}`;
+      }
+      return t('screens.answerDetail.time.justNow');
+    } catch (error) {
+      return t('screens.answerDetail.time.justNow');
+    }
+  };
+  const normalizeAnswerDetail = item => {
+    if (!item || typeof item !== 'object') {
+      return item;
+    }
+    const normalizedId = item.id ?? item.answerId ?? item.answer_id ?? null;
+    const normalizedAuthor = pickDisplayText(item.authorNickName, item.userNickname, item.userName, item.author, item.nickName, item.nickname) || t('home.anonymous');
+    const normalizedAvatar = pickDisplayText(item.authorAvatar, item.userAvatar, item.avatar, item.headImg, item.headImage) || null;
+    const normalizedInviterName = pickDisplayText(item.invitedBy?.name, item.inviterName, item.invitedUserName, item.invitedNickName);
+    const normalizedInviterAvatar = pickDisplayText(item.invitedBy?.avatar, item.inviterAvatar, item.invitedUserAvatar);
+    const normalizedTime = formatSupplementAnswerTime(item.createTime ?? item.createdAt ?? item.updateTime ?? item.updatedAt ?? item.time);
+    return {
+      ...item,
+      id: normalizedId,
+      answerId: normalizedId,
+      author: normalizedAuthor,
+      userName: normalizedAuthor,
+      userNickname: item.userNickname ?? item.authorNickName ?? normalizedAuthor,
+      authorNickName: item.authorNickName ?? normalizedAuthor,
+      avatar: normalizedAvatar,
+      userAvatar: normalizedAvatar,
+      authorAvatar: pickDisplayText(item.authorAvatar, item.userAvatar, item.avatar, item.headImg, item.headImage) || null,
+      questionId: item.questionId ?? item.question_id ?? null,
+      supplementId: item.supplementId ?? item.supplement_id ?? null,
+      userId: item.userId ?? item.user_id ?? null,
+      title: pickDisplayText(item.title, item.authorTitle, item.userTitle, item.position),
+      content: item.content ?? item.description ?? '',
+      time: normalizedTime,
+      location: pickDisplayText(item.location, item.ipLocation, item.city) || t('screens.answerDetail.states.unknownLocation'),
+      viewCount: normalizeCount(item.viewCount, item.view_count, item.views),
+      views: normalizeCount(item.viewCount, item.view_count, item.views),
+      likeCount: normalizeCount(item.likeCount, item.like_count, item.likes),
+      likes: normalizeCount(item.likeCount, item.like_count, item.likes),
+      commentCount: normalizeCount(item.commentCount, item.comment_count, item.comments),
+      comments: normalizeCount(item.commentCount, item.comment_count, item.comments),
+      supplementCount: normalizeCount(item.supplementCount, item.supplement_count),
+      collectCount: normalizeCount(item.collectCount, item.collect_count, item.bookmarks, item.bookmarkCount),
+      bookmarkCount: normalizeCount(item.collectCount, item.collect_count, item.bookmarks, item.bookmarkCount),
+      bookmarks: normalizeCount(item.collectCount, item.collect_count, item.bookmarks, item.bookmarkCount),
+      dislikeCount: normalizeCount(item.dislikeCount, item.dislike_count, item.dislikes),
+      dislikes: normalizeCount(item.dislikeCount, item.dislike_count, item.dislikes),
+      shareCount: normalizeCount(item.shareCount, item.share_count, item.shares),
+      shares: normalizeCount(item.shareCount, item.share_count, item.shares),
+      superLikeCount: normalizeCount(item.superLikeCount, item.super_like_count, item.superLikes),
+      superLikes: normalizeCount(item.superLikeCount, item.super_like_count, item.superLikes),
+      featureScore: normalizeCount(item.featureScore, item.feature_score),
+      isTop: normalizeFlag(item.isTop, item.top, item.is_top),
+      verified: normalizeFlag(item.verified, item.isVerified, item.authorVerified),
+      liked: normalizeFlag(item.liked, item.isLiked),
+      disliked: normalizeFlag(item.disliked, item.isDisliked),
+      collected: normalizeFlag(item.collected, item.isCollected, item.bookmarked, item.isBookmarked),
+      adopted: normalizeFlag(item.adopted, item.isAccepted, item.isAdopted),
+      canAdopt: normalizeFlag(item.canAdopt),
+      canEdit: normalizeFlag(item.canEdit),
+      invitedBy: normalizedInviterName ? {
+        name: normalizedInviterName,
+        avatar: normalizedInviterAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=inviter-${normalizedId ?? 'default'}`
+      } : item.invitedBy ?? null,
+      imageUrls: Array.isArray(item.imageUrls) ? item.imageUrls : []
+    };
   };
 
-  // 处理仲裁申请
+  // 获取完整的回答数据（包含统计信息）
+  const answer = normalizeAnswerDetail(answerData || route?.params?.updatedAnswer || route?.params?.answer) || DEFAULT_ANSWER_DETAIL;
+  const normalizeSupplementAnswerItem = item => {
+    if (!item || typeof item !== 'object') {
+      return item;
+    }
+    const normalizedId = item.id ?? item.supplementAnswerId ?? item.supplement_answer_id ?? null;
+    const normalizedAuthor = pickDisplayText(item.authorNickName, item.userNickname, item.userName, item.author, item.nickName, item.nickname) || t('home.anonymous');
+    const normalizedAvatar = pickDisplayText(item.authorAvatar, item.userAvatar, item.avatar, item.headImg, item.headImage) || null;
+    const normalizedLikeCount = normalizeCount(item.likeCount, item.likes, item.like_count);
+    const normalizedDislikeCount = normalizeCount(item.dislikeCount, item.dislikes, item.dislike_count);
+    const normalizedCommentCount = normalizeCount(item.commentCount, item.comments, item.comment_count);
+    const normalizedShareCount = normalizeCount(item.shareCount, item.shares, item.share_count);
+    const normalizedCollectCount = normalizeCount(item.collectCount, item.bookmarkCount, item.bookmarks, item.collect_count);
+    const normalizedAdopted = normalizeFlag(item.adopted, item.isAccepted, item.isAdopted);
+    const likeCountResolved = normalizeFlag(item.__likeCountResolved);
+    const dislikeCountResolved = normalizeFlag(item.__dislikeCountResolved);
+    const collectCountResolved = normalizeFlag(item.__collectCountResolved);
+    return {
+      ...item,
+      id: normalizedId,
+      supplementAnswerId: normalizedId,
+      answerId: item.answerId ?? item.answer_id ?? answer.id ?? null,
+      questionId: item.questionId ?? item.question_id ?? answer.questionId ?? null,
+      userId: item.userId ?? item.user_id ?? null,
+      author: normalizedAuthor,
+      userName: normalizedAuthor,
+      userNickname: item.userNickname ?? item.authorNickName ?? normalizedAuthor,
+      authorNickName: item.authorNickName ?? normalizedAuthor,
+      avatar: normalizedAvatar,
+      userAvatar: normalizedAvatar,
+      authorAvatar: pickDisplayText(item.authorAvatar, item.userAvatar, item.avatar, item.headImg, item.headImage) || null,
+      verified: normalizeFlag(item.verified, item.isVerified, item.authorVerified),
+      location: pickDisplayText(item.location, item.ipLocation, item.city) || t('screens.answerDetail.states.unknownLocation'),
+      content: item.content ?? item.description ?? item.text ?? '',
+      likeCount: normalizedLikeCount,
+      likes: normalizedLikeCount,
+      dislikeCount: normalizedDislikeCount,
+      dislikes: normalizedDislikeCount,
+      commentCount: normalizedCommentCount,
+      comments: normalizedCommentCount,
+      shareCount: normalizedShareCount,
+      shares: normalizedShareCount,
+      collectCount: normalizedCollectCount,
+      bookmarkCount: normalizedCollectCount,
+      bookmarks: normalizedCollectCount,
+      time: formatSupplementAnswerTime(item.createTime ?? item.createdAt ?? item.updateTime ?? item.updatedAt),
+      liked: normalizeFlag(item.liked, item.isLiked),
+      disliked: normalizeFlag(item.disliked, item.isDisliked),
+      collected: normalizeFlag(item.collected, item.isCollected, item.bookmarked, item.isBookmarked),
+      __likeCountResolved: likeCountResolved,
+      __dislikeCountResolved: dislikeCountResolved,
+      __collectCountResolved: collectCountResolved,
+      adopted: normalizedAdopted,
+      canEdit: !!(item.canEdit ?? false),
+      imageUrls: Array.isArray(item.imageUrls) ? item.imageUrls : []
+    };
+  };
+  const normalizeSupplementAnswerList = (rows = []) => rows.map(normalizeSupplementAnswerItem);
+  const buildSupplementAnswerMutationResult = (currentSupplement = {}, responseData, fallbackValues = {}) => {
+    const payload = responseData && typeof responseData === 'object' && !Array.isArray(responseData) ? responseData : {};
+    const liked = typeof responseData === 'boolean' && fallbackValues.liked !== undefined ? responseData : payload.liked ?? payload.isLiked ?? fallbackValues.liked ?? currentSupplement.liked ?? false;
+    const collected = typeof responseData === 'boolean' && fallbackValues.collected !== undefined ? responseData : payload.collected ?? payload.isCollected ?? payload.bookmarked ?? payload.isBookmarked ?? fallbackValues.collected ?? currentSupplement.collected ?? false;
+    const disliked = typeof responseData === 'boolean' && fallbackValues.disliked !== undefined ? responseData : payload.disliked ?? payload.isDisliked ?? fallbackValues.disliked ?? currentSupplement.disliked ?? false;
+    const likeCount = Number(fallbackValues.likeCount ?? payload.likeCount ?? payload.likes ?? currentSupplement.likeCount ?? currentSupplement.likes) || 0;
+    const collectCount = Number(fallbackValues.collectCount ?? payload.collectCount ?? payload.bookmarkCount ?? payload.bookmarks ?? currentSupplement.collectCount ?? currentSupplement.bookmarkCount ?? currentSupplement.bookmarks) || 0;
+    const dislikeCount = Number(fallbackValues.dislikeCount ?? payload.dislikeCount ?? payload.dislikes ?? currentSupplement.dislikeCount ?? currentSupplement.dislikes) || 0;
+    return normalizeSupplementAnswerItem({
+      ...currentSupplement,
+      ...payload,
+      liked: !!liked,
+      collected: !!collected,
+      disliked: !!disliked,
+      likeCount,
+      collectCount,
+      dislikeCount,
+      likes: likeCount,
+      bookmarkCount: collectCount,
+      bookmarks: collectCount,
+      dislikes: dislikeCount,
+      __likeCountResolved: fallbackValues.likeCount !== undefined ? true : currentSupplement.__likeCountResolved,
+      __collectCountResolved: fallbackValues.collectCount !== undefined ? true : currentSupplement.__collectCountResolved,
+      __dislikeCountResolved: fallbackValues.dislikeCount !== undefined ? true : currentSupplement.__dislikeCountResolved
+    });
+  };
+  const getSupplementLikeDisplayCount = supplement => getResolvedViewerInteractionCount(supplement?.likeCount ?? supplement?.likes ?? 0, supplement?.liked, supplement?.__likeCountResolved);
+  const getSupplementDislikeDisplayCount = supplement => getResolvedViewerInteractionCount(supplement?.dislikeCount ?? supplement?.dislikes ?? 0, supplement?.disliked, supplement?.__dislikeCountResolved);
+  const updateSupplementAnswerItem = (supplementId, updater) => {
+    setSupplementAnswers(prevAnswers => prevAnswers.map(item => {
+      if (String(item?.id) !== String(supplementId)) {
+        return item;
+      }
+      const nextItem = typeof updater === 'function' ? updater(item) : updater;
+      return normalizeSupplementAnswerItem(nextItem);
+    }));
+  };
+  const isSupplementTab = activeTab === 0;
+  const bottomComposerPlaceholder = isSupplementTab ? t('screens.answerDetail.actions.supplementAnswer') : t('screens.answerDetail.placeholders.writeComment');
+  const handleOpenBottomComposer = () => {
+    if (isSupplementTab) {
+      setShowSupplementAnswerModal(true);
+      return;
+    }
+    setShowWriteCommentModal(true);
+  };
+  const handlePublishComment = (commentText, isTeam, selectedImages = []) => {
+    const normalizedText = typeof commentText === 'string' ? commentText.trim() : '';
+    if (!normalizedText && selectedImages.length === 0) {
+      return;
+    }
+    const newComment = {
+      id: comments.length + 1,
+      author: isTeam ? t('screens.answerDetail.identities.team') : t('screens.answerDetail.identities.personal'),
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${isTeam ? 'team-comment' : 'personal-comment'}`,
+      content: normalizedText,
+      likes: 0,
+      dislikes: 0,
+      shares: 0,
+      bookmarks: 0,
+      time: t('screens.answerDetail.time.justNow'),
+      images: selectedImages
+    };
+    setComments(prevComments => [newComment, ...prevComments]);
+    setShowWriteCommentModal(false);
+    toast.success(t('screens.answerDetail.alerts.commentPublished'));
+  };
   const handleSubmitArbitration = () => {
     if (!arbitrationReason.trim()) {
       toast.error(t('screens.answerDetail.alerts.arbitrationReasonRequired'));
@@ -129,15 +475,14 @@ export default function AnswerDetailScreen({ navigation, route }) {
       toast.error(t('screens.answerDetail.alerts.maxExpertsExceeded'));
       return;
     }
-
     toast.success(t('screens.answerDetail.alerts.arbitrationSubmitted'));
     setShowArbitrationModal(false);
     setArbitrationReason('');
     setSelectedExperts([]);
   };
 
-  // 切换专家选择
-  const toggleExpertSelection = (expertId) => {
+  // 鍒囨崲涓撳閫夋嫨
+  const toggleExpertSelection = expertId => {
     if (selectedExperts.includes(expertId)) {
       setSelectedExperts(selectedExperts.filter(id => id !== expertId));
     } else {
@@ -149,18 +494,12 @@ export default function AnswerDetailScreen({ navigation, route }) {
     }
   };
 
-  // 过滤专家列表
-  const filteredExperts = expertsList.filter(expert =>
-    expert.name.toLowerCase().includes(expertSearchText.toLowerCase()) ||
-    expert.title.toLowerCase().includes(expertSearchText.toLowerCase()) ||
-    expert.expertise.toLowerCase().includes(expertSearchText.toLowerCase())
-  );
-
-  const handleReply = (comment) => {
+  // 杩囨护涓撳鍒楄〃
+  const filteredExperts = expertsList.filter(expert => expert.name.toLowerCase().includes(expertSearchText.toLowerCase()) || expert.title.toLowerCase().includes(expertSearchText.toLowerCase()) || expert.expertise.toLowerCase().includes(expertSearchText.toLowerCase()));
+  const handleReply = comment => {
     setReplyTarget(comment);
     setShowReplyModal(true);
   };
-
   const submitReply = () => {
     if (replyText.trim()) {
       toast.success(t('screens.answerDetail.alerts.replyPublished'));
@@ -168,349 +507,436 @@ export default function AnswerDetailScreen({ navigation, route }) {
       setShowReplyModal(false);
     }
   };
-
   const handleComment = () => {
-    if (inputText.trim()) {
-      const newComment = {
-        id: comments.length + 1,
-        author: '我',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=me',
-        content: inputText,
-        likes: 0,
-        dislikes: 0,
-        shares: 0,
-        bookmarks: 0,
-        time: t('screens.answerDetail.time.justNow')
-      };
-      setComments([newComment, ...comments]);
-      setInputText('');
-      toast.success(t('screens.answerDetail.alerts.commentPublished'));
-    }
+    handleOpenBottomComposer();
   };
 
-  // 处理回答收藏/取消收藏 - 带防抖和请求去重
+  // 澶勭悊鍥炵瓟鏀惰棌/鍙栨秷鏀惰棌 - 甯﹂槻鎶栧拰璇锋眰鍘婚噸
   const handleAnswerBookmark = async () => {
-    console.log('🔍 收藏操作:');
+    console.log('馃攳 鏀惰棌鎿嶄綔:');
     console.log('  answerId:', answer.id);
-    
     if (!answer.id) {
-      console.error('❌ 回答ID不存在');
-      toast.error('操作失败：回答ID不存在');
+      console.error('回答 ID 不存在');
+      toast.error(t('screens.answerDetail.alerts.answerIdMissing'));
       return;
     }
 
-    // 防止重复请求
+    // 闃叉閲嶅璇锋眰
     if (isCollectLoading) {
-      console.log('🚫 收藏请求进行中，忽略重复点击');
+      console.log('馃毇 鏀惰棌璇锋眰杩涜涓紝蹇界暐閲嶅鐐瑰嚮');
       return;
     }
 
-    // 清除之前的防抖定时器
+    // 娓呴櫎涔嬪墠鐨勯槻鎶栧畾鏃跺櫒
     if (collectTimeoutRef.current) {
       clearTimeout(collectTimeoutRef.current);
     }
 
-    // 立即更新UI状态，提供即时反馈
+    // 绔嬪嵆鏇存柊UI鐘舵€侊紝鎻愪緵鍗虫椂鍙嶉
     const currentState = answerBookmarked;
     const newState = !currentState;
-    
     setAnswerBookmarked(newState);
 
-    // 设置防抖定时器
+    // 璁剧疆闃叉姈瀹氭椂鍣?
     collectTimeoutRef.current = setTimeout(async () => {
       try {
-        // 设置加载状态，防止重复请求
+        // 璁剧疆鍔犺浇鐘舵€侊紝闃叉閲嶅璇锋眰
         setIsCollectLoading(true);
+        console.log(`馃摛 ${newState ? '鏀惰棌' : '鍙栨秷鏀惰棌'}鍥炵瓟: id=${answer.id}`);
 
-        console.log(`📤 ${newState ? '收藏' : '取消收藏'}回答: id=${answer.id}`);
-        
-        // 根据当前状态调用不同的接口
-        const response = newState 
-          ? await answerApi.collectAnswer(answer.id)
-          : await answerApi.uncollectAnswer(answer.id);
-        
-        console.log('📥 收藏响应:', response);
-        
+        // 鏍规嵁褰撳墠鐘舵€佽皟鐢ㄤ笉鍚岀殑鎺ュ彛
+        const response = newState ? await answerApi.collectAnswer(answer.id) : await answerApi.uncollectAnswer(answer.id);
+        console.log('馃摜 鏀惰棌鍝嶅簲:', response);
         if (response && response.code === 200) {
-          // 服务器返回成功，保持UI状态
-          toast.success(newState ? '已收藏' : '已取消收藏');
-          
-          // 同步数据到问题详情页
-          syncDataToQuestionDetail();
+          // 鏈嶅姟鍣ㄨ繑鍥炴垚鍔燂紝淇濇寔UI鐘舵€?
+          toast.success(newState ? t('screens.answerDetail.alerts.collected') : t('screens.answerDetail.alerts.uncollected'));
+
+          // 鍚屾鏁版嵁鍒伴棶棰樿鎯呴〉
+          syncDataToQuestionDetail({
+            liked: answerLiked,
+            disliked: answerDisliked,
+            collected: newState
+          });
         } else {
-          // 服务器返回失败，回滚UI状态
-          console.error('❌ 收藏操作失败:', response);
-          setAnswerBookmarked(currentState); // 回滚到原状态
-          toast.error(response?.msg || '操作失败');
+          // 鏈嶅姟鍣ㄨ繑鍥炲け璐ワ紝鍥炴粴UI鐘舵€?
+          console.error('鉂?鏀惰棌鎿嶄綔澶辫触:', response);
+          setAnswerBookmarked(currentState); // 鍥炴粴鍒板師鐘舵€?
+          toast.error(response?.msg || t('screens.answerDetail.alerts.operationFailed'));
         }
       } catch (error) {
-        console.error('❌ 收藏请求异常:', error);
-        
-        // 网络错误，回滚UI状态
-        setAnswerBookmarked(currentState); // 回滚到原状态
-        toast.error('网络错误，请稍后重试');
+        console.error('鉂?鏀惰棌璇锋眰寮傚父:', error);
+
+        // 缃戠粶閿欒锛屽洖婊歎I鐘舵€?
+        setAnswerBookmarked(currentState); // 鍥炴粴鍒板師鐘舵€?
+        toast.error(t('screens.answerDetail.alerts.networkError'));
       } finally {
-        // 清除加载状态
+        // 娓呴櫎鍔犺浇鐘舵€?
         setIsCollectLoading(false);
         collectTimeoutRef.current = null;
       }
-    }, 300); // 300ms防抖延迟
+    }, 300); // 300ms闃叉姈寤惰繜
   };
 
-  // 同步数据到问题详情页（不跳转，只更新参数）
-  const syncDataToQuestionDetail = () => {
+  // 鍚屾鏁版嵁鍒伴棶棰樿鎯呴〉锛堜笉璺宠浆锛屽彧鏇存柊鍙傛暟锛?
+  const syncDataToQuestionDetail = (overrides = {}) => {
     if (!answer || !navigation) return;
-    
-    console.log('🔄 同步回答数据到问题详情页:', answer.id);
-    
+    console.log('馃攧 鍚屾鍥炵瓟鏁版嵁鍒伴棶棰樿鎯呴〉:', answer.id);
     const routes = navigation.getState()?.routes;
     const questionDetailRoute = routes?.find(r => r.name === 'QuestionDetail');
-    
+    const nextLiked = overrides.liked ?? answerLiked;
+    const nextCollected = overrides.collected ?? answerBookmarked;
+    const nextDisliked = overrides.disliked ?? answerDisliked;
+    const updatedAnswer = normalizeAnswerDetail({
+      ...answer,
+      isLiked: nextLiked,
+      liked: nextLiked,
+      isBookmarked: nextCollected,
+      bookmarked: nextCollected,
+      isCollected: nextCollected,
+      collected: nextCollected,
+      isDisliked: nextDisliked,
+      disliked: nextDisliked,
+      likeCount: getInteractionDisplayCount(answer.likeCount || answer.like_count || answer.likes || 0, !!answer.liked, nextLiked),
+      bookmarkCount: getInteractionDisplayCount(answer.bookmarkCount || answer.bookmark_count || answer.bookmarks || answer.collectCount || 0, !!answer.collected, nextCollected),
+      collectCount: getInteractionDisplayCount(answer.collectCount || answer.bookmarkCount || answer.bookmark_count || answer.bookmarks || 0, !!answer.collected, nextCollected),
+      dislikeCount: getInteractionDisplayCount(answer.dislikeCount || answer.dislike_count || answer.dislikes || 0, !!answer.disliked, nextDisliked)
+    });
+    setAnswerData(updatedAnswer);
     if (questionDetailRoute) {
-      const updatedAnswer = {
-        id: answer.id,
-        // 用户状态
-        isLiked: answerLiked,
-        liked: answerLiked,
-        isBookmarked: answerBookmarked,
-        bookmarked: answerBookmarked,
-        collected: answerBookmarked,
-        isDisliked: answerDisliked,
-        disliked: answerDisliked,
-        // 统计数据 - 支持多种字段名
-        likeCount: (answer.likeCount || answer.like_count || answer.likes || 0) + (answerLiked ? 1 : 0),
-        like_count: (answer.likeCount || answer.like_count || answer.likes || 0) + (answerLiked ? 1 : 0),
-        likes: (answer.likeCount || answer.like_count || answer.likes || 0) + (answerLiked ? 1 : 0),
-        bookmarkCount: (answer.bookmarkCount || answer.bookmark_count || answer.bookmarks || 0) + (answerBookmarked ? 1 : 0),
-        bookmark_count: (answer.bookmarkCount || answer.bookmark_count || answer.bookmarks || 0) + (answerBookmarked ? 1 : 0),
-        bookmarks: (answer.bookmarkCount || answer.bookmark_count || answer.bookmarks || 0) + (answerBookmarked ? 1 : 0),
-        dislikeCount: (answer.dislikeCount || answer.dislike_count || answer.dislikes || 0) + (answerDisliked ? 1 : 0),
-        dislike_count: (answer.dislikeCount || answer.dislike_count || answer.dislikes || 0) + (answerDisliked ? 1 : 0),
-        dislikes: (answer.dislikeCount || answer.dislike_count || answer.dislikes || 0) + (answerDisliked ? 1 : 0),
-      };
-      
-      console.log('📤 更新参数:', updatedAnswer);
-      
-      // 使用 setParams 更新参数，不触发导航跳转
-      navigation.setParams({
-        updatedAnswer: updatedAnswer
+      console.log('馃摛 鏇存柊鍙傛暟:', updatedAnswer);
+      navigation.dispatch({
+        ...CommonActions.setParams({
+          updatedAnswer
+        }),
+        source: questionDetailRoute.key,
+        target: navigation.getState()?.key
       });
     } else {
-      console.log('⚠️  未找到问题详情页路由');
+      console.log('鈿狅笍  鏈壘鍒伴棶棰樿鎯呴〉璺敱');
     }
   };
 
-  // 处理点赞/取消点赞
+  // 澶勭悊鐐硅禐/鍙栨秷鐐硅禐
   const handleAnswerLike = async () => {
     if (!answer.id) {
-      toast.error('操作失败：回答ID不存在');
+      toast.error(t('screens.answerDetail.alerts.answerIdMissing'));
       return;
     }
-
     const currentState = answerLiked;
     const newState = !currentState;
-    
-    // 立即更新UI
+
+    // 绔嬪嵆鏇存柊UI
     setAnswerLiked(newState);
-    
-    // 如果之前是点踩状态，取消点踩
+
+    // 濡傛灉涔嬪墠鏄偣韪╃姸鎬侊紝鍙栨秷鐐硅俯
     if (answerDisliked) {
       setAnswerDisliked(false);
     }
-
     try {
-      const response = newState 
-        ? await answerApi.likeAnswer(answer.id)
-        : await answerApi.unlikeAnswer(answer.id);
-      
+      const response = newState ? await answerApi.likeAnswer(answer.id) : await answerApi.unlikeAnswer(answer.id);
       if (response && response.code === 200) {
-        toast.success(newState ? '已点赞' : '已取消点赞');
-        syncDataToQuestionDetail();
+        toast.success(newState ? t('screens.answerDetail.alerts.liked') : t('screens.answerDetail.alerts.unliked'));
+        syncDataToQuestionDetail({
+          liked: newState,
+          disliked: answerDisliked ? false : answerDisliked,
+          collected: answerBookmarked
+        });
       } else {
         setAnswerLiked(currentState);
-        toast.error(response?.msg || '操作失败');
+        toast.error(response?.msg || t('screens.answerDetail.alerts.operationFailed'));
       }
     } catch (error) {
-      console.error('❌ 点赞操作失败:', error);
+      console.error('鉂?鐐硅禐鎿嶄綔澶辫触:', error);
       setAnswerLiked(currentState);
-      toast.error('网络错误，请稍后重试');
+      toast.error(t('screens.answerDetail.alerts.networkError'));
     }
   };
 
-  // 处理点踩/取消点踩
+  // 澶勭悊鐐硅俯/鍙栨秷鐐硅俯
   const handleAnswerDislike = async () => {
     if (!answer.id) {
-      toast.error('操作失败：回答ID不存在');
+      toast.error(t('screens.answerDetail.alerts.answerIdMissing'));
       return;
     }
-
     const currentState = answerDisliked;
     const newState = !currentState;
-    
-    // 立即更新UI
+
+    // 绔嬪嵆鏇存柊UI
     setAnswerDisliked(newState);
-    
-    // 如果之前是点赞状态，取消点赞
+
+    // 濡傛灉涔嬪墠鏄偣璧炵姸鎬侊紝鍙栨秷鐐硅禐
     if (answerLiked) {
       setAnswerLiked(false);
     }
-
     try {
-      const response = newState 
-        ? await answerApi.dislikeAnswer(answer.id)
-        : await answerApi.undislikeAnswer(answer.id);
-      
+      const response = newState ? await answerApi.dislikeAnswer(answer.id) : await answerApi.undislikeAnswer(answer.id);
       if (response && response.code === 200) {
-        toast.success(newState ? '已点踩' : '已取消点踩');
-        syncDataToQuestionDetail();
+        toast.success(newState ? t('screens.answerDetail.alerts.disliked') : t('screens.answerDetail.alerts.undisliked'));
+        syncDataToQuestionDetail({
+          liked: answerLiked ? false : answerLiked,
+          disliked: newState,
+          collected: answerBookmarked
+        });
       } else {
         setAnswerDisliked(currentState);
-        toast.error(response?.msg || '操作失败');
+        toast.error(response?.msg || t('screens.answerDetail.alerts.operationFailed'));
       }
     } catch (error) {
-      console.error('❌ 点踩操作失败:', error);
+      console.error('鉂?鐐硅俯鎿嶄綔澶辫触:', error);
       setAnswerDisliked(currentState);
-      toast.error('网络错误，请稍后重试');
+      toast.error(t('screens.answerDetail.alerts.networkError'));
+    }
+  };
+  const answerLikeCount = getInteractionDisplayCount(answer.likeCount || answer.like_count || answer.likes || 0, !!answer.liked, answerLiked);
+  const answerBookmarkCount = getInteractionDisplayCount(answer.collectCount || answer.bookmarkCount || answer.bookmark_count || answer.bookmarks || 0, !!answer.collected, answerBookmarked);
+  const answerDislikeCount = getInteractionDisplayCount(answer.dislikeCount || answer.dislike_count || answer.dislikes || 0, !!answer.disliked, answerDisliked);
+  const handleSupplementCollect = async supplementId => {
+    const supplement = supplementAnswers.find(item => String(item?.id) === String(supplementId));
+    if (!supplementId || !supplement) {
+      toast.error(t('screens.answerDetail.alerts.collectFailed'));
+      return;
+    }
+    if (supplementCollectLoading[supplementId]) {
+      return;
+    }
+    const supplementQuestionId = supplement.questionId ?? answer.questionId ?? route?.params?.questionId ?? null;
+    if (!supplementQuestionId) {
+      toast.error(t('screens.answerDetail.alerts.supplementCollectUnavailable'));
+      return;
+    }
+    try {
+      setSupplementCollectLoading(prev => ({
+        ...prev,
+        [supplementId]: true
+      }));
+      const nextCollected = !supplement.collected;
+      const currentCollectCount = Number(supplement.collectCount ?? supplement.bookmarkCount ?? supplement.bookmarks ?? 0) || 0;
+      const response = nextCollected ? await answerApi.collectSupplementAnswer(supplementId) : await answerApi.uncollectSupplementAnswer(supplementId);
+      if (response && response.code === 200) {
+        const updatedSupplement = buildSupplementAnswerMutationResult(supplement, response.data, {
+          collected: nextCollected,
+          collectCount: Math.max(currentCollectCount + (nextCollected ? 1 : -1), 0)
+        });
+        updateSupplementAnswerItem(supplementId, updatedSupplement);
+        toast.success(updatedSupplement.collected ? t('screens.answerDetail.alerts.collected') : t('screens.answerDetail.alerts.uncollected'));
+      } else {
+        const rawMessage = response?.msg || '';
+        if (rawMessage.includes('question_id') && rawMessage.includes('cannot be null')) {
+          toast.error(t('screens.answerDetail.alerts.supplementCollectUnavailable'));
+        } else {
+          toast.error(rawMessage || t('screens.answerDetail.alerts.operationFailed'));
+        }
+      }
+    } catch (error) {
+      console.error('补充回答收藏失败:', error);
+      const rawMessage = error?.message || '';
+      if (rawMessage.includes('question_id') && rawMessage.includes('cannot be null')) {
+        toast.error(t('screens.answerDetail.alerts.supplementCollectUnavailable'));
+      } else {
+        toast.error(rawMessage || t('screens.answerDetail.alerts.operationFailed'));
+      }
+    } finally {
+      setSupplementCollectLoading(prev => ({
+        ...prev,
+        [supplementId]: false
+      }));
+    }
+  };
+  const handleSupplementLike = async supplementId => {
+    const supplement = supplementAnswers.find(item => String(item?.id) === String(supplementId));
+    if (!supplementId || !supplement) {
+      toast.error(t('screens.answerDetail.alerts.operationFailed'));
+      return;
+    }
+    if (supplementLikeLoading[supplementId]) {
+      return;
+    }
+    try {
+      setSupplementLikeLoading(prev => ({
+        ...prev,
+        [supplementId]: true
+      }));
+      const nextLiked = !supplement.liked;
+      const currentLikeCount = getSupplementLikeDisplayCount(supplement);
+      const response = nextLiked ? await answerApi.likeSupplementAnswer(supplementId) : await answerApi.unlikeSupplementAnswer(supplementId);
+      if (response && response.code === 200) {
+        const updatedSupplement = buildSupplementAnswerMutationResult(supplement, response.data, {
+          liked: nextLiked,
+          likeCount: Math.max(currentLikeCount + (nextLiked ? 1 : -1), 0)
+        });
+        updateSupplementAnswerItem(supplementId, updatedSupplement);
+        toast.success(updatedSupplement.liked ? t('screens.answerDetail.alerts.liked') : t('screens.answerDetail.alerts.unliked'));
+      } else {
+        toast.error(response?.msg || t('screens.answerDetail.alerts.operationFailed'));
+      }
+    } catch (error) {
+      console.log('补充回答点赞请求异常:', error);
+      toast.error(error?.message || t('screens.answerDetail.alerts.operationFailed'));
+    } finally {
+      setSupplementLikeLoading(prev => ({
+        ...prev,
+        [supplementId]: false
+      }));
+    }
+  };
+  const handleSupplementDislike = async supplementId => {
+    const supplement = supplementAnswers.find(item => String(item?.id) === String(supplementId));
+    if (!supplementId || !supplement) {
+      toast.error(t('screens.answerDetail.alerts.operationFailed'));
+      return;
+    }
+    if (supplementDislikeLoading[supplementId]) {
+      return;
+    }
+    try {
+      setSupplementDislikeLoading(prev => ({
+        ...prev,
+        [supplementId]: true
+      }));
+      const nextDisliked = !supplement.disliked;
+      const currentDislikeCount = getSupplementDislikeDisplayCount(supplement);
+      const response = nextDisliked ? await answerApi.dislikeSupplementAnswer(supplementId) : await answerApi.undislikeSupplementAnswer(supplementId);
+      if (response && response.code === 200) {
+        const updatedSupplement = buildSupplementAnswerMutationResult(supplement, response.data, {
+          disliked: nextDisliked,
+          dislikeCount: Math.max(currentDislikeCount + (nextDisliked ? 1 : -1), 0)
+        });
+        updateSupplementAnswerItem(supplementId, updatedSupplement);
+        toast.success(updatedSupplement.disliked ? t('screens.answerDetail.alerts.disliked') : t('screens.answerDetail.alerts.undisliked'));
+      } else {
+        toast.error(response?.msg || t('screens.answerDetail.alerts.operationFailed'));
+      }
+    } catch (error) {
+      console.log('补充回答点踩请求异常:', error);
+      toast.error(error?.message || t('screens.answerDetail.alerts.operationFailed'));
+    } finally {
+      setSupplementDislikeLoading(prev => ({
+        ...prev,
+        [supplementId]: false
+      }));
     }
   };
 
-  // 获取补充回答列表
-  const fetchSupplementAnswers = async (reset = false) => {
+  // 鑾峰彇琛ュ厖鍥炵瓟鍒楄〃
+  const fetchSupplementAnswers = async (reset = false, sortByOverride = sortFilter) => {
     if (!answer.id) {
-      console.error('❌ 回答ID不存在');
+      console.error('回答 ID 不存在');
       return;
     }
 
-    // 如果正在加载，不重复请求
+    // 濡傛灉姝ｅ湪鍔犺浇锛屼笉閲嶅璇锋眰
     if (supplementLoading) {
-      console.log('🚫 补充回答加载中，忽略重复请求');
+      console.log('馃毇 琛ュ厖鍥炵瓟鍔犺浇涓紝蹇界暐閲嶅璇锋眰');
       return;
     }
 
-    // 如果是加载更多，检查是否还有更多数据
+    // 濡傛灉鏄姞杞芥洿澶氾紝妫€鏌ユ槸鍚﹁繕鏈夋洿澶氭暟鎹?
     if (!reset && !supplementPagination.hasMore) {
-      console.log('📋 没有更多补充回答了');
+      console.log('没有更多补充回答了');
       return;
     }
-
     try {
       setSupplementLoading(true);
       setSupplementError(null);
-
       const pageNum = reset ? 1 : supplementPagination.pageNum;
-      
-      console.log(`📤 获取补充回答列表: answerId=${answer.id}, pageNum=${pageNum}, sortBy=${sortFilter}`);
-      
+      console.log(`馃摛 鑾峰彇琛ュ厖鍥炵瓟鍒楄〃: answerId=${answer.id}, pageNum=${pageNum}, sortBy=${sortFilter}`);
       const response = await answerApi.getSupplementAnswers(answer.id, {
-        sortBy: sortFilter,
+        sortBy: sortByOverride,
         pageNum,
         pageSize: supplementPagination.pageSize
       });
-
-      console.log('📥 补充回答响应:', response);
-
+      console.log('馃摜 琛ュ厖鍥炵瓟鍝嶅簲:', response);
       if (response && response.code === 200) {
         const data = response.data || {};
-        const list = data.list || [];
-        const total = data.total || 0;
-        
-        // 更新补充回答列表
-        setSupplementAnswers(reset ? list : [...supplementAnswers, ...list]);
-        
-        // 更新分页信息
+        const rawList = data.rows || data.list || data.records || [];
+        const list = normalizeSupplementAnswerList(rawList);
+        const total = data.total ?? data.count ?? data.recordsTotal ?? list.length;
+        const nextPageSize = supplementPagination.pageSize;
+        const hasMore = total > 0 ? pageNum * nextPageSize < total : list.length >= nextPageSize;
+
+        // 鏇存柊琛ュ厖鍥炵瓟鍒楄〃
+        setSupplementAnswers(prev => reset ? list : [...prev, ...list]);
+
+        // 鏇存柊鍒嗛〉淇℃伅
         setSupplementPagination({
-          pageNum: pageNum + 1,
-          pageSize: supplementPagination.pageSize,
-          hasMore: list.length >= supplementPagination.pageSize,
+          pageNum: list.length < nextPageSize ? pageNum : pageNum + 1,
+          pageSize: nextPageSize,
+          hasMore,
           total
         });
       } else {
-        throw new Error(response?.msg || '获取补充回答失败');
+        throw new Error(response?.msg || t('screens.answerDetail.alerts.fetchSupplementsFailed'));
       }
     } catch (error) {
-      console.error('❌ 获取补充回答异常:', error);
-      setSupplementError(error.message || '网络错误，请稍后重试');
+      console.log('⚠️ 获取补充回答异常:', error);
+      setSupplementError(error.message || t('screens.answerDetail.alerts.networkError'));
     } finally {
       setSupplementLoading(false);
     }
   };
 
-  // 处理排序切换
-  const handleSortChange = (newSortBy) => {
+  // 澶勭悊鎺掑簭鍒囨崲
+  const handleSortChange = newSortBy => {
     if (sortFilter !== newSortBy) {
-      console.log(`📋 切换排序方式: ${sortFilter} -> ${newSortBy}`);
+      console.log(`馃搵 鍒囨崲鎺掑簭鏂瑰紡: ${sortFilter} -> ${newSortBy}`);
       setSortFilter(newSortBy);
-      
-      // 重新加载补充回答列表
+
+      // 閲嶆柊鍔犺浇琛ュ厖鍥炵瓟鍒楄〃
       if (activeTab === 0) {
-        fetchSupplementAnswers(true);
+        fetchSupplementAnswers(true, newSortBy);
       }
     }
   };
 
-  // 获取回答详情数据(包含最新的点赞、收藏、点踩状态)
+  // 鑾峰彇鍥炵瓟璇︽儏鏁版嵁(鍖呭惈鏈€鏂扮殑鐐硅禐銆佹敹钘忋€佺偣韪╃姸鎬?
   const fetchAnswerDetail = async () => {
     if (!answer?.id) {
-      console.log('⚠️ 回答ID不存在,跳过获取详情');
+      console.log('鈿狅笍 鍥炵瓟ID涓嶅瓨鍦?璺宠繃鑾峰彇璇︽儏');
       return;
     }
-
     try {
-      console.log(`📤 获取回答详情: answerId=${answer.id}`);
+      console.log(`馃摛 鑾峰彇鍥炵瓟璇︽儏: answerId=${answer.id}`);
       const response = await answerApi.getAnswerDetail(answer.id);
-      
-      console.log('📥 回答详情响应:', JSON.stringify(response, null, 2));
-      
+      console.log('馃摜 鍥炵瓟璇︽儏鍝嶅簲:', JSON.stringify(response, null, 2));
       if (response && response.code === 200 && response.data) {
-        const detailData = response.data;
-        
-        // 更新回答数据
+        const detailData = normalizeAnswerDetail(response.data);
+
+        // 鏇存柊鍥炵瓟鏁版嵁
         setAnswerData(detailData);
-        
-        // 初始化交互状态
-        if (detailData.isLiked !== undefined) {
-          setAnswerLiked(detailData.isLiked);
-        }
-        if (detailData.isCollected !== undefined) {
-          setAnswerBookmarked(detailData.isCollected);
-        } else if (detailData.isBookmarked !== undefined) {
-          setAnswerBookmarked(detailData.isBookmarked);
-        }
-        if (detailData.isDisliked !== undefined) {
-          setAnswerDisliked(detailData.isDisliked);
-        }
-        
-        console.log('✅ 回答详情加载成功,交互状态已初始化:', {
+
+        // 鍒濆鍖栦氦浜掔姸鎬?
+        setAnswerLiked(!!detailData.liked);
+        setAnswerBookmarked(!!detailData.collected);
+        setAnswerDisliked(!!detailData.disliked);
+        console.log('鉁?鍥炵瓟璇︽儏鍔犺浇鎴愬姛,浜や簰鐘舵€佸凡鍒濆鍖?', {
           isLiked: detailData.isLiked,
           isCollected: detailData.isCollected || detailData.isBookmarked,
           isDisliked: detailData.isDisliked,
           likeCount: detailData.likeCount,
           collectCount: detailData.collectCount,
-          dislikeCount: detailData.dislikeCount,
+          dislikeCount: detailData.dislikeCount
         });
       }
     } catch (error) {
-      console.error('❌ 获取回答详情失败:', error);
-      // 失败时使用传递过来的数据
-      console.log('使用导航参数传递的回答数据');
+      console.log('⚠️ 获取回答详情异常:', error);
+      // 澶辫触鏃朵娇鐢ㄤ紶閫掕繃鏉ョ殑鏁版嵁
+      console.log('浣跨敤瀵艰埅鍙傛暟浼犻€掔殑鍥炵瓟鏁版嵁');
     }
   };
 
-  // 初始化加载补充回答
+  // 鍒濆鍖栧姞杞借ˉ鍏呭洖绛?
   useEffect(() => {
     if (isFocused && answer.id) {
-      // 获取回答详情(包含最新的交互状态)
+      // 鑾峰彇鍥炵瓟璇︽儏(鍖呭惈鏈€鏂扮殑浜や簰鐘舵€?
       fetchAnswerDetail();
-      
-      // 如果当前在补充回答tab,加载补充回答列表
+
+      // 濡傛灉褰撳墠鍦ㄨˉ鍏呭洖绛攖ab,鍔犺浇琛ュ厖鍥炵瓟鍒楄〃
       if (activeTab === 0) {
         fetchSupplementAnswers(true);
       }
     }
   }, [isFocused, answer.id, activeTab]);
-
-  return (
-    <SafeAreaView style={styles.container}>
+  return <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -529,34 +955,31 @@ export default function AnswerDetailScreen({ navigation, route }) {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* 回答内容 */}
+        {/* 鍥炵瓟鍐呭 */}
         <View style={styles.answerSection}>
           <View style={styles.answerHeader}>
-            <Image source={{ uri: answer.userAvatar || answer.avatar }} style={styles.answerAvatar} />
+            <Avatar uri={answer.authorAvatar || answer.userAvatar || answer.avatar} name={answer.authorNickName || answer.userNickname || answer.userName || answer.author || t('home.anonymous')} size={48} style={styles.answerAvatar} />
             <View style={styles.answerAuthorInfo}>
               <View style={styles.answerAuthorRow}>
-                <Text style={styles.answerAuthor}>{answer.userName || answer.userNickname || answer.author || '匿名用户'}</Text>
-                {answer.verified && <Ionicons name="checkmark-circle" size={16} color="#3b82f6" />}
+                <Text style={styles.answerAuthor}>{answer.authorNickName || answer.userNickname || answer.userName || answer.author || t('home.anonymous')}</Text>
+                {Boolean(answer.verified) && <Ionicons name="checkmark-circle" size={16} color="#3b82f6" />}
                 
-                {/* 采纳按钮 - 放在用户名后面 */}
-                <TouchableOpacity 
-                  style={styles.adoptAnswerBtn}
-                  onPress={() => {
-                    showAppAlert(t('screens.answerDetail.alerts.adoptAnswerTitle'), t('screens.answerDetail.alerts.adoptAnswerMessage'), [
-                      { text: t('screens.answerDetail.alerts.cancel'), style: 'cancel' },
-                      { text: t('screens.answerDetail.alerts.confirm'), onPress: () => {} }
-                    ]);
-                  }}
-                >
-                  <Text style={styles.adoptAnswerBtnText}>{t('screens.answerDetail.actions.adopt')}</Text>
-                </TouchableOpacity>
+                {/* 閲囩撼鎸夐挳 - 鏀惧湪鐢ㄦ埛鍚嶅悗闈?*/}
+                {Boolean(answer.canAdopt || answer.adopted) && <TouchableOpacity style={styles.adoptAnswerBtn} onPress={() => {
+                showAppAlert(t('screens.answerDetail.alerts.adoptAnswerTitle'), t('screens.answerDetail.alerts.adoptAnswerMessage'), [{
+                  text: t('screens.answerDetail.alerts.cancel'),
+                  style: 'cancel'
+                }, {
+                  text: t('screens.answerDetail.alerts.confirm'),
+                  onPress: () => {}
+                }]);
+              }}>
+                    <Text style={styles.adoptAnswerBtnText}>{t('screens.answerDetail.actions.adopt')}</Text>
+                  </TouchableOpacity>}
               </View>
-              <Text style={styles.answerAuthorTitle}>{answer.title}</Text>
+              {!!answer.title && <Text style={styles.answerAuthorTitle}>{answer.title}</Text>}
             </View>
-            <TouchableOpacity 
-              style={[styles.followBtn, following && styles.followBtnActive]}
-              onPress={() => setFollowing(!following)}
-            >
+            <TouchableOpacity style={[styles.followBtn, following && styles.followBtnActive]} onPress={() => setFollowing(!following)}>
               <Text style={[styles.followBtnText, following && styles.followBtnTextActive]}>
                 {following ? t('screens.answerDetail.actions.following') : t('screens.answerDetail.actions.follow')}
               </Text>
@@ -565,7 +988,7 @@ export default function AnswerDetailScreen({ navigation, route }) {
 
           <Text style={styles.answerContent}>{answer.content}</Text>
 
-          {/* 时间和标签区域 - 合并在一行 */}
+          {/* 鏃堕棿鍜屾爣绛惧尯鍩?- 鍚堝苟鍦ㄤ竴琛?*/}
           <View style={styles.answerMetaWithBadges}>
             <View style={styles.answerMetaLeft}>
               <Ionicons name="eye-outline" size={14} color="#9ca3af" />
@@ -574,143 +997,116 @@ export default function AnswerDetailScreen({ navigation, route }) {
               <Text style={styles.answerTime}>{answer.time}</Text>
             </View>
             
-            {/* 标签区域 - 放在右侧 */}
+            {/* 鏍囩鍖哄煙 - 鏀惧湪鍙充晶 */}
             <View style={styles.badgesSectionRight}>
-              {/* 已采纳标签 */}
-              {answer.adopted && (
-                <View style={styles.adoptedBadgeCompact}>
+              {/* 宸查噰绾虫爣绛?*/}
+              {Boolean(answer.adopted) && <View style={styles.adoptedBadgeCompact}>
                   <Text style={styles.adoptedBadgeCompactText}>{t('screens.answerDetail.badges.adopted')}</Text>
-                </View>
-              )}
+                </View>}
               
-              {/* 邀请者标签 */}
-              {answer.invitedBy && (
-                <View style={styles.inviterBadgeCompact}>
-                  <Image source={{ uri: answer.invitedBy.avatar }} style={styles.inviterAvatarCompact} />
+              {/* 閭€璇疯€呮爣绛?*/}
+              {Boolean(answer.invitedBy) && <View style={styles.inviterBadgeCompact}>
+                  <Image source={{
+                uri: answer.invitedBy.avatar
+              }} style={styles.inviterAvatarCompact} />
                   <Text style={styles.inviterTextCompact}>{t('screens.answerDetail.badges.invitedBy').replace('{name}', answer.invitedBy.name)}</Text>
-                </View>
-              )}
+                </View>}
 
-              {/* 仲裁按钮 */}
-              {answer.adopted && (
-                <TouchableOpacity 
-                  style={styles.arbitrationBtnCompact}
-                  onPress={() => setShowArbitrationModal(true)}
-                >
-                  <Ionicons name="gavel-outline" size={12} color="#6b7280" />
-                  <Text style={styles.arbitrationBtnTextCompact}>{t('screens.answerDetail.actions.arbitration')}</Text>
-                </TouchableOpacity>
-              )}
             </View>
           </View>
         </View>
 
-        {/* Tab标签 */}
+        {/* Tab鏍囩 */}
         <View style={styles.tabsSection}>
           <View style={styles.tabs}>
             {[0, 1].map(tabIndex => {
-              const count = tabIndex === 0 ? supplementAnswers.length : comments.length;
-              const label = getTabLabel(tabIndex, count);
-              return (
-                <TouchableOpacity 
-                  key={tabIndex} 
-                  style={styles.tabItem}
-                  onPress={() => setActiveTab(tabIndex)}
-                >
+            const count = tabIndex === 0 ? supplementAnswers.length || answer.supplementCount || 0 : comments.length || answer.commentCount || 0;
+            const label = getTabLabel(tabIndex, count);
+            return <TouchableOpacity key={tabIndex} style={styles.tabItem} onPress={() => setActiveTab(tabIndex)}>
                   <Text style={[styles.tabText, activeTab === tabIndex && styles.tabTextActive]}>{label}</Text>
                   {activeTab === tabIndex && <View style={styles.tabIndicator} />}
-                </TouchableOpacity>
-              );
-            })}
+                </TouchableOpacity>;
+          })}
           </View>
 
-          {/* 筛选条 */}
+          {/* 绛涢€夋潯 */}
           <View style={styles.sortFilterBar}>
             <View style={styles.sortFilterLeft}>
-              <TouchableOpacity 
-                style={[styles.sortFilterBtn, sortFilter === 'featured' && styles.sortFilterBtnActive]}
-                onPress={() => handleSortChange('featured')}
-              >
+              <TouchableOpacity style={[styles.sortFilterBtn, sortFilter === 'featured' && styles.sortFilterBtnActive]} onPress={() => handleSortChange('featured')}>
                 <Ionicons name="star" size={14} color={sortFilter === 'featured' ? '#ef4444' : '#9ca3af'} />
                 <Text style={[styles.sortFilterText, sortFilter === 'featured' && styles.sortFilterTextActive]}>{t('screens.answerDetail.filter.featured')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.sortFilterBtn, sortFilter === 'latest' && styles.sortFilterBtnActive]}
-                onPress={() => handleSortChange('latest')}
-              >
-                <Ionicons name="time" size={14} color={sortFilter === 'latest' ? '#ef4444' : '#9ca3af'} />
-                <Text style={[styles.sortFilterText, sortFilter === 'latest' && styles.sortFilterTextActive]}>{t('screens.answerDetail.filter.latest')}</Text>
+              <TouchableOpacity style={[styles.sortFilterBtn, sortFilter === 'newest' && styles.sortFilterBtnActive]} onPress={() => handleSortChange('newest')}>
+                <Ionicons name="time" size={14} color={sortFilter === 'newest' ? '#ef4444' : '#9ca3af'} />
+                <Text style={[styles.sortFilterText, sortFilter === 'newest' && styles.sortFilterTextActive]}>{t('screens.answerDetail.filter.latest')}</Text>
               </TouchableOpacity>
             </View>
             <Text style={styles.sortFilterCount}>
-              {activeTab === 0 ? t('screens.answerDetail.stats.supplementCount').replace('{count}', supplementAnswers.length) : t('screens.answerDetail.stats.commentCount').replace('{count}', comments.length)}
+              {activeTab === 0 ? t('screens.answerDetail.stats.supplementCount').replace('{count}', supplementAnswers.length || answer.supplementCount || 0) : t('screens.answerDetail.stats.commentCount').replace('{count}', comments.length || answer.commentCount || 0)}
             </Text>
           </View>
         </View>
 
-        {/* 内容区域 */}
+        {/* 鍐呭鍖哄煙 */}
         <View style={styles.contentSection}>
-          {activeTab === 0 ? (
-            // 补充回答列表
-            <>
-              {supplementLoading && supplementAnswers.length === 0 ? (
-                // 首次加载显示骨架屏
-                <SupplementAnswerSkeleton count={2} />
-              ) : supplementError && supplementAnswers.length === 0 ? (
-                // 加载失败且无数据时显示错误信息
-                <View style={styles.errorContainer}>
+          {activeTab === 0 ?
+        // 琛ュ厖鍥炵瓟鍒楄〃
+        <>
+              {supplementLoading && supplementAnswers.length === 0 ?
+          // 棣栨鍔犺浇鏄剧ず楠ㄦ灦灞?
+          <SupplementAnswerSkeleton count={2} /> : supplementError && supplementAnswers.length === 0 ?
+          // 鍔犺浇澶辫触涓旀棤鏁版嵁鏃舵樉绀洪敊璇俊鎭?
+          <View style={styles.errorContainer}>
                   <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
-                  <Text style={styles.errorTitle}>加载失败</Text>
+                  <Text style={styles.errorTitle}>{t('screens.answerDetail.states.loadFailed')}</Text>
                   <Text style={styles.errorMessage}>{supplementError}</Text>
-                  <TouchableOpacity 
-                    style={styles.retryButton}
-                    onPress={() => fetchSupplementAnswers(true)}
-                  >
-                    <Text style={styles.retryButtonText}>重试</Text>
+                  <TouchableOpacity style={styles.retryButton} onPress={() => fetchSupplementAnswers(true)}>
+                    <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
                   </TouchableOpacity>
-                </View>
-              ) : supplementAnswers.length === 0 ? (
-                // 无数据时显示空状态
-                <EmptyState
-                  icon="chatbubbles-outline"
-                  title="暂无补充回答"
-                  description="还没有人发布补充回答"
-                />
-              ) : (
-                // 有数据时显示列表
-                supplementAnswers.map(supplement => (
-                  <View key={supplement.id} style={styles.supplementCard}>
+                </View> : supplementAnswers.length === 0 ?
+          // 鏃犳暟鎹椂鏄剧ず绌虹姸鎬?
+          <EmptyState icon="chatbubbles-outline" title={t('screens.answerDetail.states.emptySupplementsTitle')} description={t('screens.answerDetail.states.emptySupplementsDescription')} /> :
+          // 鏈夋暟鎹椂鏄剧ず鍒楄〃
+          supplementAnswers.map(supplement => <View 
+                    key={supplement.id} 
+                    style={styles.supplementCard}
+                  >
                     <View style={styles.supplementHeader}>
-                      <Image source={{ uri: supplement.avatar }} style={styles.supplementAvatar} />
+                      <Avatar uri={supplement.authorAvatar || supplement.userAvatar || supplement.avatar} name={supplement.authorNickName || supplement.userNickname || supplement.userName || supplement.author || t('home.anonymous')} size={32} style={styles.supplementAvatar} />
                       <View style={styles.supplementAuthorInfo}>
                         <View style={styles.supplementAuthorRow}>
-                          <Text style={styles.supplementAuthor}>{supplement.author}</Text>
+                          <View style={styles.supplementTitleRow}>
+                            <Text style={styles.supplementAuthor}>{supplement.author}</Text>
+                            <View style={styles.supplementMeta}>
+                              <Ionicons name="location-outline" size={12} color="#9ca3af" />
+                              <Text style={styles.supplementLocation}>{supplement.location}</Text>
+                              <Text style={styles.supplementLocation}>{supplement.time}</Text>
+                            </View>
+                          </View>
                           
-                          {/* 采纳按钮 - 放在用户名后面 */}
-                          <TouchableOpacity 
-                            style={styles.adoptAnswerBtn}
-                            onPress={() => {
-                              showAppAlert(t('screens.answerDetail.alerts.adoptSupplementTitle'), t('screens.answerDetail.alerts.adoptSupplementMessage'), [
-                                { text: t('screens.answerDetail.alerts.cancel'), style: 'cancel' },
-                                { text: t('screens.answerDetail.alerts.confirm'), onPress: () => {} }
-                              ]);
-                            }}
-                          >
+                          {/* 閲囩撼鎸夐挳 - 鏀惧湪鐢ㄦ埛鍚嶅悗闈?*/}
+                          <TouchableOpacity style={styles.adoptAnswerBtn} onPress={() => {
+                    showAppAlert(t('screens.answerDetail.alerts.adoptSupplementTitle'), t('screens.answerDetail.alerts.adoptSupplementMessage'), [{
+                      text: t('screens.answerDetail.alerts.cancel'),
+                      style: 'cancel'
+                    }, {
+                      text: t('screens.answerDetail.alerts.confirm'),
+                      onPress: () => {}
+                    }]);
+                  }}>
                             <Text style={styles.adoptAnswerBtnText}>{t('screens.answerDetail.actions.adopt')}</Text>
                           </TouchableOpacity>
-                        </View>
-                        <View style={styles.supplementMeta}>
-                          <Ionicons name="location-outline" size={12} color="#9ca3af" />
-                          <Text style={styles.supplementLocation}>{supplement.location}</Text>
                         </View>
                       </View>
                     </View>
                     <Text style={styles.supplementContent}>{supplement.content}</Text>
                     <View style={styles.supplementActions}>
                       <View style={styles.supplementActionsLeft}>
-                        <TouchableOpacity style={styles.supplementActionBtn}>
-                          <Ionicons name="thumbs-up-outline" size={16} color="#6b7280" />
-                          <Text style={styles.supplementActionText}>{supplement.likes || 0}</Text>
+                        <TouchableOpacity style={styles.supplementActionBtn} onPress={() => handleSupplementLike(supplement.id)} disabled={!!supplementLikeLoading[supplement.id]}>
+                          <Ionicons name={supplement.liked ? "thumbs-up" : "thumbs-up-outline"} size={16} color={supplement.liked ? "#ef4444" : "#6b7280"} />
+                          <Text style={[styles.supplementActionText, supplement.liked && {
+                        color: '#ef4444'
+                      }]}>{getSupplementLikeDisplayCount(supplement)}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.supplementActionBtn}>
                           <Ionicons name="chatbubble-outline" size={16} color="#6b7280" />
@@ -720,46 +1116,40 @@ export default function AnswerDetailScreen({ navigation, route }) {
                           <Ionicons name="arrow-redo-outline" size={16} color="#6b7280" />
                           <Text style={styles.supplementActionText}>{supplement.shares || 0}</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.supplementActionBtn}>
-                          <Ionicons name="star-outline" size={16} color="#6b7280" />
-                          <Text style={styles.supplementActionText}>{supplement.bookmarks || 0}</Text>
+                        <TouchableOpacity style={styles.supplementActionBtn} onPress={() => handleSupplementCollect(supplement.id)} disabled={!!supplementCollectLoading[supplement.id]}>
+                          <Ionicons name={supplement.collected ? "star" : "star-outline"} size={16} color={supplement.collected ? "#f59e0b" : "#6b7280"} />
+                          <Text style={[styles.supplementActionText, supplement.collected && {
+                        color: '#f59e0b'
+                      }]}>{supplement.collectCount ?? supplement.bookmarkCount ?? supplement.bookmarks ?? 0}</Text>
                         </TouchableOpacity>
                       </View>
                       <View style={styles.supplementActionsRight}>
-                        <TouchableOpacity style={styles.supplementActionBtn}>
-                          <Ionicons name="thumbs-down-outline" size={16} color="#6b7280" />
-                          <Text style={styles.supplementActionText}>{supplement.dislikes || 0}</Text>
+                        <TouchableOpacity style={styles.supplementActionBtn} onPress={() => handleSupplementDislike(supplement.id)} disabled={!!supplementDislikeLoading[supplement.id]}>
+                          <Ionicons name={supplement.disliked ? "thumbs-down" : "thumbs-down-outline"} size={16} color={supplement.disliked ? "#6b7280" : "#6b7280"} />
+                          <Text style={styles.supplementActionText}>{getSupplementDislikeDisplayCount(supplement)}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.supplementActionBtn}>
                           <Ionicons name="flag-outline" size={16} color="#ef4444" />
                         </TouchableOpacity>
                       </View>
                     </View>
-                  </View>
-                ))
-              )}
+                  </View>)}
               
-              {/* 加载更多指示器 */}
-              {supplementLoading && supplementAnswers.length > 0 && (
-                <View style={styles.loadingMore}>
-                  <Text style={styles.loadingMoreText}>加载中...</Text>
-                </View>
-              )}
+              {/* 鍔犺浇鏇村鎸囩ず鍣?*/}
+              {Boolean(supplementLoading && supplementAnswers.length > 0) && <View style={styles.loadingMore}>
+                  <Text style={styles.loadingMoreText}>{t('screens.answerDetail.states.loadingMore')}</Text>
+                </View>}
             </>
-          ) : (
-            // 评论列表
-            <>
+          : (
+        // 璇勮鍒楄〃
+        <>
               {comments.length === 0 ? (
-                // 评论空状态
-                <EmptyState
-                  icon="chatbubble-outline"
-                  title="暂无评论"
-                  description="快来发表第一条评论吧"
-                />
+          <EmptyState icon="chatbubble-outline" title={t('screens.answerDetail.states.emptyCommentsTitle')} description={t('screens.answerDetail.states.emptyCommentsDescription')} />
               ) : (
-                comments.map(comment => (
-                <View key={comment.id} style={styles.commentCard}>
-                  <Image source={{ uri: comment.avatar }} style={styles.commentAvatar} />
+                comments.map(comment => <View key={comment.id} style={styles.commentCard}>
+                  <Image source={{
+              uri: comment.avatar
+            }} style={styles.commentAvatar} />
                   <View style={styles.commentContent}>
                     <View style={styles.commentHeader}>
                       <Text style={styles.commentAuthor}>{comment.author}</Text>
@@ -768,23 +1158,18 @@ export default function AnswerDetailScreen({ navigation, route }) {
                     <Text style={styles.commentText}>{comment.content}</Text>
                     <View style={styles.commentActions}>
                       <View style={styles.commentActionsLeft}>
-                        <TouchableOpacity 
-                          style={styles.commentActionBtn}
-                          onPress={() => setLiked({ ...liked, [comment.id]: !liked[comment.id] })}
-                        >
-                          <Ionicons 
-                            name={liked[comment.id] ? "thumbs-up" : "thumbs-up-outline"} 
-                            size={14} 
-                            color={liked[comment.id] ? "#ef4444" : "#9ca3af"} 
-                          />
-                          <Text style={[styles.commentActionText, liked[comment.id] && { color: '#ef4444' }]}>
+                        <TouchableOpacity style={styles.commentActionBtn} onPress={() => setLiked({
+                    ...liked,
+                    [comment.id]: !liked[comment.id]
+                  })}>
+                          <Ionicons name={liked[comment.id] ? "thumbs-up" : "thumbs-up-outline"} size={14} color={liked[comment.id] ? "#ef4444" : "#9ca3af"} />
+                          <Text style={[styles.commentActionText, liked[comment.id] && {
+                      color: '#ef4444'
+                    }]}>
                             {(comment.likes || 0) + (liked[comment.id] ? 1 : 0)}
                           </Text>
                         </TouchableOpacity>
-                        <TouchableOpacity 
-                          style={styles.commentActionBtn}
-                          onPress={() => handleReply(comment)}
-                        >
+                        <TouchableOpacity style={styles.commentActionBtn} onPress={() => handleReply(comment)}>
                           <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
                           <Text style={styles.commentActionText}>{t('screens.answerDetail.actions.reply')}</Text>
                         </TouchableOpacity>
@@ -792,30 +1177,24 @@ export default function AnswerDetailScreen({ navigation, route }) {
                           <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
                           <Text style={styles.commentActionText}>{comment.shares || 0}</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity 
-                          style={styles.commentActionBtn}
-                          onPress={() => setBookmarked({ ...bookmarked, [comment.id]: !bookmarked[comment.id] })}
-                        >
-                          <Ionicons 
-                            name={bookmarked[comment.id] ? "bookmark" : "bookmark-outline"} 
-                            size={14} 
-                            color={bookmarked[comment.id] ? "#f59e0b" : "#9ca3af"} 
-                          />
-                          <Text style={[styles.commentActionText, bookmarked[comment.id] && { color: '#f59e0b' }]}>
+                        <TouchableOpacity style={styles.commentActionBtn} onPress={() => setBookmarked({
+                    ...bookmarked,
+                    [comment.id]: !bookmarked[comment.id]
+                  })}>
+                          <Ionicons name={bookmarked[comment.id] ? "bookmark" : "bookmark-outline"} size={14} color={bookmarked[comment.id] ? "#f59e0b" : "#9ca3af"} />
+                          <Text style={[styles.commentActionText, bookmarked[comment.id] && {
+                      color: '#f59e0b'
+                    }]}>
                             {(comment.bookmarks || 0) + (bookmarked[comment.id] ? 1 : 0)}
                           </Text>
                         </TouchableOpacity>
                       </View>
                       <View style={styles.commentActionsRight}>
-                        <TouchableOpacity 
-                          style={styles.commentActionBtn}
-                          onPress={() => setDisliked({ ...disliked, [comment.id]: !disliked[comment.id] })}
-                        >
-                          <Ionicons 
-                            name={disliked[comment.id] ? "thumbs-down" : "thumbs-down-outline"} 
-                            size={14} 
-                            color="#9ca3af" 
-                          />
+                        <TouchableOpacity style={styles.commentActionBtn} onPress={() => setDisliked({
+                    ...disliked,
+                    [comment.id]: !disliked[comment.id]
+                  })}>
+                          <Ionicons name={disliked[comment.id] ? "thumbs-down" : "thumbs-down-outline"} size={14} color="#9ca3af" />
                           <Text style={styles.commentActionText}>{(comment.dislikes || 0) + (disliked[comment.id] ? 1 : 0)}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.commentActionBtn}>
@@ -824,83 +1203,47 @@ export default function AnswerDetailScreen({ navigation, route }) {
                       </View>
                     </View>
                   </View>
-                </View>
-              ))
+                </View>)
               )}
             </>
           )}
         </View>
       </ScrollView>
 
-      {/* 底部栏 */}
+      {/* 搴曢儴鏍?*/}
       <View style={styles.bottomBar}>
         <View style={styles.bottomBarLeft}>
-          <TouchableOpacity 
-            style={styles.bottomIconBtn}
-            onPress={handleAnswerLike}
-          >
-            <Ionicons 
-              name={answerLiked ? "thumbs-up" : "thumbs-up-outline"} 
-              size={20} 
-              color={answerLiked ? "#ef4444" : "#6b7280"} 
-            />
-            <Text style={[styles.bottomIconText, answerLiked && { color: '#ef4444' }]}>
-              {(answer.likeCount || answer.like_count || answer.likes || 0) + (answerLiked ? 1 : 0)}
+          <TouchableOpacity style={styles.bottomIconBtn} onPress={handleAnswerLike}>
+            <Ionicons name={answerLiked ? "thumbs-up" : "thumbs-up-outline"} size={20} color={answerLiked ? "#ef4444" : "#6b7280"} />
+            <Text style={[styles.bottomIconText, answerLiked && {
+            color: '#ef4444'
+          }]}>
+              {answerLikeCount}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[
-              styles.bottomIconBtn,
-              isCollectLoading && styles.bottomIconBtnDisabled
-            ]}
-            onPress={handleAnswerBookmark}
-            disabled={isCollectLoading}
-          >
-            <Ionicons 
-              name={answerBookmarked ? "star" : "star-outline"} 
-              size={20} 
-              color={answerBookmarked ? "#f59e0b" : "#6b7280"} 
-            />
-            <Text style={[styles.bottomIconText, answerBookmarked && { color: '#f59e0b' }]}>
-              {(answer.bookmarkCount || answer.bookmark_count || answer.bookmarks || 0) + (answerBookmarked ? 1 : 0)}
+          <TouchableOpacity style={[styles.bottomIconBtn, isCollectLoading && styles.bottomIconBtnDisabled]} onPress={handleAnswerBookmark} disabled={isCollectLoading}>
+            <Ionicons name={answerBookmarked ? "star" : "star-outline"} size={20} color={answerBookmarked ? "#f59e0b" : "#6b7280"} />
+            <Text style={[styles.bottomIconText, answerBookmarked && {
+            color: '#f59e0b'
+          }]}>
+              {answerBookmarkCount}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.bottomIconBtn}
-            onPress={handleAnswerDislike}
-          >
-            <Ionicons 
-              name={answerDisliked ? "thumbs-down" : "thumbs-down-outline"} 
-              size={20} 
-              color={answerDisliked ? "#6b7280" : "#6b7280"} 
-            />
+          <TouchableOpacity style={styles.bottomIconBtn} onPress={handleAnswerDislike}>
+            <Ionicons name={answerDisliked ? "thumbs-down" : "thumbs-down-outline"} size={20} color={answerDisliked ? "#6b7280" : "#6b7280"} />
             <Text style={styles.bottomIconText}>
-              {(answer.dislikeCount || answer.dislike_count || answer.dislikes || 0) + (answerDisliked ? 1 : 0)}
+              {answerDislikeCount}
             </Text>
           </TouchableOpacity>
         </View>
         <View style={styles.bottomBarRight}>
-          <TouchableOpacity 
-            style={styles.bottomCommentInput}
-            onPress={() => {
-              // 可以打开评论输入弹窗或聚焦输入框
-            }}
-          >
-            <Text style={styles.bottomCommentPlaceholder}>{t('screens.answerDetail.placeholders.writeComment')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.bottomSupplementBtn}
-            onPress={() => {
-              setShowSupplementAnswerModal(true);
-            }}
-          >
-            <Ionicons name="add-circle-outline" size={16} color="#fff" />
-            <Text style={styles.bottomSupplementBtnText}>{t('screens.answerDetail.actions.supplementAnswer')}</Text>
+          <TouchableOpacity style={styles.bottomCommentInput} onPress={handleOpenBottomComposer}>
+            <Text style={styles.bottomCommentPlaceholder}>{bottomComposerPlaceholder}</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* 回复弹窗 */}
+      {/* 鍥炲寮圭獥 */}
       <Modal visible={showReplyModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.replyModal}>
@@ -910,406 +1253,950 @@ export default function AnswerDetailScreen({ navigation, route }) {
                 <Ionicons name="close" size={24} color="#6b7280" />
               </TouchableOpacity>
             </View>
-            <TextInput
-              style={styles.replyInput}
-              placeholder={t('screens.answerDetail.placeholders.writeReply')}
-              placeholderTextColor="#9ca3af"
-              value={replyText}
-              onChangeText={setReplyText}
-              multiline
-              autoFocus
-            />
-            <TouchableOpacity 
-              style={[styles.replySubmitBtn, !replyText.trim() && styles.replySubmitBtnDisabled]}
-              onPress={submitReply}
-              disabled={!replyText.trim()}
-            >
+            <TextInput style={styles.replyInput} placeholder={t('screens.answerDetail.placeholders.writeReply')} placeholderTextColor="#9ca3af" value={replyText} onChangeText={setReplyText} multiline autoFocus />
+            <TouchableOpacity style={[styles.replySubmitBtn, !replyText.trim() && styles.replySubmitBtnDisabled]} onPress={submitReply} disabled={!replyText.trim()}>
               <Text style={styles.replySubmitText}>{t('screens.answerDetail.actions.publish')}</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* 申请仲裁弹窗 */}
-      <Modal visible={showArbitrationModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.arbitrationModal}>
-            <View style={styles.arbitrationModalHandle} />
-            <View style={styles.arbitrationModalHeader}>
-              <Text style={styles.arbitrationModalTitle}>{t('screens.answerDetail.modals.arbitrationTitle')}</Text>
-              <TouchableOpacity onPress={() => setShowArbitrationModal(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.arbitrationContent} showsVerticalScrollIndicator={false}>
-              {/* 说明 */}
-              <View style={styles.arbitrationInfo}>
-                <Ionicons name="information-circle" size={20} color="#3b82f6" />
-                <Text style={styles.arbitrationInfoText}>
-                  {t('screens.answerDetail.arbitration.info')}
-                </Text>
-              </View>
-
-              {/* 仲裁理由 */}
-              <Text style={styles.arbitrationSectionTitle}>{t('screens.answerDetail.arbitration.reasonLabel')}</Text>
-              <TextInput
-                style={styles.arbitrationReasonInput}
-                placeholder={t('screens.answerDetail.placeholders.arbitrationReason')}
-                placeholderTextColor="#9ca3af"
-                value={arbitrationReason}
-                onChangeText={setArbitrationReason}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-              />
-
-              {/* 邀请专家 */}
-              <View style={styles.arbitrationExpertsHeader}>
-                <Text style={styles.arbitrationSectionTitle}>{t('screens.answerDetail.arbitration.inviteExpertsLabel')}</Text>
-                <Text style={styles.arbitrationExpertsCount}>
-                  {t('screens.answerDetail.arbitration.expertsCount').replace('{count}', selectedExperts.length)}
-                </Text>
-              </View>
-
-              {/* 专家搜索框 */}
-              <View style={styles.expertSearchBox}>
-                <Ionicons name="search-outline" size={18} color="#9ca3af" />
-                <TextInput
-                  style={styles.expertSearchInput}
-                  placeholder={t('screens.answerDetail.placeholders.searchExpert')}
-                  placeholderTextColor="#9ca3af"
-                  value={expertSearchText}
-                  onChangeText={setExpertSearchText}
-                />
-                {expertSearchText.length > 0 && (
-                  <TouchableOpacity onPress={() => setExpertSearchText('')}>
-                    <Ionicons name="close-circle" size={18} color="#9ca3af" />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* 推荐专家标题 */}
-              <View style={styles.recommendedExpertsHeader}>
-                <Ionicons name="star" size={16} color="#f59e0b" />
-                <Text style={styles.recommendedExpertsTitle}>{t('screens.answerDetail.arbitration.recommendedExperts')}</Text>
-              </View>
-
-              {expertsList
-                .filter(expert => {
-                  if (!expertSearchText) return true;
-                  const searchLower = expertSearchText.toLowerCase();
-                  return (
-                    expert.name.toLowerCase().includes(searchLower) ||
-                    expert.title.toLowerCase().includes(searchLower) ||
-                    expert.expertise.toLowerCase().includes(searchLower)
-                  );
-                })
-                .map(expert => (
-                <TouchableOpacity
-                  key={expert.id}
-                  style={[
-                    styles.expertItem,
-                    selectedExperts.includes(expert.id) && styles.expertItemSelected
-                  ]}
-                  onPress={() => toggleExpertSelection(expert.id)}
-                >
-                  <Avatar uri={expert.avatar} name={expert.name} size={44} />
-                  <View style={styles.expertInfo}>
-                    <View style={styles.expertNameRow}>
-                      <Text style={styles.expertName}>{expert.name}</Text>
-                      {expert.verified && <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />}
-                    </View>
-                    <Text style={styles.expertTitle}>{expert.title}</Text>
-                    <Text style={styles.expertExpertise}>{t('screens.answerDetail.arbitration.expertiseLabel')}{expert.expertise}</Text>
-                  </View>
-                  <View style={[
-                    styles.expertCheckbox,
-                    selectedExperts.includes(expert.id) && styles.expertCheckboxSelected
-                  ]}>
-                    {selectedExperts.includes(expert.id) && (
-                      <Ionicons name="checkmark" size={16} color="#fff" />
-                    )}
-                  </View>
-                </TouchableOpacity>
-              ))}
-
-              {/* 搜索无结果提示 */}
-              {expertSearchText && expertsList.filter(expert => {
-                const searchLower = expertSearchText.toLowerCase();
-                return (
-                  expert.name.toLowerCase().includes(searchLower) ||
-                  expert.title.toLowerCase().includes(searchLower) ||
-                  expert.expertise.toLowerCase().includes(searchLower)
-                );
-              }).length === 0 && (
-                <View style={styles.noExpertsFound}>
-                  <Ionicons name="search-outline" size={32} color="#d1d5db" />
-                  <Text style={styles.noExpertsFoundText}>{t('screens.answerDetail.arbitration.noExpertsFound')}</Text>
-                  <Text style={styles.noExpertsFoundDesc}>{t('screens.answerDetail.arbitration.tryOtherKeywords')}</Text>
-                </View>
-              )}
-
-              <View style={{ height: 20 }} />
-            </ScrollView>
-
-            <View style={styles.arbitrationModalFooter}>
-              <TouchableOpacity
-                style={[
-                  styles.submitArbitrationBtn,
-                  (!arbitrationReason.trim() || selectedExperts.length < 3) && styles.submitArbitrationBtnDisabled
-                ]}
-                onPress={handleSubmitArbitration}
-                disabled={!arbitrationReason.trim() || selectedExperts.length < 3}
-              >
-                <Text style={styles.submitArbitrationBtnText}>
-                  {t('screens.answerDetail.arbitration.submitButton')}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.cancelArbitrationBtn}
-                onPress={() => {
-                  setShowArbitrationModal(false);
-                  setArbitrationReason('');
-                  setSelectedExperts([]);
-                }}
-              >
-                <Text style={styles.cancelArbitrationBtnText}>{t('screens.answerDetail.alerts.cancel')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 补充回答弹窗 */}
-      <SupplementAnswerModal
-        visible={showSupplementAnswerModal}
-        onClose={() => setShowSupplementAnswerModal(false)}
-        answer={answer}
-        questionId={route?.params?.questionId || answer?.questionId}
-        onSuccess={() => {
-          // 补充回答发布成功后刷新列表
-          fetchSupplementAnswers(true);
-        }}
-      />
-    </SafeAreaView>
-  );
+      {/* 琛ュ厖鍥炵瓟寮圭獥 */}
+      <SupplementAnswerModal visible={showSupplementAnswerModal} onClose={() => setShowSupplementAnswerModal(false)} answer={answer} questionId={route?.params?.questionId || answer?.questionId} onSuccess={() => {
+      // 琛ュ厖鍥炵瓟鍙戝竷鎴愬姛鍚庡埛鏂板垪琛?
+      fetchSupplementAnswers(true);
+    }} />
+      <WriteCommentModal visible={showWriteCommentModal} onClose={() => setShowWriteCommentModal(false)} onPublish={handlePublishComment} title={t('screens.answerDetail.modals.writeCommentTitle')} placeholder={t('screens.answerDetail.placeholders.writeCommentContent')} />
+    </SafeAreaView>;
 }
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff' },
-  backBtn: { padding: 4 },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: '#1f2937' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12, width: 80, justifyContent: 'flex-end' },
-  shareBtn: { padding: 4, flexDirection: 'row', alignItems: 'center', gap: 2 },
-  shareBtnText: { fontSize: 12, color: '#6b7280' },
-  content: { flex: 1 },
-  answerSection: { backgroundColor: '#fff', padding: 16, marginBottom: 8 },
-  // 时间和标签合并区域
-  answerMetaWithBadges: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 },
-  answerMetaLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  badgesSectionRight: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  // 标签区域样式 - 紧凑版
-  badgesSection: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' },
-  adoptedBadgeCompact: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#f0fdf4', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  adoptedBadgeCompactText: { fontSize: 11, color: '#22c55e', fontWeight: '600' },
-  inviterBadgeCompact: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: '#eff6ff', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  inviterAvatarCompact: { width: 14, height: 14, borderRadius: 7 },
-  inviterTextCompact: { fontSize: 10, color: '#3b82f6', fontWeight: '500', textAlign: 'center' },
-  arbitrationBtnCompact: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#f9fafb', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb' },
-  arbitrationBtnTextCompact: { fontSize: 10, color: '#6b7280', fontWeight: '500' },
-  inviterBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#eff6ff', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, marginBottom: 12, alignSelf: 'flex-start' },
-  inviterAvatar: { width: 16, height: 16, borderRadius: 8 },
-  inviterText: { fontSize: 12, color: '#3b82f6', fontWeight: '500' },
-  answerHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
-  answerAvatar: { width: 48, height: 48, borderRadius: 24 },
-  answerAuthorInfo: { flex: 1, marginLeft: 12 },
-  answerAuthorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' },
-  answerAuthor: { fontSize: 16, fontWeight: '600', color: '#1f2937' },
-  // 采纳按钮样式 - 与问题详情页一致
-  adoptAnswerBtn: { 
-    backgroundColor: '#f0fdf4', 
-    paddingHorizontal: 4, 
-    paddingVertical: 0, 
-    borderRadius: 14, 
-    borderWidth: 1.5, 
+  container: {
+    flex: 1,
+    backgroundColor: '#f3f4f6'
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff'
+  },
+  backBtn: {
+    padding: 4
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937'
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    width: 80,
+    justifyContent: 'flex-end'
+  },
+  shareBtn: {
+    padding: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2
+  },
+  shareBtnText: {
+    fontSize: 12,
+    color: '#6b7280'
+  },
+  content: {
+    flex: 1
+  },
+  answerSection: {
+    backgroundColor: '#fff',
+    padding: 16,
+    marginBottom: 8
+  },
+  // 鏃堕棿鍜屾爣绛惧悎骞跺尯鍩?
+  answerMetaWithBadges: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    flexWrap: 'wrap',
+    gap: 8
+  },
+  answerMetaLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  badgesSectionRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap'
+  },
+  // 鏍囩鍖哄煙鏍峰紡 - 绱у噾鐗?
+  badgesSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+    flexWrap: 'wrap'
+  },
+  adoptedBadgeCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8
+  },
+  adoptedBadgeCompactText: {
+    fontSize: 11,
+    color: '#22c55e',
+    fontWeight: '600'
+  },
+  inviterBadgeCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8
+  },
+  inviterAvatarCompact: {
+    width: 14,
+    height: 14,
+    borderRadius: 7
+  },
+  inviterTextCompact: {
+    fontSize: 10,
+    color: '#3b82f6',
+    fontWeight: '500',
+    textAlign: 'center'
+  },
+  arbitrationBtnCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#f9fafb',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb'
+  },
+  arbitrationBtnTextCompact: {
+    fontSize: 10,
+    color: '#6b7280',
+    fontWeight: '500'
+  },
+  inviterBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginBottom: 12,
+    alignSelf: 'flex-start'
+  },
+  inviterAvatar: {
+    width: 16,
+    height: 16,
+    borderRadius: 8
+  },
+  inviterText: {
+    fontSize: 12,
+    color: '#3b82f6',
+    fontWeight: '500'
+  },
+  answerHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12
+  },
+  answerAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24
+  },
+  answerAuthorInfo: {
+    flex: 1,
+    marginLeft: 12
+  },
+  answerAuthorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+    flexWrap: 'wrap'
+  },
+  answerAuthor: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937'
+  },
+  // 閲囩撼鎸夐挳鏍峰紡 - 涓庨棶棰樿鎯呴〉涓€鑷?
+  adoptAnswerBtn: {
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 4,
+    paddingVertical: 0,
+    borderRadius: 14,
+    borderWidth: 1.5,
     borderColor: '#22c55e',
     marginLeft: 6
   },
-  adoptAnswerBtnText: { 
-    fontSize: 12, 
-    color: '#22c55e', 
+  adoptAnswerBtnText: {
+    fontSize: 12,
+    color: '#22c55e',
     fontWeight: '700',
     letterSpacing: 0.2
   },
-  answerAuthorTitle: { fontSize: 13, color: '#9ca3af' },
-  followBtn: { backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 16 },
-  followBtnActive: { backgroundColor: '#f3f4f6' },
-  followBtnText: { fontSize: 13, color: '#fff', fontWeight: '500' },
-  followBtnTextActive: { color: '#6b7280' },
-  adoptedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f0fdf4', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, alignSelf: 'flex-start', marginBottom: 12 },
-  adoptedText: { fontSize: 13, color: '#22c55e', fontWeight: '500' },
-  answerContent: { fontSize: 15, color: '#374151', lineHeight: 24, marginBottom: 12 },
-  answerMeta: { marginBottom: 12 },
-  answerMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  answerViews: { fontSize: 13, color: '#9ca3af' },
-  answerMetaSeparator: { fontSize: 13, color: '#d1d5db', marginHorizontal: 2 },
-  answerTime: { fontSize: 13, color: '#9ca3af' },
-  tabsSection: { backgroundColor: '#fff', marginBottom: 8 },
-  tabs: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  tabItem: { flex: 1, paddingVertical: 12, position: 'relative', alignItems: 'center' },
-  tabText: { fontSize: 14, color: '#6b7280' },
-  tabTextActive: { color: '#ef4444', fontWeight: '600' },
-  tabIndicator: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, backgroundColor: '#ef4444', borderRadius: 1 },
-  sortFilterBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#fafafa', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  sortFilterLeft: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  sortFilterBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 12 },
-  sortFilterBtnActive: { backgroundColor: '#fef2f2' },
-  sortFilterText: { fontSize: 13, color: '#9ca3af' },
-  sortFilterTextActive: { color: '#ef4444', fontWeight: '500' },
-  sortFilterCount: { fontSize: 12, color: '#9ca3af' },
-  contentSection: { backgroundColor: '#fff' },
-  supplementCard: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  supplementHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
-  supplementAvatar: { width: 40, height: 40, borderRadius: 20 },
-  supplementAuthorInfo: { flex: 1, marginLeft: 12 },
-  supplementAuthorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' },
-  supplementAuthor: { fontSize: 14, fontWeight: '500', color: '#1f2937' },
-  supplementMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  supplementLocation: { fontSize: 12, color: '#9ca3af' },
-  supplementContent: { fontSize: 14, color: '#374151', lineHeight: 22, marginBottom: 12 },
-  supplementActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  supplementActionsLeft: { flexDirection: 'row', alignItems: 'center', gap: 16, flex: 1 },
-  supplementActionsRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  supplementActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  supplementActionText: { fontSize: 13, color: '#6b7280' },
-  commentCard: { flexDirection: 'row', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  commentAvatar: { width: 36, height: 36, borderRadius: 18 },
-  commentContent: { flex: 1, marginLeft: 12 },
-  commentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  commentAuthor: { fontSize: 14, fontWeight: '500', color: '#1f2937' },
-  commentTime: { fontSize: 12, color: '#9ca3af' },
-  commentText: { fontSize: 14, color: '#374151', lineHeight: 20, marginBottom: 8 },
-  commentActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
-  commentActionsLeft: { flexDirection: 'row', alignItems: 'center', gap: 16, flex: 1 },
-  commentActionsRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  commentActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  commentActionText: { fontSize: 12, color: '#9ca3af' },
-  bottomBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  bottomBarLeft: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  bottomBarRight: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, marginLeft: 16 },
-  bottomIconBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  bottomIconBtnDisabled: { opacity: 0.6 },
-  bottomIconText: { fontSize: 12, color: '#6b7280' },
-  bottomCommentInput: { flex: 1, backgroundColor: '#f9fafb', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderColor: '#e5e7eb' },
-  bottomCommentPlaceholder: { fontSize: 13, color: '#9ca3af' },
-  bottomSupplementBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, justifyContent: 'center' },
-  bottomSupplementBtnText: { fontSize: 13, color: '#fff', fontWeight: '600' },
-  modalOverlay: { flex: 1, backgroundColor: modalTokens.overlay, justifyContent: 'flex-end' },
-  replyModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, padding: 16, maxHeight: '60%' },
-  replyModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border, paddingBottom: 12 },
-  replyModalTitle: { fontSize: 16, fontWeight: '600', color: modalTokens.textPrimary },
-  replyInput: { backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 12, padding: 12, fontSize: 14, color: modalTokens.textPrimary, minHeight: 100, textAlignVertical: 'top', marginBottom: 16 },
-  replySubmitBtn: { backgroundColor: '#ef4444', paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
-  replySubmitBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
-  replySubmitText: { fontSize: 15, color: '#fff', fontWeight: '600' },
-  // 仲裁申请弹窗样式
-  arbitrationModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '85%' },
-  arbitrationModalHandle: { width: 40, height: 4, backgroundColor: modalTokens.border, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 12 },
-  arbitrationModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
-  arbitrationModalTitle: { fontSize: 18, fontWeight: '600', color: modalTokens.textPrimary },
-  arbitrationContent: { maxHeight: 500, paddingHorizontal: 20, paddingTop: 16 },
-  arbitrationInfo: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: '#eff6ff', borderRadius: 12, padding: 14, marginBottom: 20, borderWidth: 1, borderColor: '#dbeafe' },
-  arbitrationInfoText: { flex: 1, fontSize: 13, color: '#1e40af', lineHeight: 20 },
-  arbitrationSectionTitle: { fontSize: 15, fontWeight: '600', color: modalTokens.textPrimary, marginBottom: 10 },
-  arbitrationReasonInput: { backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 12, padding: 12, fontSize: 14, color: modalTokens.textPrimary, minHeight: 100, marginBottom: 20 },
-  arbitrationExpertsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  arbitrationExpertsCount: { fontSize: 13, color: modalTokens.textSecondary, fontWeight: '500' },
-  expertSearchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16, gap: 8 },
-  expertSearchInput: { flex: 1, fontSize: 14, color: modalTokens.textPrimary, padding: 0 },
-  recommendedExpertsHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
-  recommendedExpertsTitle: { fontSize: 14, fontWeight: '600', color: modalTokens.textPrimary },
-  noExpertsFound: { alignItems: 'center', paddingVertical: 40 },
-  noExpertsFoundText: { fontSize: 15, fontWeight: '500', color: modalTokens.textSecondary, marginTop: 12 },
-  noExpertsFoundDesc: { fontSize: 13, color: modalTokens.textMuted, marginTop: 4 },
-  expertItem: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: modalTokens.surfaceSoft, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: modalTokens.border },
-  expertItemSelected: { backgroundColor: '#eff6ff', borderColor: '#3b82f6', borderWidth: 2 },
-  expertInfo: { flex: 1, marginLeft: 12 },
-  expertNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  expertName: { fontSize: 14, fontWeight: '600', color: modalTokens.textPrimary },
-  expertTitle: { fontSize: 12, color: modalTokens.textSecondary, marginBottom: 2 },
-  expertExpertise: { fontSize: 11, color: modalTokens.textMuted },
-  expertCheckbox: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: modalTokens.border, alignItems: 'center', justifyContent: 'center' },
-  expertCheckboxSelected: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
-  arbitrationModalFooter: { paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: modalTokens.border },
-  submitArbitrationBtn: { backgroundColor: '#ef4444', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 10 },
-  submitArbitrationBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
-  submitArbitrationBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
-  cancelArbitrationBtn: { backgroundColor: modalTokens.surfaceMuted, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  cancelArbitrationBtnText: { fontSize: 15, color: modalTokens.textSecondary, fontWeight: '500' },
-  // 补充回答弹窗样式
-  answerModal: { flex: 1, backgroundColor: modalTokens.surface },
-  answerModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
-  answerCloseBtn: { padding: 4, zIndex: 10 },
-  answerHeaderCenter: { flex: 1, alignItems: 'center' },
-  answerModalTitle: { fontSize: 17, fontWeight: '600', color: modalTokens.textPrimary },
-  answerPublishBtn: { backgroundColor: modalTokens.danger, paddingHorizontal: modalTokens.actionPaddingX, paddingVertical: modalTokens.actionPaddingY, borderRadius: modalTokens.actionRadius, zIndex: 1 },
-  answerPublishBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
-  answerPublishText: { fontSize: 14, color: '#fff', fontWeight: '600' },
-  answerPublishTextDisabled: { color: '#fff' },
-  answerContentArea: { flex: 1, backgroundColor: modalTokens.surface },
-  answerTextInput: { padding: 16, fontSize: 16, color: modalTokens.textPrimary, lineHeight: 26, minHeight: 300 },
-  answerIdentitySection: { paddingHorizontal: 16, paddingBottom: 16 },
-  answerToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: modalTokens.border, backgroundColor: modalTokens.surface },
-  answerToolsLeft: { flexDirection: 'row', alignItems: 'center' },
-  answerToolItem: { padding: 10 },
-  answerWordCount: { fontSize: 13, color: modalTokens.textMuted },
-  supplementAnswerContext: { backgroundColor: '#f0f9ff', padding: 16, borderBottomWidth: 1, borderBottomColor: '#e0f2fe' },
-  supplementAnswerHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
-  supplementAnswerLabel: { fontSize: 13, color: '#3b82f6', fontWeight: '600' },
-  supplementAnswerAuthor: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  supplementAnswerAuthorName: { fontSize: 14, fontWeight: '500', color: '#1f2937' },
-  supplementAnswerContent: { fontSize: 14, color: '#6b7280', lineHeight: 20 },
-  
-  // 加载和错误状态样式
+  answerAuthorTitle: {
+    fontSize: 13,
+    color: '#9ca3af'
+  },
+  followBtn: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 16
+  },
+  followBtnActive: {
+    backgroundColor: '#f3f4f6'
+  },
+  followBtnText: {
+    fontSize: 13,
+    color: '#fff',
+    fontWeight: '500'
+  },
+  followBtnTextActive: {
+    color: '#6b7280'
+  },
+  adoptedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginBottom: 12
+  },
+  adoptedText: {
+    fontSize: 13,
+    color: '#22c55e',
+    fontWeight: '500'
+  },
+  answerContent: {
+    fontSize: 15,
+    color: '#374151',
+    lineHeight: 24,
+    marginBottom: 12
+  },
+  answerMeta: {
+    marginBottom: 12
+  },
+  answerMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  answerViews: {
+    fontSize: 13,
+    color: '#9ca3af'
+  },
+  answerMetaSeparator: {
+    fontSize: 13,
+    color: '#d1d5db',
+    marginHorizontal: 2
+  },
+  answerTime: {
+    fontSize: 13,
+    color: '#9ca3af'
+  },
+  tabsSection: {
+    backgroundColor: '#fff',
+    marginBottom: 0
+  },
+  tabs: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  tabItem: {
+    flex: 1,
+    paddingVertical: 12,
+    position: 'relative',
+    alignItems: 'center'
+  },
+  tabText: {
+    fontSize: 14,
+    color: '#6b7280'
+  },
+  tabTextActive: {
+    color: '#ef4444',
+    fontWeight: '600'
+  },
+  tabIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: '#ef4444',
+    borderRadius: 1
+  },
+  sortFilterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#fafafa',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  sortFilterLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16
+  },
+  sortFilterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12
+  },
+  sortFilterBtnActive: {
+    backgroundColor: '#fef2f2'
+  },
+  sortFilterText: {
+    fontSize: 13,
+    color: '#9ca3af'
+  },
+  sortFilterTextActive: {
+    color: '#ef4444',
+    fontWeight: '500'
+  },
+  sortFilterCount: {
+    fontSize: 12,
+    color: '#9ca3af'
+  },
+  contentSection: {
+    backgroundColor: '#fff'
+  },
+  supplementCard: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  supplementHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12
+  },
+  supplementAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16
+  },
+  supplementAuthorInfo: {
+    flex: 1,
+    marginLeft: 12
+  },
+  supplementAuthorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap'
+  },
+  supplementAuthor: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1f2937'
+  },
+  supplementTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
+    gap: 6
+  },
+  supplementMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginLeft: 2,
+    flexShrink: 1
+  },
+  supplementLocation: {
+    fontSize: 12,
+    color: '#9ca3af'
+  },
+  supplementContent: {
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 22,
+    marginBottom: 12
+  },
+  supplementActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  supplementActionsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    flex: 1
+  },
+  supplementActionsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  supplementActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4
+  },
+  supplementActionText: {
+    fontSize: 13,
+    color: '#6b7280'
+  },
+  commentCard: {
+    flexDirection: 'row',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  commentAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18
+  },
+  commentContent: {
+    flex: 1,
+    marginLeft: 12
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6
+  },
+  commentAuthor: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1f2937'
+  },
+  commentTime: {
+    fontSize: 12,
+    color: '#9ca3af'
+  },
+  commentText: {
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 20,
+    marginBottom: 8
+  },
+  commentActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10
+  },
+  commentActionsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    flex: 1
+  },
+  commentActionsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  commentActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4
+  },
+  commentActionText: {
+    fontSize: 12,
+    color: '#9ca3af'
+  },
+  bottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6'
+  },
+  bottomBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16
+  },
+  bottomBarRight: {
+    flex: 1,
+    marginLeft: 16
+  },
+  bottomIconBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3
+  },
+  bottomIconBtnDisabled: {
+    opacity: 0.6
+  },
+  bottomIconText: {
+    fontSize: 12,
+    color: '#6b7280'
+  },
+  bottomCommentInput: {
+    flex: 1,
+    minHeight: 38,
+    justifyContent: 'center',
+    backgroundColor: '#f9fafb',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb'
+  },
+  bottomCommentPlaceholder: {
+    fontSize: 13,
+    color: '#9ca3af'
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: modalTokens.overlay,
+    justifyContent: 'flex-end'
+  },
+  replyModal: {
+    backgroundColor: modalTokens.surface,
+    borderTopLeftRadius: modalTokens.sheetRadius,
+    borderTopRightRadius: modalTokens.sheetRadius,
+    borderTopWidth: 1,
+    borderColor: modalTokens.border,
+    padding: 16,
+    maxHeight: '60%'
+  },
+  replyModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: modalTokens.border,
+    paddingBottom: 12
+  },
+  replyModalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: modalTokens.textPrimary
+  },
+  replyInput: {
+    backgroundColor: modalTokens.surfaceSoft,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 14,
+    color: modalTokens.textPrimary,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    marginBottom: 16
+  },
+  replySubmitBtn: {
+    backgroundColor: '#ef4444',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center'
+  },
+  replySubmitBtnDisabled: {
+    backgroundColor: modalTokens.dangerSoft
+  },
+  replySubmitText: {
+    fontSize: 15,
+    color: '#fff',
+    fontWeight: '600'
+  },
+  // 浠茶鐢宠寮圭獥鏍峰紡
+  arbitrationModal: {
+    backgroundColor: modalTokens.surface,
+    borderTopLeftRadius: modalTokens.sheetRadius,
+    borderTopRightRadius: modalTokens.sheetRadius,
+    borderTopWidth: 1,
+    borderColor: modalTokens.border,
+    maxHeight: '85%'
+  },
+  arbitrationModalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: modalTokens.border,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 12
+  },
+  arbitrationModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: modalTokens.border
+  },
+  arbitrationModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: modalTokens.textPrimary
+  },
+  arbitrationContent: {
+    maxHeight: 500,
+    paddingHorizontal: 20,
+    paddingTop: 16
+  },
+  arbitrationInfo: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#eff6ff',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#dbeafe'
+  },
+  arbitrationInfoText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1e40af',
+    lineHeight: 20
+  },
+  arbitrationSectionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: modalTokens.textPrimary,
+    marginBottom: 10
+  },
+  arbitrationReasonInput: {
+    backgroundColor: modalTokens.surfaceSoft,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 14,
+    color: modalTokens.textPrimary,
+    minHeight: 100,
+    marginBottom: 20
+  },
+  arbitrationExpertsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12
+  },
+  arbitrationExpertsCount: {
+    fontSize: 13,
+    color: modalTokens.textSecondary,
+    fontWeight: '500'
+  },
+  expertSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: modalTokens.surfaceSoft,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
+    gap: 8
+  },
+  expertSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: modalTokens.textPrimary,
+    padding: 0
+  },
+  recommendedExpertsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 12
+  },
+  recommendedExpertsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: modalTokens.textPrimary
+  },
+  noExpertsFound: {
+    alignItems: 'center',
+    paddingVertical: 40
+  },
+  noExpertsFoundText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: modalTokens.textSecondary,
+    marginTop: 12
+  },
+  noExpertsFoundDesc: {
+    fontSize: 13,
+    color: modalTokens.textMuted,
+    marginTop: 4
+  },
+  expertItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: modalTokens.surfaceSoft,
+    borderRadius: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: modalTokens.border
+  },
+  expertItemSelected: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#3b82f6',
+    borderWidth: 2
+  },
+  expertInfo: {
+    flex: 1,
+    marginLeft: 12
+  },
+  expertNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4
+  },
+  expertName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: modalTokens.textPrimary
+  },
+  expertTitle: {
+    fontSize: 12,
+    color: modalTokens.textSecondary,
+    marginBottom: 2
+  },
+  expertExpertise: {
+    fontSize: 11,
+    color: modalTokens.textMuted
+  },
+  expertCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: modalTokens.border,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  expertCheckboxSelected: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6'
+  },
+  arbitrationModalFooter: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: modalTokens.border
+  },
+  submitArbitrationBtn: {
+    backgroundColor: '#ef4444',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 10
+  },
+  submitArbitrationBtnDisabled: {
+    backgroundColor: modalTokens.dangerSoft
+  },
+  submitArbitrationBtnText: {
+    fontSize: 15,
+    color: '#fff',
+    fontWeight: '600'
+  },
+  cancelArbitrationBtn: {
+    backgroundColor: modalTokens.surfaceMuted,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center'
+  },
+  cancelArbitrationBtnText: {
+    fontSize: 15,
+    color: modalTokens.textSecondary,
+    fontWeight: '500'
+  },
+  // 琛ュ厖鍥炵瓟寮圭獥鏍峰紡
+  answerModal: {
+    flex: 1,
+    backgroundColor: modalTokens.surface
+  },
+  answerModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: modalTokens.border
+  },
+  answerCloseBtn: {
+    padding: 4,
+    zIndex: 10
+  },
+  answerHeaderCenter: {
+    flex: 1,
+    alignItems: 'center'
+  },
+  answerModalTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: modalTokens.textPrimary
+  },
+  answerPublishBtn: {
+    backgroundColor: modalTokens.danger,
+    paddingHorizontal: modalTokens.actionPaddingX,
+    paddingVertical: modalTokens.actionPaddingY,
+    borderRadius: modalTokens.actionRadius,
+    zIndex: 1
+  },
+  answerPublishBtnDisabled: {
+    backgroundColor: modalTokens.dangerSoft
+  },
+  answerPublishText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '600'
+  },
+  answerPublishTextDisabled: {
+    color: '#fff'
+  },
+  answerContentArea: {
+    flex: 1,
+    backgroundColor: modalTokens.surface
+  },
+  answerTextInput: {
+    padding: 16,
+    fontSize: 16,
+    color: modalTokens.textPrimary,
+    lineHeight: 26,
+    minHeight: 300
+  },
+  answerIdentitySection: {
+    paddingHorizontal: 16,
+    paddingBottom: 16
+  },
+  answerToolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: modalTokens.border,
+    backgroundColor: modalTokens.surface
+  },
+  answerToolsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  answerToolItem: {
+    padding: 10
+  },
+  answerWordCount: {
+    fontSize: 13,
+    color: modalTokens.textMuted
+  },
+  supplementAnswerContext: {
+    backgroundColor: '#f0f9ff',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0f2fe'
+  },
+  supplementAnswerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10
+  },
+  supplementAnswerLabel: {
+    fontSize: 13,
+    color: '#3b82f6',
+    fontWeight: '600'
+  },
+  supplementAnswerAuthor: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10
+  },
+  supplementAnswerAuthorName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1f2937'
+  },
+  supplementAnswerContent: {
+    fontSize: 14,
+    color: '#6b7280',
+    lineHeight: 20
+  },
+  // 鍔犺浇鍜岄敊璇姸鎬佹牱寮?
   errorContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
-    paddingHorizontal: 20,
+    paddingHorizontal: 20
   },
   errorTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#ef4444',
     marginTop: 16,
-    marginBottom: 8,
+    marginBottom: 8
   },
   errorMessage: {
     fontSize: 14,
     color: '#6b7280',
     textAlign: 'center',
     lineHeight: 20,
-    marginBottom: 20,
+    marginBottom: 20
   },
   retryButton: {
     backgroundColor: '#ef4444',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 8
   },
   retryButtonText: {
     fontSize: 14,
     color: '#fff',
-    fontWeight: '600',
+    fontWeight: '600'
   },
   loadingMore: {
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 20
   },
   loadingMoreText: {
     fontSize: 14,
-    color: '#6b7280',
-  },
+    color: '#6b7280'
+  }
 });

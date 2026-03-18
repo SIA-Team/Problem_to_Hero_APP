@@ -1,4 +1,4 @@
-{
+﻿{
   "app": {
     "name": "Problem to Hero",
     "slogan": "将问题转化为英雄解决方案"
@@ -816,15 +816,19 @@
         "featured": "精选",
         "latest": "最新"
       },
-      "actions": {
-        "follow": "关注",
-        "following": "已关注",
-        "adopt": "采纳",
-        "arbitration": "仲裁",
-        "supplementAnswer": "补充回答",
-        "reply": "回复",
-        "publish": "发布"
-      },
+        "actions": {
+          "follow": "关注",
+          "following": "已关注",
+          "adopt": "采纳",
+          "arbitration": "仲裁",
+          "supplementAnswer": "补充回答",
+          "reply": "回复",
+          "publish": "发布"
+        },
+        "identities": {
+          "personal": "我",
+          "team": "团队身份"
+        },
       "stats": {
         "views": "浏览",
         "participants": "人参与",
@@ -835,17 +839,19 @@
         "adopted": "已采纳",
         "invitedBy": "由 {name} 邀请"
       },
-      "placeholders": {
-        "writeComment": "写评论...",
-        "writeReply": "写下你的回复...",
-        "arbitrationReason": "请详细说明您申请仲裁的理由...",
-        "searchExpert": "搜索专家姓名、职称或领域..."
-      },
-      "modals": {
-        "replyTitle": "回复 {author}",
-        "arbitrationTitle": "申请仲裁",
-        "supplementAnswerTitle": "补充回答"
-      },
+        "placeholders": {
+          "writeComment": "写评论...",
+          "writeCommentContent": "写下你的评论...",
+          "writeReply": "写下你的回复...",
+          "arbitrationReason": "请详细说明您申请仲裁的理由...",
+          "searchExpert": "搜索专家姓名、职称或领域..."
+        },
+        "modals": {
+          "replyTitle": "回复 {author}",
+          "arbitrationTitle": "申请仲裁",
+          "supplementAnswerTitle": "补充回答",
+          "writeCommentTitle": "写评论"
+        },
       "arbitration": {
         "info": "如果您对已采纳的答案持有不同意见，可以申请仲裁。邀请至少3位专家投票，超过50%同意则推翻采纳。",
         "reasonLabel": "仲裁理由",
@@ -860,21 +866,42 @@
       "alerts": {
         "success": "成功",
         "hint": "提示",
-        "commentPublished": "评论已发布",
-        "replyPublished": "回复已发布",
-        "supplementSubmitted": "补充回答已提交",
-        "arbitrationSubmitted": "仲裁申请已提交，等待专家投票中...",
-        "arbitrationReasonRequired": "请说明申请仲裁的理由",
-        "minExpertsRequired": "至少需要邀请 3 位专家参与仲裁",
+          "commentPublished": "评论已发布",
+          "replyPublished": "回复已发布",
+          "supplementSubmitted": "补充回答已提交",
+          "answerIdMissing": "操作失败：回答 ID 不存在",
+          "operationFailed": "操作失败",
+          "networkError": "网络连接失败，请稍后重试",
+          "collectFailed": "收藏失败",
+          "supplementCollectUnavailable": "当前补充回答数据异常，暂时无法收藏",
+          "fetchSupplementsFailed": "获取补充回答失败",
+          "collected": "已收藏",
+          "uncollected": "已取消收藏",
+          "liked": "已点赞",
+          "unliked": "已取消点赞",
+          "disliked": "已踩",
+          "undisliked": "已取消踩",
+          "arbitrationSubmitted": "仲裁申请已提交，等待专家投票中...",
+          "arbitrationReasonRequired": "请说明申请仲裁的理由",
+          "minExpertsRequired": "至少需要邀请 3 位专家参与仲裁",
         "maxExpertsExceeded": "最多只能邀请 5 位专家",
         "adoptAnswerTitle": "采纳答案",
         "adoptAnswerMessage": "确认采纳这个答案吗？",
         "adoptSupplementTitle": "采纳补充回答",
         "adoptSupplementMessage": "确认采纳这个补充回答吗？",
-        "cancel": "取消",
-        "confirm": "确认"
-      },
-      "time": {
+          "cancel": "取消",
+          "confirm": "确认"
+        },
+        "states": {
+          "loadFailed": "加载失败",
+          "emptySupplementsTitle": "暂无补充回答",
+          "emptySupplementsDescription": "还没有人发布补充回答",
+          "emptyCommentsTitle": "暂无评论",
+          "emptyCommentsDescription": "快来发表第一条评论吧",
+          "loadingMore": "加载中...",
+          "unknownLocation": "未知"
+        },
+        "time": {
         "justNow": "刚刚",
         "minutesAgo": "分钟前",
         "hoursAgo": "小时前",

@@ -17,7 +17,7 @@ const LoadingSpinner = ({
   return (
     <View style={containerStyle}>
       <ActivityIndicator size={size} color={color} />
-      {text && <Text style={styles.text}>{text}</Text>}
+      {Boolean(text) ? <Text style={styles.text}>{text}</Text> : null}
     </View>
   );
 };

@@ -12,20 +12,32 @@ import uploadApi from '../services/api/uploadApi';
 import expertApi from '../services/api/expertApi';
 import { showToast } from '../utils/toast';
 import { modalTokens } from '../components/modalTokens';
-
-const questionTypes = [
-  { id: 0, name: '公开问题', desc: '公开提问', icon: 'gift', color: '#22c55e' },
-  { id: 1, name: '悬赏问题', desc: '付费求答', icon: 'cash', color: '#f97316' },
-  { id: 2, name: '定向问题', desc: '指定回答', icon: 'locate', color: '#3b82f6' },
-];
-
-
+const questionTypes = [{
+  id: 0,
+  name: '公开问题',
+  desc: '公开提问',
+  icon: 'gift',
+  color: '#22c55e'
+}, {
+  id: 1,
+  name: '悬赏问题',
+  desc: '付费求答',
+  icon: 'cash',
+  color: '#f97316'
+}, {
+  id: 2,
+  name: '定向问题',
+  desc: '指定回答',
+  icon: 'locate',
+  color: '#3b82f6'
+}];
 const rewardAmounts = [10, 20, 50, 100];
-
-export default function PublishScreen({ navigation, route }) {
+export default function PublishScreen({
+  navigation,
+  route
+}) {
   // 获取路由参数中的草稿数据
   const draftData = route?.params?.draftData;
-  
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [selectedType, setSelectedType] = useState(0); // 直接使用数字：0=公开，1=悬赏，2=定向
@@ -36,17 +48,17 @@ export default function PublishScreen({ navigation, route }) {
   const [customTopic, setCustomTopic] = useState('');
   const [location, setLocation] = useState('北京');
   const [visibility, setVisibility] = useState(0); // 直接使用数字：0=所有人，1=仅关注我的人，2=仅自己
-  
+
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showVisibilityModal, setShowVisibilityModal] = useState(false);
   const [selectedLevel1, setSelectedLevel1] = useState(null);
   const [selectedLevel2, setSelectedLevel2] = useState(null);
-  
+
   // 定向问题相关状态
   const [targetedUsers, setTargetedUsers] = useState([]);
   const [targetedReward, setTargetedReward] = useState('');
   const [expertSearchQuery, setExpertSearchQuery] = useState('');
-  
+
   // 专家列表数据状态
   const [expertList, setExpertList] = useState([]); // 专家列表
   const [expertTotal, setExpertTotal] = useState(0); // 专家总数
@@ -55,12 +67,12 @@ export default function PublishScreen({ navigation, route }) {
   const [expertLoading, setExpertLoading] = useState(false); // 加载状态
   const [expertLoadingMore, setExpertLoadingMore] = useState(false); // 加载更多状态
   const [expertHasMore, setExpertHasMore] = useState(true); // 是否还有更多数据
-  
+
   // 答案设置
   const [answerPublic, setAnswerPublic] = useState(true); // 是否公开答案
   const [answerPaid, setAnswerPaid] = useState(false); // 是否付费查看
   const [answerPrice, setAnswerPrice] = useState(''); // 查看答案价格
-  
+
   // 身份选择
   const [publishIdentity, setPublishIdentity] = useState('personal'); // 'personal' or 'team'
   const [selectedTeams, setSelectedTeams] = useState([]); // 选中的团队ID数组
@@ -70,15 +82,15 @@ export default function PublishScreen({ navigation, route }) {
 
   // 输入框高度状态
   const [contentInputHeight, setContentInputHeight] = useState(150); // 问题描述输入框高度
-  
+
   // 话题管理
   const [allTopics, setAllTopics] = useState([]); // 所有可选话题（只包含用户自定义的）
   const [customTopicNames, setCustomTopicNames] = useState([]); // 用户自定义的话题名称列表（不含#，用于发送给后端）
-  
+
   // 发布状态
   const [isPublishing, setIsPublishing] = useState(false); // 是否正在发布
   const [isUploadingImages, setIsUploadingImages] = useState(false); // 是否正在上传图片
-  
+
   // 分类数据状态
   const [categoryLoading, setCategoryLoading] = useState(false);
   const [categoryError, setCategoryError] = useState(null);
@@ -88,15 +100,15 @@ export default function PublishScreen({ navigation, route }) {
   const [tempSelectedLevel1, setTempSelectedLevel1] = useState(null); // 临时选中的一级分类（用于视图切换）
   const [loadingLevel2, setLoadingLevel2] = useState(false); // 二级分类加载状态
   const [level1SearchQuery, setLevel1SearchQuery] = useState(''); // 一级分类搜索关键词
-  
+
   // 位置选择状态
   const [showLocationModal, setShowLocationModal] = useState(false);
-  
+
   // 加载分类数据
   useEffect(() => {
     fetchLevel1Categories();
   }, []);
-  
+
   // 回显草稿数据
   useEffect(() => {
     if (draftData) {
@@ -104,7 +116,7 @@ export default function PublishScreen({ navigation, route }) {
       console.log('📝 回显草稿数据');
       console.log('═══════════════════════════════════════════════════════════');
       console.log('草稿数据:', JSON.stringify(draftData, null, 2));
-      
+
       // 基础信息
       if (draftData.title) {
         console.log('  设置标题:', draftData.title);
@@ -134,18 +146,19 @@ export default function PublishScreen({ navigation, route }) {
         console.log('  设置答案公开:', draftData.isPublicAnswer);
         setAnswerPublic(draftData.isPublicAnswer === 1);
       }
-      
+
       // 悬赏金额（分转元）
       if (draftData.bountyAmount && draftData.bountyAmount > 0) {
         const amount = (draftData.bountyAmount / 100).toString();
         console.log('  设置悬赏金额:', amount, '元');
-        if (draftData.type === 2) { // 定向问题
+        if (draftData.type === 2) {
+          // 定向问题
           setTargetedReward(amount);
         } else {
           setReward(amount);
         }
       }
-      
+
       // 付费查看金额（分转元）
       if (draftData.payViewAmount && draftData.payViewAmount > 0) {
         const amount = (draftData.payViewAmount / 100).toString();
@@ -153,13 +166,12 @@ export default function PublishScreen({ navigation, route }) {
         setAnswerPaid(true);
         setAnswerPrice(amount);
       }
-      
+
       // 图片
       console.log('  检查图片数据:');
       console.log('    draftData.imageUrls:', draftData.imageUrls);
       console.log('    是否为数组:', Array.isArray(draftData.imageUrls));
       console.log('    数组长度:', draftData.imageUrls?.length);
-      
       if (draftData.imageUrls && Array.isArray(draftData.imageUrls) && draftData.imageUrls.length > 0) {
         // 过滤掉空字符串和无效的URL
         const validImages = draftData.imageUrls.filter(url => {
@@ -167,9 +179,7 @@ export default function PublishScreen({ navigation, route }) {
           console.log(`    图片URL: "${url}" - 有效: ${isValid}`);
           return isValid;
         });
-        
         console.log('  过滤后的有效图片数量:', validImages.length);
-        
         if (validImages.length > 0) {
           console.log('  ✅ 设置图片:', validImages.length, '张');
           console.log('  图片URLs:', validImages);
@@ -182,7 +192,7 @@ export default function PublishScreen({ navigation, route }) {
         console.log('  ℹ️ 草稿中没有图片数据，清空图片数组');
         setImages([]);
       }
-      
+
       // 话题
       if (draftData.topics && Array.isArray(draftData.topics) && draftData.topics.length > 0) {
         const topicNames = draftData.topics.map(t => `#${t.name}`);
@@ -191,87 +201,60 @@ export default function PublishScreen({ navigation, route }) {
         setAllTopics(topicNames);
         setCustomTopicNames(draftData.topics.map(t => t.name));
       }
-      
+
       // 专家（定向问题）
       if (draftData.experts && Array.isArray(draftData.experts) && draftData.experts.length > 0) {
         console.log('  设置专家:', draftData.experts.length, '位');
         setTargetedUsers(draftData.experts);
       }
-      
+
       // 分类（需要等分类数据加载完成后再设置）
       if (draftData.categoryId) {
         console.log('  草稿分类ID:', draftData.categoryId);
         console.log('  等待分类数据加载...');
       }
-      
       console.log('✅ 草稿数据回显完成');
       console.log('═══════════════════════════════════════════════════════════');
     }
   }, [draftData]); // 只依赖 draftData
-  
+
   // 单独处理分类回显（当分类数据加载完成后）
   useEffect(() => {
     if (draftData && level1Categories.length > 0) {
       const categoryId = draftData.categoryId;
       const categoryName = draftData.categoryName;
-      
       if (!categoryId && !categoryName) {
-        console.log('⚠️ 草稿中没有分类信息');
         return;
       }
-      
-      console.log('🔍 开始查找分类');
-      console.log('  categoryId:', categoryId);
-      console.log('  categoryName:', categoryName);
-      console.log('  一级分类数量:', level1Categories.length);
-      
+
       // 查找对应的分类
       let found = false;
-      
       for (const level1 of level1Categories) {
         // 先尝试加载该一级分类的二级分类（如果还没加载）
         if (!level2CategoriesMap[level1.id]) {
-          console.log(`  一级分类 ${level1.name} 的二级分类尚未加载，跳过`);
           continue;
         }
-        
         const level2List = level2CategoriesMap[level1.id] || [];
-        console.log(`  检查一级分类: ${level1.name} (ID:${level1.id}), 二级分类数量: ${level2List.length}`);
-        
+
         // 优先通过 ID 查找
         let level2 = null;
         if (categoryId) {
           level2 = level2List.find(cat => cat.id === categoryId);
         }
-        
+
         // 如果通过 ID 没找到，尝试通过名称查找
         if (!level2 && categoryName) {
           level2 = level2List.find(cat => cat.name === categoryName);
-          if (level2) {
-            console.log(`  通过名称找到分类: ${categoryName}`);
-          }
         }
-        
         if (level2) {
-          console.log(`✅ 找到匹配的分类: ${level1.name} > ${level2.name}`);
           setSelectedLevel1(level1);
           setSelectedLevel2(level2);
           found = true;
           break;
         }
       }
-      
       if (!found) {
-        console.warn('⚠️ 未找到对应的分类');
-        console.warn('  categoryId:', categoryId);
-        console.warn('  categoryName:', categoryName);
-        console.warn('  可能原因：');
-        console.warn('  1. 该分类的二级分类尚未加载（需要先点击一级分类）');
-        console.warn('  2. 该分类ID或名称不存在');
-        console.warn('  3. 分类数据结构有变化');
-        
         // 尝试自动加载所有一级分类的二级分类
-        console.log('  尝试自动加载所有二级分类...');
         level1Categories.forEach(level1 => {
           if (!level2CategoriesMap[level1.id]) {
             fetchLevel2Categories(level1.id);
@@ -280,63 +263,28 @@ export default function PublishScreen({ navigation, route }) {
       }
     }
   }, [draftData, level1Categories, level2CategoriesMap]);
-  
+
   // 加载一级分类
   const fetchLevel1Categories = async () => {
     setCategoryLoading(true);
     setCategoryError(null);
-    
     try {
       // 请求一级分类，pageSize设置为100，通常足够
       const response = await categoryApi.getCategoryList({
         pageNum: 1,
         pageSize: 100,
-        parentId: 0, // 只获取一级分类
+        parentId: 0 // 只获取一级分类
       });
-      
-      console.log('═══════════════════════════════════════════════════════════');
-      console.log('📡 一级分类接口原始响应数据');
-      console.log('═══════════════════════════════════════════════════════════');
-      console.log('完整响应:', JSON.stringify(response, null, 2));
-      console.log('═══════════════════════════════════════════════════════════');
-      
       if (response && response.code === 200 && response.data && response.data.rows) {
-        console.log('═══════════════════════════════════════════════════════════');
-        console.log('📊 接口返回的原始数据分析');
-        console.log('═══════════════════════════════════════════════════════════');
-        console.log(`总记录数 (total): ${response.data.total}`);
-        console.log(`当前页数据条数 (rows.length): ${response.data.rows.length}`);
-        console.log('');
-        console.log('原始数据列表 (response.data.rows):');
-        response.data.rows.forEach((cat, index) => {
-          console.log(`  ${index + 1}. ID:${cat.id}, Name:"${cat.name}", ParentId:${cat.parentId}, Icon:"${cat.icon}"`);
-        });
-        console.log('═══════════════════════════════════════════════════════════');
-        
         // 直接使用返回的数据，因为我们已经通过 parentId=0 参数过滤了
         const categories = response.data.rows.map(cat => {
           return {
             ...cat,
-            originalIcon: cat.icon, // 保存原始 Font Awesome 图标值
-            color: cat.color || getColorForCategory(cat.name),
+            originalIcon: cat.icon,
+            // 保存原始 Font Awesome 图标值
+            color: cat.color || getColorForCategory(cat.name)
           };
         });
-        
-        console.log('═══════════════════════════════════════════════════════════');
-        console.log('📂 处理后的一级分类数据');
-        console.log('═══════════════════════════════════════════════════════════');
-        console.log(`✅ 一级分类加载成功，共 ${categories.length} 个`);
-        console.log('处理后的分类列表:');
-        categories.forEach((cat, index) => {
-          console.log(`  ${index + 1}. ID:${cat.id} - ${cat.name} (ParentId:${cat.parentId})`);
-        });
-        console.log('═══════════════════════════════════════════════════════════');
-        
-        // 检查是否还有更多一级分类（极少见）
-        if (response.data.total > categories.length) {
-          console.warn(`⚠️ 一级分类超过100个，总共${response.data.total}个，当前只显示前${categories.length}个`);
-        }
-        
         setLevel1Categories(categories);
       } else {
         console.error('❌ 接口响应格式异常:', response);
@@ -351,63 +299,42 @@ export default function PublishScreen({ navigation, route }) {
       setCategoryLoading(false);
     }
   };
-  
+
   // 加载二级分类（按需加载，支持分页）
-  const fetchLevel2Categories = async (parentId) => {
+  const fetchLevel2Categories = async parentId => {
     // 如果已经加载过，直接使用缓存
     if (level2CategoriesMap[parentId]) {
-      if (__DEV__) {
-        console.log(`✅ 二级分类已缓存，直接使用: parentId=${parentId}`);
-      }
       return;
     }
-    
     setLoadingLevel2(true);
-    
     try {
       // 首次请求，pageSize=100，通常足够
       const response = await categoryApi.getCategoryList({
         pageNum: 1,
         pageSize: 100,
-        parentId: parentId, // 获取指定一级分类下的二级分类
+        parentId: parentId // 获取指定一级分类下的二级分类
       });
-      
-      if (__DEV__) {
-        console.log(`二级分类数据 (parentId=${parentId}):`, response);
-      }
-      
       if (response && response.code === 200 && response.data && response.data.rows) {
         // 直接使用返回的数据，因为我们已经通过 parentId 参数过滤了
         let allCategories = response.data.rows;
         const total = response.data.total;
-        
-        if (__DEV__) {
-          console.log(`✅ 二级分类加载成功 (parentId=${parentId})，共${allCategories.length}个`);
-        }
-        
+
         // 如果还有更多数据，继续加载（极少见）
         if (allCategories.length < total) {
-          if (__DEV__) {
-            console.log(`⚠️ 二级分类较多 (parentId=${parentId})，总共${total}个，继续加载...`);
-          }
-          
           // 计算还需要加载多少页
           const remainingPages = Math.ceil((total - allCategories.length) / 100);
-          
+
           // 并发加载剩余页
           const remainingPromises = [];
           for (let page = 2; page <= remainingPages + 1; page++) {
-            remainingPromises.push(
-              categoryApi.getCategoryList({
-                pageNum: page,
-                pageSize: 100,
-                parentId: parentId,
-              })
-            );
+            remainingPromises.push(categoryApi.getCategoryList({
+              pageNum: page,
+              pageSize: 100,
+              parentId: parentId
+            }));
           }
-          
           const remainingResponses = await Promise.all(remainingPromises);
-          
+
           // 合并所有数据
           remainingResponses.forEach(res => {
             if (res && res.code === 200 && res.data && res.data.rows) {
@@ -415,24 +342,20 @@ export default function PublishScreen({ navigation, route }) {
               allCategories = [...allCategories, ...res.data.rows];
             }
           });
-          
-          if (__DEV__) {
-            console.log(`✅ 二级分类全部加载完成 (parentId=${parentId})，共${allCategories.length}个`);
-          }
         }
-        
+
         // 转换数据格式并缓存
         const formattedCategories = allCategories.map(cat => ({
           id: cat.id,
           name: cat.name,
-          originalIcon: cat.icon, // 保存原始 Font Awesome 图标值
+          originalIcon: cat.icon,
+          // 保存原始 Font Awesome 图标值
           icon: cat.icon,
-          color: cat.color || getColorForCategory(cat.name), // 添加颜色
+          color: cat.color || getColorForCategory(cat.name) // 添加颜色
         }));
-        
         setLevel2CategoriesMap(prev => ({
           ...prev,
-          [parentId]: formattedCategories,
+          [parentId]: formattedCategories
         }));
       } else {
         throw new Error(response?.msg || '获取二级分类失败');
@@ -442,45 +365,39 @@ export default function PublishScreen({ navigation, route }) {
       // 失败时保持空数组，不使用备用数据
       setLevel2CategoriesMap(prev => ({
         ...prev,
-        [parentId]: [],
+        [parentId]: []
       }));
     } finally {
       setLoadingLevel2(false);
     }
   };
-  
+
   // 获取要显示的分类数据
   const getDisplayCategoryData = () => {
     return {
-      level1: level1Categories, // 只使用接口数据，不使用备用数据
-      level2: level2CategoriesMap,
+      level1: level1Categories,
+      // 只使用接口数据，不使用备用数据
+      level2: level2CategoriesMap
     };
   };
-  
+
   // 过滤一级分类（根据搜索关键词）
   const getFilteredLevel1Categories = () => {
     const allCategories = getDisplayCategoryData().level1;
-    
     if (!level1SearchQuery.trim()) {
       return allCategories; // 没有搜索关键词，返回全部
     }
-    
     const query = level1SearchQuery.toLowerCase().trim();
-    return allCategories.filter(cat => 
-      cat.name.toLowerCase().includes(query) ||
-      (cat.description && cat.description.toLowerCase().includes(query)) ||
-      (cat.desc && cat.desc.toLowerCase().includes(query))
-    );
+    return allCategories.filter(cat => cat.name.toLowerCase().includes(query) || cat.description && cat.description.toLowerCase().includes(query) || cat.desc && cat.desc.toLowerCase().includes(query));
   };
-  
+
   // 根据分类名称返回颜色（辅助函数，用于后端没有返回颜色时的降级方案）
-  const getColorForCategory = (name) => {
+  const getColorForCategory = name => {
     const colorMap = {
       // 一级分类
       '国家': '#3b82f6',
       '行业': '#22c55e',
       '个人': '#8b5cf6',
-      
       // 国家相关
       '政策法规': '#3b82f6',
       '社会民生': '#06b6d4',
@@ -488,7 +405,6 @@ export default function PublishScreen({ navigation, route }) {
       '教育医疗': '#8b5cf6',
       '环境保护': '#10b981',
       '基础设施': '#64748b',
-      
       // 行业相关
       '互联网': '#06b6d4',
       '金融': '#f59e0b',
@@ -497,7 +413,6 @@ export default function PublishScreen({ navigation, route }) {
       '房地产': '#ef4444',
       '制造业': '#64748b',
       '餐饮服务': '#f97316',
-      
       // 个人相关
       '职业发展': '#3b82f6',
       '情感生活': '#ec4899',
@@ -505,7 +420,6 @@ export default function PublishScreen({ navigation, route }) {
       '理财投资': '#f59e0b',
       '学习成长': '#8b5cf6',
       '家庭关系': '#f97316',
-      
       // 其他
       '政治': '#ef4444',
       '经济': '#f59e0b',
@@ -517,12 +431,11 @@ export default function PublishScreen({ navigation, route }) {
       '社会': '#6366f1',
       '法律': '#f97316',
       '军事': '#64748b',
-      '外交': '#0ea5e9',
+      '外交': '#0ea5e9'
     };
     return colorMap[name] || '#6b7280';
   };
-
-  const toggleTopic = (topic) => {
+  const toggleTopic = topic => {
     if (selectedTopics.includes(topic)) {
       setSelectedTopics(selectedTopics.filter(t => t !== topic));
     } else if (selectedTopics.length < 3) {
@@ -531,7 +444,6 @@ export default function PublishScreen({ navigation, route }) {
       showToast('最多选择3个话题', 'warning');
     }
   };
-
   const addImage = () => {
     if (images.length >= 9) {
       showToast('最多只能添加9张图片', 'warning');
@@ -539,86 +451,87 @@ export default function PublishScreen({ navigation, route }) {
     }
     setShowImagePicker(true);
   };
-
-  const handleImageSelected = (imageUri) => {
+  const handleImageSelected = imageUri => {
     setImages([...images, imageUri]);
   };
-
   const addCustomTopic = () => {
     if (!customTopic.trim()) {
       return;
     }
-    
+
     // 格式化话题：确保有 # 前缀
     const formattedTopic = customTopic.trim().startsWith('#') ? customTopic.trim() : `#${customTopic.trim()}`;
     // 提取话题名称（去掉 # 前缀）
     const topicName = formattedTopic.substring(1);
-    
+
     // 检查话题是否已经存在于可选列表中
     if (allTopics.includes(formattedTopic)) {
       showToast('该话题已存在', 'info');
       setCustomTopic('');
       return;
     }
-    
+
     // 话题不存在，添加到列表
     setAllTopics([...allTopics, formattedTopic]); // 添加到可选话题列表（带#）
     setCustomTopicNames([...customTopicNames, topicName]); // 添加到自定义话题名称列表（不带#）
-    
+
     // 自动选中新添加的话题
     if (selectedTopics.length < 3) {
       setSelectedTopics([...selectedTopics, formattedTopic]);
     } else {
       showToast('最多选择3个话题', 'warning');
     }
-    
+
     // 清空输入框
     setCustomTopic('');
   };
-
   const handleSaveDraft = async () => {
     if (!title && !content) {
       showToast('请先输入内容', 'warning');
       return;
     }
-
     try {
       // 构建草稿数据（与发布数据结构相同）
       const draftData = {
-        id: 0, // 新建草稿
-        type: selectedType, // 直接使用数字，不需要映射
-        categoryId: selectedLevel2?.id || 5, // 使用选中的分类ID，如果没有则使用默认值5
+        id: 0,
+        // 新建草稿
+        type: selectedType,
+        // 直接使用数字，不需要映射
+        categoryId: selectedLevel2?.id || 5,
+        // 使用选中的分类ID，如果没有则使用默认值5
         title: title.trim() || '',
         description: content.trim() || '',
         subQuestions: '',
-        bountyAmount: 5000, // 默认悬赏金额
+        bountyAmount: 5000,
+        // 默认悬赏金额
         payViewAmount: answerPaid ? Math.round(parseFloat(answerPrice || 0) * 100) : 0,
         location: location && location !== '不显示' ? location : '北京市朝阳区',
-        visibilityScope: visibility, // 直接使用数字，不需要映射
+        visibilityScope: visibility,
+        // 直接使用数字，不需要映射
         isAnonymous: isAnonymous ? 1 : 0,
         isPublicAnswer: answerPublic ? 1 : 0,
         teamId: publishIdentity === 'team' && selectedTeams.length > 0 ? selectedTeams[0] : 100,
-        expertIds: selectedType === 2 && targetedUsers.length > 0 ? targetedUsers.map(u => u.id) : [], // 2 = 定向问题
+        expertIds: selectedType === 2 && targetedUsers.length > 0 ? targetedUsers.map(u => u.id) : [],
+        // 2 = 定向问题
         topicIds: [],
         topicNames: customTopicNames.length > 0 ? customTopicNames : [],
-        imageUrls: images.length > 0 ? images : [],
+        imageUrls: images.length > 0 ? images : []
       };
 
       // 设置悬赏金额（根据问题类型）
-      if (selectedType === 1 && reward) { // 1 = 悬赏问题
+      if (selectedType === 1 && reward) {
+        // 1 = 悬赏问题
         draftData.bountyAmount = Math.round(parseFloat(reward) * 100);
-      } else if (selectedType === 2 && targetedReward) { // 2 = 定向问题
+      } else if (selectedType === 2 && targetedReward) {
+        // 2 = 定向问题
         draftData.bountyAmount = Math.round(parseFloat(targetedReward) * 100);
-      } else if (selectedType === 0 && reward) { // 0 = 公开问题
+      } else if (selectedType === 0 && reward) {
+        // 0 = 公开问题
         draftData.bountyAmount = Math.round(parseFloat(reward) * 100);
       }
-
       console.log('保存草稿数据:', JSON.stringify(draftData, null, 2));
-      
       const response = await questionApi.saveDraft(draftData);
-      
       console.log('保存草稿响应:', response);
-
       if (response.code === 200) {
         showToast('草稿已保存', 'success');
       } else {
@@ -626,9 +539,7 @@ export default function PublishScreen({ navigation, route }) {
       }
     } catch (error) {
       console.error('保存草稿失败:', error);
-      
       let errorMessage = '网络错误，请检查网络连接后重试';
-      
       if (error.response) {
         errorMessage = error.response.data?.msg || error.response.data?.message || '服务器错误，请稍后重试';
       } else if (error.request) {
@@ -636,11 +547,9 @@ export default function PublishScreen({ navigation, route }) {
       } else if (error.message) {
         errorMessage = error.message;
       }
-      
       showToast(errorMessage, 'error');
     }
   };
-
   const handlePublish = async () => {
     // 调试信息
     console.log('🔍 发布验证开始');
@@ -651,14 +560,13 @@ export default function PublishScreen({ navigation, route }) {
     console.log('  - selectedType === 1:', selectedType === 1);
     console.log('  - selectedType === 2:', selectedType === 2);
     console.log('  - JSON.stringify(selectedType):', JSON.stringify(selectedType));
-    
     console.log('🔍 title值:', `"${title}"`);
     console.log('🔍 title.trim():', `"${title.trim()}"`);
     console.log('🔍 title.length:', title.length);
     console.log('🔍 selectedLevel1:', selectedLevel1);
     console.log('🔍 selectedLevel2:', selectedLevel2);
     console.log('🔍 content.trim():', `"${content.trim()}"`);
-    
+
     // 验证问题类型（现在直接是数字，不需要映射）
     console.log('🔍 问题类型验证:');
     console.log('  - selectedType:', selectedType);
@@ -690,16 +598,18 @@ export default function PublishScreen({ navigation, route }) {
     }
 
     // 2. 验证悬赏问题金额
-    if (selectedType === 1) { // 1 = 悬赏问题
+    if (selectedType === 1) {
+      // 1 = 悬赏问题
       const amount = parseFloat(reward);
       if (isNaN(amount) || amount < 1) {
         showToast('悬赏问题金额不能小于$1', 'warning');
         return;
       }
     }
-    
+
     // 3. 验证定向问题
-    if (selectedType === 2) { // 2 = 定向问题
+    if (selectedType === 2) {
+      // 2 = 定向问题
       if (targetedUsers.length === 0) {
         showToast('请至少邀请一位专家', 'warning');
         return;
@@ -710,22 +620,21 @@ export default function PublishScreen({ navigation, route }) {
         return;
       }
     }
-    
+
     // 4. 验证付费查看答案
     if (answerPaid && (!answerPrice || parseFloat(answerPrice) < 1)) {
       showToast('请设置查看答案的价格（最低$1）', 'warning');
       return;
     }
-    
+
     // 5. 验证团队身份
     if (publishIdentity === 'team' && selectedTeams.length === 0) {
       showToast('请选择要代表的团队', 'warning');
       return;
     }
-
     try {
       setIsPublishing(true);
-      
+
       // 6. 上传图片（如果有）
       let imageUrls = [];
       if (images.length > 0) {
@@ -753,92 +662,92 @@ export default function PublishScreen({ navigation, route }) {
       // 7. 构建请求数据
       // 🧪 临时测试：使用简化的数据结构来排查500错误
       const useMinimalData = false; // 设置为 true 使用简化数据，false 使用完整数据
-      
+
       let requestData;
-      
       if (useMinimalData) {
         // 简化的数据结构，只包含最基本的字段
         requestData = {
           id: 0,
-          type: selectedType, // 直接使用数字，不需要映射
+          type: selectedType,
+          // 直接使用数字，不需要映射
           categoryId: selectedLevel2.id,
           title: title.trim(),
           description: content.trim() || '',
-          subQuestions: '[]', // JSON 字符串格式的空数组
-          bountyAmount: selectedType === 1 && reward ? Math.round(parseFloat(reward) * 100) : 0, // 1 = 悬赏问题
+          subQuestions: '[]',
+          // JSON 字符串格式的空数组
+          bountyAmount: selectedType === 1 && reward ? Math.round(parseFloat(reward) * 100) : 0,
+          // 1 = 悬赏问题
           payViewAmount: 0,
           location: location || '',
           visibilityScope: 0,
           isAnonymous: 0,
           isPublicAnswer: 1,
-          teamId: 100, // 使用一个默认的有效团队ID
+          teamId: 100,
+          // 使用一个默认的有效团队ID
           expertIds: [],
           topicIds: [],
           topicNames: [],
           imageUrls: []
         };
-        
         console.log('🧪 使用简化数据结构进行测试');
         console.log('🧪 问题类型: selectedType =', selectedType);
       } else {
         // 完整的数据结构
         requestData = {
           // 基础必填字段
-          id: 0, // 新建问题
-          type: selectedType, // 直接使用数字，不需要映射
-          categoryId: selectedLevel2.id, // 必填，使用选中的二级分类ID
-          title: title.trim(), // 确保去除首尾空格
+          id: 0,
+          // 新建问题
+          type: selectedType,
+          // 直接使用数字，不需要映射
+          categoryId: selectedLevel2.id,
+          // 必填，使用选中的二级分类ID
+          title: title.trim(),
+          // 确保去除首尾空格
           description: content.trim() || '',
-          
           // 子问题（JSON 字符串格式的数组）
           subQuestions: '[]',
-          
           // 悬赏金额（单位：分，需要转换）
           bountyAmount: 0,
-          
           // 付费查看金额（单位：分）
           payViewAmount: answerPaid ? Math.round(parseFloat(answerPrice || 0) * 100) : 0,
-          
           // 位置信息
           location: location && location !== '不显示' ? location : '北京市朝阳区',
-          
           // 可见范围：0=所有人，1=仅关注我的人，2=仅自己
-          visibilityScope: visibility, // 直接使用数字，不需要映射
-          
+          visibilityScope: visibility,
+          // 直接使用数字，不需要映射
+
           // 是否匿名：0=不匿名，1=匿名
           isAnonymous: isAnonymous ? 1 : 0,
-          
           // 是否公开答案：0=不公开，1=公开
           isPublicAnswer: answerPublic ? 1 : 0,
-          
           // 团队ID（以团队身份发布时才添加）
           teamId: publishIdentity === 'team' && selectedTeams.length > 0 ? selectedTeams[0] : 100,
-          
           // 专家ID列表（仅定向问题且有选择专家时才添加）
-          expertIds: selectedType === 2 && targetedUsers.length > 0 ? targetedUsers.map(u => u.id) : [], // 2 = 定向问题
-          
+          expertIds: selectedType === 2 && targetedUsers.length > 0 ? targetedUsers.map(u => u.id) : [],
+          // 2 = 定向问题
+
           // 话题ID列表（已有话题）
           topicIds: [],
-          
           // 话题名称列表（用户自定义的话题）
           topicNames: customTopicNames.length > 0 ? customTopicNames : [],
-          
           // 图片URL列表
-          imageUrls: imageUrls.length > 0 ? imageUrls : [],
+          imageUrls: imageUrls.length > 0 ? imageUrls : []
         };
-        
         console.log('📦 使用完整数据结构');
         console.log('📦 问题类型: selectedType =', selectedType);
       }
-      
+
       // 8. 设置悬赏金额（根据问题类型）
-      if (selectedType === 1 && reward) { // 1 = 悬赏问题
+      if (selectedType === 1 && reward) {
+        // 1 = 悬赏问题
         // 悬赏问题：使用 reward 字段的金额，转换为分
         requestData.bountyAmount = Math.round(parseFloat(reward) * 100);
-      } else if (selectedType === 2 && targetedReward) { // 2 = 定向问题
+      } else if (selectedType === 2 && targetedReward) {
+        // 2 = 定向问题
         // 定向问题：使用 targetedReward 字段的金额，转换为分
         requestData.bountyAmount = Math.round(parseFloat(targetedReward) * 100);
-      } else if (selectedType === 0 && reward) { // 0 = 公开问题
+      } else if (selectedType === 0 && reward) {
+        // 0 = 公开问题
         // 公开问题：如果设置了悬赏金额，也转换为分
         requestData.bountyAmount = Math.round(parseFloat(reward) * 100);
       } else {
@@ -866,9 +775,7 @@ export default function PublishScreen({ navigation, route }) {
       console.log('  ✓ expertIds:', requestData.expertIds);
       console.log('  ✓ imageUrls:', requestData.imageUrls);
       console.log('═══════════════════════════════════════════════════════════');
-      
       const response = await questionApi.publishQuestion(requestData);
-      
       console.log('═══════════════════════════════════════════════════════════');
       console.log('📥 发布问题 - 服务器响应');
       console.log('═══════════════════════════════════════════════════════════');
@@ -879,7 +786,7 @@ export default function PublishScreen({ navigation, route }) {
       if (response.code === 200) {
         // 显示成功提示
         showToast('问题发布成功', 'success', 2000);
-        
+
         // 清空表单
         setTitle('');
         setContent('');
@@ -896,7 +803,7 @@ export default function PublishScreen({ navigation, route }) {
         setAnswerPublic(true);
         setAnswerPaid(false);
         setAnswerPrice('');
-        
+
         // 延迟返回上一页，让用户看到成功提示
         setTimeout(() => {
           navigation.goBack();
@@ -906,14 +813,13 @@ export default function PublishScreen({ navigation, route }) {
       }
     } catch (error) {
       console.error('发布问题失败:', error);
-      
+
       // 处理不同类型的错误
       let errorMessage = '网络错误，请检查网络连接后重试';
-      
       if (error.response) {
         // 服务器返回了错误响应
         console.error('服务器错误响应:', error.response.data);
-        
+
         // 优先使用服务器返回的具体错误信息
         if (error.response.data?.msg) {
           errorMessage = error.response.data.msg;
@@ -922,7 +828,7 @@ export default function PublishScreen({ navigation, route }) {
         } else {
           errorMessage = '服务器错误，请稍后重试';
         }
-        
+
         // 特别处理验证错误
         if (error.response.status === 400) {
           console.error('❌ 验证错误 - 检查请求数据:');
@@ -937,45 +843,41 @@ export default function PublishScreen({ navigation, route }) {
         // 其他错误
         errorMessage = error.message;
       }
-      
       showToast(errorMessage, 'error');
     } finally {
       setIsPublishing(false);
       setIsUploadingImages(false);
     }
   };
-
   const handleLocationPress = () => {
     setShowLocationModal(true);
   };
-  
-  const handleLocationSelect = (city) => {
+  const handleLocationSelect = city => {
     setLocation(city);
   };
-  
   const handleLocationClose = () => {
     setShowLocationModal(false);
   };
-
   const handleVisibilityPress = () => {
     setShowVisibilityModal(true);
   };
-
-  const getVisibilityText = (value) => {
-    switch(value) {
-      case 0: return '所有人';
-      case 1: return '仅关注我的人';
-      case 2: return '仅自己';
-      default: return '所有人';
+  const getVisibilityText = value => {
+    switch (value) {
+      case 0:
+        return '所有人';
+      case 1:
+        return '仅关注我的人';
+      case 2:
+        return '仅自己';
+      default:
+        return '所有人';
     }
   };
-
-  const selectVisibility = (value) => {
+  const selectVisibility = value => {
     setVisibility(value);
     setShowVisibilityModal(false);
   };
-
-  const toggleTargetedUser = (user) => {
+  const toggleTargetedUser = user => {
     if (targetedUsers.find(u => u.id === user.id)) {
       setTargetedUsers(targetedUsers.filter(u => u.id !== user.id));
     } else if (targetedUsers.length < 5) {
@@ -984,8 +886,7 @@ export default function PublishScreen({ navigation, route }) {
       showToast('最多邀请5位专家', 'warning');
     }
   };
-
-  const removeTargetedUser = (userId) => {
+  const removeTargetedUser = userId => {
     setTargetedUsers(targetedUsers.filter(u => u.id !== userId));
   };
 
@@ -995,10 +896,9 @@ export default function PublishScreen({ navigation, route }) {
    */
   const loadExpertList = async (isLoadMore = false) => {
     // 如果正在加载或没有更多数据，则不重复加载
-    if (expertLoading || (isLoadMore && !expertHasMore)) {
+    if (expertLoading || isLoadMore && !expertHasMore) {
       return;
     }
-
     try {
       if (isLoadMore) {
         setExpertLoadingMore(true);
@@ -1006,29 +906,26 @@ export default function PublishScreen({ navigation, route }) {
         setExpertLoading(true);
         setExpertPageNum(1);
       }
-
       const pageNum = isLoadMore ? expertPageNum + 1 : 1;
-      
+
       // 根据选中的分类筛选专家
       const params = {
         pageNum,
-        pageSize: expertPageSize,
+        pageSize: expertPageSize
       };
-      
+
       // 如果选择了二级分类，则按分类筛选
       if (selectedLevel2?.id) {
         params.categoryId = selectedLevel2.id;
       }
-
       const response = await expertApi.getExpertList(params);
-
       console.log('✅ 专家列表响应:', response);
-
       if (response.code === 200 && response.data) {
-        const { total, rows } = response.data;
-        
+        const {
+          total,
+          rows
+        } = response.data;
         console.log(`📊 专家数据: total=${total}, rows.length=${rows?.length || 0}`);
-        
         if (isLoadMore) {
           setExpertList([...expertList, ...rows]);
           setExpertPageNum(pageNum);
@@ -1036,7 +933,6 @@ export default function PublishScreen({ navigation, route }) {
           setExpertList(rows);
           setExpertPageNum(1);
         }
-        
         setExpertTotal(total);
         setExpertHasMore(rows.length === expertPageSize);
       } else {
@@ -1063,9 +959,11 @@ export default function PublishScreen({ navigation, route }) {
   // 当选择定向问题类型或分类变化时，重新加载专家列表
   useEffect(() => {
     // 只有在选择了定向问题类型且选择了分类时才加载专家列表
-    if (selectedType === 2 && selectedLevel2?.id) { // 2 = 定向问题
+    if (selectedType === 2 && selectedLevel2?.id) {
+      // 2 = 定向问题
       loadExpertList(false);
-    } else if (selectedType === 2 && !selectedLevel2?.id) { // 2 = 定向问题
+    } else if (selectedType === 2 && !selectedLevel2?.id) {
+      // 2 = 定向问题
       // 如果选择了定向问题但没有选择分类，清空专家列表
       setExpertList([]);
       setExpertTotal(0);
@@ -1073,86 +971,72 @@ export default function PublishScreen({ navigation, route }) {
   }, [selectedType, selectedLevel2]);
 
   // 过滤专家列表（本地搜索）
-  const filteredExperts = expertList.filter(user => 
-    user.nickname.toLowerCase().includes(expertSearchQuery.toLowerCase()) ||
-    (user.categories && user.categories.some(cat => 
-      cat.name.toLowerCase().includes(expertSearchQuery.toLowerCase())
-    ))
-  );
-
-  const selectLevel1 = async (cat) => {
+  const filteredExperts = expertList.filter(user => user.nickname.toLowerCase().includes(expertSearchQuery.toLowerCase()) || user.categories && user.categories.some(cat => cat.name.toLowerCase().includes(expertSearchQuery.toLowerCase())));
+  const selectLevel1 = async cat => {
     setTempSelectedLevel1(cat);
     setCategoryModalView('level2'); // 切换到二级分类视图
-    
+
     // 按需加载二级分类
     await fetchLevel2Categories(cat.id);
   };
-
-  const selectLevel2 = (cat) => {
+  const selectLevel2 = cat => {
     setSelectedLevel1(tempSelectedLevel1); // 确认选择一级分类
     setSelectedLevel2(cat); // 选择二级分类
     setShowCategoryModal(false); // 关闭弹窗
     setCategoryModalView('level1'); // 重置视图
     setTempSelectedLevel1(null); // 清空临时选择
   };
-  
   const backToLevel1 = () => {
     setCategoryModalView('level1');
     setTempSelectedLevel1(null);
   };
-  
   const handleCategoryModalClose = () => {
     setShowCategoryModal(false);
     setCategoryModalView('level1');
     setTempSelectedLevel1(null);
     setLevel1SearchQuery(''); // 清空搜索关键词
   };
-
   const getCategoryDisplay = () => {
     if (selectedLevel1 && selectedLevel2) {
       return `${selectedLevel1.name} > ${selectedLevel2.name}`;
     }
     return '请选择问题类别';
   };
-
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+  return <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity 
-          onPress={() => navigation.goBack()}
-          style={styles.closeBtn}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          activeOpacity={0.7}
-        >
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn} hitSlop={{
+        top: 10,
+        bottom: 10,
+        left: 10,
+        right: 10
+      }} activeOpacity={0.7}>
           <Ionicons name="close" size={28} color="#374151" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>发布问题</Text>
-        <TouchableOpacity 
-          onPress={handleSaveDraft}
-          style={styles.saveDraftBtn}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          activeOpacity={0.7}
-        >
+        <TouchableOpacity onPress={handleSaveDraft} style={styles.saveDraftBtn} hitSlop={{
+        top: 10,
+        bottom: 10,
+        left: 10,
+        right: 10
+      }} activeOpacity={0.7}>
           <Text style={styles.saveDraft}>存草稿</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* 问题类型选择 */}
-        <View style={[styles.section, { marginBottom: 16 }]}>
+        <View style={[styles.section, {
+        marginBottom: 16
+      }]}>
           <Text style={styles.sectionTitle}>选择问题类型</Text>
           <View style={styles.typeList}>
-            {questionTypes.map(type => (
-              <TouchableOpacity
-                key={type.id}
-                style={[styles.typeCard, selectedType === type.id && styles.typeCardActive]}
-                onPress={() => setSelectedType(type.id)}
-              >
+            {questionTypes.map(type => <TouchableOpacity key={type.id} style={[styles.typeCard, selectedType === type.id && styles.typeCardActive]} onPress={() => setSelectedType(type.id)}>
                 <Ionicons name={type.icon} size={24} color={selectedType === type.id ? type.color : '#9ca3af'} />
-                <Text style={[styles.typeName, selectedType === type.id && { color: type.color }]}>{type.name}</Text>
+                <Text style={[styles.typeName, selectedType === type.id && {
+              color: type.color
+            }]}>{type.name}</Text>
                 <Text style={styles.typeDesc}>{type.desc}</Text>
-              </TouchableOpacity>
-            ))}
+              </TouchableOpacity>)}
           </View>
         </View>
 
@@ -1161,12 +1045,14 @@ export default function PublishScreen({ navigation, route }) {
           <Text style={styles.sectionTitle}>问题类别 <Text style={styles.required}>*</Text></Text>
           <TouchableOpacity style={styles.categorySelector} onPress={() => setShowCategoryModal(true)}>
             <View style={styles.categorySelectorLeft}>
-              {selectedLevel1 && (
-                <View style={[styles.categoryIcon, { backgroundColor: selectedLevel1.color + '20' }]}>
+              {Boolean(selectedLevel1) && <View style={[styles.categoryIcon, {
+              backgroundColor: selectedLevel1.color + '20'
+            }]}>
                   <CategoryIcon icon={selectedLevel1.originalIcon || selectedLevel1.icon} size={18} color={selectedLevel1.color} />
-                </View>
-              )}
-              <Text style={[styles.categorySelectorText, !selectedLevel1 && { color: '#9ca3af' }]}>
+                </View>}
+              <Text style={[styles.categorySelectorText, !selectedLevel1 && {
+              color: '#9ca3af'
+            }]}>
                 {getCategoryDisplay()}
               </Text>
             </View>
@@ -1175,213 +1061,143 @@ export default function PublishScreen({ navigation, route }) {
         </View>
 
         {/* 公开问题 - 悬赏金额 */}
-        {selectedType === 0 && ( // 0 = 公开问题
-          <View style={styles.section}>
+        {selectedType === 0 &&
+      // 0 = 公开问题
+      <View style={styles.section}>
             <Text style={styles.sectionTitle}>设置悬赏金额</Text>
             <Text style={styles.sectionDesc}>可以设置为 $0（不设悬赏）或任意金额</Text>
             <View style={styles.quickAmounts}>
-              {rewardAmounts.map(amount => (
-                <TouchableOpacity
-                  key={amount}
-                  style={[styles.amountBtn, reward === String(amount) && styles.amountBtnActive]}
-                  onPress={() => setReward(String(amount))}
-                >
+              {rewardAmounts.map(amount => <TouchableOpacity key={amount} style={[styles.amountBtn, reward === String(amount) && styles.amountBtnActive]} onPress={() => setReward(String(amount))}>
                   <Text style={[styles.amountText, reward === String(amount) && styles.amountTextActive]}>${amount}</Text>
-                </TouchableOpacity>
-              ))}
+                </TouchableOpacity>)}
             </View>
             <View style={styles.customAmount}>
               <Text style={styles.customLabel}>自定义金额：</Text>
-              <TextInput 
-                style={styles.customInput} 
-                placeholder="输入金额（可以是$0）" 
-                keyboardType="numeric" 
-                value={reward} 
-                onChangeText={(text) => {
-                  // 只允许输入数字和小数点
-                  const filtered = text.replace(/[^0-9.]/g, '');
-                  setReward(filtered);
-                }}
-              />
+              <TextInput style={styles.customInput} placeholder="输入金额（可以是$0）" keyboardType="numeric" value={reward} onChangeText={text => {
+            // 只允许输入数字和小数点
+            const filtered = text.replace(/[^0-9.]/g, '');
+            setReward(filtered);
+          }} />
               <Text style={styles.currencySymbol}>$</Text>
             </View>
-          </View>
-        )}
+          </View>}
 
         {/* 悬赏金额 */}
-        {selectedType === 1 && ( // 1 = 悬赏问题
-          <View style={styles.section}>
+        {selectedType === 1 &&
+      // 1 = 悬赏问题
+      <View style={styles.section}>
             <Text style={styles.sectionTitle}>设置悬赏金额 <Text style={styles.required}>*</Text></Text>
             <Text style={styles.sectionDesc}>悬赏金额不能小于 $1</Text>
             <View style={styles.quickAmounts}>
-              {rewardAmounts.map(amount => (
-                <TouchableOpacity
-                  key={amount}
-                  style={[styles.amountBtn, reward === String(amount) && styles.amountBtnActive]}
-                  onPress={() => setReward(String(amount))}
-                >
+              {rewardAmounts.map(amount => <TouchableOpacity key={amount} style={[styles.amountBtn, reward === String(amount) && styles.amountBtnActive]} onPress={() => setReward(String(amount))}>
                   <Text style={[styles.amountText, reward === String(amount) && styles.amountTextActive]}>${amount}</Text>
-                </TouchableOpacity>
-              ))}
+                </TouchableOpacity>)}
             </View>
             <View style={styles.customAmount}>
               <Text style={styles.customLabel}>自定义金额：</Text>
-              <TextInput 
-                style={styles.customInput} 
-                placeholder="输入金额（最低$1）" 
-                keyboardType="numeric" 
-                value={reward} 
-                onChangeText={(text) => {
-                  // 只允许输入数字和小数点
-                  const filtered = text.replace(/[^0-9.]/g, '');
-                  setReward(filtered);
-                }}
-              />
+              <TextInput style={styles.customInput} placeholder="输入金额（最低$1）" keyboardType="numeric" value={reward} onChangeText={text => {
+            // 只允许输入数字和小数点
+            const filtered = text.replace(/[^0-9.]/g, '');
+            setReward(filtered);
+          }} />
               <Text style={styles.currencySymbol}>$</Text>
             </View>
-          </View>
-        )}
+          </View>}
 
         {/* 定向问题 - 邀请专家 */}
-        {selectedType === 2 && (expertLoading || expertList.length > 0 || targetedUsers.length > 0) && ( // 2 = 定向问题
-          <>
+        {Boolean(selectedType === 2 && (expertLoading || expertList.length > 0 || targetedUsers.length > 0)) &&
+      // 2 = 定向问题
+      <>
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>邀请回答专家 <Text style={styles.required}>*</Text></Text>
               <Text style={styles.sectionDesc}>最多邀请5位专家回答</Text>
               
               {/* 已选择的专家 */}
-              {targetedUsers.length > 0 && (
-                <View style={styles.selectedUsersContainer}>
-                  {targetedUsers.map(user => (
-                    <View key={user.id} style={styles.selectedUserChip}>
+              {targetedUsers.length > 0 && <View style={styles.selectedUsersContainer}>
+                  {targetedUsers.map(user => <View key={user.id} style={styles.selectedUserChip}>
                       <View style={styles.selectedUserInfo}>
-                        <Image 
-                          source={{ uri: user.avatar }} 
-                          style={styles.selectedUserAvatar}
-                        />
+                        <Image source={{
+                  uri: user.avatar
+                }} style={styles.selectedUserAvatar} />
                         <Text style={styles.selectedUserName}>{user.nickname}</Text>
                       </View>
-                      <TouchableOpacity onPress={() => removeTargetedUser(user.id)} style={{ marginLeft: 6 }}>
+                      <TouchableOpacity onPress={() => removeTargetedUser(user.id)} style={{
+                marginLeft: 6
+              }}>
                         <Ionicons name="close-circle" size={20} color="#ef4444" />
                       </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
-              )}
+                    </View>)}
+                </View>}
 
               {/* 搜索框 */}
               <View style={styles.expertSearchContainer}>
                 <Ionicons name="search" size={20} color="#9ca3af" />
-                <TextInput
-                  style={styles.expertSearchInput}
-                  placeholder="搜索专家姓名、领域或职称..."
-                  value={expertSearchQuery}
-                  onChangeText={setExpertSearchQuery}
-                  placeholderTextColor="#9ca3af"
-                />
-                {expertSearchQuery.length > 0 && (
-                  <TouchableOpacity onPress={() => setExpertSearchQuery('')}>
+                <TextInput style={styles.expertSearchInput} placeholder="搜索专家姓名、领域或职称..." value={expertSearchQuery} onChangeText={setExpertSearchQuery} placeholderTextColor="#9ca3af" />
+                {expertSearchQuery.length > 0 && <TouchableOpacity onPress={() => setExpertSearchQuery('')}>
                     <Ionicons name="close-circle" size={20} color="#9ca3af" />
-                  </TouchableOpacity>
-                )}
+                  </TouchableOpacity>}
               </View>
 
               {/* 可选择的专家列表 */}
               <View style={styles.expertListContainer}>
                 {/* 推荐标题 */}
                 <View style={styles.recommendedHeader}>
-                  <Ionicons name="star" size={18} color="#f59e0b" style={{ marginRight: 6 }} />
+                  <Ionicons name="star" size={18} color="#f59e0b" style={{
+                marginRight: 6
+              }} />
                   <Text style={styles.recommendedHeaderText}>推荐专家 ({expertTotal})</Text>
                 </View>
 
                 {/* 专家列表 */}
-                {expertLoading && expertList.length === 0 ? (
-                  <View style={styles.loadingContainer}>
+                {expertLoading && expertList.length === 0 ? <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#3b82f6" />
                     <Text style={styles.loadingText}>加载专家列表...</Text>
-                  </View>
-                ) : filteredExperts.length > 0 ? (
-                  <FlatList
-                    data={filteredExperts}
-                    keyExtractor={(item) => item.id.toString()}
-                    renderItem={({ item: user }) => {
-                      const isSelected = targetedUsers.find(u => u.id === user.id);
-                      return (
-                        <TouchableOpacity
-                          style={[styles.expertItem, isSelected && styles.expertItemSelected]}
-                          onPress={() => toggleTargetedUser(user)}
-                        >
-                          <Image 
-                            source={{ uri: user.avatar }} 
-                            style={styles.expertAvatarImage}
-                          />
+                  </View> : filteredExperts.length > 0 ? <FlatList data={filteredExperts} keyExtractor={item => item.id.toString()} renderItem={({
+              item: user
+            }) => {
+              const isSelected = targetedUsers.find(u => u.id === user.id);
+              return <TouchableOpacity style={[styles.expertItem, isSelected && styles.expertItemSelected]} onPress={() => toggleTargetedUser(user)}>
+                          <Image source={{
+                  uri: user.avatar
+                }} style={styles.expertAvatarImage} />
                           <View style={styles.expertInfo}>
                             <View style={styles.expertNameRow}>
                               <Text style={styles.expertName}>{user.nickname}</Text>
-                              <Ionicons name="checkmark-circle" size={16} color="#3b82f6" style={{ marginLeft: 4 }} />
+                              <Ionicons name="checkmark-circle" size={16} color="#3b82f6" style={{
+                      marginLeft: 4
+                    }} />
                             </View>
-                            {user.categories && user.categories.length > 0 && (
-                              <View style={styles.expertCategoriesRow}>
-                                {user.categories.slice(0, 2).map((cat, idx) => (
-                                  <View key={cat.id} style={styles.expertFieldTag}>
+                            {Boolean(user.categories && user.categories.length > 0) && <View style={styles.expertCategoriesRow}>
+                                {user.categories.slice(0, 2).map((cat, idx) => <View key={cat.id} style={styles.expertFieldTag}>
                                     <Text style={styles.expertFieldText}>{cat.name}</Text>
-                                  </View>
-                                ))}
-                                {user.categories.length > 2 && (
-                                  <Text style={styles.expertMoreCategories}>+{user.categories.length - 2}</Text>
-                                )}
-                              </View>
-                            )}
+                                  </View>)}
+                                {user.categories.length > 2 && <Text style={styles.expertMoreCategories}>+{user.categories.length - 2}</Text>}
+                              </View>}
                           </View>
-                          {isSelected && (
-                            <Ionicons name="checkmark-circle" size={24} color="#3b82f6" />
-                          )}
-                        </TouchableOpacity>
-                      );
-                    }}
-                    onEndReached={loadMoreExperts}
-                    onEndReachedThreshold={0.5}
-                    ListFooterComponent={() => {
-                      if (expertLoadingMore) {
-                        return (
-                          <View style={styles.loadingMoreContainer}>
+                          {Boolean(isSelected) && <Ionicons name="checkmark-circle" size={24} color="#3b82f6" />}
+                        </TouchableOpacity>;
+            }} onEndReached={loadMoreExperts} onEndReachedThreshold={0.5} ListFooterComponent={() => {
+              if (expertLoadingMore) {
+                return <View style={styles.loadingMoreContainer}>
                             <ActivityIndicator size="small" color="#3b82f6" />
                             <Text style={styles.loadingMoreText}>加载更多...</Text>
-                          </View>
-                        );
-                      }
-                      if (!expertHasMore && expertList.length > 0) {
-                        return (
-                          <View style={styles.noMoreContainer}>
+                          </View>;
+              }
+              if (!expertHasMore && expertList.length > 0) {
+                return <View style={styles.noMoreContainer}>
                             <Text style={styles.noMoreText}>没有更多专家了</Text>
-                          </View>
-                        );
-                      }
-                      return null;
-                    }}
-                    scrollEnabled={false}
-                    nestedScrollEnabled={true}
-                    style={styles.expertFlatList}
-                  />
-                ) : (
-                  <View style={styles.noResultsContainer}>
+                          </View>;
+              }
+              return null;
+            }} scrollEnabled={false} nestedScrollEnabled={true} style={styles.expertFlatList} /> : <View style={styles.noResultsContainer}>
                     <Ionicons name="search-outline" size={48} color="#d1d5db" />
                     <Text style={styles.noResultsText}>
-                      {expertSearchQuery 
-                        ? '未找到匹配的专家' 
-                        : !selectedLevel2?.id 
-                          ? '请先选择问题类别' 
-                          : '该类别暂无专家'}
+                      {expertSearchQuery ? '未找到匹配的专家' : !selectedLevel2?.id ? '请先选择问题类别' : '该类别暂无专家'}
                     </Text>
                     <Text style={styles.noResultsHint}>
-                      {expertSearchQuery 
-                        ? '试试其他关键词' 
-                        : !selectedLevel2?.id 
-                          ? '选择类别后可查看该领域的专家' 
-                          : '可以尝试选择其他类别'}
+                      {expertSearchQuery ? '试试其他关键词' : !selectedLevel2?.id ? '选择类别后可查看该领域的专家' : '可以尝试选择其他类别'}
                     </Text>
-                  </View>
-                )}
+                  </View>}
               </View>
             </View>
 
@@ -1390,65 +1206,37 @@ export default function PublishScreen({ navigation, route }) {
               <Text style={styles.sectionTitle}>设置奖赏金额 <Text style={styles.required}>*</Text></Text>
               <Text style={styles.sectionDesc}>可以设置为 $0（不设悬赏）或任意金额</Text>
               <View style={styles.quickAmounts}>
-                {rewardAmounts.map(amount => (
-                  <TouchableOpacity
-                    key={amount}
-                    style={[styles.amountBtn, targetedReward === String(amount) && styles.amountBtnActive]}
-                    onPress={() => setTargetedReward(String(amount))}
-                  >
+                {rewardAmounts.map(amount => <TouchableOpacity key={amount} style={[styles.amountBtn, targetedReward === String(amount) && styles.amountBtnActive]} onPress={() => setTargetedReward(String(amount))}>
                     <Text style={[styles.amountText, targetedReward === String(amount) && styles.amountTextActive]}>${amount}</Text>
-                  </TouchableOpacity>
-                ))}
+                  </TouchableOpacity>)}
               </View>
               <View style={styles.customAmount}>
                 <Text style={styles.customLabel}>自定义金额：</Text>
-                <TextInput 
-                  style={styles.customInput} 
-                  placeholder="输入金额（最低$0）" 
-                  keyboardType="numeric" 
-                  value={targetedReward} 
-                  onChangeText={(text) => {
-                    // 只允许输入数字和小数点
-                    const filtered = text.replace(/[^0-9.]/g, '');
-                    setTargetedReward(filtered);
-                  }}
-                />
+                <TextInput style={styles.customInput} placeholder="输入金额（最低$0）" keyboardType="numeric" value={targetedReward} onChangeText={text => {
+              // 只允许输入数字和小数点
+              const filtered = text.replace(/[^0-9.]/g, '');
+              setTargetedReward(filtered);
+            }} />
                 <Text style={styles.currencySymbol}>$</Text>
               </View>
             </View>
-          </>
-        )}
+          </>}
 
         {/* 问题标题 */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>问题标题 <Text style={styles.required}>*</Text></Text>
-          <TextInput 
-            style={styles.titleInput} 
-            placeholder="请输入问题标题（5-50字）" 
-            placeholderTextColor="#9ca3af"
-            value={title} 
-            onChangeText={setTitle} 
-            maxLength={50} 
-          />
+          <TextInput style={styles.titleInput} placeholder="请输入问题标题（5-50字）" placeholderTextColor="#9ca3af" value={title} onChangeText={setTitle} maxLength={50} />
           <Text style={styles.charCount}>{title.length}/50</Text>
         </View>
 
         {/* 问题描述 */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>问题描述 <Text style={styles.required}>*</Text></Text>
-          <TextInput 
-            style={[styles.contentInput, { height: Math.max(150, contentInputHeight) }]} 
-            placeholder="详细描述你的问题，让回答者更好地理解..." 
-            placeholderTextColor="#9ca3af"
-            value={content} 
-            onChangeText={setContent} 
-            multiline 
-            textAlignVertical="top" 
-            maxLength={2000}
-            onContentSizeChange={(event) => {
-              setContentInputHeight(event.nativeEvent.contentSize.height);
-            }}
-          />
+          <TextInput style={[styles.contentInput, {
+          height: Math.max(150, contentInputHeight)
+        }]} placeholder="详细描述你的问题，让回答者更好地理解..." placeholderTextColor="#9ca3af" value={content} onChangeText={setContent} multiline textAlignVertical="top" maxLength={2000} onContentSizeChange={event => {
+          setContentInputHeight(event.nativeEvent.contentSize.height);
+        }} />
           <Text style={styles.charCount}>{content.length}/2000</Text>
         </View>
 
@@ -1456,24 +1244,22 @@ export default function PublishScreen({ navigation, route }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>添加图片（最多9张）</Text>
           <View style={styles.imageGrid}>
-            {images.map((img, idx) => (
-              <View key={idx} style={styles.imageItem}>
+            {images.map((img, idx) => <View key={idx} style={styles.imageItem}>
                 <View style={styles.imageItemInner}>
-                  <Image source={{ uri: img }} style={styles.imagePreview} />
+                  <Image source={{
+                uri: img
+              }} style={styles.imagePreview} />
                 </View>
                 <TouchableOpacity style={styles.removeImage} onPress={() => setImages(images.filter((_, i) => i !== idx))}>
                   <Ionicons name="close-circle" size={20} color="#ef4444" />
                 </TouchableOpacity>
-              </View>
-            ))}
-            {images.length < 9 && (
-              <View style={styles.addImageBtn}>
+              </View>)}
+            {images.length < 9 && <View style={styles.addImageBtn}>
                 <TouchableOpacity style={styles.addImageBtnInner} onPress={addImage}>
                   <Ionicons name="add" size={24} color="#9ca3af" />
                   <Text style={styles.addImageText}>添加图片</Text>
                 </TouchableOpacity>
-              </View>
-            )}
+              </View>}
           </View>
         </View>
 
@@ -1481,25 +1267,12 @@ export default function PublishScreen({ navigation, route }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>选择话题</Text>
           <View style={styles.topicList}>
-            {allTopics.map(topic => (
-              <TouchableOpacity
-                key={topic}
-                style={[styles.topicTag, selectedTopics.includes(topic) && styles.topicTagActive]}
-                onPress={() => toggleTopic(topic)}
-              >
+            {allTopics.map(topic => <TouchableOpacity key={topic} style={[styles.topicTag, selectedTopics.includes(topic) && styles.topicTagActive]} onPress={() => toggleTopic(topic)}>
                 <Text style={[styles.topicTagText, selectedTopics.includes(topic) && styles.topicTagTextActive]}>{topic}</Text>
-              </TouchableOpacity>
-            ))}
+              </TouchableOpacity>)}
           </View>
           <View style={styles.customTopic}>
-            <TextInput 
-              style={styles.customTopicInput} 
-              placeholder="自定义话题" 
-              value={customTopic} 
-              onChangeText={setCustomTopic}
-              onSubmitEditing={addCustomTopic}
-              returnKeyType="done"
-            />
+            <TextInput style={styles.customTopicInput} placeholder="自定义话题" value={customTopic} onChangeText={setCustomTopic} onSubmitEditing={addCustomTopic} returnKeyType="done" />
             <TouchableOpacity style={styles.addTopicBtn} onPress={addCustomTopic}>
               <Text style={styles.addTopicBtnText}>添加</Text>
             </TouchableOpacity>
@@ -1519,17 +1292,14 @@ export default function PublishScreen({ navigation, route }) {
                 <Text style={styles.answerSettingDesc}>所有人都可以看到问题的答案</Text>
               </View>
             </View>
-            <Switch 
-              value={answerPublic} 
-              onValueChange={setAnswerPublic} 
-              trackColor={{ false: '#e5e7eb', true: '#bfdbfe' }} 
-              thumbColor={answerPublic ? '#3b82f6' : '#fff'} 
-            />
+            <Switch value={answerPublic} onValueChange={setAnswerPublic} trackColor={{
+            false: '#e5e7eb',
+            true: '#bfdbfe'
+          }} thumbColor={answerPublic ? '#3b82f6' : '#fff'} />
           </View>
 
           {/* 付费查看答案 */}
-          {answerPublic && (
-            <View style={styles.answerSettingItem}>
+          {Boolean(answerPublic) && <View style={styles.answerSettingItem}>
               <View style={styles.answerSettingLeft}>
                 <Ionicons name="cash-outline" size={22} color="#f59e0b" />
                 <View style={styles.answerSettingText}>
@@ -1537,41 +1307,29 @@ export default function PublishScreen({ navigation, route }) {
                   <Text style={styles.answerSettingDesc}>用户需要付费才能查看答案</Text>
                 </View>
               </View>
-              <Switch 
-                value={answerPaid} 
-                onValueChange={setAnswerPaid} 
-                trackColor={{ false: '#e5e7eb', true: '#fef3c7' }} 
-                thumbColor={answerPaid ? '#f59e0b' : '#fff'} 
-              />
-            </View>
-          )}
+              <Switch value={answerPaid} onValueChange={setAnswerPaid} trackColor={{
+            false: '#e5e7eb',
+            true: '#fef3c7'
+          }} thumbColor={answerPaid ? '#f59e0b' : '#fff'} />
+            </View>}
 
           {/* 查看价格设置 */}
-          {answerPublic && answerPaid && (
-            <View style={styles.answerPriceContainer}>
+          {Boolean(answerPublic && answerPaid) && <View style={styles.answerPriceContainer}>
               <Text style={styles.answerPriceLabel}>查看价格</Text>
               <View style={styles.answerPriceInput}>
                 <Text style={styles.currencySymbol}>$</Text>
-                <TextInput 
-                  style={styles.priceInput} 
-                  placeholder="设置查看答案的价格" 
-                  keyboardType="numeric" 
-                  value={answerPrice} 
-                  onChangeText={setAnswerPrice}
-                  placeholderTextColor="#9ca3af"
-                />
+                <TextInput style={styles.priceInput} placeholder="设置查看答案的价格" keyboardType="numeric" value={answerPrice} onChangeText={setAnswerPrice} placeholderTextColor="#9ca3af" />
               </View>
               <Text style={styles.answerPriceHint}>建议价格：$1 - $10</Text>
-            </View>
-          )}
+            </View>}
 
           {/* 私密答案提示 */}
-          {!answerPublic && (
-            <View style={styles.privateAnswerTip}>
-              <Ionicons name="lock-closed" size={16} color="#6b7280" style={{ marginRight: 8 }} />
+          {!answerPublic && <View style={styles.privateAnswerTip}>
+              <Ionicons name="lock-closed" size={16} color="#6b7280" style={{
+            marginRight: 8
+          }} />
               <Text style={styles.privateAnswerText}>答案将仅对你可见，其他用户无法查看</Text>
-            </View>
-          )}
+            </View>}
         </View>
 
         {/* 更多设置 */}
@@ -1591,41 +1349,35 @@ export default function PublishScreen({ navigation, route }) {
           <View style={styles.settingItem}>
             <Ionicons name="person-outline" size={20} color="#9ca3af" />
             <Text style={styles.settingLabel}>匿名提问</Text>
-            <Switch value={isAnonymous} onValueChange={setIsAnonymous} trackColor={{ false: '#e5e7eb', true: '#fecaca' }} thumbColor={isAnonymous ? '#ef4444' : '#fff'} />
+            <Switch value={isAnonymous} onValueChange={setIsAnonymous} trackColor={{
+            false: '#e5e7eb',
+            true: '#fecaca'
+          }} thumbColor={isAnonymous ? '#ef4444' : '#fff'} />
           </View>
         </View>
 
         {/* 身份选择器 */}
         <View style={styles.section}>
-          <IdentitySelector
-            selectedIdentity={publishIdentity}
-            selectedTeams={selectedTeams}
-            onIdentityChange={setPublishIdentity}
-            onTeamsChange={setSelectedTeams}
-          />
+          <IdentitySelector selectedIdentity={publishIdentity} selectedTeams={selectedTeams} onIdentityChange={setPublishIdentity} onTeamsChange={setSelectedTeams} />
         </View>
 
         {/* 发布按钮 */}
-        <TouchableOpacity 
-          style={[
-            styles.publishBtn, 
-            (!title || !content || !selectedLevel2 || isPublishing) && styles.publishBtnDisabled
-          ]} 
-          onPress={handlePublish}
-          disabled={isPublishing}
-        >
-          {isPublishing ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
+        <TouchableOpacity style={[styles.publishBtn, (!title || !content || !selectedLevel2 || isPublishing) && styles.publishBtnDisabled]} onPress={handlePublish} disabled={isPublishing}>
+          {isPublishing ? <View style={{
+          flexDirection: 'row',
+          alignItems: 'center'
+        }}>
+              <ActivityIndicator size="small" color="#fff" style={{
+            marginRight: 8
+          }} />
               <Text style={styles.publishBtnText}>
                 {isUploadingImages ? '上传图片中...' : '发布中...'}
               </Text>
-            </View>
-          ) : (
-            <Text style={styles.publishBtnText}>发布问题</Text>
-          )}
+            </View> : <Text style={styles.publishBtnText}>发布问题</Text>}
         </TouchableOpacity>
-        <View style={{ height: 30 }} />
+        <View style={{
+        height: 30
+      }} />
       </ScrollView>
 
       {/* 问题类别选择弹窗 */}
@@ -1633,70 +1385,51 @@ export default function PublishScreen({ navigation, route }) {
         <View style={styles.modalOverlay}>
           <View style={styles.categoryModal}>
             <View style={styles.modalHeader}>
-              {categoryModalView === 'level2' ? (
-                <TouchableOpacity onPress={backToLevel1} style={styles.backBtn}>
+              {categoryModalView === 'level2' ? <TouchableOpacity onPress={backToLevel1} style={styles.backBtn}>
                   <Ionicons name="arrow-back" size={24} color="#374151" />
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity onPress={handleCategoryModalClose}>
+                </TouchableOpacity> : <TouchableOpacity onPress={handleCategoryModalClose}>
                   <Ionicons name="close" size={24} color="#374151" />
-                </TouchableOpacity>
-              )}
+                </TouchableOpacity>}
               <Text style={styles.modalTitle}>
                 {categoryModalView === 'level1' ? '选择问题类别' : tempSelectedLevel1?.name}
               </Text>
-              <View style={{ width: 24 }} />
+              <View style={{
+              width: 24
+            }} />
             </View>
 
-            {categoryLoading ? (
-              <View style={styles.categoryLoadingContainer}>
+            {categoryLoading ? <View style={styles.categoryLoadingContainer}>
                 <ActivityIndicator size="large" color="#ef4444" />
                 <Text style={styles.categoryLoadingText}>加载分类数据中...</Text>
-              </View>
-            ) : categoryError ? (
-              <View style={styles.categoryErrorContainer}>
+              </View> : categoryError ? <View style={styles.categoryErrorContainer}>
                 <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
                 <Text style={styles.categoryErrorText}>加载失败</Text>
                 <Text style={styles.categoryErrorDesc}>{categoryError}</Text>
                 <TouchableOpacity style={styles.retryBtn} onPress={fetchLevel1Categories}>
-                  <Ionicons name="refresh" size={20} color="#fff" style={{ marginRight: 6 }} />
+                  <Ionicons name="refresh" size={20} color="#fff" style={{
+                marginRight: 6
+              }} />
                   <Text style={styles.retryBtnText}>重试</Text>
                 </TouchableOpacity>
-              </View>
-            ) : (
-              <ScrollView style={styles.categoryContent} showsVerticalScrollIndicator={false}>
-                {categoryModalView === 'level1' ? (
-                  /* 视图1：一级分类列表 */
-                  <View style={styles.level1Container}>
+              </View> : <ScrollView style={styles.categoryContent} showsVerticalScrollIndicator={false}>
+                {categoryModalView === 'level1' ? (/* 视图1：一级分类列表 */
+            <View style={styles.level1Container}>
                     <Text style={styles.levelTitle}>请选择一级分类</Text>
                     
                     {/* 搜索框 */}
                     <View style={styles.level1SearchContainer}>
                       <Ionicons name="search" size={20} color="#9ca3af" />
-                      <TextInput
-                        style={styles.level1SearchInput}
-                        placeholder="搜索分类名称..."
-                        value={level1SearchQuery}
-                        onChangeText={setLevel1SearchQuery}
-                        placeholderTextColor="#9ca3af"
-                      />
-                      {level1SearchQuery.length > 0 && (
-                        <TouchableOpacity onPress={() => setLevel1SearchQuery('')}>
+                      <TextInput style={styles.level1SearchInput} placeholder="搜索分类名称..." value={level1SearchQuery} onChangeText={setLevel1SearchQuery} placeholderTextColor="#9ca3af" />
+                      {level1SearchQuery.length > 0 && <TouchableOpacity onPress={() => setLevel1SearchQuery('')}>
                           <Ionicons name="close-circle" size={20} color="#9ca3af" />
-                        </TouchableOpacity>
-                      )}
+                        </TouchableOpacity>}
                     </View>
                     
                     {/* 分类列表 */}
-                    {getFilteredLevel1Categories().length > 0 ? (
-                      getFilteredLevel1Categories().map(cat => (
-                        <TouchableOpacity
-                          key={cat.id}
-                          style={styles.level1Item}
-                          onPress={() => selectLevel1(cat)}
-                          activeOpacity={0.7}
-                        >
-                          <View style={[styles.level1Icon, { backgroundColor: cat.color + '20' }]}>
+                    {getFilteredLevel1Categories().length > 0 ? getFilteredLevel1Categories().map(cat => <TouchableOpacity key={cat.id} style={styles.level1Item} onPress={() => selectLevel1(cat)} activeOpacity={0.7}>
+                          <View style={[styles.level1Icon, {
+                  backgroundColor: cat.color + '20'
+                }]}>
                             <CategoryIcon icon={cat.originalIcon || cat.icon} size={20} color={cat.color} />
                           </View>
                           <View style={styles.level1Info}>
@@ -1704,57 +1437,38 @@ export default function PublishScreen({ navigation, route }) {
                             <Text style={styles.level1Desc}>{cat.desc || cat.description}</Text>
                           </View>
                           <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-                        </TouchableOpacity>
-                      ))
-                    ) : (
-                      /* 无搜索结果 */
-                      <View style={styles.noSearchResultContainer}>
+                        </TouchableOpacity>) : (/* 无搜索结果 */
+              <View style={styles.noSearchResultContainer}>
                         <Ionicons name="search-outline" size={48} color="#d1d5db" />
                         <Text style={styles.noSearchResultText}>未找到匹配的分类</Text>
                         <Text style={styles.noSearchResultHint}>试试其他关键词</Text>
-                      </View>
-                    )}
-                  </View>
-                ) : (
-                  /* 视图2：二级分类列表 */
-                  <View style={styles.level2Container}>
+                      </View>)}
+                  </View>) : (/* 视图2：二级分类列表 */
+            <View style={styles.level2Container}>
                     <Text style={styles.levelTitle}>请选择二级分类</Text>
-                    {loadingLevel2 ? (
-                      <View style={styles.level2LoadingContainer}>
+                    {loadingLevel2 ? <View style={styles.level2LoadingContainer}>
                         <ActivityIndicator size="small" color={tempSelectedLevel1?.color || '#ef4444'} />
                         <Text style={styles.level2LoadingText}>加载中...</Text>
-                      </View>
-                    ) : (
-                      <View style={styles.level2Grid}>
-                        {(level2CategoriesMap[tempSelectedLevel1?.id] || []).map(cat => (
-                          <TouchableOpacity
-                            key={cat.id}
-                            style={styles.level2Item}
-                            onPress={() => selectLevel2(cat)}
-                            activeOpacity={0.7}
-                          >
-                            <CategoryIcon icon={cat.icon} size={18} color={tempSelectedLevel1?.color || '#6b7280'} style={{ marginRight: 6 }} />
+                      </View> : <View style={styles.level2Grid}>
+                        {(level2CategoriesMap[tempSelectedLevel1?.id] || []).map(cat => <TouchableOpacity key={cat.id} style={styles.level2Item} onPress={() => selectLevel2(cat)} activeOpacity={0.7}>
+                            <CategoryIcon icon={cat.icon} size={18} color={tempSelectedLevel1?.color || '#6b7280'} style={{
+                    marginRight: 6
+                  }} />
                             <Text style={styles.level2Name}>{cat.name}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                )}
-              </ScrollView>
-            )}
+                          </TouchableOpacity>)}
+                      </View>}
+                  </View>)}
+              </ScrollView>}
           </View>
         </View>
       </Modal>
 
       {/* 谁可以看弹窗 */}
       <Modal visible={showVisibilityModal} animationType="fade" transparent>
-        <View style={[styles.modalOverlay, { justifyContent: 'center' }]}>
-          <TouchableOpacity 
-            style={styles.modalBackdrop} 
-            activeOpacity={1} 
-            onPress={() => setShowVisibilityModal(false)}
-          />
+        <View style={[styles.modalOverlay, {
+        justifyContent: 'center'
+      }]}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowVisibilityModal(false)} />
           <View style={styles.visibilityModal}>
             <View style={styles.visibilityHeader}>
               <Text style={styles.visibilityTitle}>谁可以看</Text>
@@ -1762,63 +1476,47 @@ export default function PublishScreen({ navigation, route }) {
             </View>
 
             <View style={styles.visibilityOptions}>
-              <TouchableOpacity
-                style={[styles.visibilityOption, visibility === 0 && styles.visibilityOptionActive]}
-                onPress={() => selectVisibility(0)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.visibilityIconContainer, { backgroundColor: '#dbeafe' }]}>
+              <TouchableOpacity style={[styles.visibilityOption, visibility === 0 && styles.visibilityOptionActive]} onPress={() => selectVisibility(0)} activeOpacity={0.7}>
+                <View style={[styles.visibilityIconContainer, {
+                backgroundColor: '#dbeafe'
+              }]}>
                   <Ionicons name="globe-outline" size={24} color="#3b82f6" />
                 </View>
                 <View style={styles.visibilityTextContainer}>
                   <Text style={styles.visibilityOptionTitle}>所有人</Text>
                   <Text style={styles.visibilityOptionDesc}>所有用户都可以看到这个问题</Text>
                 </View>
-                {visibility === 0 && (
-                  <Ionicons name="checkmark-circle" size={24} color="#3b82f6" />
-                )}
+                {visibility === 0 && <Ionicons name="checkmark-circle" size={24} color="#3b82f6" />}
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.visibilityOption, visibility === 1 && styles.visibilityOptionActive]}
-                onPress={() => selectVisibility(1)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.visibilityIconContainer, { backgroundColor: '#fef3c7' }]}>
+              <TouchableOpacity style={[styles.visibilityOption, visibility === 1 && styles.visibilityOptionActive]} onPress={() => selectVisibility(1)} activeOpacity={0.7}>
+                <View style={[styles.visibilityIconContainer, {
+                backgroundColor: '#fef3c7'
+              }]}>
                   <Ionicons name="people-outline" size={24} color="#f59e0b" />
                 </View>
                 <View style={styles.visibilityTextContainer}>
                   <Text style={styles.visibilityOptionTitle}>仅关注我的人</Text>
                   <Text style={styles.visibilityOptionDesc}>只有关注你的用户可以看到</Text>
                 </View>
-                {visibility === 1 && (
-                  <Ionicons name="checkmark-circle" size={24} color="#f59e0b" />
-                )}
+                {visibility === 1 && <Ionicons name="checkmark-circle" size={24} color="#f59e0b" />}
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.visibilityOption, visibility === 2 && styles.visibilityOptionActive]}
-                onPress={() => selectVisibility(2)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.visibilityIconContainer, { backgroundColor: '#fce7f3' }]}>
+              <TouchableOpacity style={[styles.visibilityOption, visibility === 2 && styles.visibilityOptionActive]} onPress={() => selectVisibility(2)} activeOpacity={0.7}>
+                <View style={[styles.visibilityIconContainer, {
+                backgroundColor: '#fce7f3'
+              }]}>
                   <Ionicons name="lock-closed-outline" size={24} color="#ec4899" />
                 </View>
                 <View style={styles.visibilityTextContainer}>
                   <Text style={styles.visibilityOptionTitle}>仅自己</Text>
                   <Text style={styles.visibilityOptionDesc}>只有你自己可以看到这个问题</Text>
                 </View>
-                {visibility === 2 && (
-                  <Ionicons name="checkmark-circle" size={24} color="#ec4899" />
-                )}
+                {visibility === 2 && <Ionicons name="checkmark-circle" size={24} color="#ec4899" />}
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity
-              style={styles.visibilityCloseBtn}
-              onPress={() => setShowVisibilityModal(false)}
-              activeOpacity={0.7}
-            >
+            <TouchableOpacity style={styles.visibilityCloseBtn} onPress={() => setShowVisibilityModal(false)} activeOpacity={0.7}>
               <Text style={styles.visibilityCloseBtnText}>取消</Text>
             </TouchableOpacity>
           </View>
@@ -1826,135 +1524,347 @@ export default function PublishScreen({ navigation, route }) {
       </Modal>
 
       {/* 城市选择弹窗 */}
-      <CitySelector
-        visible={showLocationModal}
-        currentCity={location}
-        onSelect={handleLocationSelect}
-        onClose={handleLocationClose}
-      />
+      <CitySelector visible={showLocationModal} currentCity={location} onSelect={handleLocationSelect} onClose={handleLocationClose} />
 
       {/* 图片选择器 */}
-      <ImagePickerSheet
-        visible={showImagePicker}
-        onClose={() => setShowImagePicker(false)}
-        onImageSelected={handleImageSelected}
-        title="添加图片"
-      />
-    </SafeAreaView>
-  );
+      <ImagePickerSheet visible={showImagePicker} onClose={() => setShowImagePicker(false)} onImageSelected={handleImageSelected} title="添加图片" />
+    </SafeAreaView>;
 }
-
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff' },
-  closeBtn: { padding: 4, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  saveDraftBtn: { padding: 4, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: '#1f2937' },
-  saveDraft: { fontSize: 14, color: '#ef4444' },
-  content: { flex: 1, padding: 12 },
-  section: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12 },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#1f2937', marginBottom: 12 },
-  sectionDesc: { fontSize: 12, color: '#6b7280', marginBottom: 12 },
-  required: { color: '#ef4444' },
-  typeList: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  typeCard: { flex: 1, alignItems: 'center', padding: 14, borderRadius: 12, borderWidth: 2, borderColor: '#e5e7eb' },
-  typeCardActive: { borderColor: '#ef4444', backgroundColor: '#fef2f2' },
-  typeName: { fontSize: 12, fontWeight: '500', color: '#374151', marginTop: 8 },
-  typeDesc: { fontSize: 10, color: '#9ca3af', marginTop: 4 },
-  categorySelector: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f9fafb', borderRadius: 10, padding: 14, borderWidth: 1, borderColor: '#e5e7eb' },
-  categorySelectorLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  categoryIcon: { width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-  categorySelectorText: { fontSize: 14, color: '#1f2937' },
-  quickAmounts: { flexDirection: 'row', gap: 8 },
-  amountBtn: { alignItems: 'center', paddingVertical: 10, paddingHorizontal: 20, backgroundColor: '#f3f4f6', borderRadius: 8 },
-  amountBtnActive: { backgroundColor: '#ef4444' },
-  amountText: { fontSize: 14, color: '#374151', fontWeight: '500' },
-  amountTextActive: { color: '#fff' },
-  customAmount: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
-  customLabel: { fontSize: 13, color: '#6b7280' },
-  customInput: { flex: 1, marginLeft: 8, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, fontSize: 14 },
-  currencySymbol: { marginLeft: 8, fontSize: 14, color: '#6b7280' },
-  titleInput: { backgroundColor: '#f9fafb', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1f2937', borderWidth: 1, borderColor: '#e5e7eb' },
-  charCount: { textAlign: 'right', fontSize: 12, color: '#9ca3af', marginTop: 8 },
-  contentInput: { 
-    backgroundColor: '#f9fafb', 
-    borderRadius: 10, 
-    paddingHorizontal: 14, 
-    paddingVertical: 14, 
-    fontSize: 15, 
+  container: {
+    flex: 1,
+    backgroundColor: '#f3f4f6'
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff'
+  },
+  closeBtn: {
+    padding: 4,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  saveDraftBtn: {
+    padding: 4,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937'
+  },
+  saveDraft: {
+    fontSize: 14,
+    color: '#ef4444'
+  },
+  content: {
+    flex: 1,
+    padding: 12
+  },
+  section: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 12
+  },
+  sectionDesc: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 12
+  },
+  required: {
+    color: '#ef4444'
+  },
+  typeList: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12
+  },
+  typeCard: {
+    flex: 1,
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#e5e7eb'
+  },
+  typeCardActive: {
+    borderColor: '#ef4444',
+    backgroundColor: '#fef2f2'
+  },
+  typeName: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#374151',
+    marginTop: 8
+  },
+  typeDesc: {
+    fontSize: 10,
+    color: '#9ca3af',
+    marginTop: 4
+  },
+  categorySelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f9fafb',
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb'
+  },
+  categorySelectorLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1
+  },
+  categoryIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10
+  },
+  categorySelectorText: {
+    fontSize: 14,
+    color: '#1f2937'
+  },
+  quickAmounts: {
+    flexDirection: 'row',
+    gap: 8
+  },
+  amountBtn: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8
+  },
+  amountBtnActive: {
+    backgroundColor: '#ef4444'
+  },
+  amountText: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500'
+  },
+  amountTextActive: {
+    color: '#fff'
+  },
+  customAmount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12
+  },
+  customLabel: {
+    fontSize: 13,
+    color: '#6b7280'
+  },
+  customInput: {
+    flex: 1,
+    marginLeft: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    fontSize: 14
+  },
+  currencySymbol: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#6b7280'
+  },
+  titleInput: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#1f2937',
+    borderWidth: 1,
+    borderColor: '#e5e7eb'
+  },
+  charCount: {
+    textAlign: 'right',
+    fontSize: 12,
+    color: '#9ca3af',
+    marginTop: 8
+  },
+  contentInput: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    fontSize: 15,
     color: '#1f2937',
     lineHeight: 24,
     borderWidth: 1,
     borderColor: '#e5e7eb'
   },
-  imageGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4 },
-  imageItem: { 
+  imageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -4
+  },
+  imageItem: {
     width: '33.333%',
     paddingHorizontal: 4,
     marginBottom: 8,
-    position: 'relative',
+    position: 'relative'
   },
   imageItemInner: {
     width: '100%',
     aspectRatio: 1,
-    borderRadius: 8, 
+    borderRadius: 8,
     backgroundColor: '#e5e7eb',
-    overflow: 'hidden',
+    overflow: 'hidden'
   },
   imagePreview: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
+    resizeMode: 'cover'
   },
-  removeImage: { 
-    position: 'absolute', 
-    top: -6, 
-    right: -2, 
+  removeImage: {
+    position: 'absolute',
+    top: -6,
+    right: -2,
     zIndex: 10,
     backgroundColor: '#fff',
     borderRadius: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {
+      width: 0,
+      height: 2
+    },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-    elevation: 5,
+    elevation: 5
   },
-  addImageBtn: { 
+  addImageBtn: {
     width: '33.333%',
     paddingHorizontal: 4,
-    marginBottom: 8,
+    marginBottom: 8
   },
   addImageBtnInner: {
     width: '100%',
     aspectRatio: 1,
-    borderRadius: 8, 
-    borderWidth: 2, 
-    borderStyle: 'dashed', 
-    borderColor: '#d1d5db', 
-    justifyContent: 'center', 
-    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: '#d1d5db',
+    justifyContent: 'center',
+    alignItems: 'center'
   },
-  addImageText: { fontSize: 10, color: '#9ca3af', marginTop: 4 },
-  topicList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  topicTag: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#f3f4f6', borderRadius: 16 },
-  topicTagActive: { backgroundColor: '#fef2f2' },
-  topicTagText: { fontSize: 13, color: '#6b7280' },
-  topicTagTextActive: { color: '#ef4444' },
-  customTopic: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
-  customTopicInput: { flex: 1, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, fontSize: 14 },
-  addTopicBtn: { marginLeft: 8, backgroundColor: '#ef4444', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-  addTopicBtnText: { fontSize: 13, color: '#fff' },
-  settingsSection: { backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', marginBottom: 12 },
-  settingItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  settingLabel: { flex: 1, marginLeft: 12, fontSize: 14, color: '#1f2937' },
-  settingValue: { fontSize: 13, color: '#9ca3af', marginRight: 4 },
-  publishBtn: { backgroundColor: '#ef4444', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  publishBtnDisabled: { backgroundColor: '#fecaca' },
-  publishBtnText: { fontSize: 16, color: '#fff', fontWeight: '600' },
-  modalOverlay: { 
-    flex: 1, 
-    backgroundColor: modalTokens.overlay, 
+  addImageText: {
+    fontSize: 10,
+    color: '#9ca3af',
+    marginTop: 4
+  },
+  topicList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8
+  },
+  topicTag: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 16
+  },
+  topicTagActive: {
+    backgroundColor: '#fef2f2'
+  },
+  topicTagText: {
+    fontSize: 13,
+    color: '#6b7280'
+  },
+  topicTagTextActive: {
+    color: '#ef4444'
+  },
+  customTopic: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12
+  },
+  customTopicInput: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    fontSize: 14
+  },
+  addTopicBtn: {
+    marginLeft: 8,
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8
+  },
+  addTopicBtnText: {
+    fontSize: 13,
+    color: '#fff'
+  },
+  settingsSection: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 12
+  },
+  settingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  settingLabel: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 14,
+    color: '#1f2937'
+  },
+  settingValue: {
+    fontSize: 13,
+    color: '#9ca3af',
+    marginRight: 4
+  },
+  publishBtn: {
+    backgroundColor: '#ef4444',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center'
+  },
+  publishBtnDisabled: {
+    backgroundColor: '#fecaca'
+  },
+  publishBtnText: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: '600'
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: modalTokens.overlay,
     justifyContent: 'flex-end',
     ...(Platform.OS === 'web' && {
       position: 'fixed',
@@ -1962,237 +1872,591 @@ const styles = StyleSheet.create({
       left: 0,
       right: 0,
       bottom: 0,
-      zIndex: 9999,
-    }),
+      zIndex: 9999
+    })
   },
-  categoryModal: { 
-    backgroundColor: modalTokens.surface, 
-    borderTopLeftRadius: modalTokens.sheetRadius, 
-    borderTopRightRadius: modalTokens.sheetRadius, 
+  categoryModal: {
+    backgroundColor: modalTokens.surface,
+    borderTopLeftRadius: modalTokens.sheetRadius,
+    borderTopRightRadius: modalTokens.sheetRadius,
     borderTopWidth: 1,
     borderColor: modalTokens.border,
     maxHeight: '80%',
     ...(Platform.OS === 'web' && {
       position: 'relative',
-      zIndex: 10000,
-    }),
+      zIndex: 10000
+    })
   },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
-  modalTitle: { fontSize: 16, fontWeight: '600', color: modalTokens.textPrimary },
-  backBtn: { padding: 4, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  categoryContent: { padding: 16, maxHeight: 500 },
-  levelTitle: { fontSize: 13, fontWeight: '600', color: modalTokens.textSecondary, marginBottom: 12 },
-  level1Container: { marginBottom: 20 },
-  level1SearchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16 },
-  level1SearchInput: { flex: 1, fontSize: 14, color: modalTokens.textPrimary, padding: 0, marginHorizontal: 8 },
-  level1Item: { flexDirection: 'row', alignItems: 'flex-start', padding: 12, borderRadius: 12, marginBottom: 8, backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border },
-  level1ItemActive: { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca' },
-  level1Icon: { width: 40, height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12, flexShrink: 0, marginTop: 2 },
-  level1Info: { flex: 1, paddingTop: 8 },
-  level1Name: { fontSize: 15, fontWeight: '500', color: modalTokens.textPrimary, lineHeight: 22 },
-  level1Desc: { fontSize: 12, color: modalTokens.textMuted, marginTop: 2, lineHeight: 16 },
-  noSearchResultContainer: { alignItems: 'center', paddingVertical: 60 },
-  noSearchResultText: { fontSize: 16, fontWeight: '600', color: modalTokens.textSecondary, marginTop: 16 },
-  noSearchResultHint: { fontSize: 13, color: modalTokens.textMuted, marginTop: 8 },
-  level2Container: { marginBottom: 20 },
-  level2LoadingContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
-  level2LoadingText: { fontSize: 14, color: modalTokens.textSecondary, marginLeft: 8 },
-  level2Grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5 },
-  level2Item: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, backgroundColor: modalTokens.surfaceSoft, borderRadius: 20, marginHorizontal: 5, marginBottom: 10, borderWidth: 1, borderColor: modalTokens.border },
-  level2ItemActive: { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca' },
-  level2Name: { fontSize: 13, color: modalTokens.textPrimary },
-  level2Empty: { alignItems: 'center', paddingVertical: 30 },
-  level2EmptyText: { fontSize: 14, color: modalTokens.textMuted, marginTop: 8 },
-  
-  // 分类加载和错误状态样式
-  categoryLoadingContainer: { alignItems: 'center', paddingVertical: 60 },
-  categoryLoadingText: { fontSize: 14, color: modalTokens.textSecondary, marginTop: 16 },
-  categoryErrorContainer: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 24 },
-  categoryErrorText: { fontSize: 16, fontWeight: '600', color: '#ef4444', marginTop: 16 },
-  categoryErrorDesc: { fontSize: 13, color: modalTokens.textSecondary, marginTop: 8, textAlign: 'center' },
-  retryBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ef4444', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, marginTop: 20 },
-  retryBtnText: { fontSize: 14, color: '#fff', fontWeight: '600' },
-  
-  // 谁可以看弹窗样式
-  modalBackdrop: { 
-    position: 'absolute', 
-    top: 0, 
-    left: 0, 
-    right: 0, 
-    bottom: 0,
-    ...(Platform.OS === 'web' && {
-      zIndex: 9999,
-    }),
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: modalTokens.border
   },
-  visibilityModal: { 
-    backgroundColor: modalTokens.surface, 
-    borderRadius: 20, 
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: modalTokens.textPrimary
+  },
+  backBtn: {
+    padding: 4,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  categoryContent: {
+    padding: 16,
+    maxHeight: 500
+  },
+  levelTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: modalTokens.textSecondary,
+    marginBottom: 12
+  },
+  level1Container: {
+    marginBottom: 20
+  },
+  level1SearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: modalTokens.surfaceSoft,
     borderWidth: 1,
     borderColor: modalTokens.border,
-    marginHorizontal: 24, 
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16
+  },
+  level1SearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: modalTokens.textPrimary,
+    padding: 0,
+    marginHorizontal: 8
+  },
+  level1Item: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: modalTokens.surfaceSoft,
+    borderWidth: 1,
+    borderColor: modalTokens.border
+  },
+  level1ItemActive: {
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca'
+  },
+  level1Icon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    flexShrink: 0,
+    marginTop: 2
+  },
+  level1Info: {
+    flex: 1,
+    paddingTop: 8
+  },
+  level1Name: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: modalTokens.textPrimary,
+    lineHeight: 22
+  },
+  level1Desc: {
+    fontSize: 12,
+    color: modalTokens.textMuted,
+    marginTop: 2,
+    lineHeight: 16
+  },
+  noSearchResultContainer: {
+    alignItems: 'center',
+    paddingVertical: 60
+  },
+  noSearchResultText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: modalTokens.textSecondary,
+    marginTop: 16
+  },
+  noSearchResultHint: {
+    fontSize: 13,
+    color: modalTokens.textMuted,
+    marginTop: 8
+  },
+  level2Container: {
+    marginBottom: 20
+  },
+  level2LoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40
+  },
+  level2LoadingText: {
+    fontSize: 14,
+    color: modalTokens.textSecondary,
+    marginLeft: 8
+  },
+  level2Grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -5
+  },
+  level2Item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: modalTokens.surfaceSoft,
+    borderRadius: 20,
+    marginHorizontal: 5,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: modalTokens.border
+  },
+  level2ItemActive: {
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca'
+  },
+  level2Name: {
+    fontSize: 13,
+    color: modalTokens.textPrimary
+  },
+  level2Empty: {
+    alignItems: 'center',
+    paddingVertical: 30
+  },
+  level2EmptyText: {
+    fontSize: 14,
+    color: modalTokens.textMuted,
+    marginTop: 8
+  },
+  // 分类加载和错误状态样式
+  categoryLoadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 60
+  },
+  categoryLoadingText: {
+    fontSize: 14,
+    color: modalTokens.textSecondary,
+    marginTop: 16
+  },
+  categoryErrorContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 24
+  },
+  categoryErrorText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ef4444',
+    marginTop: 16
+  },
+  categoryErrorDesc: {
+    fontSize: 13,
+    color: modalTokens.textSecondary,
+    marginTop: 8,
+    textAlign: 'center'
+  },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 20
+  },
+  retryBtnText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '600'
+  },
+  // 谁可以看弹窗样式
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    ...(Platform.OS === 'web' && {
+      zIndex: 9999
+    })
+  },
+  visibilityModal: {
+    backgroundColor: modalTokens.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
+    marginHorizontal: 24,
     width: '90%',
-    maxWidth: 400, 
-    alignSelf: 'center', 
+    maxWidth: 400,
+    alignSelf: 'center',
     overflow: 'hidden',
     shadowColor: modalTokens.shadow,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: {
+      width: 0,
+      height: 4
+    },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
     ...(Platform.OS === 'web' && {
       position: 'relative',
       zIndex: 10000,
-      boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-    }),
+      boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+    })
   },
-  visibilityHeader: { 
+  visibilityHeader: {
     paddingTop: 24,
-    paddingHorizontal: 20, 
+    paddingHorizontal: 20,
     paddingBottom: 16,
-    borderBottomWidth: 1, 
-    borderBottomColor: modalTokens.border, 
-    alignItems: 'center' 
+    borderBottomWidth: 1,
+    borderBottomColor: modalTokens.border,
+    alignItems: 'center'
   },
-  visibilityTitle: { fontSize: 18, fontWeight: '700', color: modalTokens.textPrimary, marginBottom: 6 },
-  visibilitySubtitle: { fontSize: 13, color: modalTokens.textMuted },
-  visibilityOptions: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
-  visibilityOption: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    padding: 14, 
-    borderRadius: 12, 
-    marginBottom: 10, 
-    backgroundColor: modalTokens.surfaceSoft, 
-    borderWidth: 2, 
-    borderColor: 'transparent' 
+  visibilityTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: modalTokens.textPrimary,
+    marginBottom: 6
   },
-  visibilityOptionActive: { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
-  visibilityIconContainer: { 
-    width: 44, 
-    height: 44, 
-    borderRadius: 22, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
+  visibilitySubtitle: {
+    fontSize: 13,
+    color: modalTokens.textMuted
+  },
+  visibilityOptions: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8
+  },
+  visibilityOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 10,
+    backgroundColor: modalTokens.surfaceSoft,
+    borderWidth: 2,
+    borderColor: 'transparent'
+  },
+  visibilityOptionActive: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca'
+  },
+  visibilityIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 12,
-    flexShrink: 0,
+    flexShrink: 0
   },
-  visibilityTextContainer: { flex: 1, marginRight: 8 },
-  visibilityOptionTitle: { fontSize: 15, fontWeight: '600', color: modalTokens.textPrimary, marginBottom: 3 },
-  visibilityOptionDesc: { fontSize: 12, color: modalTokens.textSecondary, lineHeight: 16 },
-  visibilityCloseBtn: { 
-    marginHorizontal: 16, 
+  visibilityTextContainer: {
+    flex: 1,
+    marginRight: 8
+  },
+  visibilityOptionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: modalTokens.textPrimary,
+    marginBottom: 3
+  },
+  visibilityOptionDesc: {
+    fontSize: 12,
+    color: modalTokens.textSecondary,
+    lineHeight: 16
+  },
+  visibilityCloseBtn: {
+    marginHorizontal: 16,
     marginTop: 8,
-    marginBottom: 20, 
-    paddingVertical: 14, 
-    backgroundColor: modalTokens.surfaceMuted, 
-    borderRadius: 12, 
-    alignItems: 'center' 
+    marginBottom: 20,
+    paddingVertical: 14,
+    backgroundColor: modalTokens.surfaceMuted,
+    borderRadius: 12,
+    alignItems: 'center'
   },
-  visibilityCloseBtnText: { fontSize: 15, fontWeight: '600', color: modalTokens.textSecondary },
-  
+  visibilityCloseBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: modalTokens.textSecondary
+  },
   // 定向问题样式
-  selectedUsersContainer: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4, marginBottom: 16 },
-  selectedUserChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#eff6ff', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, marginHorizontal: 4, marginBottom: 8 },
-  selectedUserInfo: { flexDirection: 'row', alignItems: 'center', marginRight: 6 },
-  selectedUserAvatar: { 
-    width: 20, 
-    height: 20, 
-    borderRadius: 10, 
-    marginRight: 6,
-    backgroundColor: '#e5e7eb',
-  },
-  selectedUserName: { fontSize: 13, color: '#1f2937', fontWeight: '500' },
-  expertSearchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16, borderWidth: 1, borderColor: '#e5e7eb' },
-  expertSearchInput: { flex: 1, marginLeft: 8, fontSize: 14, color: '#1f2937' },
-  expertListContainer: { marginTop: 8 },
-  recommendedHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 4, marginBottom: 8 },
-  recommendedHeaderText: { fontSize: 15, fontWeight: '700', color: '#1f2937' },
-  expertList: { marginBottom: 10 },
-  expertFlatList: { maxHeight: 400 },
-  expertItem: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    padding: 12, 
-    backgroundColor: '#f9fafb', 
-    borderRadius: 12, 
-    borderWidth: 2, 
-    borderColor: 'transparent',
-    marginBottom: 8,
-  },
-  expertItemSelected: { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' },
-  expertAvatarImage: { 
-    width: 48, 
-    height: 48, 
-    borderRadius: 24, 
-    marginRight: 12,
-    backgroundColor: '#e5e7eb',
-  },
-  expertAvatar: { marginRight: 12 },
-  expertInfo: { flex: 1 },
-  expertNameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' },
-  expertName: { fontSize: 14, fontWeight: '600', color: '#1f2937' },
-  expertTitle: { fontSize: 12, color: '#6b7280', marginBottom: 6 },
-  expertCategoriesRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
+  selectedUsersContainer: {
+    flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: 4,
+    marginHorizontal: -4,
+    marginBottom: 16
   },
-  expertFieldTag: { 
-    backgroundColor: '#fef3c7', 
-    paddingHorizontal: 8, 
-    paddingVertical: 3, 
+  selectedUserChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginHorizontal: 4,
+    marginBottom: 8
+  },
+  selectedUserInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 6
+  },
+  selectedUserAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginRight: 6,
+    backgroundColor: '#e5e7eb'
+  },
+  selectedUserName: {
+    fontSize: 13,
+    color: '#1f2937',
+    fontWeight: '500'
+  },
+  expertSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb'
+  },
+  expertSearchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#1f2937'
+  },
+  expertListContainer: {
+    marginTop: 8
+  },
+  recommendedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    marginBottom: 8
+  },
+  recommendedHeaderText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1f2937'
+  },
+  expertList: {
+    marginBottom: 10
+  },
+  expertFlatList: {
+    maxHeight: 400
+  },
+  expertItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    marginBottom: 8
+  },
+  expertItemSelected: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#bfdbfe'
+  },
+  expertAvatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 12,
+    backgroundColor: '#e5e7eb'
+  },
+  expertAvatar: {
+    marginRight: 12
+  },
+  expertInfo: {
+    flex: 1
+  },
+  expertNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    flexWrap: 'wrap'
+  },
+  expertName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937'
+  },
+  expertTitle: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 6
+  },
+  expertCategoriesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginTop: 4
+  },
+  expertFieldTag: {
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 12,
     marginRight: 6,
-    marginBottom: 4,
+    marginBottom: 4
   },
-  expertFieldText: { fontSize: 11, color: '#f59e0b', fontWeight: '500' },
-  expertMoreCategories: { fontSize: 11, color: '#9ca3af', marginLeft: 4 },
-  loadingContainer: { 
-    alignItems: 'center', 
-    paddingVertical: 40,
+  expertFieldText: {
+    fontSize: 11,
+    color: '#f59e0b',
+    fontWeight: '500'
   },
-  loadingText: { 
-    fontSize: 14, 
-    color: '#6b7280', 
-    marginTop: 12,
-  },
-  loadingMoreContainer: { 
-    flexDirection: 'row',
-    alignItems: 'center', 
-    justifyContent: 'center',
-    paddingVertical: 16,
-  },
-  loadingMoreText: { 
-    fontSize: 13, 
-    color: '#6b7280', 
-    marginLeft: 8,
-  },
-  noMoreContainer: { 
-    alignItems: 'center', 
-    paddingVertical: 16,
-  },
-  noMoreText: { 
-    fontSize: 13, 
+  expertMoreCategories: {
+    fontSize: 11,
     color: '#9ca3af',
+    marginLeft: 4
   },
-  noResultsContainer: { alignItems: 'center', paddingVertical: 40 },
-  noResultsText: { fontSize: 15, fontWeight: '600', color: '#6b7280', marginTop: 12 },
-  noResultsHint: { fontSize: 13, color: '#9ca3af', marginTop: 4 },
-  
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 40
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginTop: 12
+  },
+  loadingMoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16
+  },
+  loadingMoreText: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginLeft: 8
+  },
+  noMoreContainer: {
+    alignItems: 'center',
+    paddingVertical: 16
+  },
+  noMoreText: {
+    fontSize: 13,
+    color: '#9ca3af'
+  },
+  noResultsContainer: {
+    alignItems: 'center',
+    paddingVertical: 40
+  },
+  noResultsText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6b7280',
+    marginTop: 12
+  },
+  noResultsHint: {
+    fontSize: 13,
+    color: '#9ca3af',
+    marginTop: 4
+  },
   // 答案设置样式
-  answerSettingItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  answerSettingLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 12 },
-  answerSettingText: { marginLeft: 12, flex: 1 },
-  answerSettingTitle: { fontSize: 14, fontWeight: '600', color: '#1f2937', marginBottom: 2 },
-  answerSettingDesc: { fontSize: 12, color: '#6b7280' },
-  answerPriceContainer: { marginTop: 12, padding: 12, backgroundColor: '#fffbeb', borderRadius: 10, borderWidth: 1, borderColor: '#fef3c7' },
-  answerPriceLabel: { fontSize: 13, fontWeight: '600', color: '#92400e', marginBottom: 8 },
-  answerPriceInput: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#fde68a' },
-  priceInput: { flex: 1, paddingVertical: 10, fontSize: 14, color: '#1f2937', marginLeft: 4 },
-  answerPriceHint: { fontSize: 11, color: '#92400e', marginTop: 6 },
-  privateAnswerTip: { flexDirection: 'row', alignItems: 'center', marginTop: 12, padding: 12, backgroundColor: '#f9fafb', borderRadius: 10 },
-  privateAnswerText: { fontSize: 12, color: '#6b7280', flex: 1 },
-  
-  rewardAmountLabel: { fontSize: 13, fontWeight: '600', color: '#1f2937', marginBottom: 12 },
+  answerSettingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  answerSettingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 12
+  },
+  answerSettingText: {
+    marginLeft: 12,
+    flex: 1
+  },
+  answerSettingTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 2
+  },
+  answerSettingDesc: {
+    fontSize: 12,
+    color: '#6b7280'
+  },
+  answerPriceContainer: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#fffbeb',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#fef3c7'
+  },
+  answerPriceLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#92400e',
+    marginBottom: 8
+  },
+  answerPriceInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#fde68a'
+  },
+  priceInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#1f2937',
+    marginLeft: 4
+  },
+  answerPriceHint: {
+    fontSize: 11,
+    color: '#92400e',
+    marginTop: 6
+  },
+  privateAnswerTip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#f9fafb',
+    borderRadius: 10
+  },
+  privateAnswerText: {
+    fontSize: 12,
+    color: '#6b7280',
+    flex: 1
+  },
+  rewardAmountLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 12
+  }
 });

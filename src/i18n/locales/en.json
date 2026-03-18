@@ -816,15 +816,19 @@
         "featured": "Featured",
         "latest": "Latest"
       },
-      "actions": {
-        "follow": "Follow",
-        "following": "Following",
-        "adopt": "Adopt",
-        "arbitration": "Arbitration",
-        "supplementAnswer": "Supplement Answer",
-        "reply": "Reply",
-        "publish": "Publish"
-      },
+        "actions": {
+          "follow": "Follow",
+          "following": "Following",
+          "adopt": "Adopt",
+          "arbitration": "Arbitration",
+          "supplementAnswer": "Supplement Answer",
+          "reply": "Reply",
+          "publish": "Publish"
+        },
+        "identities": {
+          "personal": "Me",
+          "team": "Team identity"
+        },
       "stats": {
         "views": "views",
         "participants": "participants",
@@ -835,17 +839,19 @@
         "adopted": "Adopted",
         "invitedBy": "Invited by {name}"
       },
-      "placeholders": {
-        "writeComment": "Write a comment...",
-        "writeReply": "Write your reply...",
-        "arbitrationReason": "Please explain your reason for requesting arbitration...",
-        "searchExpert": "Search expert name, title or expertise..."
-      },
-      "modals": {
-        "replyTitle": "Reply to {author}",
-        "arbitrationTitle": "Request Arbitration",
-        "supplementAnswerTitle": "Supplement Answer"
-      },
+        "placeholders": {
+          "writeComment": "Write a comment...",
+          "writeCommentContent": "Write your comment...",
+          "writeReply": "Write your reply...",
+          "arbitrationReason": "Please explain your reason for requesting arbitration...",
+          "searchExpert": "Search expert name, title or expertise..."
+        },
+        "modals": {
+          "replyTitle": "Reply to {author}",
+          "arbitrationTitle": "Request Arbitration",
+          "supplementAnswerTitle": "Supplement Answer",
+          "writeCommentTitle": "Write Comment"
+        },
       "arbitration": {
         "info": "If you disagree with the adopted answer, you can request arbitration. Invite at least 3 experts to vote, and the adoption will be overturned if more than 50% agree.",
         "reasonLabel": "Arbitration Reason",
@@ -860,21 +866,42 @@
       "alerts": {
         "success": "Success",
         "hint": "Hint",
-        "commentPublished": "Comment published",
-        "replyPublished": "Reply published",
-        "supplementSubmitted": "Supplement answer submitted",
-        "arbitrationSubmitted": "Arbitration request submitted, waiting for expert votes...",
-        "arbitrationReasonRequired": "Please explain your reason for arbitration",
-        "minExpertsRequired": "At least 3 experts are required for arbitration",
+          "commentPublished": "Comment published",
+          "replyPublished": "Reply published",
+          "supplementSubmitted": "Supplement answer submitted",
+          "answerIdMissing": "Operation failed: answer ID is missing",
+          "operationFailed": "Operation failed",
+          "networkError": "Network connection failed, please try again later",
+          "collectFailed": "Collection failed",
+          "supplementCollectUnavailable": "This supplement answer data is invalid and cannot be collected right now",
+          "fetchSupplementsFailed": "Failed to load supplement answers",
+          "collected": "Collected",
+          "uncollected": "Collection removed",
+          "liked": "Liked",
+          "unliked": "Like removed",
+          "disliked": "Disliked",
+          "undisliked": "Dislike removed",
+          "arbitrationSubmitted": "Arbitration request submitted, waiting for expert votes...",
+          "arbitrationReasonRequired": "Please explain your reason for arbitration",
+          "minExpertsRequired": "At least 3 experts are required for arbitration",
         "maxExpertsExceeded": "Maximum 5 experts allowed",
         "adoptAnswerTitle": "Adopt Answer",
         "adoptAnswerMessage": "Confirm to adopt this answer?",
         "adoptSupplementTitle": "Adopt Supplement Answer",
         "adoptSupplementMessage": "Confirm to adopt this supplement answer?",
-        "cancel": "Cancel",
-        "confirm": "Confirm"
-      },
-      "time": {
+          "cancel": "Cancel",
+          "confirm": "Confirm"
+        },
+        "states": {
+          "loadFailed": "Load failed",
+          "emptySupplementsTitle": "No supplement answers yet",
+          "emptySupplementsDescription": "No one has posted a supplement answer yet",
+          "emptyCommentsTitle": "No comments yet",
+          "emptyCommentsDescription": "Be the first to post a comment",
+          "loadingMore": "Loading...",
+          "unknownLocation": "Unknown"
+        },
+        "time": {
         "justNow": "Just now",
         "minutesAgo": "minutes ago",
         "hoursAgo": "hours ago",

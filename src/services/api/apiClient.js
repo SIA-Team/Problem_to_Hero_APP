@@ -209,7 +209,7 @@ apiClient.interceptors.response.use(
     
     // 打印错误信息
     if (__DEV__) {
-      console.error('API Error:', {
+      console.log('⚠️ API Error:', {
         url: error.config?.url,
         status: error.response?.status,
         message: error.message,

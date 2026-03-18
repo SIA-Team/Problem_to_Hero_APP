@@ -22,14 +22,14 @@ export default function QuestionListItem({ item, onPress }) {
       
       <Text style={styles.title}>
         {item.questionType === 'reward' && (
-          <View style={styles.rewardTag}>
+          <Text style={styles.rewardTag}>
             <Text style={styles.rewardTagText}>${item.reward}</Text>
-          </View>
+          </Text>
         )}
         {item.solved && (
-          <View style={styles.solvedTag}>
+          <Text style={styles.solvedTag}>
             <Text style={styles.solvedTagText}>{t('components.questionListItem.solved')}</Text>
-          </View>
+          </Text>
         )}
         {' '}{item.title}
       </Text>

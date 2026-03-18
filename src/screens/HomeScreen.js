@@ -15,14 +15,6 @@ import questionApi from '../services/api/questionApi';
 
 const { width: screenWidth } = Dimensions.get('window');
 
-const questions = [
-  { id: 1, title: '如何在三个月内从零基础学会Python编程?有没有系统的学习路线推荐?作为一名文科生，之前完全没有接触过编程，最近想转行做数据分析，听说Python是必备技能，想请教各位大神应该如何开始学习，需要掌握哪些核心知识点？', type: 'reward', reward: 50, likes: 128, dislikes: 12, answers: 56, shares: 34, bookmarks: 89, author: '张三丰', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user1', time: '2小时前', image: 'https://images.unsplash.com/photo-1526379095098-d400fd0bf935?w=600&h=300&fit=crop', solvedPercent: 65, country: '中国', city: '北京' },
-  { id: 2, title: '第一次养猫需要准备什么?有哪些新手容易踩的坑?', type: 'paid', paidAmount: 9.9, likes: 256, dislikes: 8, answers: 89, shares: 56, bookmarks: 120, author: '李小明', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user2', time: '5小时前', images: ['https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=200&h=200&fit=crop', 'https://images.unsplash.com/photo-1573865526739-10659fec78a5?w=200&h=200&fit=crop', 'https://images.unsplash.com/photo-1495360010541-f48722b34f7d?w=200&h=200&fit=crop'], solvedPercent: 80, country: '美国', city: '纽约州', state: '纽约市', isPaid: false },
-  { id: 3, title: '长期失眠应该怎么调理?吃褪黑素有用吗?求专业医生解答', type: 'targeted', likes: 512, dislikes: 5, answers: 234, shares: 78, bookmarks: 156, author: '王医生', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user3', time: '昨天 18:30', verified: true, solvedPercent: 45, country: '日本', city: '东京' },
-  { id: 4, title: '35岁程序员如何规划职业发展?是继续技术深耕还是转管理?', type: 'reward', reward: 100, likes: 1200, dislikes: 23, answers: 456, shares: 234, bookmarks: 567, author: '程序员小李', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user4', time: '3小时前', image: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=600&h=300&fit=crop', solvedPercent: 30, country: '中国', city: '上海' },
-  { id: 5, title: '有什么简单又好吃的家常菜推荐?最好是新手也能做的那种', type: 'free', likes: 368, dislikes: 6, answers: 127, shares: 45, bookmarks: 98, author: '美食达人', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user5', time: '6小时前', images: ['https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop', 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=200&h=200&fit=crop'], solvedPercent: 92, country: '英国', city: '伦敦' },
-];
-
 // tabs array will be moved inside component to use translation
 
 // 话题数据
@@ -123,8 +115,6 @@ export default function HomeScreen({ navigation }) {
     setQuestionList,
   } = useOptimizedQuestions(activeTab, tabs);
   
-  // 保留 page 状态（用于其他功能）
-  const [page, setPage] = useState(1);
   
   // 翻译状态
   const [translatedContent, setTranslatedContent] = useState({});
@@ -270,48 +260,6 @@ export default function HomeScreen({ navigation }) {
   const usedCount = 0; // 已使用次数
   const remainingFree = freeCount - usedCount;
 
-  // 下拉刷新和上拉加载已由 useOptimizedQuestions Hook 提供
-  // 原有函数已注释，使用优化版本
-  /*
-  // 下拉刷新
-  const onRefresh = async () => {
-    setRefreshing(true);
-    // 模拟API请求
-    setTimeout(() => {
-      // 重置数据
-      setQuestionList(questions);
-      setPage(1);
-      setHasMore(true);
-      setRefreshing(false);
-    }, 1500);
-  };
-
-  // 上拉加载更多
-  const onLoadMore = async () => {
-    if (loadingMore || !hasMore) return;
-    
-    setLoadingMore(true);
-    // 模拟API请求
-    setTimeout(() => {
-      const nextPage = page + 1;
-      // 模拟加载更多数据，这里复制现有数据并修改id
-      const moreData = questions.map((item, index) => ({
-        ...item,
-        id: item.id + nextPage * 100 + index,
-      }));
-      
-      setQuestionList([...questionList, ...moreData]);
-      setPage(nextPage);
-      
-      // 模拟到第3页就没有更多数据了
-      if (nextPage >= 3) {
-        setHasMore(false);
-      }
-      
-      setLoadingMore(false);
-    }, 1500);
-  };
-  */
 
   // 渲染底部组件
   const renderFooter = () => {

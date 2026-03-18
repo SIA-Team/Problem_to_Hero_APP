@@ -14,10 +14,18 @@ const categoryApi = {
    * @returns {Promise<Object>}
    */
   getCategoryList: (params = {}) => {
+    const {
+      pageNum = 1,
+      pageSize = 20,
+      category = {},
+      ...restParams
+    } = params;
+
     const requestParams = {
-      pageNum: params.pageNum || 1,
-      pageSize: params.pageSize || 20,
-      ...params.category,
+      pageNum,
+      pageSize,
+      ...restParams,
+      ...category,
     };
     
     // 使用内容服务的 apiClient
