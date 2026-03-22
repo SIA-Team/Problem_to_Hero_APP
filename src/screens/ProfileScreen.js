@@ -12,6 +12,7 @@ import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import UserCacheService from '../services/UserCacheService';
 import authApi from '../services/api/authApi';
+import userApi from '../services/api/userApi';
 import questionApi from '../services/api/questionApi';
 import { showAppAlert } from '../utils/appAlert';
 import ServerSwitcher from '../components/ServerSwitcher';
@@ -22,6 +23,30 @@ export default function ProfileScreen({
   const {
     t
   } = useTranslation();
+  const [walletData, setWalletData] = useState({
+    balance: 0,
+    currency: 'usd'
+  });
+  const getCurrencySymbol = React.useCallback(currency => {
+    switch (String(currency || 'usd').toLowerCase()) {
+      case 'usd':
+        return '$';
+      case 'cny':
+      case 'rmb':
+        return '¥';
+      case 'eur':
+        return '€';
+      case 'gbp':
+        return '£';
+      default:
+        return '$';
+    }
+  }, []);
+  const formattedWalletBalance = React.useMemo(() => {
+    const amount = Number(walletData.balance);
+    const safeAmount = Number.isFinite(amount) ? amount : 0;
+    return `${getCurrencySymbol(walletData.currency)}${safeAmount.toFixed(2)}`;
+  }, [walletData.balance, walletData.currency, getCurrencySymbol]);
 
   // 用户信息状态
   const [userProfile, setUserProfile] = useState({
@@ -74,15 +99,31 @@ export default function ProfileScreen({
   }, []);
 
   // 首次加载
+  const loadWalletBalance = React.useCallback(async () => {
+    try {
+      const response = await userApi.getWalletBalance();
+      if (response.code === 0 || response.code === 200) {
+        setWalletData({
+          balance: Number(response?.data?.balance) || 0,
+          currency: response?.data?.currency || 'usd'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load wallet balance:', error);
+    }
+  }, []);
+
   useEffect(() => {
     loadUserProfile();
-  }, [loadUserProfile]);
+    loadWalletBalance();
+  }, [loadUserProfile, loadWalletBalance]);
 
   // 每次页面获得焦点时重新加载（从设置页面返回时会触发）
   useFocusEffect(React.useCallback(() => {
     console.log('🔄 ProfileScreen 获得焦点，重新加载用户信息');
     loadUserProfile();
-  }, [loadUserProfile]));
+    loadWalletBalance();
+  }, [loadUserProfile, loadWalletBalance]));
   const stats = React.useMemo(() => [{
     label: t('profile.likes'),
     value: '3.5k',
@@ -496,7 +537,7 @@ export default function ProfileScreen({
         }]);
         break;
       case 'withdraw':
-        showAppAlert(t('profile.withdraw'), t('profile.withdrawableAmount') + '：$256.50', [{
+        showAppAlert(t('profile.withdraw'), `${t('profile.withdrawableAmount')}：${formattedWalletBalance}`, [{
           text: t('profile.withdrawAll'),
           onPress: () => showAppAlert(t('profile.withdrawSuccess'), t('profile.withdrawSuccess') + '，' + t('profile.withdrawEstimate'))
         }, {
@@ -1000,7 +1041,7 @@ export default function ProfileScreen({
             <View style={styles.walletIcon}><Ionicons name="wallet" size={20} color="#f59e0b" /></View>
             <View style={styles.walletInfo}>
               <Text style={styles.walletLabel}>{t('profile.myWallet')}</Text>
-              <Text style={styles.walletBalance}>$256.50</Text>
+              <Text style={styles.walletBalance}>{formattedWalletBalance}</Text>
             </View>
             <View style={styles.walletActions}>
               <TouchableOpacity style={styles.rechargeBtn} onPress={() => handleWalletAction('recharge')}><Text style={styles.rechargeBtnText}>{t('profile.recharge')}</Text></TouchableOpacity>

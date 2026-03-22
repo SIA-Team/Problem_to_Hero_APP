@@ -213,6 +213,10 @@ const userApi = {
   getFollowing: (params) => {
     return apiClient.get(API_ENDPOINTS.USER.FOLLOWING, { params });
   },
+
+  getWalletBalance: () => {
+    return apiClient.get(API_ENDPOINTS.WALLET.BALANCE);
+  },
 };
 
 export default userApi;

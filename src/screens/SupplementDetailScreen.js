@@ -1,83 +1,819 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Modal, Image } from 'react-native';
+﻿import React, { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Modal, Image, ActivityIndicator } from 'react-native';
+import { CommonActions } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import IdentitySelector from '../components/IdentitySelector';
+import WriteCommentModal from '../components/WriteCommentModal';
+import WriteAnswerModal from '../components/WriteAnswerModal';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import { showToast } from '../utils/toast';
-const supplementAnswers = [{
-  id: 1,
-  author: '数学老师',
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=matht1',
-  verified: true,
-  title: '高中数学教师 · 8年经验',
-  content: '学Python其实不需要太高深的数学基础。基础的加减乘除、简单的逻辑思维就够了。如果要做数据分析,了解一些统计学知识会更好,但这些都可以边学边补。',
-  likes: 89,
-  bookmarks: 34,
-  shares: 18,
-  comments: 12,
-  time: '1小时前'
-}, {
-  id: 2,
-  author: '自学成才者',
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=self2',
-  verified: false,
-  title: '程序员 · 自学转行',
-  content: '我高中数学也不好,但照样学会了Python。编程更多的是逻辑思维,不是数学计算。放心学吧!',
-  likes: 45,
-  bookmarks: 21,
-  shares: 9,
-  comments: 5,
-  time: '30分钟前'
-}];
-const supplementComments = [{
-  id: 1,
-  author: '学习者A',
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=learnerA',
-  content: '我也担心这个问题,看来可以放心学了',
-  likes: 15,
-  dislikes: 2,
-  shares: 5,
-  bookmarks: 8,
-  time: '45分钟前',
-  replies: 2
-}, {
-  id: 2,
-  author: '学习者B',
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=learnerB',
-  content: '数学不好也能学编程,这个我可以证明',
-  likes: 8,
-  dislikes: 1,
-  shares: 3,
-  bookmarks: 4,
-  time: '20分钟前',
-  replies: 1
-}];
-const repliesData = {
-  1: [{
-    id: 101,
-    author: '回复者A',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=replyA1',
-    content: '确实是这样!',
-    likes: 3,
-    time: '30分钟前'
-  }, {
-    id: 102,
-    author: '回复者B',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=replyB1',
-    content: '我也是这么想的',
-    likes: 2,
-    time: '25分钟前'
-  }],
-  2: [{
-    id: 201,
-    author: '回复者C',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=replyC1',
-    content: '加油!',
-    likes: 1,
-    time: '15分钟前'
-  }]
+import answerApi from '../services/api/answerApi';
+import commentApi from '../services/api/commentApi';
+import questionApi from '../services/api/questionApi';
+import uploadApi from '../services/api/uploadApi';
+
+const DEFAULT_AVATAR = 'https://api.dicebear.com/7.x/avataaars/svg?seed=default';
+const INITIAL_COMMENT_LIST_STATE = {
+  list: [],
+  total: 0,
+  loading: false,
+  loaded: false,
+  error: ''
+};
+const INITIAL_COMMENT_COMPOSER_TARGET = {
+  targetId: null,
+  parentId: 0,
+  replyToCommentId: 0,
+  replyToUserId: null,
+  replyToUserName: '',
+  threadRootId: null,
+  originalComment: null
+};
+const TAB_KEYS = {
+  ANSWERS: 'answers',
+  COMMENTS: 'comments',
+  INVITE: 'invite'
+};
+const SORT_KEYS = {
+  FEATURED: 'featured',
+  LATEST: 'latest'
+};
+const INVITE_TAB_KEYS = {
+  LOCAL: 'local',
+  TWITTER: 'twitter',
+  FACEBOOK: 'facebook'
+};
+const hasCountValue = (...values) => values.some(value => value !== undefined && value !== null && value !== '');
+const normalizeFlag = (...values) => {
+  for (const value of values) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'number') {
+      return value === 1;
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === '1' || normalized === 'true') {
+        return true;
+      }
+      if (normalized === '0' || normalized === 'false') {
+        return false;
+      }
+    }
+  }
+  return false;
+};
+
+const parseIsoLikeDate = value => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  const isoMatch = trimmed.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s])(\d{2}):(\d{2})(?::(\d{2}))?(?:\.(\d{1,3}))?(Z|[+-]\d{2}:?\d{2})?$/
+  );
+
+  if (!isoMatch) {
+    return null;
+  }
+
+  const year = Number(isoMatch[1]);
+  const month = Number(isoMatch[2]) - 1;
+  const day = Number(isoMatch[3]);
+  const hour = Number(isoMatch[4]);
+  const minute = Number(isoMatch[5]);
+  const second = Number(isoMatch[6] ?? 0);
+  const millisecond = Number((isoMatch[7] ?? '0').padEnd(3, '0'));
+  const timezone = isoMatch[8] ?? '';
+
+  if (!timezone) {
+    return new Date(year, month, day, hour, minute, second, millisecond);
+  }
+
+  if (timezone === 'Z') {
+    return new Date(Date.UTC(year, month, day, hour, minute, second, millisecond));
+  }
+
+  const timezoneMatch = timezone.match(/^([+-])(\d{2}):?(\d{2})$/);
+  if (!timezoneMatch) {
+    return null;
+  }
+
+  const sign = timezoneMatch[1] === '-' ? -1 : 1;
+  const timezoneMinutes = Number(timezoneMatch[2]) * 60 + Number(timezoneMatch[3]);
+  const utcTimestamp =
+    Date.UTC(year, month, day, hour, minute, second, millisecond) -
+    sign * timezoneMinutes * 60 * 1000;
+
+  return new Date(utcTimestamp);
+};
+
+const extractTimezoneOffsetMs = value => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.endsWith('Z')) {
+    return 0;
+  }
+
+  const timezoneMatch = trimmed.match(/([+-])(\d{2}):?(\d{2})$/);
+  if (!timezoneMatch) {
+    return null;
+  }
+
+  const sign = timezoneMatch[1] === '-' ? -1 : 1;
+  const timezoneMinutes = Number(timezoneMatch[2]) * 60 + Number(timezoneMatch[3]);
+  return sign * timezoneMinutes * 60 * 1000;
+};
+
+const parseDateValue = timeValue => {
+  if (timeValue instanceof Date) {
+    return timeValue;
+  }
+
+  if (typeof timeValue === 'number' && Number.isFinite(timeValue)) {
+    return new Date(timeValue < 1e12 ? timeValue * 1000 : timeValue);
+  }
+
+  if (typeof timeValue === 'string') {
+    const trimmed = timeValue.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    if (/^\d{10,13}$/.test(trimmed)) {
+      const numericValue = Number(trimmed);
+      return new Date(trimmed.length === 10 ? numericValue * 1000 : numericValue);
+    }
+
+    const isoLikeDate = parseIsoLikeDate(trimmed);
+    if (isoLikeDate && !isNaN(isoLikeDate.getTime())) {
+      return isoLikeDate;
+    }
+
+    return new Date(trimmed);
+  }
+
+  return null;
+};
+
+const resolveDisplayDateValue = timeValue => {
+  const parsedDate = parseDateValue(timeValue);
+  if (!parsedDate || isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  if (typeof timeValue !== 'string') {
+    return parsedDate;
+  }
+
+  const offsetMs = extractTimezoneOffsetMs(timeValue);
+  const nowTimestamp = Date.now();
+  if (parsedDate.getTime() <= nowTimestamp || offsetMs === null) {
+    return parsedDate;
+  }
+
+  const correctedDate = new Date(parsedDate.getTime() - offsetMs);
+  if (!isNaN(correctedDate.getTime()) && correctedDate.getTime() <= nowTimestamp) {
+    return correctedDate;
+  }
+
+  return parsedDate;
+};
+
+const formatTime = timeValue => {
+  if (!timeValue) return '刚刚';
+  try {
+    const time = resolveDisplayDateValue(timeValue);
+    if (!time || isNaN(time.getTime())) {
+      return typeof timeValue === 'string' ? timeValue : '刚刚';
+    }
+    const now = new Date();
+    const diff = now - time;
+    if (isNaN(time.getTime())) {
+      return typeof timeValue === 'string' ? timeValue : '刚刚';
+    }
+    if (diff < 0) {
+      return '刚刚';
+    }
+    const minutes = Math.floor(diff / (1000 * 60));
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    if (days >= 1) return `${days}天前`;
+    if (hours >= 1) return `${hours}小时前`;
+    if (minutes >= 1) return `${minutes}分钟前`;
+    return '刚刚';
+  } catch (error) {
+    return typeof timeValue === 'string' ? timeValue : '刚刚';
+  }
+};
+
+const normalizeDisplayTime = (...values) => {
+  for (const value of values) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      const parsedTime = parseDateValue(trimmed);
+      if (parsedTime && !isNaN(parsedTime.getTime())) {
+        return formatTime(trimmed);
+      }
+
+      return trimmed;
+    }
+
+    const parsedTime = parseDateValue(value);
+    if (parsedTime && !isNaN(parsedTime.getTime())) {
+      return formatTime(value);
+    }
+  }
+
+  return '刚刚';
+};
+
+const normalizeCount = (...values) => {
+  for (const value of values) {
+    const count = Number(value);
+    if (!Number.isNaN(count)) {
+      return count;
+    }
+  }
+  return 0;
+};
+
+const pickDisplayText = (...values) => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return '';
+};
+
+const normalizeQuestionDetail = (question, fallbackSeed = 'question') => {
+  if (!question || typeof question !== 'object') {
+    return null;
+  }
+
+  const normalizedId = question.id ?? question.questionId ?? question.question_id ?? null;
+  const normalizedAuthorName =
+    question.userName ??
+    question.userNickname ??
+    question.authorNickName ??
+    question.author ??
+    '鍖垮悕鐢ㄦ埛';
+  const normalizedAvatar =
+    question.userAvatar ??
+    question.authorAvatar ??
+    question.avatar ??
+    `https://api.dicebear.com/7.x/avataaars/svg?seed=${fallbackSeed}${normalizedId ?? 'unknown'}`;
+  const normalizedCreateTime =
+    question.createTime ??
+    question.createdAt ??
+    question.updateTime ??
+    question.updatedAt ??
+    null;
+  const normalizedDescription =
+    question.description ??
+    question.content ??
+    question.questionDescription ??
+    question.text ??
+    '';
+  const normalizedTitle =
+    question.title ??
+    question.questionTitle ??
+    normalizedDescription ??
+    '无标题';
+  const normalizedAnonymous = Number(question.isAnonymous ?? 0) === 1;
+  const hasLikeCountField = hasCountValue(question.likeCount, question.likes, question.like_count);
+  const hasDislikeCountField = hasCountValue(question.dislikeCount, question.dislikes, question.dislike_count);
+  const hasCollectCountField = hasCountValue(question.collectCount, question.bookmarkCount, question.bookmarks, question.collect_count);
+
+  return {
+    ...question,
+    id: normalizedId,
+    questionId: question.questionId ?? question.question_id ?? normalizedId,
+    parentQuestionId:
+      question.parentQuestionId ??
+      question.parentQuestionID ??
+      question.originalQuestionId ??
+      question.rootQuestionId ??
+      question.questionId ??
+      question.question_id ??
+      null,
+    title: normalizedTitle,
+    description: normalizedDescription,
+    content: normalizedDescription || normalizedTitle,
+    author: normalizedAnonymous ? '鍖垮悕鐢ㄦ埛' : normalizedAuthorName,
+    userName: normalizedAuthorName,
+    userNickname: question.userNickname ?? question.authorNickName ?? normalizedAuthorName,
+    avatar: normalizedAvatar,
+    userAvatar: normalizedAvatar,
+    authorAvatar: normalizedAvatar,
+    location: question.location ?? question.ipLocation ?? question.city ?? '鏈煡',
+    time: normalizeDisplayTime(question.time, normalizedCreateTime),
+    createTime: normalizedCreateTime,
+    likes: normalizeCount(question.likeCount, question.likes, question.like_count),
+    likeCount: normalizeCount(question.likeCount, question.likes, question.like_count),
+    dislikes: normalizeCount(question.dislikeCount, question.dislikes, question.dislike_count),
+    dislikeCount: normalizeCount(question.dislikeCount, question.dislikes, question.dislike_count),
+    bookmarks: normalizeCount(question.collectCount, question.bookmarkCount, question.bookmarks, question.collect_count),
+    collectCount: normalizeCount(question.collectCount, question.bookmarkCount, question.bookmarks, question.collect_count),
+    comments: normalizeCount(question.commentCount, question.comments, question.comment_count),
+    commentCount: normalizeCount(question.commentCount, question.comments, question.comment_count),
+    shares: normalizeCount(question.shareCount, question.shares, question.share_count),
+    shareCount: normalizeCount(question.shareCount, question.shares, question.share_count),
+    views: normalizeCount(question.viewCount, question.views, question.view_count),
+    viewCount: normalizeCount(question.viewCount, question.views, question.view_count),
+    liked: normalizeFlag(question.liked, question.isLiked),
+    disliked: normalizeFlag(question.disliked, question.isDisliked),
+    collected: normalizeFlag(question.collected, question.isCollected, question.bookmarked, question.isBookmarked),
+    __likeCountResolved: question.__likeCountResolved ?? hasLikeCountField,
+    __dislikeCountResolved: question.__dislikeCountResolved ?? hasDislikeCountField,
+    __collectCountResolved: question.__collectCountResolved ?? hasCollectCountField,
+  };
+};
+
+const buildOriginalQuestionSummary = source => {
+  const normalized = normalizeQuestionDetail(source, 'original-question');
+  if (!normalized) {
+    return null;
+  }
+
+  return {
+    id: normalized.id ?? normalized.questionId ?? null,
+    title: normalized.title || normalized.content || '原问题',
+    author: normalized.author || normalized.userName || '匿名用户',
+    avatar: normalized.avatar || DEFAULT_AVATAR,
+    time: normalized.time || '刚刚',
+    location: normalized.location || '未知',
+    content: normalized.description || normalized.content || normalized.title || ''
+  };
+};
+
+const extractOriginalQuestionCandidate = detail => {
+  if (!detail || typeof detail !== 'object') {
+    return null;
+  }
+
+  const candidates = [
+    detail.originalQuestion,
+    detail.parentQuestion,
+    detail.parent,
+    detail.rootQuestion,
+    detail.sourceQuestion
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate === 'object') {
+      return candidate;
+    }
+  }
+
+  return null;
+};
+const mergeQuestionDetailWithFallback = (detail, fallback = null, fallbackSeed = 'question-merged') => {
+  if (!detail && !fallback) {
+    return null;
+  }
+
+  const detailData = detail && typeof detail === 'object' ? detail : {};
+  const fallbackData = fallback && typeof fallback === 'object' ? fallback : {};
+  const preferFallbackLike = hasCountValue(fallbackData.likeCount, fallbackData.likes, fallbackData.like_count) || fallbackData.__likeCountResolved;
+  const preferFallbackDislike = hasCountValue(fallbackData.dislikeCount, fallbackData.dislikes, fallbackData.dislike_count) || fallbackData.__dislikeCountResolved;
+  const preferFallbackCollect = hasCountValue(fallbackData.collectCount, fallbackData.bookmarkCount, fallbackData.bookmarks, fallbackData.collect_count) || fallbackData.__collectCountResolved;
+  const fallbackHasLikedState = fallbackData.liked !== undefined || fallbackData.isLiked !== undefined;
+  const fallbackHasDislikedState = fallbackData.disliked !== undefined || fallbackData.isDisliked !== undefined;
+  const fallbackHasCollectedState =
+    fallbackData.collected !== undefined ||
+    fallbackData.isCollected !== undefined ||
+    fallbackData.bookmarked !== undefined ||
+    fallbackData.isBookmarked !== undefined;
+  const mergedDetail = {
+    ...fallbackData,
+    ...detailData,
+    likeCount: preferFallbackLike
+      ? fallbackData.likeCount ?? fallbackData.likes ?? fallbackData.like_count
+      : detailData.likeCount ?? detailData.likes ?? detailData.like_count ?? fallbackData.likeCount ?? fallbackData.likes ?? fallbackData.like_count,
+    likes: preferFallbackLike
+      ? fallbackData.likeCount ?? fallbackData.likes ?? fallbackData.like_count
+      : detailData.likeCount ?? detailData.likes ?? detailData.like_count ?? fallbackData.likeCount ?? fallbackData.likes ?? fallbackData.like_count,
+    dislikeCount: preferFallbackDislike
+      ? fallbackData.dislikeCount ?? fallbackData.dislikes ?? fallbackData.dislike_count
+      : detailData.dislikeCount ?? detailData.dislikes ?? detailData.dislike_count ?? fallbackData.dislikeCount ?? fallbackData.dislikes ?? fallbackData.dislike_count,
+    dislikes: preferFallbackDislike
+      ? fallbackData.dislikeCount ?? fallbackData.dislikes ?? fallbackData.dislike_count
+      : detailData.dislikeCount ?? detailData.dislikes ?? detailData.dislike_count ?? fallbackData.dislikeCount ?? fallbackData.dislikes ?? fallbackData.dislike_count,
+    collectCount: preferFallbackCollect
+      ? fallbackData.collectCount ?? fallbackData.bookmarkCount ?? fallbackData.bookmarks ?? fallbackData.collect_count
+      : detailData.collectCount ?? detailData.bookmarkCount ?? detailData.bookmarks ?? detailData.collect_count ?? fallbackData.collectCount ?? fallbackData.bookmarkCount ?? fallbackData.bookmarks ?? fallbackData.collect_count,
+    bookmarkCount: preferFallbackCollect
+      ? fallbackData.collectCount ?? fallbackData.bookmarkCount ?? fallbackData.bookmarks ?? fallbackData.collect_count
+      : detailData.collectCount ?? detailData.bookmarkCount ?? detailData.bookmarks ?? detailData.collect_count ?? fallbackData.collectCount ?? fallbackData.bookmarkCount ?? fallbackData.bookmarks ?? fallbackData.collect_count,
+    bookmarks: preferFallbackCollect
+      ? fallbackData.collectCount ?? fallbackData.bookmarkCount ?? fallbackData.bookmarks ?? fallbackData.collect_count
+      : detailData.collectCount ?? detailData.bookmarkCount ?? detailData.bookmarks ?? detailData.collect_count ?? fallbackData.collectCount ?? fallbackData.bookmarkCount ?? fallbackData.bookmarks ?? fallbackData.collect_count,
+    commentCount: hasCountValue(detailData.commentCount, detailData.comments, detailData.comment_count)
+      ? detailData.commentCount ?? detailData.comments ?? detailData.comment_count
+      : fallbackData.commentCount ?? fallbackData.comments ?? fallbackData.comment_count,
+    comments: hasCountValue(detailData.commentCount, detailData.comments, detailData.comment_count)
+      ? detailData.commentCount ?? detailData.comments ?? detailData.comment_count
+      : fallbackData.commentCount ?? fallbackData.comments ?? fallbackData.comment_count,
+    shareCount: hasCountValue(detailData.shareCount, detailData.shares, detailData.share_count)
+      ? detailData.shareCount ?? detailData.shares ?? detailData.share_count
+      : fallbackData.shareCount ?? fallbackData.shares ?? fallbackData.share_count,
+    shares: hasCountValue(detailData.shareCount, detailData.shares, detailData.share_count)
+      ? detailData.shareCount ?? detailData.shares ?? detailData.share_count
+      : fallbackData.shareCount ?? fallbackData.shares ?? fallbackData.share_count,
+    viewCount: hasCountValue(detailData.viewCount, detailData.views, detailData.view_count)
+      ? detailData.viewCount ?? detailData.views ?? detailData.view_count
+      : fallbackData.viewCount ?? fallbackData.views ?? fallbackData.view_count,
+    views: hasCountValue(detailData.viewCount, detailData.views, detailData.view_count)
+      ? detailData.viewCount ?? detailData.views ?? detailData.view_count
+      : fallbackData.viewCount ?? fallbackData.views ?? fallbackData.view_count,
+    liked: fallbackHasLikedState
+      ? normalizeFlag(fallbackData.liked, fallbackData.isLiked)
+      : normalizeFlag(detailData.liked, detailData.isLiked, fallbackData.liked, fallbackData.isLiked),
+    disliked: fallbackHasDislikedState
+      ? normalizeFlag(fallbackData.disliked, fallbackData.isDisliked)
+      : normalizeFlag(detailData.disliked, detailData.isDisliked, fallbackData.disliked, fallbackData.isDisliked),
+    collected: fallbackHasCollectedState
+      ? normalizeFlag(fallbackData.collected, fallbackData.isCollected, fallbackData.bookmarked, fallbackData.isBookmarked)
+      : normalizeFlag(detailData.collected, detailData.isCollected, detailData.bookmarked, detailData.isBookmarked, fallbackData.collected, fallbackData.isCollected, fallbackData.bookmarked, fallbackData.isBookmarked),
+    __likeCountResolved: preferFallbackLike ? true : hasCountValue(detailData.likeCount, detailData.likes, detailData.like_count),
+    __dislikeCountResolved: preferFallbackDislike ? true : hasCountValue(detailData.dislikeCount, detailData.dislikes, detailData.dislike_count),
+    __collectCountResolved: preferFallbackCollect ? true : hasCountValue(detailData.collectCount, detailData.bookmarkCount, detailData.bookmarks, detailData.collect_count),
+  };
+
+  return normalizeQuestionDetail(mergedDetail, fallbackSeed);
+};
+const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, isResolved = false) => {
+  const normalizedBaseCount = Number(baseCount) || 0;
+  const resolvedBaseCount = !!serverState && !isResolved ? normalizedBaseCount + 1 : normalizedBaseCount;
+  if (localState === undefined) {
+    return !!serverState ? Math.max(resolvedBaseCount, 1) : resolvedBaseCount;
+  }
+  if (!!localState === !!serverState) {
+    return !!localState ? Math.max(resolvedBaseCount, 1) : resolvedBaseCount;
+  }
+  const nextDisplayCount = Math.max(resolvedBaseCount + (localState ? 1 : -1), 0);
+  return !!localState ? Math.max(nextDisplayCount, 1) : nextDisplayCount;
+};
+const buildSupplementMutationResult = (currentSupplement = {}, responseData, fallbackValues = {}) => {
+  const payload = responseData && typeof responseData === 'object' && !Array.isArray(responseData) ? responseData : {};
+  const liked = typeof responseData === 'boolean' && fallbackValues.liked !== undefined ? responseData : payload.liked ?? payload.isLiked ?? fallbackValues.liked ?? currentSupplement.liked ?? false;
+  const disliked = typeof responseData === 'boolean' && fallbackValues.disliked !== undefined ? responseData : payload.disliked ?? payload.isDisliked ?? fallbackValues.disliked ?? currentSupplement.disliked ?? false;
+  const collected = typeof responseData === 'boolean' && fallbackValues.collected !== undefined ? responseData : payload.collected ?? payload.isCollected ?? payload.bookmarked ?? payload.isBookmarked ?? fallbackValues.collected ?? currentSupplement.collected ?? false;
+  const likeCount = Number(fallbackValues.likeCount ?? payload.likeCount ?? payload.likes ?? currentSupplement.likeCount ?? currentSupplement.likes) || 0;
+  const dislikeCount = Number(fallbackValues.dislikeCount ?? payload.dislikeCount ?? payload.dislikes ?? currentSupplement.dislikeCount ?? currentSupplement.dislikes) || 0;
+  const collectCount = Number(fallbackValues.collectCount ?? payload.collectCount ?? payload.bookmarkCount ?? payload.bookmarks ?? currentSupplement.collectCount ?? currentSupplement.bookmarkCount ?? currentSupplement.bookmarks) || 0;
+
+  return normalizeQuestionDetail({
+    ...currentSupplement,
+    ...payload,
+    liked: !!liked,
+    disliked: !!disliked,
+    collected: !!collected,
+    likeCount,
+    likes: likeCount,
+    dislikeCount,
+    dislikes: dislikeCount,
+    collectCount,
+    bookmarkCount: collectCount,
+    bookmarks: collectCount,
+    __likeCountResolved: fallbackValues.likeCount !== undefined ? true : currentSupplement.__likeCountResolved,
+    __dislikeCountResolved: fallbackValues.dislikeCount !== undefined ? true : currentSupplement.__dislikeCountResolved,
+    __collectCountResolved: fallbackValues.collectCount !== undefined ? true : currentSupplement.__collectCountResolved,
+  }, 'supplement-mutation');
+};
+const normalizeAnswerItem = answer => {
+  if (!answer || typeof answer !== 'object') {
+    return null;
+  }
+
+  const hasLikeCountField = hasCountValue(answer.likeCount, answer.like_count, answer.likes);
+  const hasDislikeCountField = hasCountValue(answer.dislikeCount, answer.dislike_count, answer.dislikes);
+  const hasCollectCountField = hasCountValue(answer.collectCount, answer.bookmarkCount, answer.bookmark_count, answer.bookmarks);
+  const normalizedId = answer.answerId ?? answer.answer_id ?? answer.id ?? null;
+  const normalizedQuestionId = answer.questionId ?? answer.question_id ?? answer.question?.id ?? null;
+  const normalizedAuthorName =
+    answer.userName ??
+    answer.userNickname ??
+    answer.authorNickName ??
+    answer.author ??
+    '鍖垮悕鐢ㄦ埛';
+  const normalizedAvatar =
+    answer.userAvatar ??
+    answer.authorAvatar ??
+    answer.avatar ??
+    `https://api.dicebear.com/7.x/avataaars/svg?seed=answer${normalizedId ?? 'unknown'}`;
+  const normalizedCreateTime =
+    answer.createTime ??
+    answer.createdAt ??
+    answer.updateTime ??
+    answer.updatedAt ??
+    null;
+  const normalizedContent =
+    answer.content ??
+    answer.answerContent ??
+    answer.description ??
+    answer.text ??
+    '';
+  const normalizedTitle =
+    answer.title ??
+    answer.userTitle ??
+    answer.authorTitle ??
+    answer.userDescription ??
+    answer.descriptionText ??
+    '';
+  const normalizedCollected = normalizeFlag(answer.collected, answer.isCollected, answer.bookmarked, answer.isBookmarked);
+  const normalizedLiked = normalizeFlag(answer.liked, answer.isLiked);
+  const normalizedDisliked = normalizeFlag(answer.disliked, answer.isDisliked);
+
+  return {
+    ...answer,
+    id: normalizedId,
+    answerId: normalizedId,
+    answer_id: answer.answer_id ?? normalizedId,
+    questionId: normalizedQuestionId,
+    question_id: answer.question_id ?? normalizedQuestionId,
+    userName: normalizedAuthorName,
+    userNickname: answer.userNickname ?? answer.authorNickName ?? normalizedAuthorName,
+    author: answer.author ?? answer.authorNickName ?? normalizedAuthorName,
+    userAvatar: normalizedAvatar,
+    authorAvatar: normalizedAvatar,
+    avatar: normalizedAvatar,
+    title: normalizedTitle,
+    content: normalizedContent,
+    time: normalizeDisplayTime(answer.time, normalizedCreateTime),
+    createTime: normalizedCreateTime,
+    verified: normalizeFlag(answer.verified, answer.isVerified, answer.userVerified),
+    liked: normalizedLiked,
+    isLiked: normalizedLiked,
+    disliked: normalizedDisliked,
+    isDisliked: normalizedDisliked,
+    collected: normalizedCollected,
+    isCollected: normalizedCollected,
+    bookmarked: normalizedCollected,
+    isBookmarked: normalizedCollected,
+    likeCount: normalizeCount(answer.likeCount, answer.like_count, answer.likes),
+    likes: normalizeCount(answer.likeCount, answer.like_count, answer.likes),
+    dislikeCount: normalizeCount(answer.dislikeCount, answer.dislike_count, answer.dislikes),
+    dislikes: normalizeCount(answer.dislikeCount, answer.dislike_count, answer.dislikes),
+    commentCount: normalizeCount(answer.commentCount, answer.comment_count, answer.comments),
+    comments: normalizeCount(answer.commentCount, answer.comment_count, answer.comments),
+    shareCount: normalizeCount(answer.shareCount, answer.share_count, answer.shares),
+    shares: normalizeCount(answer.shareCount, answer.share_count, answer.shares),
+    collectCount: normalizeCount(answer.collectCount, answer.bookmarkCount, answer.bookmark_count, answer.bookmarks),
+    bookmarkCount: normalizeCount(answer.collectCount, answer.bookmarkCount, answer.bookmark_count, answer.bookmarks),
+    bookmark_count: normalizeCount(answer.collectCount, answer.bookmarkCount, answer.bookmark_count, answer.bookmarks),
+    bookmarks: normalizeCount(answer.collectCount, answer.bookmarkCount, answer.bookmark_count, answer.bookmarks),
+    __likeCountResolved: answer.__likeCountResolved ?? hasLikeCountField,
+    __dislikeCountResolved: answer.__dislikeCountResolved ?? hasDislikeCountField,
+    __collectCountResolved: answer.__collectCountResolved ?? hasCollectCountField,
+  };
+};
+const normalizeAnswerRows = (rows = []) => rows.map(normalizeAnswerItem).filter(Boolean);
+const extractCommentRows = response => response?.data?.rows ?? response?.data?.list ?? response?.data?.records ?? [];
+const extractCommentTotal = (response, fallback = 0) => response?.data?.total ?? response?.data?.count ?? response?.data?.recordsTotal ?? fallback;
+const normalizeCommentItem = (comment, defaults = {}) => {
+  if (!comment || typeof comment !== 'object') {
+    return null;
+  }
+
+  const normalizedId = comment.commentId ?? comment.comment_id ?? comment.id ?? null;
+  const normalizedAuthor =
+    pickDisplayText(
+      comment.userName,
+      comment.userNickname,
+      comment.authorNickName,
+      comment.author,
+      comment.nickName,
+      comment.nickname
+    ) || '鍖垮悕鐢ㄦ埛';
+  const normalizedAvatar =
+    pickDisplayText(
+      comment.userAvatar,
+      comment.authorAvatar,
+      comment.avatar,
+      comment.headImg,
+      comment.headImage
+    ) || `https://api.dicebear.com/7.x/avataaars/svg?seed=comment${normalizedId ?? 'unknown'}`;
+  const normalizedContent =
+    comment.content ??
+    comment.commentContent ??
+    comment.contentText ??
+    comment.commentText ??
+    comment.text ??
+    '';
+  const normalizedCreateTime =
+    comment.createTime ??
+    comment.createdAt ??
+    comment.gmtCreate ??
+    comment.publishTime ??
+    null;
+  const normalizedLikeCount = normalizeCount(comment.likeCount, comment.likes);
+  const normalizedDislikeCount = normalizeCount(comment.dislikeCount, comment.dislikes);
+  const normalizedCollectCount = normalizeCount(comment.collectCount, comment.bookmarkCount, comment.bookmarks);
+  const normalizedReplyCount = normalizeCount(comment.replyCount, comment.replies, comment.childCount, comment.childrenCount);
+  const normalizedShareCount = normalizeCount(comment.shareCount, comment.shares);
+
+  return {
+    ...comment,
+    id: normalizedId,
+    commentId: normalizedId,
+    targetType: Number(comment.targetType ?? comment.target_type ?? defaults.targetType ?? 3) || 3,
+    targetId: Number(comment.targetId ?? comment.target_id ?? defaults.targetId ?? 0) || 0,
+    parentId: Number(comment.parentId ?? comment.parent_id ?? defaults.parentId ?? 0) || 0,
+    author: normalizedAuthor,
+    userName: normalizedAuthor,
+    userNickname: comment.userNickname ?? comment.authorNickName ?? normalizedAuthor,
+    avatar: normalizedAvatar,
+    userAvatar: normalizedAvatar,
+    content: normalizedContent,
+    commentContent: comment.commentContent ?? normalizedContent,
+    likeCount: normalizedLikeCount,
+    likes: normalizedLikeCount,
+    dislikeCount: normalizedDislikeCount,
+    dislikes: normalizedDislikeCount,
+    collectCount: normalizedCollectCount,
+    bookmarkCount: normalizedCollectCount,
+    bookmarks: normalizedCollectCount,
+    replyCount: normalizedReplyCount,
+    replies: normalizedReplyCount,
+    shareCount: normalizedShareCount,
+    shares: normalizedShareCount,
+    liked: normalizeFlag(comment.liked, comment.isLiked),
+    disliked: normalizeFlag(comment.disliked, comment.isDisliked),
+    collected: normalizeFlag(comment.collected, comment.isCollected, comment.bookmarked, comment.isBookmarked),
+    createTime: normalizedCreateTime,
+    time: normalizeDisplayTime(comment.time, normalizedCreateTime),
+    __likeCountResolved: comment.__likeCountResolved ?? hasCountValue(comment.likeCount, comment.likes),
+    __dislikeCountResolved: comment.__dislikeCountResolved ?? hasCountValue(comment.dislikeCount, comment.dislikes),
+    __collectCountResolved: comment.__collectCountResolved ?? hasCountValue(comment.collectCount, comment.bookmarkCount, comment.bookmarks),
+  };
+};
+const normalizeComments = (rows = [], defaults = {}) => rows.map(row => normalizeCommentItem(row, defaults)).filter(Boolean);
+const buildCommentReplyTree = (rows = [], rootCommentId = null) => {
+  if (!Array.isArray(rows) || !rows.length) {
+    return [];
+  }
+
+  const normalizedRootId = rootCommentId !== undefined && rootCommentId !== null ? String(rootCommentId) : null;
+  const nodeMap = new Map();
+
+  rows.forEach(row => {
+    if (!row?.id) {
+      return;
+    }
+    nodeMap.set(String(row.id), {
+      ...row,
+      children: []
+    });
+  });
+
+  const roots = [];
+  rows.forEach(row => {
+    if (!row?.id) {
+      return;
+    }
+
+    const currentId = String(row.id);
+    const node = nodeMap.get(currentId);
+    const directParentId = row.parentId !== undefined && row.parentId !== null ? String(row.parentId) : '';
+    const replyTargetId = row.replyToCommentId !== undefined && row.replyToCommentId !== null ? String(row.replyToCommentId) : '';
+    const structuralParentId = normalizedRootId && directParentId === normalizedRootId && replyTargetId && replyTargetId !== currentId
+      ? replyTargetId
+      : directParentId;
+
+    if (!structuralParentId || structuralParentId === '0' || structuralParentId === currentId || (normalizedRootId && structuralParentId === normalizedRootId)) {
+      roots.push(node);
+      return;
+    }
+
+    const parentNode = nodeMap.get(structuralParentId);
+    if (!parentNode) {
+      roots.push(node);
+      return;
+    }
+
+    parentNode.children.push(node);
+  });
+
+  return roots;
+};
+const flattenCommentReplyTree = (nodes = [], level = 0, accumulator = []) => {
+  if (!Array.isArray(nodes) || !nodes.length) {
+    return accumulator;
+  }
+
+  nodes.forEach(node => {
+    if (!node) {
+      return;
+    }
+    accumulator.push({
+      ...node,
+      __level: level
+    });
+    if (Array.isArray(node.children) && node.children.length > 0) {
+      flattenCommentReplyTree(node.children, level + 1, accumulator);
+    }
+  });
+
+  return accumulator;
+};
+const getAnswerIdentityKey = answer => {
+  if (!answer || typeof answer !== 'object') {
+    return '';
+  }
+
+  const normalized = normalizeAnswerItem(answer) || answer;
+  const primaryId = normalized.id ?? normalized.answerId ?? normalized.answer_id;
+  if (primaryId !== undefined && primaryId !== null && primaryId !== '') {
+    return `id:${primaryId}`;
+  }
+
+  const questionId = normalized.questionId ?? normalized.question_id ?? 'unknown-question';
+  const content = String(normalized.content ?? '').trim();
+  const author = String(normalized.userName ?? normalized.userNickname ?? normalized.author ?? '').trim();
+  const createTime = String(normalized.createTime ?? normalized.time ?? '').trim();
+  return `fallback:${questionId}:${author}:${content}:${createTime}`;
+};
+const mergeAnswerLists = (...answerGroups) => {
+  const merged = [];
+  const seenKeys = new Set();
+
+  answerGroups.flat().forEach(answer => {
+    const normalized = normalizeAnswerItem(answer);
+    if (!normalized) {
+      return;
+    }
+
+    const identityKey = getAnswerIdentityKey(normalized);
+    if (seenKeys.has(identityKey)) {
+      return;
+    }
+
+    seenKeys.add(identityKey);
+    merged.push(normalized);
+  });
+
+  return merged;
+};
+const buildPendingAnswerItem = ({ responseData, questionId, content, imageUrls, selectedIdentity, selectedTeams }) => {
+  const payload = responseData && typeof responseData === 'object' && !Array.isArray(responseData)
+    ? responseData
+    : {};
+  const fallbackId = payload.id ?? payload.answerId ?? payload.answer_id ?? `pending-${Date.now()}`;
+  const fallbackTitle = selectedIdentity === 'team'
+    ? '鍥㈤槦韬唤'
+    : '涓汉韬唤';
+
+  return normalizeAnswerItem({
+    ...payload,
+    id: fallbackId,
+    answerId: payload.answerId ?? payload.answer_id ?? payload.id ?? fallbackId,
+    answer_id: payload.answer_id ?? payload.answerId ?? payload.id ?? fallbackId,
+    questionId: payload.questionId ?? payload.question_id ?? questionId,
+    question_id: payload.question_id ?? payload.questionId ?? questionId,
+    content: payload.content ?? payload.answerContent ?? content,
+    answerContent: payload.answerContent ?? payload.content ?? content,
+    images: payload.images ?? imageUrls,
+    imageUrls: payload.imageUrls ?? imageUrls,
+    title: payload.title ?? payload.userTitle ?? fallbackTitle,
+    userTitle: payload.userTitle ?? payload.title ?? fallbackTitle,
+    userName: payload.userName ?? payload.userNickname ?? payload.author ?? (selectedIdentity === 'team' ? '团队回答' : '我'),
+    userNickname: payload.userNickname ?? payload.userName ?? payload.author ?? (selectedIdentity === 'team' ? '团队回答' : '我'),
+    author: payload.author ?? payload.userName ?? payload.userNickname ?? (selectedIdentity === 'team' ? '团队回答' : '我'),
+    createTime: payload.createTime ?? payload.createdAt ?? new Date().toISOString(),
+    liked: payload.liked ?? false,
+    disliked: payload.disliked ?? false,
+    collected: payload.collected ?? false,
+    likeCount: payload.likeCount ?? payload.likes ?? 0,
+    dislikeCount: payload.dislikeCount ?? payload.dislikes ?? 0,
+    collectCount: payload.collectCount ?? payload.bookmarkCount ?? payload.bookmarks ?? 0,
+    commentCount: payload.commentCount ?? payload.comments ?? 0,
+    shareCount: payload.shareCount ?? payload.shares ?? 0,
+    verified: payload.verified ?? false,
+    pendingLocalPublish: true,
+    pendingTeamIds: selectedTeams,
+  });
 };
 export default function SupplementDetailScreen({
   navigation,
@@ -86,50 +822,45 @@ export default function SupplementDetailScreen({
   const {
     t
   } = useTranslation();
-  const [activeTab, setActiveTab] = useState('');
-  const [sortFilter, setSortFilter] = useState('');
-
-  // Initialize state with translated values
-  React.useEffect(() => {
-    if (!activeTab) {
-      setActiveTab(t('screens.supplementDetail.tabs.allAnswers'));
-    }
-    if (!sortFilter) {
-      setSortFilter(t('screens.supplementDetail.sort.featured'));
-    }
-  }, [t, activeTab, sortFilter]);
+  const [activeTab, setActiveTab] = useState(TAB_KEYS.ANSWERS);
+  const [sortFilter, setSortFilter] = useState(SORT_KEYS.FEATURED);
   const [liked, setLiked] = useState({});
-  const [disliked, setDisliked] = useState(false);
-  const [bookmarked, setBookmarked] = useState(false);
+  const [disliked, setDisliked] = useState(undefined);
+  const [bookmarked, setBookmarked] = useState(undefined);
   const [answerLiked, setAnswerLiked] = useState({});
   const [answerBookmarked, setAnswerBookmarked] = useState({});
   const [commentLiked, setCommentLiked] = useState({});
   const [commentDisliked, setCommentDisliked] = useState({});
   const [commentBookmarked, setCommentBookmarked] = useState({});
-  const [expandedComments, setExpandedComments] = useState({});
+  const [commentListState, setCommentListState] = useState(INITIAL_COMMENT_LIST_STATE);
+  const [commentListRefreshKey, setCommentListRefreshKey] = useState(0);
+  const [commentRepliesMap, setCommentRepliesMap] = useState({});
+  const [expandedReplyChildren, setExpandedReplyChildren] = useState({});
+  const [commentLikeLoading, setCommentLikeLoading] = useState({});
+  const [commentCollectLoading, setCommentCollectLoading] = useState({});
+  const [commentDislikeLoading, setCommentDislikeLoading] = useState({});
   const [showAnswerModal, setShowAnswerModal] = useState(false);
   const [answerText, setAnswerText] = useState('');
+  const [answerImages, setAnswerImages] = useState([]);
+  const [answerSubmitting, setAnswerSubmitting] = useState(false);
+  const [answerIdentity, setAnswerIdentity] = useState('personal');
+  const [answerSelectedTeams, setAnswerSelectedTeams] = useState([]);
   const [showCommentModal, setShowCommentModal] = useState(false);
-  const [commentText, setCommentText] = useState('');
+  const [commentComposerTarget, setCommentComposerTarget] = useState(INITIAL_COMMENT_COMPOSER_TARGET);
+  const [showCommentReplyModal, setShowCommentReplyModal] = useState(false);
+  const [currentCommentId, setCurrentCommentId] = useState(null);
   const [currentAnswerId, setCurrentAnswerId] = useState(null);
   const [showAnswerCommentModal, setShowAnswerCommentModal] = useState(false);
   const [answerCommentText, setAnswerCommentText] = useState('');
-  const [inviteTab, setInviteTab] = useState('');
-
-  // Initialize inviteTab with translated value
-  React.useEffect(() => {
-    if (!inviteTab) {
-      setInviteTab(t('screens.supplementDetail.invite.tabs.local'));
-    }
-  }, [t, inviteTab]);
+  const [inviteTab, setInviteTab] = useState(INVITE_TAB_KEYS.LOCAL);
   const [searchLocalUser, setSearchLocalUser] = useState('');
   const [searchTwitterUser, setSearchTwitterUser] = useState('');
   const [searchFacebookUser, setSearchFacebookUser] = useState('');
   const originalQuestion = {
-    title: '如何在三个月内从零基础学会Python编程?有没有系统的学习路线推荐?',
+    title: '如何在三个月内从零基础学会 Python，有没有系统的学习路线推荐？',
     author: '张三丰',
     avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user1',
-    content: '本人是一名文科生,之前完全没有接触过编程。最近想转行做数据分析,听说Python是必备技能。',
+    content: '本人是一名文科生，之前完全没有接触过编程，最近想转行做数据分析，听说 Python 是必备技能。',
     time: '2小时前',
     location: '北京'
   };
@@ -138,19 +869,1408 @@ export default function SupplementDetailScreen({
     author: '学习者小李',
     avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=supp1',
     location: '上海',
-    content: '请问学Python需要先学什么数学基础吗?我高中数学不太好,会不会影响学习?',
+    content: '请问学 Python 需要先学什么数学基础吗？我高中数学不太好，会不会影响学习？',
     likes: 45,
     shares: 12,
     bookmarks: 23,
     comments: 8,
     time: '1小时前'
   };
-  const handleSubmitAnswer = () => {
-    if (!answerText.trim()) return;
-    showToast(t('screens.supplementDetail.alerts.answerSubmitted'), 'success');
-    setAnswerText('');
-    setShowAnswerModal(false);
+  const routeSupplement = React.useMemo(() => normalizeQuestionDetail(route?.params?.supplement, 'route-supplement'), [route?.params?.supplement]);
+  const routeOriginalQuestion = React.useMemo(() => buildOriginalQuestionSummary(route?.params?.originalQuestion), [route?.params?.originalQuestion]);
+  const supplementId = route?.params?.supplement?.id ?? route?.params?.id ?? supplementQuestion?.id ?? null;
+  const [supplementDetail, setSupplementDetail] = useState(routeSupplement);
+  const [originalQuestionDetail, setOriginalQuestionDetail] = useState(routeOriginalQuestion);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
+  const [answerListState, setAnswerListState] = useState({
+    list: [],
+    total: 0,
+    loading: false,
+    loaded: false,
+    error: ''
+  });
+  const [pendingPublishedAnswers, setPendingPublishedAnswers] = useState([]);
+  const [interactionLoading, setInteractionLoading] = useState({
+    like: false,
+    collect: false,
+    dislike: false
+  });
+
+  React.useEffect(() => {
+    if (routeSupplement) {
+      setSupplementDetail(routeSupplement);
+      setLiked(prev => ({
+        ...prev,
+        main: !!routeSupplement.liked
+      }));
+      setDisliked(!!routeSupplement.disliked);
+      setBookmarked(!!routeSupplement.collected);
+    }
+
+    if (routeOriginalQuestion) {
+      setOriginalQuestionDetail(routeOriginalQuestion);
+    }
+  }, [routeSupplement, routeOriginalQuestion]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const loadSupplementDetail = async () => {
+      if (!supplementId) {
+        setDetailError('缺少补充问题ID');
+        return;
+      }
+
+      try {
+        setDetailLoading(true);
+        setDetailError('');
+
+        const detailResponse = await questionApi.getQuestionDetail(supplementId);
+        const normalizedDetail = mergeQuestionDetailWithFallback(
+          detailResponse?.data,
+          routeSupplement ?? supplementQuestion,
+          'supplement-detail'
+        );
+
+        if (!normalizedDetail || cancelled) {
+          return;
+        }
+
+        setSupplementDetail(normalizedDetail);
+        setLiked(prev => ({
+          ...prev,
+          main: !!normalizedDetail.liked
+        }));
+        setDisliked(!!normalizedDetail.disliked);
+        setBookmarked(!!normalizedDetail.collected);
+
+        const embeddedOriginalQuestion = buildOriginalQuestionSummary(extractOriginalQuestionCandidate(detailResponse?.data));
+        if (embeddedOriginalQuestion) {
+          setOriginalQuestionDetail(embeddedOriginalQuestion);
+        }
+
+        const possibleParentQuestionId =
+          normalizedDetail.parentQuestionId ??
+          route?.params?.parentQuestionId ??
+          route?.params?.originalQuestion?.id ??
+          null;
+
+        if (possibleParentQuestionId && String(possibleParentQuestionId) !== String(normalizedDetail.id)) {
+          try {
+            const parentResponse = await questionApi.getQuestionDetail(possibleParentQuestionId);
+            const parentQuestion = buildOriginalQuestionSummary(parentResponse?.data);
+            if (!cancelled && parentQuestion) {
+              setOriginalQuestionDetail(parentQuestion);
+            }
+          } catch (parentError) {
+            console.warn('鑾峰彇鍘熼棶棰樿鎯呭け璐?', parentError);
+          }
+        }
+      } catch (error) {
+        console.error('鑾峰彇琛ュ厖闂璇︽儏澶辫触:', error);
+        if (!cancelled) {
+          setDetailError('鑾峰彇琛ュ厖闂璇︽儏澶辫触');
+        }
+      } finally {
+        if (!cancelled) {
+          setDetailLoading(false);
+        }
+      }
+    };
+
+    loadSupplementDetail();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [supplementId, route?.params?.parentQuestionId, route?.params?.originalQuestion?.id]);
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const loadSupplementAnswers = async () => {
+      if (activeTab !== TAB_KEYS.ANSWERS) {
+        return;
+      }
+
+      if (!supplementAnswerQuestionId) {
+        setAnswerListState(prev => ({
+          ...prev,
+          list: [],
+          total: 0,
+          loaded: true,
+          loading: false,
+          error: '缂哄皯鍥炵瓟鍒楄〃闂ID'
+        }));
+        return;
+      }
+
+      try {
+        setAnswerListState(prev => ({
+          ...prev,
+          loading: true,
+          error: ''
+        }));
+
+        const response = await answerApi.getAnswers(supplementAnswerQuestionId, {
+          sortBy: answerSortBy,
+          pageNum: 1,
+          pageSize: 20
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        if (response?.code === 200 && response?.data) {
+          const rows = response.data.rows ?? response.data.list ?? [];
+          const normalizedRows = normalizeAnswerRows(rows);
+          const mergedRows = answerSortBy === 'newest'
+            ? mergeAnswerLists(pendingPublishedAnswers, normalizedRows)
+            : normalizedRows;
+          setAnswerListState({
+            list: mergedRows,
+            total: Math.max(Number(response.data.total ?? normalizedRows.length) || 0, mergedRows.length),
+            loading: false,
+            loaded: true,
+            error: ''
+          });
+          return;
+        }
+
+        const fallbackRows = answerSortBy === 'newest' ? pendingPublishedAnswers : [];
+        setAnswerListState({
+          list: fallbackRows,
+          total: fallbackRows.length,
+          loading: false,
+          loaded: true,
+          error: response?.msg || '鑾峰彇鍥炵瓟鍒楄〃澶辫触'
+        });
+      } catch (error) {
+        console.error('鑾峰彇琛ュ厖闂璇︽儏椤靛洖绛斿垪琛ㄥけ璐?', error);
+        if (!cancelled) {
+          const fallbackRows = answerSortBy === 'newest' ? pendingPublishedAnswers : [];
+          setAnswerListState({
+            list: fallbackRows,
+            total: fallbackRows.length,
+            loading: false,
+            loaded: true,
+            error: '鑾峰彇鍥炵瓟鍒楄〃澶辫触'
+          });
+        }
+      }
+    };
+
+    loadSupplementAnswers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, answerSortBy, supplementAnswerQuestionId, pendingPublishedAnswers]);
+  const syncCommentInteractionStates = (commentsToSync = []) => {
+    if (!commentsToSync.length) {
+      return;
+    }
+
+    const likedState = {};
+    const dislikedState = {};
+    const collectedState = {};
+
+    commentsToSync.forEach(comment => {
+      if (!comment?.id) {
+        return;
+      }
+      likedState[comment.id] = !!comment.liked;
+      dislikedState[comment.id] = !!comment.disliked;
+      collectedState[comment.id] = !!comment.collected;
+    });
+
+    setCommentLiked(prev => ({
+      ...prev,
+      ...likedState
+    }));
+    setCommentDisliked(prev => ({
+      ...prev,
+      ...dislikedState
+    }));
+    setCommentBookmarked(prev => ({
+      ...prev,
+      ...collectedState
+    }));
   };
+  const findCommentById = commentId => {
+    if (!commentId) {
+      return null;
+    }
+    return commentListState.list.find(comment => String(comment.id) === String(commentId))
+      || Object.values(commentRepliesMap).flatMap(entry => entry?.list || []).find(comment => String(comment.id) === String(commentId))
+      || null;
+  };
+  const getCommentLikeDisplayCount = (comment, localState) => getResolvedInteractionDisplayCount(
+    comment?.likeCount ?? comment?.likes ?? 0,
+    !!comment?.liked,
+    localState,
+    comment?.__likeCountResolved
+  );
+  const getCommentDislikeDisplayCount = (comment, localState) => getResolvedInteractionDisplayCount(
+    comment?.dislikeCount ?? comment?.dislikes ?? 0,
+    !!comment?.disliked,
+    localState,
+    comment?.__dislikeCountResolved
+  );
+  const getCommentCollectDisplayCount = (comment, localState) => getResolvedInteractionDisplayCount(
+    comment?.collectCount ?? comment?.bookmarkCount ?? comment?.bookmarks ?? 0,
+    !!comment?.collected,
+    localState,
+    comment?.__collectCountResolved
+  );
+  const getCommentReplyDisplayCount = comment => {
+    const baseCount = normalizeCount(
+      comment?.replyCount,
+      comment?.replies,
+      comment?.childCount,
+      comment?.childrenCount
+    );
+    const loadedTotal = normalizeCount(commentRepliesMap[comment?.id]?.total);
+    return Math.max(baseCount, loadedTotal);
+  };
+  const buildCommentFromMutationResponse = (currentComment = {}, responseData, fallbackValues = {}) => {
+    const payload = responseData && typeof responseData === 'object' && !Array.isArray(responseData) ? responseData : {};
+
+    return normalizeCommentItem({
+      ...currentComment,
+      ...payload,
+      liked: payload.liked ?? payload.isLiked ?? fallbackValues.liked ?? currentComment.liked,
+      disliked: payload.disliked ?? payload.isDisliked ?? fallbackValues.disliked ?? currentComment.disliked,
+      collected: payload.collected ?? payload.isCollected ?? payload.bookmarked ?? payload.isBookmarked ?? fallbackValues.collected ?? currentComment.collected,
+      likeCount: payload.likeCount ?? payload.likes ?? fallbackValues.likeCount ?? currentComment.likeCount ?? currentComment.likes,
+      dislikeCount: payload.dislikeCount ?? payload.dislikes ?? fallbackValues.dislikeCount ?? currentComment.dislikeCount ?? currentComment.dislikes,
+      collectCount: payload.collectCount ?? payload.bookmarkCount ?? payload.bookmarks ?? fallbackValues.collectCount ?? currentComment.collectCount ?? currentComment.bookmarkCount ?? currentComment.bookmarks,
+    }, {
+      targetType: 3,
+      targetId: currentComment.targetId ?? supplementId,
+      parentId: currentComment.parentId ?? 0
+    });
+  };
+  const updateCommentStates = (commentId, updater) => {
+    if (!commentId) {
+      return;
+    }
+
+    setCommentListState(prevState => {
+      if (!prevState.list?.length) {
+        return prevState;
+      }
+
+      let changed = false;
+      const nextList = prevState.list.map(comment => {
+        if (String(comment.id) !== String(commentId)) {
+          return comment;
+        }
+        changed = true;
+        return normalizeCommentItem(updater(comment), {
+          targetType: 3,
+          targetId: comment.targetId ?? supplementId,
+          parentId: comment.parentId ?? 0
+        });
+      });
+
+      return changed ? {
+        ...prevState,
+        list: nextList
+      } : prevState;
+    });
+    setCommentRepliesMap(prevMap => {
+      let changed = false;
+      const nextMap = {
+        ...prevMap
+      };
+
+      Object.keys(nextMap).forEach(parentId => {
+        const currentEntry = nextMap[parentId];
+        if (!currentEntry?.list?.length) {
+          return;
+        }
+
+        let entryChanged = false;
+        const nextList = currentEntry.list.map(comment => {
+          if (String(comment.id) !== String(commentId)) {
+            return comment;
+          }
+          entryChanged = true;
+          changed = true;
+          return normalizeCommentItem(updater(comment), {
+            targetType: 3,
+            targetId: comment.targetId ?? supplementId,
+            parentId: comment.parentId ?? 0
+          });
+        });
+
+        if (entryChanged) {
+          nextMap[parentId] = {
+            ...currentEntry,
+            list: nextList
+          };
+        }
+      });
+
+      return changed ? nextMap : prevMap;
+    });
+  };
+  const buildCommentReplyTarget = (comment, fallbackTarget = {}) => {
+    if (!comment || typeof comment !== 'object') {
+      return {
+        ...INITIAL_COMMENT_COMPOSER_TARGET,
+        targetId: fallbackTarget.targetId ?? supplementId ?? null
+      };
+    }
+
+    const resolvedCommentId = Number(comment.id ?? comment.commentId ?? 0) || 0;
+    const replyToUserName = comment.userName ?? comment.userNickname ?? comment.author ?? '';
+    return {
+      targetId: Number(fallbackTarget.targetId ?? comment.targetId ?? supplementId ?? 0) || null,
+      parentId: resolvedCommentId,
+      replyToCommentId: resolvedCommentId,
+      replyToUserId: Number(comment.userId ?? comment.user_id ?? 0) || null,
+      replyToUserName,
+      threadRootId: Number(fallbackTarget.threadRootId ?? getCommentThreadRootId(resolvedCommentId) ?? resolvedCommentId) || resolvedCommentId,
+      originalComment: normalizeCommentItem(comment, {
+        targetType: 3,
+        targetId: fallbackTarget.targetId ?? comment.targetId ?? supplementId ?? null,
+        parentId: resolvedCommentId
+      })
+    };
+  };
+  const getCommentThreadRootId = commentId => {
+    if (!commentId) {
+      return null;
+    }
+
+    let currentComment = findCommentById(commentId);
+    let safetyCount = 0;
+
+    while (currentComment && Number(currentComment.parentId ?? 0) > 0 && safetyCount < 50) {
+      const parentComment = findCommentById(currentComment.parentId);
+      if (!parentComment || String(parentComment.id) === String(currentComment.id)) {
+        break;
+      }
+      currentComment = parentComment;
+      safetyCount += 1;
+    }
+
+    return currentComment?.id ?? commentId;
+  };
+  const openCommentComposer = (target = {}) => {
+    setCommentComposerTarget({
+      targetId: target?.targetId ?? supplementId ?? null,
+      parentId: Number(target?.parentId ?? 0) || 0,
+      replyToCommentId: Number(target?.replyToCommentId ?? 0) || 0,
+      replyToUserId: target?.replyToUserId !== undefined && target?.replyToUserId !== null ? Number(target.replyToUserId) || null : null,
+      replyToUserName: target?.replyToUserName ?? '',
+      threadRootId: target?.threadRootId !== undefined && target?.threadRootId !== null ? Number(target.threadRootId) || null : null,
+      originalComment: target?.originalComment ? normalizeCommentItem(target.originalComment, {
+        targetType: 3,
+        targetId: target?.targetId ?? supplementId ?? null,
+        parentId: target?.parentId ?? 0
+      }) : null
+    });
+    setShowCommentModal(true);
+  };
+  const closeCommentComposer = () => {
+    const threadRootId = Number(commentComposerTarget.threadRootId ?? 0) || null;
+    const shouldRestoreReplyModal = threadRootId && commentComposerTarget.parentId > 0;
+    setShowCommentModal(false);
+    setCommentComposerTarget(INITIAL_COMMENT_COMPOSER_TARGET);
+    if (shouldRestoreReplyModal) {
+      setCurrentCommentId(threadRootId);
+      setShowCommentReplyModal(true);
+    }
+  };
+  const loadCommentReplies = async parentCommentId => {
+    if (!supplementId || !parentCommentId) {
+      return;
+    }
+
+    setCommentRepliesMap(prevMap => ({
+      ...prevMap,
+      [parentCommentId]: {
+        ...(prevMap[parentCommentId] || {}),
+        loading: true
+      }
+    }));
+
+    try {
+      const fetchAllDescendantReplies = async rootParentId => {
+        const pageSize = 50;
+        const visitedParentIds = new Set();
+        const collectedReplies = [];
+        const collectedReplyIds = new Set();
+
+        const fetchDirectChildren = async currentParentId => {
+          let pageNum = 1;
+          let directChildren = [];
+
+          while (true) {
+            const response = await commentApi.getComments({
+              targetType: 3,
+              targetId: Number(supplementId),
+              parentId: Number(currentParentId),
+              pageNum,
+              pageSize
+            });
+
+            if (!(response?.code === 200 && response?.data)) {
+              break;
+            }
+
+            const rawRows = extractCommentRows(response);
+            const normalizedRows = normalizeComments(rawRows, {
+              targetType: 3,
+              targetId: Number(supplementId)
+            });
+            directChildren = [...directChildren, ...normalizedRows];
+            const total = extractCommentTotal(response, directChildren.length);
+
+            if (!rawRows.length || directChildren.length >= total || rawRows.length < pageSize) {
+              break;
+            }
+
+            pageNum += 1;
+          }
+
+          return directChildren;
+        };
+
+        const traverseChildren = async currentParentId => {
+          const normalizedParentKey = String(currentParentId);
+          if (visitedParentIds.has(normalizedParentKey)) {
+            return;
+          }
+
+          visitedParentIds.add(normalizedParentKey);
+          const children = await fetchDirectChildren(currentParentId);
+
+          for (const child of children) {
+            const childKey = String(child.id);
+            if (!collectedReplyIds.has(childKey)) {
+              collectedReplyIds.add(childKey);
+              collectedReplies.push(child);
+            }
+            await traverseChildren(child.id);
+          }
+        };
+
+        await traverseChildren(parentCommentId);
+        return collectedReplies;
+      };
+
+      const replies = await fetchAllDescendantReplies(parentCommentId);
+      syncCommentInteractionStates(replies);
+      const total = replies.length;
+      updateCommentStates(parentCommentId, previousComment => ({
+        ...previousComment,
+        replyCount: total,
+        replies: total
+      }));
+      setCommentRepliesMap(prevMap => ({
+        ...prevMap,
+        [parentCommentId]: {
+          list: replies,
+          total,
+          loaded: true,
+          loading: false
+        }
+      }));
+    } catch (error) {
+      console.error('获取补充问题评论回复失败:', error);
+      setCommentRepliesMap(prevMap => ({
+        ...prevMap,
+        [parentCommentId]: {
+          ...(prevMap[parentCommentId] || {}),
+          list: [],
+          total: 0,
+          loaded: true,
+          loading: false
+        }
+      }));
+      showToast('加载回复失败', 'error');
+    }
+  };
+  const renderCommentReplyCard = (reply, options = {}) => {
+    const beforeOpenReply = typeof options.beforeOpenReply === 'function' ? options.beforeOpenReply : () => {};
+    const beforeReport = typeof options.beforeReport === 'function' ? options.beforeReport : () => {};
+    const rootCommentId = options.rootCommentId ?? null;
+    const contextReplyId = options.contextReplyId ?? null;
+    const relationCommentId = Number(reply.replyToCommentId ?? reply.parentId ?? 0) || 0;
+    const relationComment = relationCommentId ? findCommentById(relationCommentId) : null;
+    const relationUserName = reply.replyToUserName || relationComment?.userName || relationComment?.userNickname || relationComment?.author || '';
+    const shouldHideContextRelation = contextReplyId !== null && String(relationCommentId) === String(contextReplyId);
+    const shouldShowReplyRelation = !!relationUserName && !shouldHideContextRelation && rootCommentId !== null && String(relationCommentId) !== String(rootCommentId) && String(relationCommentId) !== String(reply.id);
+    const isLiked = commentLiked[reply.id] ?? reply.liked;
+    const isCollected = commentBookmarked[reply.id] ?? reply.collected;
+    const isDisliked = commentDisliked[reply.id] ?? reply.disliked;
+
+    return <View key={reply.id} style={styles.replyCard}>
+        <View style={styles.replyHeader}>
+          <Avatar uri={reply.userAvatar || reply.avatar} name={reply.userName || reply.userNickname || reply.author} size={24} />
+          <View style={styles.replyAuthorMeta}>
+            <View style={styles.replyAuthorLine}>
+              <Text style={styles.replyAuthor}>{reply.userName || reply.userNickname || reply.author}</Text>
+              {shouldShowReplyRelation ? <>
+                  <Text style={styles.replyAuthorRelation}> 回复 </Text>
+                  <Text style={styles.replyReplyTarget}>{relationUserName}</Text>
+                </> : null}
+            </View>
+          </View>
+          <View style={{ flex: 1 }} />
+          <Text style={styles.replyTime}>{reply.time}</Text>
+        </View>
+        <Text style={styles.replyText}>{reply.content}</Text>
+        <View style={styles.replyActions}>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentLike(reply.id)} disabled={commentLikeLoading[reply.id]}>
+            <Ionicons name={isLiked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={isLiked ? "#ef4444" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, isLiked && { color: '#ef4444' }]}>{getCommentLikeDisplayCount(reply, commentLiked[reply.id])}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
+          beforeOpenReply();
+          openCommentComposer(buildCommentReplyTarget(reply, {
+            targetId: supplementId
+          }));
+        }}>
+            <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
+            <Text style={styles.replyActionText}>{reply.replies || 0}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => showToast(t('screens.supplementDetail.alerts.forwardFunction'), 'info')}>
+            <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
+            <Text style={styles.replyActionText}>{reply.shares || 0}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentCollect(reply.id)} disabled={commentCollectLoading[reply.id]}>
+            <Ionicons name={isCollected ? "star" : "star-outline"} size={12} color={isCollected ? "#f59e0b" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, isCollected && { color: '#f59e0b' }]}>{getCommentCollectDisplayCount(reply, commentBookmarked[reply.id])}</Text>
+          </TouchableOpacity>
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentDislike(reply.id)} disabled={commentDislikeLoading[reply.id]}>
+            <Ionicons name={isDisliked ? "thumbs-down" : "thumbs-down-outline"} size={12} color={isDisliked ? "#6b7280" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, isDisliked && { color: '#6b7280' }]}>{getCommentDislikeDisplayCount(reply, commentDisliked[reply.id])}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
+          beforeReport();
+          handleCommentReport(reply.id);
+        }}>
+            <Ionicons name="flag-outline" size={12} color="#ef4444" />
+            <Text style={styles.replyActionText}>{reply.reports || 0}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>;
+  };
+  const renderCommentReplyTreeNodes = (nodes = [], level = 0, options = {}) => nodes.map(reply => {
+    const childNodes = Array.isArray(reply.children) ? reply.children : [];
+    const hasChildren = childNodes.length > 0;
+    const descendantReplies = hasChildren ? flattenCommentReplyTree(childNodes) : [];
+    const isExpanded = expandedReplyChildren[reply.id] !== undefined ? expandedReplyChildren[reply.id] : true;
+
+    return <View key={reply.id}>
+        {renderCommentReplyCard(reply, options)}
+        {hasChildren ? <View style={styles.replyChildrenSection}>
+            <TouchableOpacity style={styles.replyChildrenToggle} onPress={() => setExpandedReplyChildren(prev => ({
+          ...prev,
+          [reply.id]: !isExpanded
+        }))}>
+              <Text style={styles.replyChildrenToggleText}>{isExpanded ? `收起回复 (${descendantReplies.length})` : `展开回复 (${descendantReplies.length})`}</Text>
+            </TouchableOpacity>
+            {isExpanded ? descendantReplies.map(childReply => renderCommentReplyCard(childReply, {
+          ...options,
+          contextReplyId: reply.id
+        })) : null}
+          </View> : null}
+      </View>;
+  });
+  React.useEffect(() => {
+    let cancelled = false;
+    const resolvedCommentSortBy = sortFilter === SORT_KEYS.LATEST ? 'newest' : 'likes';
+
+    const loadSupplementComments = async () => {
+      if (activeTab !== TAB_KEYS.COMMENTS) {
+        return;
+      }
+
+      if (!supplementId) {
+        setCommentListState({
+          list: [],
+          total: 0,
+          loading: false,
+          loaded: true,
+          error: '缺少评论列表目标ID'
+        });
+        return;
+      }
+
+      try {
+        setCommentListState(prev => ({
+          ...prev,
+          loading: true,
+          error: ''
+        }));
+
+        const response = await commentApi.getComments({
+          targetType: 3,
+          targetId: Number(supplementId),
+          parentId: 0,
+          sortBy: resolvedCommentSortBy
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        if (response?.code === 200 && response?.data) {
+          const rows = extractCommentRows(response);
+          const normalizedRows = normalizeComments(rows, {
+            targetType: 3,
+            targetId: Number(supplementId),
+            parentId: 0
+          });
+          const total = Math.max(extractCommentTotal(response, normalizedRows.length), normalizedRows.length);
+          syncCommentInteractionStates(normalizedRows);
+          setCommentListState({
+            list: normalizedRows,
+            total,
+            loading: false,
+            loaded: true,
+            error: ''
+          });
+          return;
+        }
+
+        setCommentListState({
+          list: [],
+          total: 0,
+          loading: false,
+          loaded: true,
+          error: response?.msg || '获取评论列表失败'
+        });
+      } catch (error) {
+        console.error('获取补充问题评论列表失败:', error);
+        if (!cancelled) {
+          setCommentListState({
+            list: [],
+            total: 0,
+            loading: false,
+            loaded: true,
+            error: '获取评论列表失败'
+          });
+        }
+      }
+    };
+
+    loadSupplementComments();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, sortFilter, supplementId, commentListRefreshKey]);
+  React.useEffect(() => {
+    if (!showCommentReplyModal || !currentCommentId || commentRepliesMap[currentCommentId]?.loaded || commentRepliesMap[currentCommentId]?.loading) {
+      return;
+    }
+    loadCommentReplies(currentCommentId);
+  }, [showCommentReplyModal, currentCommentId, commentRepliesMap]);
+  React.useEffect(() => {
+    if (!showCommentReplyModal) {
+      setExpandedReplyChildren({});
+    }
+  }, [showCommentReplyModal]);
+
+  const resolvedSupplementQuestion = supplementDetail || routeSupplement || supplementQuestion;
+  const resolvedOriginalQuestion = originalQuestionDetail || routeOriginalQuestion || originalQuestion;
+  const supplementAnswerQuestionId =
+    resolvedSupplementQuestion?.id ??
+    route?.params?.supplement?.id ??
+    route?.params?.id ??
+    supplementQuestion?.id ??
+    null;
+  const answerSortBy = sortFilter === SORT_KEYS.LATEST ? 'newest' : 'featured';
+  const supplementDisplayAuthor =
+    routeSupplement?.author ||
+    routeSupplement?.userName ||
+    routeSupplement?.userNickname ||
+    resolvedSupplementQuestion?.author ||
+    resolvedSupplementQuestion?.userName ||
+    resolvedSupplementQuestion?.userNickname ||
+    '鍖垮悕鐢ㄦ埛';
+  const supplementDisplayAvatar =
+    routeSupplement?.avatar ||
+    routeSupplement?.userAvatar ||
+    routeSupplement?.authorAvatar ||
+    resolvedSupplementQuestion?.avatar ||
+    resolvedSupplementQuestion?.userAvatar ||
+    resolvedSupplementQuestion?.authorAvatar ||
+    DEFAULT_AVATAR;
+  const supplementDisplayLocation =
+    routeSupplement?.location ||
+    resolvedSupplementQuestion?.location ||
+    '鏈煡';
+  const supplementDisplayTime =
+    routeSupplement?.time ||
+    resolvedSupplementQuestion?.time ||
+    '鍒氬垰';
+  const supplementDisplayContent =
+    routeSupplement?.content ||
+    routeSupplement?.description ||
+    routeSupplement?.title ||
+    resolvedSupplementQuestion?.content ||
+    resolvedSupplementQuestion?.description ||
+    resolvedSupplementQuestion?.title ||
+    '';
+  const mainLiked = liked.main ?? resolvedSupplementQuestion?.liked ?? false;
+  const mainCollected = bookmarked ?? resolvedSupplementQuestion?.collected ?? false;
+  const mainDisliked = disliked ?? resolvedSupplementQuestion?.disliked ?? false;
+  const supplementLikeDisplayCount = getResolvedInteractionDisplayCount(
+    resolvedSupplementQuestion?.likeCount ?? resolvedSupplementQuestion?.likes,
+    resolvedSupplementQuestion?.liked,
+    liked.main,
+    resolvedSupplementQuestion?.__likeCountResolved
+  );
+  const supplementCollectDisplayCount = getResolvedInteractionDisplayCount(
+    resolvedSupplementQuestion?.collectCount ?? resolvedSupplementQuestion?.bookmarkCount ?? resolvedSupplementQuestion?.bookmarks,
+    resolvedSupplementQuestion?.collected,
+    bookmarked,
+    resolvedSupplementQuestion?.__collectCountResolved
+  );
+  const supplementDislikeDisplayCount = getResolvedInteractionDisplayCount(
+    resolvedSupplementQuestion?.dislikeCount ?? resolvedSupplementQuestion?.dislikes,
+    resolvedSupplementQuestion?.disliked,
+    disliked,
+    resolvedSupplementQuestion?.__dislikeCountResolved
+  );
+  const supplementAnswersList = answerListState.list;
+  const supplementAnswersTotal = answerListState.loaded
+    ? Math.max(normalizeCount(answerListState.total), supplementAnswersList.length)
+    : 0;
+  const supplementCommentsList = commentListState.list;
+  const currentReplyComment = supplementCommentsList.find(comment => String(comment.id) === String(currentCommentId)) || null;
+  const supplementCommentsTotal = commentListState.loaded
+    ? Math.max(normalizeCount(commentListState.total), supplementCommentsList.length)
+    : normalizeCount(resolvedSupplementQuestion?.commentCount, resolvedSupplementQuestion?.comments);
+  const handleAnswerSortFilterChange = nextSortFilter => {
+    if (nextSortFilter === sortFilter) {
+      return;
+    }
+
+    const nextSortBy = activeTab === TAB_KEYS.COMMENTS
+      ? (nextSortFilter === SORT_KEYS.LATEST ? 'newest' : 'likes')
+      : (nextSortFilter === SORT_KEYS.LATEST ? 'newest' : 'featured');
+    console.log('琛ュ厖闂璇︽儏椤靛垏鎹㈠洖绛旀帓搴?', {
+      nextSortFilter,
+      nextSortBy
+    });
+    setSortFilter(nextSortFilter);
+  };
+  const handleSubmitSupplementComment = async (text) => {
+    const normalizedText = typeof text === 'string' ? text.trim() : '';
+    if (!normalizedText) {
+      return;
+    }
+
+    const targetId = Number(commentComposerTarget?.targetId ?? supplementId ?? 0) || 0;
+    const parentId = Number(commentComposerTarget?.parentId ?? 0) || 0;
+    const replyToCommentId = Number(commentComposerTarget?.replyToCommentId ?? 0) || 0;
+    const threadRootId = Number(commentComposerTarget?.threadRootId ?? 0) || null;
+
+    if (!targetId) {
+      showToast('补充问题ID不存在', 'error');
+      return;
+    }
+
+    try {
+      const payload = {
+        targetType: 3,
+        targetId,
+        parentId,
+        content: normalizedText
+      };
+
+      if (replyToCommentId) {
+        payload.replyToCommentId = replyToCommentId;
+      }
+      if (commentComposerTarget?.replyToUserId) {
+        payload.replyToUserId = Number(commentComposerTarget.replyToUserId) || null;
+      }
+      if (commentComposerTarget?.replyToUserName) {
+        payload.replyToUserName = commentComposerTarget.replyToUserName;
+      }
+
+      const response = await commentApi.createComment(payload);
+
+      if (response?.code === 200) {
+        if (parentId === 0) {
+          const nextCommentCount = normalizeCount(
+            resolvedSupplementQuestion?.commentCount,
+            resolvedSupplementQuestion?.comments
+          ) + 1;
+
+          setSupplementDetail(prevDetail => normalizeQuestionDetail({
+            ...(prevDetail || resolvedSupplementQuestion || {}),
+            commentCount: nextCommentCount,
+            comments: nextCommentCount
+          }, 'supplement-comment-created'));
+        } else {
+          updateCommentStates(parentId, previousComment => {
+            const nextReplyCount = normalizeCount(previousComment?.replyCount, previousComment?.replies) + 1;
+            return {
+              ...previousComment,
+              replyCount: nextReplyCount,
+              replies: nextReplyCount
+            };
+          });
+
+          if (threadRootId && String(threadRootId) !== String(parentId)) {
+            updateCommentStates(threadRootId, previousComment => {
+              const nextReplyCount = normalizeCount(previousComment?.replyCount, previousComment?.replies) + 1;
+              return {
+                ...previousComment,
+                replyCount: nextReplyCount,
+                replies: nextReplyCount
+              };
+            });
+          }
+        }
+
+        if (parentId === 0) {
+          setCommentListRefreshKey(prev => prev + 1);
+        }
+        setShowCommentModal(false);
+        setCommentComposerTarget(INITIAL_COMMENT_COMPOSER_TARGET);
+
+        if (parentId > 0) {
+          const resolvedThreadRootId = threadRootId || getCommentThreadRootId(parentId) || parentId;
+          setCurrentCommentId(resolvedThreadRootId);
+          await loadCommentReplies(resolvedThreadRootId);
+          setShowCommentReplyModal(true);
+        }
+
+        showToast(t('screens.supplementDetail.alerts.commentPublished'), 'success');
+        return;
+      }
+
+      showToast(response?.msg || '评论发布失败', 'error');
+    } catch (error) {
+      console.error('发布补充问题评论失败:', error);
+      showToast('评论发布失败，请稍后重试', 'error');
+    }
+  };
+  const handleCommentLike = async commentId => {
+    const comment = findCommentById(commentId);
+    if (!commentId || !comment || commentLikeLoading[commentId]) {
+      return;
+    }
+
+    const currentState = commentLiked[commentId] !== undefined ? commentLiked[commentId] : !!comment.liked;
+    const nextState = !currentState;
+    setCommentLiked(prev => ({
+      ...prev,
+      [commentId]: nextState
+    }));
+
+    try {
+      setCommentLikeLoading(prev => ({
+        ...prev,
+        [commentId]: true
+      }));
+      const response = nextState
+        ? await commentApi.likeComment(commentId)
+        : await commentApi.unlikeComment(commentId);
+
+      if (response?.code === 200) {
+        showToast(nextState ? '已点赞' : '已取消点赞', 'success');
+        updateCommentStates(commentId, currentComment => buildCommentFromMutationResponse(currentComment, response.data, {
+          liked: nextState,
+          likeCount: Math.max(getCommentLikeDisplayCount(currentComment, currentState) + (nextState ? 1 : -1), 0)
+        }));
+        return;
+      }
+
+      setCommentLiked(prev => ({
+        ...prev,
+        [commentId]: currentState
+      }));
+      showToast(response?.msg || '操作失败', 'error');
+    } catch (error) {
+      console.error('补充问题评论点赞失败:', error);
+      setCommentLiked(prev => ({
+        ...prev,
+        [commentId]: currentState
+      }));
+      showToast('网络错误，请稍后重试', 'error');
+    } finally {
+      setCommentLikeLoading(prev => ({
+        ...prev,
+        [commentId]: false
+      }));
+    }
+  };
+  const handleCommentCollect = async commentId => {
+    const comment = findCommentById(commentId);
+    if (!commentId || !comment || commentCollectLoading[commentId]) {
+      return;
+    }
+
+    const currentState = commentBookmarked[commentId] !== undefined ? commentBookmarked[commentId] : !!comment.collected;
+    const nextState = !currentState;
+    setCommentBookmarked(prev => ({
+      ...prev,
+      [commentId]: nextState
+    }));
+
+    try {
+      setCommentCollectLoading(prev => ({
+        ...prev,
+        [commentId]: true
+      }));
+      const collectPayload = {
+        targetType: 3,
+        targetId: Number(comment.targetId ?? supplementId) || undefined,
+        parentId: Number(comment.parentId ?? 0) || 0
+      };
+      const response = nextState
+        ? await commentApi.collectComment(commentId, collectPayload)
+        : await commentApi.uncollectComment(commentId, collectPayload);
+
+      if (response?.code === 200) {
+        showToast(nextState ? '已收藏' : '已取消收藏', 'success');
+        updateCommentStates(commentId, currentComment => buildCommentFromMutationResponse(currentComment, response.data, {
+          collected: nextState,
+          collectCount: Math.max(getCommentCollectDisplayCount(currentComment, currentState) + (nextState ? 1 : -1), 0)
+        }));
+        return;
+      }
+
+      setCommentBookmarked(prev => ({
+        ...prev,
+        [commentId]: currentState
+      }));
+      showToast(response?.msg || '操作失败', 'error');
+    } catch (error) {
+      console.error('补充问题评论收藏失败:', error);
+      setCommentBookmarked(prev => ({
+        ...prev,
+        [commentId]: currentState
+      }));
+      showToast('网络错误，请稍后重试', 'error');
+    } finally {
+      setCommentCollectLoading(prev => ({
+        ...prev,
+        [commentId]: false
+      }));
+    }
+  };
+  const handleCommentDislike = async commentId => {
+    const comment = findCommentById(commentId);
+    if (!commentId || !comment || commentDislikeLoading[commentId]) {
+      return;
+    }
+
+    const currentState = commentDisliked[commentId] !== undefined ? commentDisliked[commentId] : !!comment.disliked;
+    const nextState = !currentState;
+    setCommentDisliked(prev => ({
+      ...prev,
+      [commentId]: nextState
+    }));
+
+    try {
+      setCommentDislikeLoading(prev => ({
+        ...prev,
+        [commentId]: true
+      }));
+      const response = nextState
+        ? await commentApi.dislikeComment(commentId)
+        : await commentApi.undislikeComment(commentId);
+
+      if (response?.code === 200) {
+        showToast(nextState ? '已踩' : '已取消踩', 'success');
+        updateCommentStates(commentId, currentComment => buildCommentFromMutationResponse(currentComment, response.data, {
+          disliked: nextState,
+          dislikeCount: Math.max(getCommentDislikeDisplayCount(currentComment, currentState) + (nextState ? 1 : -1), 0)
+        }));
+        return;
+      }
+
+      setCommentDisliked(prev => ({
+        ...prev,
+        [commentId]: currentState
+      }));
+      showToast(response?.msg || '操作失败', 'error');
+    } catch (error) {
+      console.error('补充问题评论点踩失败:', error);
+      setCommentDisliked(prev => ({
+        ...prev,
+        [commentId]: currentState
+      }));
+      showToast('网络错误，请稍后重试', 'error');
+    } finally {
+      setCommentDislikeLoading(prev => ({
+        ...prev,
+        [commentId]: false
+      }));
+    }
+  };
+  const handleCommentReport = commentId => {
+    if (!commentId) {
+      showToast('操作失败', 'error');
+      return;
+    }
+
+    navigation.navigate('Report', {
+      type: 'comment',
+      targetType: 5,
+      targetId: Number(commentId) || 0
+    });
+  };
+  const syncSupplementUpdateToQuestionDetail = updatedSupplement => {
+    const sourceRouteKey = route?.params?.sourceRouteKey;
+    if (!sourceRouteKey || !updatedSupplement?.id) {
+      return;
+    }
+    const interactionOnlySupplement = {
+      id: updatedSupplement.id,
+      supplementId: updatedSupplement.supplementId,
+      supplement_id: updatedSupplement.supplement_id,
+      liked: !!updatedSupplement.liked,
+      disliked: !!updatedSupplement.disliked,
+      collected: !!updatedSupplement.collected,
+      likeCount: Number(updatedSupplement.likeCount ?? updatedSupplement.likes) || 0,
+      likes: Number(updatedSupplement.likeCount ?? updatedSupplement.likes) || 0,
+      dislikeCount: Number(updatedSupplement.dislikeCount ?? updatedSupplement.dislikes) || 0,
+      dislikes: Number(updatedSupplement.dislikeCount ?? updatedSupplement.dislikes) || 0,
+      collectCount: Number(updatedSupplement.collectCount ?? updatedSupplement.bookmarkCount ?? updatedSupplement.bookmarks) || 0,
+      bookmarkCount: Number(updatedSupplement.collectCount ?? updatedSupplement.bookmarkCount ?? updatedSupplement.bookmarks) || 0,
+      bookmarks: Number(updatedSupplement.collectCount ?? updatedSupplement.bookmarkCount ?? updatedSupplement.bookmarks) || 0,
+      __likeCountResolved: updatedSupplement.__likeCountResolved,
+      __dislikeCountResolved: updatedSupplement.__dislikeCountResolved,
+      __collectCountResolved: updatedSupplement.__collectCountResolved,
+    };
+    navigation.dispatch({
+      ...CommonActions.setParams({
+        updatedSupplement: interactionOnlySupplement
+      }),
+      source: sourceRouteKey,
+      target: navigation.getState()?.key
+    });
+  };
+  const applySupplementInteractionUpdate = updatedSupplement => {
+    const normalizedSupplement = normalizeQuestionDetail(updatedSupplement, 'supplement-detail-updated');
+    if (!normalizedSupplement) {
+      return;
+    }
+    setSupplementDetail(normalizedSupplement);
+    setLiked(prev => ({
+      ...prev,
+      main: !!normalizedSupplement.liked
+    }));
+    setBookmarked(!!normalizedSupplement.collected);
+    setDisliked(!!normalizedSupplement.disliked);
+    syncSupplementUpdateToQuestionDetail(normalizedSupplement);
+  };
+  const handleSupplementLike = async () => {
+    const currentSupplement = normalizeQuestionDetail(resolvedSupplementQuestion, 'supplement-like');
+    const currentSupplementId = currentSupplement?.id ?? supplementId;
+
+    if (!currentSupplementId) {
+      showToast('补充问题ID不存在', 'error');
+      return;
+    }
+
+    try {
+      setInteractionLoading(prev => ({
+        ...prev,
+        like: true
+      }));
+      const currentLiked = liked.main ?? currentSupplement?.liked ?? false;
+      const nextLiked = !currentLiked;
+      const fallbackLikeCount = Math.max(supplementLikeDisplayCount + (nextLiked ? 1 : -1), 0);
+      const response = currentLiked ? await questionApi.unlikeSupplement(currentSupplementId) : await questionApi.likeSupplement(currentSupplementId);
+
+      if (response?.code === 200) {
+        const updatedSupplement = buildSupplementMutationResult(currentSupplement, response.data, {
+          liked: nextLiked,
+          likeCount: fallbackLikeCount
+        });
+        applySupplementInteractionUpdate(updatedSupplement);
+        showToast(updatedSupplement.liked ? '已点赞' : '已取消点赞', 'success');
+        return;
+      }
+
+      showToast(response?.msg || '操作失败', 'error');
+    } catch (error) {
+      console.error('补充问题详情页点赞失败:', error);
+      showToast('网络错误，请稍后重试', 'error');
+    } finally {
+      setInteractionLoading(prev => ({
+        ...prev,
+        like: false
+      }));
+    }
+  };
+  const handleSupplementCollect = async () => {
+    const currentSupplement = normalizeQuestionDetail(resolvedSupplementQuestion, 'supplement-collect');
+    const currentSupplementId = currentSupplement?.id ?? supplementId;
+
+    if (!currentSupplementId) {
+      showToast('补充问题ID不存在', 'error');
+      return;
+    }
+
+    const supplementQuestionId =
+      currentSupplement?.questionId ??
+      currentSupplement?.parentQuestionId ??
+      route?.params?.parentQuestionId ??
+      null;
+
+    if (!supplementQuestionId) {
+      showToast('当前补充问题数据异常，暂时无法收藏', 'error');
+      return;
+    }
+
+    try {
+      setInteractionLoading(prev => ({
+        ...prev,
+        collect: true
+      }));
+      const currentCollected = bookmarked ?? currentSupplement?.collected ?? false;
+      const nextCollected = !currentCollected;
+      const fallbackCollectCount = Math.max(supplementCollectDisplayCount + (nextCollected ? 1 : -1), 0);
+      const response = currentCollected ? await questionApi.uncollectSupplement(currentSupplementId) : await questionApi.collectSupplement(currentSupplementId);
+
+      if (response?.code === 200) {
+        const updatedSupplement = buildSupplementMutationResult(currentSupplement, response.data, {
+          collected: nextCollected,
+          collectCount: fallbackCollectCount
+        });
+        applySupplementInteractionUpdate(updatedSupplement);
+        showToast(updatedSupplement.collected ? '已收藏' : '已取消收藏', 'success');
+        return;
+      }
+
+      showToast(response?.msg || '操作失败', 'error');
+    } catch (error) {
+      console.error('补充问题详情页收藏失败:', error);
+      showToast('网络错误，请稍后重试', 'error');
+    } finally {
+      setInteractionLoading(prev => ({
+        ...prev,
+        collect: false
+      }));
+    }
+  };
+  const handleSupplementDislike = async () => {
+    const currentSupplement = normalizeQuestionDetail(resolvedSupplementQuestion, 'supplement-dislike');
+    const currentSupplementId = currentSupplement?.id ?? supplementId;
+
+    if (!currentSupplementId) {
+      showToast('补充问题ID不存在', 'error');
+      return;
+    }
+
+    try {
+      setInteractionLoading(prev => ({
+        ...prev,
+        dislike: true
+      }));
+      const currentDisliked = disliked ?? currentSupplement?.disliked ?? false;
+      const nextDisliked = !currentDisliked;
+      const fallbackDislikeCount = Math.max(supplementDislikeDisplayCount + (nextDisliked ? 1 : -1), 0);
+      const response = currentDisliked ? await questionApi.undislikeSupplement(currentSupplementId) : await questionApi.dislikeSupplement(currentSupplementId);
+
+      if (response?.code === 200) {
+        const updatedSupplement = buildSupplementMutationResult(currentSupplement, response.data, {
+          disliked: nextDisliked,
+          dislikeCount: fallbackDislikeCount
+        });
+        applySupplementInteractionUpdate(updatedSupplement);
+        showToast(updatedSupplement.disliked ? '宸茶俯' : '宸插彇娑堣俯', 'success');
+        return;
+      }
+
+      showToast(response?.msg || '操作失败', 'error');
+    } catch (error) {
+      console.error('补充问题详情页点踩失败:', error);
+      showToast('网络错误，请稍后重试', 'error');
+    } finally {
+      setInteractionLoading(prev => ({
+        ...prev,
+        dislike: false
+      }));
+    }
+  };
+  const closeAnswerModal = () => {
+    setShowAnswerModal(false);
+    setAnswerText('');
+    setAnswerImages([]);
+    setAnswerIdentity('personal');
+    setAnswerSelectedTeams([]);
+    setAnswerSubmitting(false);
+  };
+
+  const legacyHandleSubmitAnswer = async () => {
+    if (!answerText.trim()) {
+      showToast('请输入回答内容', 'warning');
+      return;
+    }
+
+    const questionId =
+      resolvedSupplementQuestion?.id ??
+      route?.params?.supplement?.id ??
+      route?.params?.id ??
+      null;
+
+    if (!questionId) {
+      showToast('问题ID不存在，暂时无法发布回答', 'error');
+      return;
+    }
+
+    try {
+      setAnswerSubmitting(true);
+
+      let imageUrls = [];
+      if (answerImages.length > 0) {
+        for (let i = 0; i < answerImages.length; i += 1) {
+          const imageUri = answerImages[i];
+          const uploadResult = await uploadApi.uploadImage({
+            uri: imageUri,
+            name: `supplement_answer_${Date.now()}_${i}.jpg`,
+            type: 'image/jpeg',
+          });
+
+          if (uploadResult?.code === 200 && uploadResult?.data) {
+            imageUrls.push(uploadResult.data);
+          } else {
+            showToast(`第${i + 1}张图片上传失败`, 'error');
+            setAnswerSubmitting(false);
+            return;
+          }
+        }
+      }
+
+      const answerCreateRequest = {
+        content: answerText.trim(),
+        supplementId: resolvedSupplementQuestion?.id,
+      };
+
+      if (imageUrls.length > 0) {
+        answerCreateRequest.imageUrls = imageUrls;
+      }
+
+      const response = await answerApi.publishAnswer(questionId, answerCreateRequest);
+
+      if (response?.code === 200) {
+        showToast('回答发布成功', 'success');
+        closeAnswerModal();
+        return;
+      }
+
+      showToast(response?.msg || '回答发布失败', 'error');
+    } catch (error) {
+      console.error('补充问题详情页发布回答失败:', error);
+      showToast('回答发布失败，请稍后重试', 'error');
+    } finally {
+      setAnswerSubmitting(false);
+    }
+  };
+  const handleSubmitAnswer = async () => {
+    if (!answerText.trim()) {
+      showToast('请输入回答内容', 'warning');
+      return;
+    }
+
+    const questionId =
+      resolvedSupplementQuestion?.id ??
+      route?.params?.supplement?.id ??
+      route?.params?.id ??
+      null;
+
+    if (!questionId) {
+      showToast('补充问题ID不存在，暂时无法发布回答', 'error');
+      return;
+    }
+
+    if (answerIdentity === 'team' && answerSelectedTeams.length === 0) {
+      showToast('璇烽€夋嫨鍥㈤槦韬唤鍚庡啀鍙戝竷', 'warning');
+      return;
+    }
+
+    try {
+      setAnswerSubmitting(true);
+
+      let imageUrls = [];
+      if (answerImages.length > 0) {
+        for (let i = 0; i < answerImages.length; i += 1) {
+          const imageUri = answerImages[i];
+          const uploadResult = await uploadApi.uploadImage({
+            uri: imageUri,
+            name: `supplement_answer_${Date.now()}_${i}.jpg`,
+            type: 'image/jpeg',
+          });
+
+          if (uploadResult?.code === 200 && uploadResult?.data) {
+            imageUrls.push(uploadResult.data);
+          } else {
+            showToast(`第${i + 1}张图片上传失败`, 'error');
+            setAnswerSubmitting(false);
+            return;
+          }
+        }
+      }
+
+      const answerCreateRequest = {
+        questionId,
+        content: answerText.trim(),
+        supplementId: resolvedSupplementQuestion?.id ?? questionId,
+        imageUrls,
+        invitedBy: route?.params?.invitedBy ?? null,
+        teamId: answerIdentity === 'team'
+          ? Number(answerSelectedTeams[0]) || null
+          : 100,
+      };
+
+      const response = await answerApi.publishAnswer(questionId, answerCreateRequest);
+
+      if (response?.code === 200) {
+        const pendingAnswer = buildPendingAnswerItem({
+          responseData: response?.data,
+          questionId,
+          content: answerText.trim(),
+          imageUrls,
+          selectedIdentity: answerIdentity,
+          selectedTeams: answerSelectedTeams,
+        });
+
+        showToast('鍥炵瓟鍙戝竷鎴愬姛', 'success');
+        setPendingPublishedAnswers(prev => mergeAnswerLists([pendingAnswer], prev));
+        setAnswerListState(prev => {
+          const mergedList = mergeAnswerLists([pendingAnswer], prev.list);
+          return {
+            ...prev,
+            list: mergedList,
+            total: Math.max(normalizeCount(prev.total) + 1, mergedList.length),
+            loading: false,
+            loaded: true,
+            error: ''
+          };
+        });
+        setSortFilter(SORT_KEYS.LATEST);
+        closeAnswerModal();
+        return;
+      }
+
+      showToast(response?.msg || '鍥炵瓟鍙戝竷澶辫触', 'error');
+    } catch (error) {
+      console.error('琛ュ厖闂璇︽儏椤靛彂甯冨洖绛斿け璐?', error);
+      showToast('鍥炵瓟鍙戝竷澶辫触锛岃绋嶅悗閲嶈瘯', 'error');
+    } finally {
+      setAnswerSubmitting(false);
+    }
+  };
+
   return <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{
@@ -170,7 +2290,7 @@ export default function SupplementDetailScreen({
           right: 10
         }} activeOpacity={0.7}>
             <Ionicons name="arrow-redo-outline" size={22} color="#6b7280" />
-            <Text style={styles.shareBtnText}>{supplementQuestion.shares}</Text>
+            <Text style={styles.shareBtnText}>{resolvedSupplementQuestion.shareCount ?? resolvedSupplementQuestion.shares ?? 0}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.shareBtn} onPress={() => showToast(t('screens.supplementDetail.alerts.reportFunction'), 'info')}>
             <Ionicons name="flag-outline" size={22} color="#ef4444" />
@@ -181,10 +2301,10 @@ export default function SupplementDetailScreen({
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.supplementSection}>
           <View style={styles.supplementHeader}>
-            <Avatar uri={supplementQuestion.avatar} name={supplementQuestion.author} size={40} />
+            <Avatar uri={supplementDisplayAvatar} name={supplementDisplayAuthor} size={40} />
             <View style={styles.supplementAuthorInfo}>
               <View style={styles.supplementAuthorRow}>
-                <Text style={styles.supplementAuthor}>{supplementQuestion.author}</Text>
+                <Text style={styles.supplementAuthor}>{supplementDisplayAuthor}</Text>
                 <TouchableOpacity style={styles.followBtnSmall}>
                   <Ionicons name="add" size={12} color="#ef4444" />
                   <Text style={styles.followBtnSmallText}>{t('screens.supplementDetail.actions.follow')}</Text>
@@ -192,16 +2312,21 @@ export default function SupplementDetailScreen({
               </View>
               <View style={styles.supplementMetaRow}>
                 <Ionicons name="location-outline" size={12} color="#9ca3af" />
-                <Text style={styles.supplementLocation}>{supplementQuestion.location}</Text>
-                <Text style={styles.supplementTime}>· {supplementQuestion.time}</Text>
+                <Text style={styles.supplementLocation}>{supplementDisplayLocation}</Text>
+                <Text style={styles.supplementTime}>路 {supplementDisplayTime}</Text>
               </View>
             </View>
           </View>
-          <Text style={styles.supplementContent}>{supplementQuestion.content}</Text>
+          <Text style={styles.supplementContent}>{supplementDisplayContent}</Text>
           <View style={styles.supplementViewsRow}>
             <Ionicons name="eye-outline" size={14} color="#9ca3af" />
-            <Text style={styles.supplementViewsText}>1.2k {t('screens.supplementDetail.stats.views')}</Text>
+            <Text style={styles.supplementViewsText}>{resolvedSupplementQuestion.viewCount ?? resolvedSupplementQuestion.views ?? 0} {t('screens.supplementDetail.stats.views')}</Text>
           </View>
+          {detailLoading && <View style={styles.detailHintRow}>
+              <ActivityIndicator size="small" color="#ef4444" />
+              <Text style={styles.detailHintText}>姝ｅ湪鍔犺浇琛ュ厖璇︽儏...</Text>
+            </View>}
+          {detailError ? <Text style={styles.detailErrorText}>{detailError}</Text> : null}
         </View>
 
         <View style={styles.originalQuestionCard}>
@@ -209,71 +2334,86 @@ export default function SupplementDetailScreen({
             <Ionicons name="link-outline" size={14} color="#9ca3af" />
             <Text style={styles.originalQuestionLabel}>{t('screens.supplementDetail.originalQuestion.label')}</Text>
           </View>
-          <Text style={styles.originalQuestionTitle} numberOfLines={2}>{originalQuestion.title}</Text>
+          <Text style={styles.originalQuestionTitle} numberOfLines={2}>{resolvedOriginalQuestion.title}</Text>
           <View style={styles.originalQuestionFooter}>
-            <Avatar uri={originalQuestion.avatar} name={originalQuestion.author} size={20} />
-            <Text style={styles.originalQuestionAuthor}>{originalQuestion.author}</Text>
-            <Text style={styles.originalQuestionTime}>· {originalQuestion.time}</Text>
+            <Avatar uri={resolvedOriginalQuestion.avatar} name={resolvedOriginalQuestion.author} size={20} />
+            <Text style={styles.originalQuestionAuthor}>{resolvedOriginalQuestion.author}</Text>
+            <Text style={styles.originalQuestionTime}>路 {resolvedOriginalQuestion.time}</Text>
           </View>
         </View>
 
         <View style={styles.tabsSection}>
           <View style={styles.tabs}>
             <TouchableOpacity style={styles.tabItem} onPress={() => {
-            setActiveTab(t('screens.supplementDetail.tabs.allAnswers'));
-            setSortFilter(t('screens.supplementDetail.sort.featured'));
+            setActiveTab(TAB_KEYS.ANSWERS);
+            setSortFilter(SORT_KEYS.FEATURED);
           }}>
-              <Text style={[styles.tabText, activeTab === t('screens.supplementDetail.tabs.allAnswers') && styles.tabTextActive]}>{t('screens.supplementDetail.tabs.allAnswers')}</Text>
-              {activeTab === t('screens.supplementDetail.tabs.allAnswers') && <View style={styles.tabIndicator} />}
+              <Text style={[styles.tabText, activeTab === TAB_KEYS.ANSWERS && styles.tabTextActive]}>{t('screens.supplementDetail.tabs.allAnswers')}</Text>
+              {activeTab === TAB_KEYS.ANSWERS && <View style={styles.tabIndicator} />}
             </TouchableOpacity>
             <TouchableOpacity style={styles.tabItem} onPress={() => {
-            setActiveTab(t('screens.supplementDetail.tabs.allComments'));
-            setSortFilter(t('screens.supplementDetail.sort.featured'));
+            setActiveTab(TAB_KEYS.COMMENTS);
+            setSortFilter(SORT_KEYS.FEATURED);
           }}>
-              <Text style={[styles.tabText, activeTab === t('screens.supplementDetail.tabs.allComments') && styles.tabTextActive]}>{t('screens.supplementDetail.tabs.allComments')}</Text>
-              {activeTab === t('screens.supplementDetail.tabs.allComments') && <View style={styles.tabIndicator} />}
+              <Text style={[styles.tabText, activeTab === TAB_KEYS.COMMENTS && styles.tabTextActive]}>{t('screens.supplementDetail.tabs.allComments')}</Text>
+              {activeTab === TAB_KEYS.COMMENTS && <View style={styles.tabIndicator} />}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.tabItem} onPress={() => setActiveTab(t('screens.supplementDetail.tabs.invite'))}>
-              <Text style={[styles.tabText, activeTab === t('screens.supplementDetail.tabs.invite') && styles.tabTextActive]}>{t('screens.supplementDetail.tabs.invite')}</Text>
-              {activeTab === t('screens.supplementDetail.tabs.invite') && <View style={styles.tabIndicator} />}
+            <TouchableOpacity style={styles.tabItem} onPress={() => setActiveTab(TAB_KEYS.INVITE)}>
+              <Text style={[styles.tabText, activeTab === TAB_KEYS.INVITE && styles.tabTextActive]}>{t('screens.supplementDetail.tabs.invite')}</Text>
+              {activeTab === TAB_KEYS.INVITE && <View style={styles.tabIndicator} />}
             </TouchableOpacity>
           </View>
 
-          {(activeTab === t('screens.supplementDetail.tabs.allAnswers') || activeTab === t('screens.supplementDetail.tabs.allComments')) && <View style={styles.sortFilterBar}>
+          {(activeTab === TAB_KEYS.ANSWERS || activeTab === TAB_KEYS.COMMENTS) && <View style={styles.sortFilterBar}>
               <View style={styles.sortFilterLeft}>
-                <TouchableOpacity style={[styles.sortFilterBtn, sortFilter === t('screens.supplementDetail.sort.featured') && styles.sortFilterBtnActive]} onPress={() => setSortFilter(t('screens.supplementDetail.sort.featured'))}>
-                  <Ionicons name="star" size={14} color={sortFilter === t('screens.supplementDetail.sort.featured') ? '#ef4444' : '#9ca3af'} />
-                  <Text style={[styles.sortFilterText, sortFilter === t('screens.supplementDetail.sort.featured') && styles.sortFilterTextActive]}>{t('screens.supplementDetail.sort.featured')}</Text>
+                <TouchableOpacity style={[styles.sortFilterBtn, sortFilter === SORT_KEYS.FEATURED && styles.sortFilterBtnActive]} onPress={() => handleAnswerSortFilterChange(SORT_KEYS.FEATURED)}>
+                  <Ionicons name="star" size={14} color={sortFilter === SORT_KEYS.FEATURED ? '#ef4444' : '#9ca3af'} />
+                  <Text style={[styles.sortFilterText, sortFilter === SORT_KEYS.FEATURED && styles.sortFilterTextActive]}>{t('screens.supplementDetail.sort.featured')}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.sortFilterBtn, sortFilter === t('screens.supplementDetail.sort.latest') && styles.sortFilterBtnActive]} onPress={() => setSortFilter(t('screens.supplementDetail.sort.latest'))}>
-                  <Ionicons name="time" size={14} color={sortFilter === t('screens.supplementDetail.sort.latest') ? '#ef4444' : '#9ca3af'} />
-                  <Text style={[styles.sortFilterText, sortFilter === t('screens.supplementDetail.sort.latest') && styles.sortFilterTextActive]}>{t('screens.supplementDetail.sort.latest')}</Text>
+                <TouchableOpacity style={[styles.sortFilterBtn, sortFilter === SORT_KEYS.LATEST && styles.sortFilterBtnActive]} onPress={() => handleAnswerSortFilterChange(SORT_KEYS.LATEST)}>
+                  <Ionicons name="time" size={14} color={sortFilter === SORT_KEYS.LATEST ? '#ef4444' : '#9ca3af'} />
+                  <Text style={[styles.sortFilterText, sortFilter === SORT_KEYS.LATEST && styles.sortFilterTextActive]}>{t('screens.supplementDetail.sort.latest')}</Text>
                 </TouchableOpacity>
               </View>
               <Text style={styles.sortFilterCount}>
-                {activeTab === t('screens.supplementDetail.tabs.allAnswers') ? t('screens.supplementDetail.count.answers', {
-              count: 2
+                {activeTab === TAB_KEYS.ANSWERS ? t('screens.supplementDetail.count.answers', {
+              count: supplementAnswersTotal
             }) : t('screens.supplementDetail.count.comments', {
-              count: 2
+              count: supplementCommentsTotal
             })}
               </Text>
             </View>}
         </View>
 
         <View style={styles.contentSection}>
-          {activeTab === t('screens.supplementDetail.tabs.allAnswers') ? <>
-              {supplementAnswers.map(answer => <TouchableOpacity key={answer.id} style={styles.answerCard} onPress={() => navigation.navigate('AnswerDetail', {
+          {activeTab === TAB_KEYS.ANSWERS ? <>
+              {answerListState.loading && supplementAnswersList.length === 0 ? <View style={styles.detailHintRow}>
+                  <ActivityIndicator size="small" color="#ef4444" />
+                  <Text style={styles.detailHintText}>姝ｅ湪鍔犺浇鍥炵瓟鍒楄〃...</Text>
+                </View> : null}
+              {answerListState.error && supplementAnswersList.length === 0 ? <Text style={styles.detailErrorText}>{answerListState.error}</Text> : null}
+              {!answerListState.loading && !answerListState.error && supplementAnswersList.length === 0 ? <View style={styles.supplementsEmptyContainer}>
+                  <Ionicons name="chatbubble-outline" size={48} color="#d1d5db" />
+                  <Text style={styles.supplementsEmptyText}>暂无回答，快来抢沙发吧</Text>
+                  <Text style={styles.supplementsEmptyDesc}>成为第一个回答这个补充问题的人</Text>
+                </View> : null}
+              {supplementAnswersList.map(answer => {
+            const isLiked = answerLiked[answer.id] ?? answer.liked;
+            const isBookmarked = answerBookmarked[answer.id] ?? answer.collected;
+            const likeCount = getResolvedInteractionDisplayCount(answer.likeCount ?? answer.likes, answer.liked, answerLiked[answer.id], answer.__likeCountResolved);
+            const collectCount = getResolvedInteractionDisplayCount(answer.collectCount ?? answer.bookmarkCount ?? answer.bookmarks, answer.collected, answerBookmarked[answer.id], answer.__collectCountResolved);
+            return <TouchableOpacity key={answer.id} style={styles.answerCard} onPress={() => navigation.navigate('AnswerDetail', {
             answer,
             defaultTab: 'supplements'
           })} activeOpacity={0.7}>
                   <View style={styles.answerHeader}>
-                    <Avatar uri={answer.avatar} name={answer.author} size={40} />
+                    <Avatar uri={answer.userAvatar || answer.avatar} name={answer.userName || answer.userNickname || answer.author} size={40} />
                     <View style={styles.answerAuthorInfo}>
                       <View style={styles.answerAuthorRow}>
-                        <Text style={styles.answerAuthor}>{answer.author}</Text>
+                        <Text style={styles.answerAuthor}>{answer.userName || answer.userNickname || answer.author || '鍖垮悕鐢ㄦ埛'}</Text>
                         {Boolean(answer.verified) && <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />}
                       </View>
-                      <Text style={styles.answerAuthorTitle}>{answer.title}</Text>
+                      <Text style={styles.answerAuthorTitle}>{answer.title || ' '}</Text>
                     </View>
                   </View>
                   <Text style={styles.answerContent}>{answer.content}</Text>
@@ -283,30 +2423,30 @@ export default function SupplementDetailScreen({
                   ...answerLiked,
                   [answer.id]: !answerLiked[answer.id]
                 })}>
-                        <Ionicons name={answerLiked[answer.id] ? "thumbs-up" : "thumbs-up-outline"} size={16} color={answerLiked[answer.id] ? "#ef4444" : "#6b7280"} />
-                        <Text style={[styles.answerActionText, answerLiked[answer.id] && {
+                        <Ionicons name={isLiked ? "thumbs-up" : "thumbs-up-outline"} size={16} color={isLiked ? "#ef4444" : "#6b7280"} />
+                        <Text style={[styles.answerActionText, isLiked && {
                     color: '#ef4444'
-                  }]}>{answer.likes + (answerLiked[answer.id] ? 1 : 0)}</Text>
+                  }]}>{likeCount}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.answerActionBtn} onPress={() => {
                   setCurrentAnswerId(answer.id);
                   setShowAnswerCommentModal(true);
                 }}>
                         <Ionicons name="chatbubble-outline" size={16} color="#6b7280" />
-                        <Text style={styles.answerActionText}>{answer.comments}</Text>
+                        <Text style={styles.answerActionText}>{answer.commentCount ?? answer.comments ?? 0}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.answerActionBtn}>
                         <Ionicons name="arrow-redo-outline" size={16} color="#6b7280" />
-                        <Text style={styles.answerActionText}>{answer.shares}</Text>
+                        <Text style={styles.answerActionText}>{answer.shareCount ?? answer.shares ?? 0}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.answerActionBtn} onPress={() => setAnswerBookmarked({
                   ...answerBookmarked,
                   [answer.id]: !answerBookmarked[answer.id]
                 })}>
-                        <Ionicons name={answerBookmarked[answer.id] ? "bookmark" : "star-outline"} size={16} color={answerBookmarked[answer.id] ? "#f59e0b" : "#6b7280"} />
-                        <Text style={[styles.answerActionText, answerBookmarked[answer.id] && {
+                        <Ionicons name={isBookmarked ? "bookmark" : "star-outline"} size={16} color={isBookmarked ? "#f59e0b" : "#6b7280"} />
+                        <Text style={[styles.answerActionText, isBookmarked && {
                     color: '#f59e0b'
-                  }]}>{answer.bookmarks + (answerBookmarked[answer.id] ? 1 : 0)}</Text>
+                  }]}>{collectCount}</Text>
                       </TouchableOpacity>
                     </View>
                     <View style={styles.answerFooterRight}>
@@ -318,46 +2458,47 @@ export default function SupplementDetailScreen({
                       </TouchableOpacity>
                     </View>
                   </View>
-                </TouchableOpacity>)}
-            </> : activeTab === t('screens.supplementDetail.tabs.invite') ?
-        // 邀请列表 - 二级tab标签
+                </TouchableOpacity>;
+          })}
+            </> : activeTab === TAB_KEYS.INVITE ?
+        // 閭€璇峰垪琛?- 浜岀骇tab鏍囩
         <View style={styles.inviteContainer}>
-              {/* 二级tab标签 */}
+              {/* 浜岀骇tab鏍囩 */}
               <View style={styles.inviteSubTabs}>
-                <TouchableOpacity style={[styles.inviteSubTabItem, inviteTab === t('screens.supplementDetail.invite.tabs.local') && styles.inviteSubTabItemActive]} onPress={() => setInviteTab(t('screens.supplementDetail.invite.tabs.local'))}>
-                  <Text style={[styles.inviteSubTabText, inviteTab === t('screens.supplementDetail.invite.tabs.local') && styles.inviteSubTabTextActive]}>{t('screens.supplementDetail.invite.tabs.local')}</Text>
+                <TouchableOpacity style={[styles.inviteSubTabItem, inviteTab === INVITE_TAB_KEYS.LOCAL && styles.inviteSubTabItemActive]} onPress={() => setInviteTab(INVITE_TAB_KEYS.LOCAL)}>
+                  <Text style={[styles.inviteSubTabText, inviteTab === INVITE_TAB_KEYS.LOCAL && styles.inviteSubTabTextActive]}>{t('screens.supplementDetail.invite.tabs.local')}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.inviteSubTabItem, inviteTab === t('screens.supplementDetail.invite.tabs.twitter') && styles.inviteSubTabItemActive]} onPress={() => setInviteTab(t('screens.supplementDetail.invite.tabs.twitter'))}>
-                  <Ionicons name="logo-twitter" size={14} color={inviteTab === t('screens.supplementDetail.invite.tabs.twitter') ? '#1DA1F2' : '#9ca3af'} />
-                  <Text style={[styles.inviteSubTabText, inviteTab === t('screens.supplementDetail.invite.tabs.twitter') && styles.inviteSubTabTextActive]}>{t('screens.supplementDetail.invite.tabs.twitter')}</Text>
+                <TouchableOpacity style={[styles.inviteSubTabItem, inviteTab === INVITE_TAB_KEYS.TWITTER && styles.inviteSubTabItemActive]} onPress={() => setInviteTab(INVITE_TAB_KEYS.TWITTER)}>
+                  <Ionicons name="logo-twitter" size={14} color={inviteTab === INVITE_TAB_KEYS.TWITTER ? '#1DA1F2' : '#9ca3af'} />
+                  <Text style={[styles.inviteSubTabText, inviteTab === INVITE_TAB_KEYS.TWITTER && styles.inviteSubTabTextActive]}>{t('screens.supplementDetail.invite.tabs.twitter')}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.inviteSubTabItem, inviteTab === t('screens.supplementDetail.invite.tabs.facebook') && styles.inviteSubTabItemActive]} onPress={() => setInviteTab(t('screens.supplementDetail.invite.tabs.facebook'))}>
-                  <Ionicons name="logo-facebook" size={14} color={inviteTab === t('screens.supplementDetail.invite.tabs.facebook') ? '#4267B2' : '#9ca3af'} />
-                  <Text style={[styles.inviteSubTabText, inviteTab === t('screens.supplementDetail.invite.tabs.facebook') && styles.inviteSubTabTextActive]}>{t('screens.supplementDetail.invite.tabs.facebook')}</Text>
+                <TouchableOpacity style={[styles.inviteSubTabItem, inviteTab === INVITE_TAB_KEYS.FACEBOOK && styles.inviteSubTabItemActive]} onPress={() => setInviteTab(INVITE_TAB_KEYS.FACEBOOK)}>
+                  <Ionicons name="logo-facebook" size={14} color={inviteTab === INVITE_TAB_KEYS.FACEBOOK ? '#4267B2' : '#9ca3af'} />
+                  <Text style={[styles.inviteSubTabText, inviteTab === INVITE_TAB_KEYS.FACEBOOK && styles.inviteSubTabTextActive]}>{t('screens.supplementDetail.invite.tabs.facebook')}</Text>
                 </TouchableOpacity>
               </View>
 
-              {/* 搜索框 */}
+              {/* 鎼滅储妗?*/}
               <View style={styles.inviteSearchContainer}>
                 <View style={styles.inviteSearchBox}>
                   <Ionicons name="search" size={14} color="#9ca3af" />
-                  <TextInput style={styles.inviteSearchInput} placeholder={inviteTab === t('screens.supplementDetail.invite.tabs.local') ? t('screens.supplementDetail.invite.search.local') : inviteTab === t('screens.supplementDetail.invite.tabs.twitter') ? t('screens.supplementDetail.invite.search.twitter') : t('screens.supplementDetail.invite.search.facebook')} placeholderTextColor="#9ca3af" value={inviteTab === t('screens.supplementDetail.invite.tabs.local') ? searchLocalUser : inviteTab === t('screens.supplementDetail.invite.tabs.twitter') ? searchTwitterUser : searchFacebookUser} onChangeText={text => {
-                if (inviteTab === t('screens.supplementDetail.invite.tabs.local')) setSearchLocalUser(text);else if (inviteTab === t('screens.supplementDetail.invite.tabs.twitter')) setSearchTwitterUser(text);else setSearchFacebookUser(text);
+                  <TextInput style={styles.inviteSearchInput} placeholder={inviteTab === INVITE_TAB_KEYS.LOCAL ? t('screens.supplementDetail.invite.search.local') : inviteTab === INVITE_TAB_KEYS.TWITTER ? t('screens.supplementDetail.invite.search.twitter') : t('screens.supplementDetail.invite.search.facebook')} placeholderTextColor="#9ca3af" value={inviteTab === INVITE_TAB_KEYS.LOCAL ? searchLocalUser : inviteTab === INVITE_TAB_KEYS.TWITTER ? searchTwitterUser : searchFacebookUser} onChangeText={text => {
+                if (inviteTab === INVITE_TAB_KEYS.LOCAL) setSearchLocalUser(text);else if (inviteTab === INVITE_TAB_KEYS.TWITTER) setSearchTwitterUser(text);else setSearchFacebookUser(text);
               }} />
                 </View>
               </View>
 
-              {/* 本站用户内容 */}
-              {inviteTab === t('screens.supplementDetail.invite.tabs.local') && <View style={styles.inviteTabContent}>
-                  {/* 推荐邀请用户 - 横向滚动 */}
+              {/* 鏈珯鐢ㄦ埛鍐呭 */}
+              {inviteTab === INVITE_TAB_KEYS.LOCAL && <View style={styles.inviteTabContent}>
+                  {/* 鎺ㄨ崘閭€璇风敤鎴?- 妯悜婊氬姩 */}
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recommendScroll}>
                     {[1, 2, 3, 4, 5].map(i => <View key={`rec-local-${i}`} style={styles.recommendUserCard}>
                         <Image source={{
                   uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=reclocal${i}`
                 }} style={styles.recommendUserAvatar} />
                         <View style={styles.recommendUserTextContainer}>
-                          <Text style={styles.recommendUserName} numberOfLines={1}>推荐用户{i}</Text>
-                          <Text style={styles.recommendUserDesc} numberOfLines={1}>{i * 20}回答</Text>
+                          <Text style={styles.recommendUserName} numberOfLines={1}>鎺ㄨ崘鐢ㄦ埛{i}</Text>
+                          <Text style={styles.recommendUserDesc} numberOfLines={1}>{i * 20}鍥炵瓟</Text>
                         </View>
                         <TouchableOpacity style={styles.recommendInviteBtn}>
                           <Ionicons name="add" size={12} color="#fff" />
@@ -365,15 +2506,15 @@ export default function SupplementDetailScreen({
                       </View>)}
                   </ScrollView>
 
-                  {/* 已邀请用户列表 */}
+                  {/* 宸查個璇风敤鎴峰垪琛?*/}
                   <Text style={styles.invitedListTitle}>{t('screens.supplementDetail.invite.invited')}</Text>
                   {[1, 2, 3, 4].map(i => <View key={`invited-local-${i}`} style={styles.inviteUserCard}>
                       <Image source={{
                 uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=local${i}`
               }} style={styles.inviteUserAvatar} />
                       <View style={styles.inviteUserInfo}>
-                        <Text style={styles.inviteUserName}>用户{i}</Text>
-                        <Text style={styles.inviteUserDesc}>Python开发者 · 回答过 {i * 10} 个问题</Text>
+                        <Text style={styles.inviteUserName}>鐢ㄦ埛{i}</Text>
+                        <Text style={styles.inviteUserDesc}>Python 开发者 · 回答过 {i * 10} 个问题</Text>
                       </View>
                       <View style={styles.invitedTag}>
                         <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
@@ -382,9 +2523,9 @@ export default function SupplementDetailScreen({
                     </View>)}
                 </View>}
 
-              {/* 推特用户内容 */}
-              {inviteTab === t('screens.supplementDetail.invite.tabs.twitter') && <View style={styles.inviteTabContent}>
-                  {/* 推荐邀请用户 - 横向滚动 */}
+              {/* 鎺ㄧ壒鐢ㄦ埛鍐呭 */}
+              {inviteTab === INVITE_TAB_KEYS.TWITTER && <View style={styles.inviteTabContent}>
+                  {/* 鎺ㄨ崘閭€璇风敤鎴?- 妯悜婊氬姩 */}
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recommendScroll}>
                     {[1, 2, 3, 4, 5].map(i => <View key={`rec-twitter-${i}`} style={styles.recommendUserCard}>
                         <Image source={{
@@ -392,7 +2533,7 @@ export default function SupplementDetailScreen({
                 }} style={styles.recommendUserAvatar} />
                         <View style={styles.recommendUserTextContainer}>
                           <Text style={styles.recommendUserName} numberOfLines={1}>@user{i}</Text>
-                          <Text style={styles.recommendUserDesc} numberOfLines={1}>{i}k粉丝</Text>
+                          <Text style={styles.recommendUserDesc} numberOfLines={1}>{i}k绮変笣</Text>
                         </View>
                         <TouchableOpacity style={[styles.recommendInviteBtn, styles.recommendInviteBtnTwitter]}>
                           <Ionicons name="logo-twitter" size={12} color="#fff" />
@@ -400,7 +2541,7 @@ export default function SupplementDetailScreen({
                       </View>)}
                   </ScrollView>
 
-                  {/* 已邀请用户列表 */}
+                  {/* 宸查個璇风敤鎴峰垪琛?*/}
                   <Text style={styles.invitedListTitle}>{t('screens.supplementDetail.invite.invited')}</Text>
                   {[1, 2, 3].map(i => <View key={`invited-twitter-${i}`} style={styles.inviteUserCard}>
                       <Image source={{
@@ -417,9 +2558,9 @@ export default function SupplementDetailScreen({
                     </View>)}
                 </View>}
 
-              {/* Facebook用户内容 */}
-              {inviteTab === t('screens.supplementDetail.invite.tabs.facebook') && <View style={styles.inviteTabContent}>
-                  {/* 推荐邀请用户 - 横向滚动 */}
+              {/* Facebook鐢ㄦ埛鍐呭 */}
+              {inviteTab === INVITE_TAB_KEYS.FACEBOOK && <View style={styles.inviteTabContent}>
+                  {/* 鎺ㄨ崘閭€璇风敤鎴?- 妯悜婊氬姩 */}
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recommendScroll}>
                     {[1, 2, 3, 4, 5].map(i => <View key={`rec-facebook-${i}`} style={styles.recommendUserCard}>
                         <Image source={{
@@ -427,7 +2568,7 @@ export default function SupplementDetailScreen({
                 }} style={styles.recommendUserAvatar} />
                         <View style={styles.recommendUserTextContainer}>
                           <Text style={styles.recommendUserName} numberOfLines={1}>FB User{i}</Text>
-                          <Text style={styles.recommendUserDesc} numberOfLines={1}>{i * 500}好友</Text>
+                          <Text style={styles.recommendUserDesc} numberOfLines={1}>{i * 500}濂藉弸</Text>
                         </View>
                         <TouchableOpacity style={[styles.recommendInviteBtn, styles.recommendInviteBtnFacebook]}>
                           <Ionicons name="logo-facebook" size={12} color="#fff" />
@@ -435,7 +2576,7 @@ export default function SupplementDetailScreen({
                       </View>)}
                   </ScrollView>
 
-                  {/* 已邀请用户列表 */}
+                  {/* 宸查個璇风敤鎴峰垪琛?*/}
                   <Text style={styles.invitedListTitle}>{t('screens.supplementDetail.invite.invited')}</Text>
                   {[1, 2, 3].map(i => <View key={`invited-facebook-${i}`} style={styles.inviteUserCard}>
                       <Image source={{
@@ -452,157 +2593,300 @@ export default function SupplementDetailScreen({
                     </View>)}
                 </View>}
             </View> : <>
-              {supplementComments.map(comment => <View key={comment.id}>
-                  <View style={styles.commentCard}>
-                    <Avatar uri={comment.avatar} name={comment.author} size={32} />
+              {commentListState.loading && supplementCommentsList.length === 0 ? <View style={styles.detailHintRow}>
+                  <ActivityIndicator size="small" color="#ef4444" />
+                  <Text style={styles.detailHintText}>正在加载评论列表...</Text>
+                </View> : null}
+              {commentListState.error && supplementCommentsList.length === 0 ? <Text style={styles.detailErrorText}>{commentListState.error}</Text> : null}
+              {!commentListState.loading && !commentListState.error && supplementCommentsList.length === 0 ? <View style={styles.supplementsEmptyContainer}>
+                  <Ionicons name="chatbubble-outline" size={48} color="#d1d5db" />
+                  <Text style={styles.supplementsEmptyText}>暂无评论，快来抢沙发吧</Text>
+                  <Text style={styles.supplementsEmptyDesc}>成为第一个评论这条补充问题的人</Text>
+                </View> : null}
+              {supplementCommentsList.map(comment => {
+            const isLiked = commentLiked[comment.id] ?? comment.liked;
+            const isCollected = commentBookmarked[comment.id] ?? comment.collected;
+            const isDisliked = commentDisliked[comment.id] ?? comment.disliked;
+            return <View key={comment.id} style={styles.commentCard}>
+                    <View style={styles.commentHeader}>
+                      <Avatar uri={comment.userAvatar || comment.avatar} name={comment.userName || comment.userNickname || comment.author} size={24} />
+                      <Text style={styles.commentAuthor}>{comment.userName || comment.userNickname || comment.author}</Text>
+                      <View style={{
+                    flex: 1
+                  }} />
+                      <Text style={styles.commentTime}>{comment.time}</Text>
+                    </View>
                     <View style={styles.commentContent}>
-                      <View style={styles.commentHeader}>
-                        <Text style={styles.commentAuthor}>{comment.author}</Text>
-                        <Text style={styles.commentTime}>{comment.time}</Text>
-                      </View>
                       <Text style={styles.commentText}>{comment.content}</Text>
                       <View style={styles.commentFooter}>
                         <View style={styles.commentFooterLeft}>
-                          <TouchableOpacity style={styles.commentActionBtn} onPress={() => setCommentLiked({
-                      ...commentLiked,
-                      [comment.id]: !commentLiked[comment.id]
-                    })}>
-                            <Ionicons name={commentLiked[comment.id] ? "thumbs-up" : "thumbs-up-outline"} size={14} color={commentLiked[comment.id] ? "#ef4444" : "#9ca3af"} />
-                            <Text style={[styles.commentActionText, commentLiked[comment.id] && {
+                          <TouchableOpacity style={styles.commentActionBtn} onPress={() => handleCommentLike(comment.id)} disabled={commentLikeLoading[comment.id]}>
+                            <Ionicons name={isLiked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={isLiked ? "#ef4444" : "#9ca3af"} />
+                            <Text style={[styles.commentActionText, isLiked && {
                         color: '#ef4444'
-                      }]}>{comment.likes + (commentLiked[comment.id] ? 1 : 0)}</Text>
+                      }]}>{getCommentLikeDisplayCount(comment, commentLiked[comment.id])}</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity style={styles.commentActionBtn} onPress={() => setExpandedComments({
-                      ...expandedComments,
-                      [comment.id]: !expandedComments[comment.id]
-                    })}>
+                          <TouchableOpacity style={styles.commentActionBtn} onPress={() => {
+                        setCurrentCommentId(comment.id);
+                        setShowCommentReplyModal(true);
+                      }}>
                             <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
-                            <Text style={styles.commentActionText}>{comment.replies} {t('screens.supplementDetail.comment.replies')}</Text>
+                            <Text style={styles.commentActionText}>{getCommentReplyDisplayCount(comment)}</Text>
                           </TouchableOpacity>
                           <TouchableOpacity style={styles.commentActionBtn} onPress={() => showToast(t('screens.supplementDetail.alerts.forwardFunction'), 'info')}>
                             <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
-                            <Text style={styles.commentActionText}>{comment.shares}</Text>
+                            <Text style={styles.commentActionText}>{comment.shareCount ?? comment.shares ?? 0}</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity style={styles.commentActionBtn} onPress={() => setCommentBookmarked({
-                      ...commentBookmarked,
-                      [comment.id]: !commentBookmarked[comment.id]
-                    })}>
-                            <Ionicons name={commentBookmarked[comment.id] ? "bookmark" : "bookmark-outline"} size={14} color={commentBookmarked[comment.id] ? "#f59e0b" : "#9ca3af"} />
-                            <Text style={[styles.commentActionText, commentBookmarked[comment.id] && {
+                          <TouchableOpacity style={styles.commentActionBtn} onPress={() => handleCommentCollect(comment.id)} disabled={commentCollectLoading[comment.id]}>
+                            <Ionicons name={isCollected ? "star" : "star-outline"} size={14} color={isCollected ? "#f59e0b" : "#9ca3af"} />
+                            <Text style={[styles.commentActionText, isCollected && {
                         color: '#f59e0b'
-                      }]}>{comment.bookmarks + (commentBookmarked[comment.id] ? 1 : 0)}</Text>
+                      }]}>{getCommentCollectDisplayCount(comment, commentBookmarked[comment.id])}</Text>
                           </TouchableOpacity>
                         </View>
                         <View style={styles.commentFooterRight}>
-                          <TouchableOpacity style={styles.commentActionBtn} onPress={() => setCommentDisliked({
-                      ...commentDisliked,
-                      [comment.id]: !commentDisliked[comment.id]
-                    })}>
-                            <Ionicons name={commentDisliked[comment.id] ? "thumbs-down" : "thumbs-down-outline"} size={14} color="#9ca3af" />
-                            <Text style={styles.commentActionText}>{comment.dislikes + (commentDisliked[comment.id] ? 1 : 0)}</Text>
+                          <TouchableOpacity style={styles.commentActionBtn} onPress={() => handleCommentDislike(comment.id)} disabled={commentDislikeLoading[comment.id]}>
+                            <Ionicons name={isDisliked ? "thumbs-down" : "thumbs-down-outline"} size={14} color="#9ca3af" />
+                            <Text style={styles.commentActionText}>{getCommentDislikeDisplayCount(comment, commentDisliked[comment.id])}</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity style={styles.commentActionBtn}>
-                            <Ionicons name="flag-outline" size={14} color="#ef4444" />
-                          </TouchableOpacity>
+                            <TouchableOpacity style={styles.commentActionBtn} onPress={() => handleCommentReport(comment.id)}>
+                              <Ionicons name="flag-outline" size={14} color="#ef4444" />
+                            </TouchableOpacity>
                         </View>
                       </View>
                     </View>
-                  </View>
-                  
-                  {Boolean(expandedComments[comment.id] && repliesData[comment.id]) && <View style={styles.repliesContainer}>
-                      {repliesData[comment.id].map(reply => <View key={reply.id} style={styles.replyCard}>
-                          <Avatar uri={reply.avatar} name={reply.author} size={28} />
-                          <View style={styles.replyContent}>
-                            <View style={styles.replyHeader}>
-                              <Text style={styles.replyAuthor}>{reply.author}</Text>
-                              <Text style={styles.replyTime}>{reply.time}</Text>
-                            </View>
-                            <Text style={styles.replyText}>{reply.content}</Text>
-                          </View>
-                        </View>)}
-                    </View>}
-                </View>)}
+                  </View>;
+          })}
             </>}
         </View>
       </ScrollView>
 
       <View style={styles.bottomBar}>
         <View style={styles.bottomBarLeft}>
-          <TouchableOpacity style={styles.bottomIconBtn} onPress={() => setLiked({
-          ...liked,
-          main: !liked.main
-        })}>
-            <Ionicons name={liked.main ? "thumbs-up" : "thumbs-up-outline"} size={20} color={liked.main ? "#ef4444" : "#6b7280"} />
-            <Text style={[styles.bottomIconText, liked.main && {
+          <TouchableOpacity style={styles.bottomIconBtn} onPress={handleSupplementLike} disabled={interactionLoading.like}>
+            <Ionicons name={mainLiked ? "thumbs-up" : "thumbs-up-outline"} size={20} color={mainLiked ? "#ef4444" : "#6b7280"} />
+            <Text style={[styles.bottomIconText, mainLiked && {
             color: '#ef4444'
-          }]}>{supplementQuestion.likes + (liked.main ? 1 : 0)}</Text>
+          }]}>{supplementLikeDisplayCount}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.bottomIconBtn} onPress={() => setBookmarked(!bookmarked)}>
-            <Ionicons name={bookmarked ? "bookmark" : "bookmark-outline"} size={20} color={bookmarked ? "#f59e0b" : "#6b7280"} />
-            <Text style={[styles.bottomIconText, bookmarked && {
+          <TouchableOpacity style={styles.bottomIconBtn} onPress={handleSupplementCollect} disabled={interactionLoading.collect}>
+            <Ionicons name={mainCollected ? "star" : "star-outline"} size={20} color={mainCollected ? "#f59e0b" : "#6b7280"} />
+            <Text style={[styles.bottomIconText, mainCollected && {
             color: '#f59e0b'
-          }]}>{supplementQuestion.bookmarks + (bookmarked ? 1 : 0)}</Text>
+          }]}>{supplementCollectDisplayCount}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.bottomIconBtn} onPress={() => setDisliked(!disliked)}>
-            <Ionicons name={disliked ? "thumbs-down" : "thumbs-down-outline"} size={20} color={disliked ? "#6b7280" : "#6b7280"} />
-            <Text style={[styles.bottomIconText, disliked && {
+          <TouchableOpacity style={styles.bottomIconBtn} onPress={handleSupplementDislike} disabled={interactionLoading.dislike}>
+            <Ionicons name={mainDisliked ? "thumbs-down" : "thumbs-down-outline"} size={20} color="#6b7280" />
+            <Text style={[styles.bottomIconText, mainDisliked && {
             color: '#6b7280'
-          }]}>12</Text>
+          }]}>{supplementDislikeDisplayCount}</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.bottomBarRight}>
-          <TouchableOpacity style={styles.bottomCommentInput} onPress={() => setShowCommentModal(true)}>
-            <Text style={styles.bottomCommentPlaceholder}>{t('screens.supplementDetail.bottomBar.commentPlaceholder')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.bottomAnswerBtn} onPress={() => setShowAnswerModal(true)}>
-            <Ionicons name="create-outline" size={18} color="#fff" />
-            <Text style={styles.bottomAnswerText}>{t('screens.supplementDetail.bottomBar.answerButton')}</Text>
+          <TouchableOpacity 
+            style={styles.bottomCommentInput} 
+            onPress={() => {
+              if (activeTab === TAB_KEYS.ANSWERS) {
+                setShowAnswerModal(true);
+              } else if (activeTab === TAB_KEYS.COMMENTS) {
+                openCommentComposer({
+                  targetId: supplementId,
+                  parentId: 0
+                });
+              }
+            }}
+          >
+            <Text style={styles.bottomCommentPlaceholder}>
+              {activeTab === TAB_KEYS.ANSWERS 
+                ? t('screens.supplementDetail.modal.answerTitle')
+                : activeTab === TAB_KEYS.COMMENTS
+                ? t('screens.supplementDetail.modal.commentTitle')
+                : t('screens.supplementDetail.bottomBar.commentPlaceholder')}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      <Modal visible={showAnswerModal} animationType="slide">
+      {/* 鍥炵瓟寮圭獥 */}
+      <Modal visible={false && showAnswerModal} animationType="slide">
         <SafeAreaView style={styles.answerModal}>
           <View style={styles.answerModalHeader}>
-            <TouchableOpacity onPress={() => setShowAnswerModal(false)} style={styles.answerCloseBtn}>
+            <TouchableOpacity onPress={() => {
+              setShowAnswerModal(false);
+              setAnswerText('');
+              setAnswerIdentity('personal');
+              setAnswerSelectedTeams([]);
+            }} style={styles.answerCloseBtn}>
               <Ionicons name="close" size={26} color="#333" />
             </TouchableOpacity>
-            <Text style={styles.answerModalTitle}>{t('screens.supplementDetail.modal.answerTitle')}</Text>
-            <TouchableOpacity style={[styles.answerPublishBtn, !answerText.trim() && styles.answerPublishBtnDisabled]} onPress={handleSubmitAnswer} disabled={!answerText.trim()}>
-              <Text style={styles.answerPublishText}>{t('screens.supplementDetail.modal.publish')}</Text>
+            <View style={styles.answerHeaderCenter}>
+              <Text style={styles.answerModalTitle}>{t('screens.supplementDetail.modal.answerTitle')}</Text>
+            </View>
+            <TouchableOpacity 
+              style={[styles.answerPublishBtn, !answerText.trim() && styles.answerPublishBtnDisabled]} 
+              onPress={handleSubmitAnswer} 
+              disabled={!answerText.trim()}
+            >
+              <Text style={[styles.answerPublishText, !answerText.trim() && styles.answerPublishTextDisabled]}>
+                {t('screens.supplementDetail.modal.publish')}
+              </Text>
             </TouchableOpacity>
           </View>
-          <ScrollView style={styles.answerContentArea}>
-            <TextInput style={styles.answerTextInput} placeholder={t('screens.supplementDetail.modal.answerPlaceholder')} placeholderTextColor="#bbb" value={answerText} onChangeText={setAnswerText} multiline autoFocus />
+
+          {/* 鏄剧ず琛ュ厖闂鍐呭 */}
+          {Boolean(resolvedSupplementQuestion) && (
+            <View style={styles.supplementAnswerContext}>
+              <View style={styles.supplementAnswerHeader}>
+                <Ionicons name="document-text" size={18} color="#3b82f6" />
+                <Text style={styles.supplementAnswerLabel}>琛ュ厖闂</Text>
+              </View>
+              <View style={styles.supplementAnswerAuthor}>
+                <Avatar 
+                  uri={supplementDisplayAvatar} 
+                  name={supplementDisplayAuthor} 
+                  size={24} 
+                />
+                <Text style={styles.supplementAnswerAuthorName}>
+                  {supplementDisplayAuthor}
+                </Text>
+              </View>
+              <Text style={styles.supplementAnswerContent} numberOfLines={3}>
+                {supplementDisplayContent}
+              </Text>
+            </View>
+          )}
+
+          <ScrollView style={styles.answerContentArea} keyboardShouldPersistTaps="handled">
+            <TextInput 
+              style={styles.answerTextInput} 
+              placeholder={t('screens.supplementDetail.modal.answerPlaceholder')} 
+              placeholderTextColor="#bbb" 
+              value={answerText} 
+              onChangeText={setAnswerText} 
+              multiline 
+              autoFocus 
+              textAlignVertical="top" 
+            />
+            
+            {/* 韬唤閫夋嫨鍣?*/}
+            <View style={styles.answerIdentitySection}>
+              <IdentitySelector 
+                selectedIdentity={answerIdentity} 
+                selectedTeams={answerSelectedTeams} 
+                onIdentityChange={setAnswerIdentity} 
+                onTeamsChange={setAnswerSelectedTeams} 
+              />
+            </View>
           </ScrollView>
+
+          <View style={styles.answerToolbar}>
+            <View style={styles.answerToolsLeft}>
+              <TouchableOpacity style={styles.answerToolItem}>
+                <Ionicons name="image-outline" size={24} color="#666" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.answerToolItem}>
+                <Ionicons name="at-outline" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.answerWordCount}>{answerText.length}/2000</Text>
+          </View>
         </SafeAreaView>
       </Modal>
 
-      <Modal visible={showCommentModal} animationType="slide">
-        <SafeAreaView style={styles.commentModal}>
-          <View style={styles.commentModalHeader}>
-            <TouchableOpacity onPress={() => {
-            setShowCommentModal(false);
-            setCommentText('');
-          }} style={styles.commentCloseBtn}>
-              <Ionicons name="close" size={26} color="#333" />
-            </TouchableOpacity>
-            <Text style={styles.commentModalTitle}>{t('screens.supplementDetail.modal.commentTitle')}</Text>
-            <TouchableOpacity style={[styles.commentPublishBtn, !commentText.trim() && styles.commentPublishBtnDisabled]} onPress={() => {
-            if (commentText.trim()) {
-              showToast(t('screens.supplementDetail.alerts.commentPublished'), 'success');
-              setCommentText('');
-              setShowCommentModal(false);
-            }
-          }} disabled={!commentText.trim()}>
-              <Text style={styles.commentPublishText}>{t('screens.supplementDetail.modal.publish')}</Text>
-            </TouchableOpacity>
+      {/* 璇勮寮圭獥 */}
+      <WriteAnswerModal
+        visible={showAnswerModal}
+        onClose={closeAnswerModal}
+        onSubmit={handleSubmitAnswer}
+        title="写回答"
+        publishText="发布"
+        questionTitle={resolvedOriginalQuestion.title}
+        supplementText={supplementDisplayContent}
+        text={answerText}
+        onChangeText={setAnswerText}
+        placeholder="写下你的回答，帮助有需要的人..."
+        selectedIdentity={answerIdentity}
+        selectedTeams={answerSelectedTeams}
+        onIdentityChange={setAnswerIdentity}
+        onTeamsChange={setAnswerSelectedTeams}
+        images={answerImages}
+        onChangeImages={setAnswerImages}
+        wordLimit={2000}
+        submitting={answerSubmitting}
+      />
+
+      <Modal visible={showCommentReplyModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowCommentReplyModal(false)} />
+          <View style={styles.commentReplyModal}>
+            <View style={styles.commentReplyModalHandle} />
+            <View style={styles.commentReplyModalHeader}>
+              <TouchableOpacity onPress={() => setShowCommentReplyModal(false)} style={styles.commentReplyModalCloseBtn}>
+                <Ionicons name="close" size={26} color="#1f2937" />
+              </TouchableOpacity>
+              <Text style={styles.commentReplyModalTitle}>
+                {Number(commentRepliesMap[currentCommentId]?.total ?? currentReplyComment?.replyCount ?? currentReplyComment?.replies ?? commentRepliesMap[currentCommentId]?.list?.length ?? 0)}条回复
+              </Text>
+              <View style={styles.commentReplyModalHeaderRight} />
+            </View>
+
+            {Boolean(currentReplyComment) && <View style={styles.originalCommentCard}>
+                <View style={styles.originalCommentHeader}>
+                  <Avatar uri={currentReplyComment.userAvatar || currentReplyComment.avatar} name={currentReplyComment.userName || currentReplyComment.userNickname || currentReplyComment.author} size={32} />
+                  <Text style={styles.originalCommentAuthor}>
+                    {currentReplyComment.userName || currentReplyComment.userNickname || currentReplyComment.author}
+                  </Text>
+                  <View style={{ flex: 1 }} />
+                  <Text style={styles.originalCommentTime}>{currentReplyComment.time}</Text>
+                </View>
+                <Text style={styles.originalCommentText}>{currentReplyComment.content}</Text>
+              </View>}
+
+            <View style={styles.repliesSectionHeader}>
+              <Text style={styles.repliesSectionTitle}>全部回复</Text>
+            </View>
+
+            <ScrollView style={styles.commentReplyScroll} showsVerticalScrollIndicator={false}>
+              {Boolean(currentCommentId && commentRepliesMap[currentCommentId]?.loading) && <View style={styles.loadingIndicator}>
+                  <Text style={styles.loadingText}>加载回复中...</Text>
+                </View>}
+              {currentCommentId && commentRepliesMap[currentCommentId]?.list?.length ? renderCommentReplyTreeNodes(buildCommentReplyTree(commentRepliesMap[currentCommentId].list, currentCommentId), 0, {
+            rootCommentId: currentCommentId,
+            beforeOpenReply: () => setShowCommentReplyModal(false),
+            beforeReport: () => setShowCommentReplyModal(false)
+          }) : null}
+              {currentCommentId && commentRepliesMap[currentCommentId]?.loaded && (!commentRepliesMap[currentCommentId]?.list || commentRepliesMap[currentCommentId].list.length === 0) && <View style={styles.loadingIndicator}>
+                  <Text style={styles.loadingText}>暂无回复</Text>
+                </View>}
+            </ScrollView>
+
+            <View style={styles.commentReplyBottomBar}>
+              <TouchableOpacity style={styles.commentReplyWriteBtn} onPress={() => {
+              if (!currentReplyComment) {
+                return;
+              }
+              setShowCommentReplyModal(false);
+              openCommentComposer(buildCommentReplyTarget(currentReplyComment, {
+                targetId: supplementId
+              }));
+            }}>
+                <Ionicons name="create-outline" size={18} color="#6b7280" />
+                <Text style={styles.commentReplyWriteText}>写回复...</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <ScrollView style={styles.commentContentArea}>
-            <TextInput style={styles.commentTextInput} placeholder={t('screens.supplementDetail.modal.commentPlaceholder')} placeholderTextColor="#bbb" value={commentText} onChangeText={setCommentText} multiline autoFocus />
-          </ScrollView>
-        </SafeAreaView>
+        </View>
       </Modal>
+
+      <WriteCommentModal
+        visible={showCommentModal}
+        onClose={closeCommentComposer}
+        onPublish={handleSubmitSupplementComment}
+        originalComment={commentComposerTarget.originalComment}
+        placeholder={commentComposerTarget.parentId ? '写下你的回复...' : '写下你的评论...'}
+        title={commentComposerTarget.parentId ? '写回复' : '写评论'}
+        publishInFooter={true}
+      />
     </SafeAreaView>;
 }
 const styles = StyleSheet.create({
@@ -721,6 +3005,36 @@ const styles = StyleSheet.create({
   supplementViewsText: {
     fontSize: 12,
     color: '#9ca3af'
+  },
+  detailHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10
+  },
+  detailHintText: {
+    fontSize: 12,
+    color: '#6b7280'
+  },
+  detailErrorText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#ef4444'
+  },
+  supplementsEmptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 60
+  },
+  supplementsEmptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6b7280',
+    marginTop: 16
+  },
+  supplementsEmptyDesc: {
+    fontSize: 14,
+    color: '#9ca3af',
+    marginTop: 8
   },
   originalQuestionCard: {
     backgroundColor: '#fafafa',
@@ -1061,7 +3375,6 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   },
   commentCard: {
-    flexDirection: 'row',
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6'
@@ -1072,46 +3385,45 @@ const styles = StyleSheet.create({
     borderRadius: 18
   },
   commentContent: {
-    flex: 1,
-    marginLeft: 12
+    flex: 1
   },
   commentHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6
+    marginBottom: 10,
+    gap: 8
   },
   commentAuthor: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '500',
-    color: '#1f2937'
+    color: '#9ca3af'
   },
   commentTime: {
     fontSize: 12,
     color: '#9ca3af'
   },
   commentText: {
-    fontSize: 14,
-    color: '#374151',
-    lineHeight: 20,
-    marginBottom: 8
+    fontSize: 15,
+    color: '#1f2937',
+    lineHeight: 22,
+    marginBottom: 10
   },
   commentFooter: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 10
+    alignItems: 'center',
+    marginTop: 4
   },
   commentFooterLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
     flex: 1
   },
   commentFooterRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12
+    gap: 4
   },
   commentActionBtn: {
     flexDirection: 'row',
@@ -1129,9 +3441,8 @@ const styles = StyleSheet.create({
     borderTopColor: '#f3f4f6'
   },
   replyCard: {
-    flexDirection: 'row',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6'
   },
@@ -1146,23 +3457,187 @@ const styles = StyleSheet.create({
   },
   replyHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4
+    marginBottom: 10,
+    gap: 8
   },
   replyAuthor: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
-    color: '#1f2937'
+    color: '#9ca3af'
   },
   replyTime: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#9ca3af'
   },
   replyText: {
+    fontSize: 15,
+    color: '#1f2937',
+    lineHeight: 22,
+    marginBottom: 10
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(15, 23, 42, 0.25)'
+  },
+  modalBackdrop: {
+    flex: 1
+  },
+  commentReplyModal: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '85%'
+  },
+  commentReplyModalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 8
+  },
+  commentReplyModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  commentReplyModalCloseBtn: {
+    position: 'absolute',
+    right: 16,
+    padding: 4,
+    zIndex: 10
+  },
+  commentReplyModalTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#1f2937'
+  },
+  commentReplyModalHeaderRight: {
+    width: 40
+  },
+  originalCommentCard: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 8,
+    borderBottomColor: '#f9fafb'
+  },
+  originalCommentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 10
+  },
+  originalCommentAuthor: {
     fontSize: 13,
-    color: '#374151',
-    lineHeight: 18
+    fontWeight: '500',
+    color: '#9ca3af'
+  },
+  originalCommentTime: {
+    fontSize: 13,
+    color: '#9ca3af'
+  },
+  originalCommentText: {
+    fontSize: 16,
+    color: '#1f2937',
+    lineHeight: 24
+  },
+  repliesSectionHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fafafa'
+  },
+  repliesSectionTitle: {
+    fontSize: 13,
+    color: '#9ca3af',
+    fontWeight: '500'
+  },
+  commentReplyScroll: {
+    maxHeight: 500,
+    backgroundColor: '#fff'
+  },
+  loadingIndicator: {
+    paddingVertical: 18,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  loadingText: {
+    fontSize: 12,
+    color: '#9ca3af'
+  },
+  replyAuthorMeta: {
+    flexShrink: 1
+  },
+  replyAuthorLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap'
+  },
+  replyAuthorRelation: {
+    fontSize: 12,
+    color: '#9ca3af'
+  },
+  replyReplyTarget: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#6b7280'
+  },
+  replyActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  replyActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3
+  },
+  replyActionText: {
+    fontSize: 11,
+    color: '#9ca3af'
+  },
+  replyChildrenSection: {
+    marginTop: 4,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10
+  },
+  replyChildrenToggle: {
+    paddingBottom: 6
+  },
+  replyChildrenToggleText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500'
+  },
+  commentReplyBottomBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6'
+  },
+  commentReplyWriteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f9fafb',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12
+  },
+  commentReplyWriteText: {
+    fontSize: 14,
+    color: '#9ca3af'
   },
   bottomBar: {
     flexDirection: 'row',
@@ -1235,8 +3710,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: modalTokens.border
   },
+  answerHeaderCenter: {
+    flex: 1,
+    alignItems: 'center'
+  },
   answerCloseBtn: {
-    padding: 4
+    padding: 4,
+    width: 40
   },
   answerModalTitle: {
     fontSize: 17,
@@ -1257,61 +3737,82 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600'
   },
+  answerPublishTextDisabled: {
+    color: '#fff',
+    opacity: 0.7
+  },
   answerContentArea: {
     flex: 1,
-    backgroundColor: modalTokens.surface
+    backgroundColor: modalTokens.surface,
+    padding: 16
   },
   answerTextInput: {
-    padding: 16,
     fontSize: 16,
     color: modalTokens.textPrimary,
     lineHeight: 26,
-    minHeight: 300
+    minHeight: 200,
+    marginBottom: 16,
+    textAlignVertical: 'top'
   },
-  commentModal: {
-    flex: 1,
-    backgroundColor: modalTokens.surface
+  answerIdentitySection: {
+    marginTop: 8
   },
-  commentModalHeader: {
+  answerToolbar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: modalTokens.border
-  },
-  commentCloseBtn: {
-    padding: 4
-  },
-  commentModalTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: modalTokens.textPrimary
-  },
-  commentPublishBtn: {
-    backgroundColor: modalTokens.danger,
-    paddingHorizontal: modalTokens.actionPaddingX,
-    paddingVertical: modalTokens.actionPaddingY,
-    borderRadius: modalTokens.actionRadius
-  },
-  commentPublishBtnDisabled: {
-    backgroundColor: modalTokens.dangerSoft
-  },
-  commentPublishText: {
-    fontSize: 14,
-    color: '#fff',
-    fontWeight: '600'
-  },
-  commentContentArea: {
-    flex: 1,
+    borderTopWidth: 1,
+    borderTopColor: modalTokens.border,
     backgroundColor: modalTokens.surface
   },
-  commentTextInput: {
+  answerToolsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16
+  },
+  answerToolItem: {
+    padding: 4
+  },
+  answerWordCount: {
+    fontSize: 14,
+    color: '#9ca3af'
+  },
+  // 琛ュ厖鍥炵瓟涓婁笅鏂囨牱寮?
+  supplementAnswerContext: {
+    backgroundColor: '#f0f9ff',
     padding: 16,
-    fontSize: 16,
-    color: modalTokens.textPrimary,
-    lineHeight: 26,
-    minHeight: 200
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0f2fe'
+  },
+  supplementAnswerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10
+  },
+  supplementAnswerLabel: {
+    fontSize: 13,
+    color: '#3b82f6',
+    fontWeight: '600'
+  },
+  supplementAnswerAuthor: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10
+  },
+  supplementAnswerAuthorName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1f2937'
+  },
+  supplementAnswerContent: {
+    fontSize: 14,
+    color: '#6b7280',
+    lineHeight: 20
   }
 });
+
+

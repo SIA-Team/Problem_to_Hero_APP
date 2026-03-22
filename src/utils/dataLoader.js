@@ -62,7 +62,7 @@ const transformSupplementDataToFormat = (apiData) => {
   }
   
   return apiData.map((item) => {
-    const normalizedId = item.id ?? item.supplementId ?? item.supplement_id ?? null;
+    const normalizedId = item.supplementId ?? item.supplement_id ?? item.id ?? null;
     const normalizedAuthor =
       item.author ||
       item.authorNickName ||
@@ -83,7 +83,11 @@ const transformSupplementDataToFormat = (apiData) => {
       '未知';
     const normalizedLikeCount = Number(item.likeCount ?? item.likes ?? item.like_count) || 0;
     const normalizedDislikeCount = Number(item.dislikeCount ?? item.dislikes ?? item.dislike_count) || 0;
-    const normalizedCommentCount = Number(item.commentCount ?? item.comments ?? item.comment_count) || 0;
+    const normalizedCommentCount = Number(
+      item.commentCount ??
+      item.comments ??
+      item.comment_count
+    ) || 0;
     const normalizedShareCount = Number(item.shareCount ?? item.shares ?? item.share_count) || 0;
     const normalizedCollectCount = Number(item.collectCount ?? item.bookmarkCount ?? item.bookmarks ?? item.collect_count) || 0;
     const normalizedAnswerCount = Number(item.answerCount ?? item.answers ?? item.answer_count) || 0;

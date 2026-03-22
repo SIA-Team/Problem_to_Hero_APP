@@ -34,7 +34,7 @@ const commentApi = {
       targetType,
       targetId,
       parentId = 0,
-      sortBy = 'newest',
+      sortBy,
       pageNum = 1,
       pageSize = 10
     } = params;
@@ -43,10 +43,12 @@ const commentApi = {
       targetType,
       targetId,
       parentId,
-      sortBy,
       pageNum,
       pageSize
     };
+    if (sortBy) {
+      requestParams.sortBy = sortBy;
+    }
 
     return contentApiClient.get(API_ENDPOINTS.COMMENT.LIST, { params: requestParams });
   },
@@ -76,9 +78,9 @@ const commentApi = {
    * @param {string} commentId - 评论ID
    * @returns {Promise<Object>}
    */
-  collectComment: (commentId) => {
+  collectComment: (commentId, data = {}) => {
     const url = replaceUrlParams(API_ENDPOINTS.COMMENT.COLLECT, { id: commentId });
-    return contentApiClient.post(url);
+    return contentApiClient.post(url, data);
   },
 
   /**
@@ -86,9 +88,9 @@ const commentApi = {
    * @param {string} commentId - 评论ID
    * @returns {Promise<Object>}
    */
-  uncollectComment: (commentId) => {
+  uncollectComment: (commentId, data = {}) => {
     const url = replaceUrlParams(API_ENDPOINTS.COMMENT.UNCOLLECT, { id: commentId });
-    return contentApiClient.post(url);
+    return contentApiClient.post(url, data);
   },
 
   /**

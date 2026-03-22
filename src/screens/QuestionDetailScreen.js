@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import IdentitySelector from '../components/IdentitySelector';
 import ImagePickerSheet from '../components/ImagePickerSheet';
+import WriteAnswerModal from '../components/WriteAnswerModal';
 import QuestionDetailSkeleton from '../components/QuestionDetailSkeleton';
 import superLikeCreditService from '../services/SuperLikeCreditService';
 import { useTranslation } from '../i18n/withTranslation';
@@ -439,7 +440,6 @@ export default function QuestionDetailScreen({
   const [showReportModal, setShowReportModal] = useState(false);
   const [answerText, setAnswerText] = useState('');
   const [answerImages, setAnswerImages] = useState([]); // 回答图片
-  const [showAnswerImagePicker, setShowAnswerImagePicker] = useState(false); // 回答图片选择器
   const [supplementText, setSupplementText] = useState('');
   const [supplementImages, setSupplementImages] = useState([]);
   const [showSupplementImagePicker, setShowSupplementImagePicker] = useState(false);
@@ -460,13 +460,37 @@ export default function QuestionDetailScreen({
   const [commentLikeLoading, setCommentLikeLoading] = useState({});
   const [commentCollected, setCommentCollected] = useState({});
   const [commentCollectLoading, setCommentCollectLoading] = useState({});
+  const [commentBookmarked, setCommentBookmarked] = useState({});
   const [commentDisliked, setCommentDisliked] = useState({});
   const [commentDislikeLoading, setCommentDislikeLoading] = useState({});
   const [sortFilter, setSortFilter] = useState('精选'); // 精选 or 最新
   const [showSuppMoreModal, setShowSuppMoreModal] = useState(false);
   const [currentSuppId, setCurrentSuppId] = useState(null);
+  const [suppCommentListState, setSuppCommentListState] = useState({
+    list: [],
+    total: 0,
+    pageNum: 1,
+    hasMore: true,
+    loaded: false,
+    loading: false,
+    refreshing: false,
+    loadingMore: false,
+    targetId: null
+  });
+  const [suppCommentRepliesMap, setSuppCommentRepliesMap] = useState({});
+  const [expandedSuppCommentReplies, setExpandedSuppCommentReplies] = useState({});
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [commentText, setCommentText] = useState('');
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [commentTarget, setCommentTarget] = useState({
+    targetType: 1,
+    targetId: null,
+    parentId: 0,
+    replyToCommentId: 0,
+    replyToUserId: null,
+    replyToUserName: '',
+    originalComment: null
+  });
   const [currentAnswerId, setCurrentAnswerId] = useState(null);
   const [answerLiked, setAnswerLiked] = useState({});
   const [answerDisliked, setAnswerDisliked] = useState({});
@@ -480,10 +504,35 @@ export default function QuestionDetailScreen({
   const [answerAdopted, setAnswerAdopted] = useState({}); // 记录每个回答的采纳状态
   const [answerAdoptLoading, setAnswerAdoptLoading] = useState({}); // 采纳请求中状态
   const [showAnswerCommentListModal, setShowAnswerCommentListModal] = useState(false);
+  const [answerCommentListState, setAnswerCommentListState] = useState({
+    list: [],
+    total: 0,
+    pageNum: 1,
+    hasMore: true,
+    loaded: false,
+    loading: false,
+    refreshing: false,
+    loadingMore: false,
+    targetId: null
+  });
+  const [questionCommentRepliesMap, setQuestionCommentRepliesMap] = useState({});
+  const [answerCommentRepliesMap, setAnswerCommentRepliesMap] = useState({});
   const [showSuppCommentListModal, setShowSuppCommentListModal] = useState(false);
   const [expandedComments, setExpandedComments] = useState({});
+  const answerCommentsList = answerCommentListState.list;
+  const answerCommentsHasMore = answerCommentListState.hasMore;
+  const suppCommentsList = suppCommentListState.list;
+  const suppCommentsTotal = suppCommentListState.total;
+  const suppCommentsHasMore = suppCommentListState.hasMore;
   const [showCommentReplyModal, setShowCommentReplyModal] = useState(false);
+  const [showAnswerCommentReplyModal, setShowAnswerCommentReplyModal] = useState(false);
+  const [showSuppCommentReplyModal, setShowSuppCommentReplyModal] = useState(false);
   const [currentCommentId, setCurrentCommentId] = useState(null);
+  const [currentAnswerCommentId, setCurrentAnswerCommentId] = useState(null);
+  const [currentSuppCommentId, setCurrentSuppCommentId] = useState(null);
+  const [expandedQuestionReplyChildren, setExpandedQuestionReplyChildren] = useState({});
+  const [expandedAnswerReplyChildren, setExpandedAnswerReplyChildren] = useState({});
+  const [expandedSuppReplyChildren, setExpandedSuppReplyChildren] = useState({});
   const [isTeamMember, setIsTeamMember] = useState(false); // 是否已加入团队
   const [showProgressBar, setShowProgressBar] = useState(false); // 是否显示进度条
   const [solvedPercentage, setSolvedPercentage] = useState(65); // 已解决的百分比
@@ -707,6 +756,101 @@ export default function QuestionDetailScreen({
       loadCommentsList(questionId, true, commentsSortBy);
     }
   }, [activeTab, commentsSortBy, commentsCache, route?.params?.id]);
+  useEffect(() => {
+    if (!showAnswerCommentListModal || !currentAnswerId) {
+      return;
+    }
+    setAnswerCommentListState(prevState => ({
+      ...prevState,
+      list: [],
+      total: 0,
+      pageNum: 1,
+      hasMore: true,
+      loaded: false,
+      loading: true,
+      refreshing: false,
+      loadingMore: false,
+      targetId: Number(currentAnswerId)
+    }));
+    setAnswerCommentRepliesMap({});
+    setCurrentAnswerCommentId(null);
+    loadAnswerComments(currentAnswerId, {
+      isRefresh: true
+    });
+  }, [showAnswerCommentListModal, currentAnswerId]);
+  useEffect(() => {
+    if (!showCommentReplyModal || !currentCommentId) {
+      return;
+    }
+    const currentReplyEntry = questionCommentRepliesMap[currentCommentId];
+    if (currentReplyEntry?.loaded || currentReplyEntry?.loading) {
+      return;
+    }
+    loadQuestionCommentReplies(currentCommentId);
+  }, [showCommentReplyModal, currentCommentId, questionCommentRepliesMap]);
+  useEffect(() => {
+    if (!showCommentReplyModal) {
+      setExpandedQuestionReplyChildren({});
+    }
+  }, [showCommentReplyModal]);
+  useEffect(() => {
+    if (!showAnswerCommentReplyModal || !currentAnswerId || !currentAnswerCommentId) {
+      return;
+    }
+    const currentReplyEntry = answerCommentRepliesMap[currentAnswerCommentId];
+    if (currentReplyEntry?.loaded || currentReplyEntry?.loading) {
+      return;
+    }
+    loadAnswerCommentReplies(currentAnswerCommentId);
+  }, [showAnswerCommentReplyModal, currentAnswerId, currentAnswerCommentId, answerCommentRepliesMap]);
+  useEffect(() => {
+    if (!showAnswerCommentReplyModal) {
+      setExpandedAnswerReplyChildren({});
+    }
+  }, [showAnswerCommentReplyModal]);
+  useEffect(() => {
+    if (!showSuppCommentListModal || !currentSuppId) {
+      return;
+    }
+    
+    // 如果已经加载过该补充的评论数据，则不重新请求
+    if (suppCommentListState.loaded && suppCommentListState.targetId === Number(currentSuppId)) {
+      return;
+    }
+    
+    setSuppCommentListState(prevState => ({
+      ...prevState,
+      list: [],
+      total: 0,
+      pageNum: 1,
+      hasMore: true,
+      loaded: false,
+      loading: true,
+      refreshing: false,
+      loadingMore: false,
+      targetId: Number(currentSuppId)
+    }));
+    setExpandedSuppCommentReplies({});
+    setSuppCommentRepliesMap({});
+    loadSupplementComments(currentSuppId, {
+      isRefresh: true
+    });
+  }, [showSuppCommentListModal, currentSuppId]);
+  useEffect(() => {
+    if (!showSuppCommentReplyModal || !currentSuppId || !currentSuppCommentId) {
+      return;
+    }
+    const currentReplyEntry = suppCommentRepliesMap[currentSuppCommentId];
+    if (currentReplyEntry?.loaded || currentReplyEntry?.loading) {
+      return;
+    }
+    loadSupplementCommentReplies(currentSuppCommentId);
+  }, [showSuppCommentReplyModal, currentSuppId, currentSuppCommentId, suppCommentRepliesMap]);
+  useEffect(() => {
+    if (!showSuppCommentReplyModal) {
+      setExpandedSuppReplyChildren({});
+    }
+  }, [showSuppCommentReplyModal]);
 
   // 当前问题数据 - 使用真实数据或默认值
   const currentQuestion = questionData ? {
@@ -724,11 +868,35 @@ export default function QuestionDetailScreen({
     displayType: 'free',
     reward: 0
   };
-  const currentReplyComment = commentsList.find(comment => String(comment.id) === String(currentCommentId)) || commentsData.find(comment => String(comment.id) === String(currentCommentId)) || null;
+  const currentReplyComment = commentsList.find(comment => String(comment.id) === String(currentCommentId)) || Object.values(questionCommentRepliesMap).flatMap(entry => entry?.list || []).find(comment => String(comment.id) === String(currentCommentId)) || suppCommentsList.find(comment => String(comment.id) === String(currentCommentId)) || commentsData.find(comment => String(comment.id) === String(currentCommentId)) || null;
+  const currentAnswerReplyComment = answerCommentsList.find(comment => String(comment.id) === String(currentAnswerCommentId)) || Object.values(answerCommentRepliesMap).flatMap(entry => entry?.list || []).find(comment => String(comment.id) === String(currentAnswerCommentId)) || null;
+  const currentSuppReplyComment = suppCommentsList.find(comment => String(comment.id) === String(currentSuppCommentId)) || null;
+  const currentComposerOriginalComment = (() => {
+    if (commentTarget?.originalComment) {
+      return commentTarget.originalComment;
+    }
+    if (!(commentTarget?.parentId && commentTarget.parentId !== 0)) {
+      return null;
+    }
+    if (commentTarget.targetType === 3) {
+      return suppCommentsList.find(c => String(c.id) === String(commentTarget.parentId)) || Object.values(suppCommentRepliesMap).flatMap(entry => entry?.list || []).find(c => String(c.id) === String(commentTarget.parentId)) || null;
+    }
+    if (commentTarget.targetType === 1) {
+      return commentsList.find(c => String(c.id) === String(commentTarget.parentId)) || Object.values(questionCommentRepliesMap).flatMap(entry => entry?.list || []).find(c => String(c.id) === String(commentTarget.parentId)) || commentsData.find(c => String(c.id) === String(commentTarget.parentId)) || null;
+    }
+    if (commentTarget.targetType === 2) {
+      return answerCommentsList.find(c => String(c.id) === String(commentTarget.parentId)) || Object.values(answerCommentRepliesMap).flatMap(entry => entry?.list || []).find(c => String(c.id) === String(commentTarget.parentId)) || null;
+    }
+    return null;
+  })();
+  const hasCountValue = (...values) => values.some(value => value !== undefined && value !== null && value !== '');
   const normalizeQuestionDetail = question => {
     if (!question || typeof question !== 'object') {
       return question;
     }
+    const hasLikeCountField = hasCountValue(question.likeCount, question.likes);
+    const hasCollectCountField = hasCountValue(question.collectCount, question.bookmarkCount, question.bookmarks);
+    const hasDislikeCountField = hasCountValue(question.dislikeCount, question.dislikes);
     const normalizedAuthorName = question.userName ?? question.userNickname ?? question.authorNickName ?? question.author ?? '匿名用户';
     const normalizedAuthorAvatar = question.userAvatar ?? question.authorAvatar ?? question.avatar ?? null;
     const normalizedImageUrls = Array.isArray(question.imageUrls) ? question.imageUrls : Array.isArray(question.images) ? question.images : [];
@@ -791,6 +959,9 @@ export default function QuestionDetailScreen({
       isCollected: normalizedCollected,
       disliked: normalizedDisliked,
       isDisliked: normalizedDisliked,
+      __likeCountResolved: question.__likeCountResolved ?? hasLikeCountField,
+      __collectCountResolved: question.__collectCountResolved ?? hasCollectCountField,
+      __dislikeCountResolved: question.__dislikeCountResolved ?? hasDislikeCountField,
       isResolved: question.isResolved ?? question.resolved ?? normalizedStatus === 2
     };
   };
@@ -927,6 +1098,7 @@ export default function QuestionDetailScreen({
               }
             }));
             syncSupplementInteractionStates(supplements);
+            hydrateSupplementCommentCounts(supplements);
             setAnswersCache(prevCache => ({
               ...prevCache,
               featured: {
@@ -974,7 +1146,7 @@ export default function QuestionDetailScreen({
       const {
         data
       } = await loadQuestionSupplements(questionId, sortBy, 1, true);
-      const newSupplements = normalizeSupplementCacheList(data || []);
+      const newSupplements = mergeInteractionCounts(normalizeSupplementCacheList(data || []), cacheData.list);
       syncSupplementInteractionStates(newSupplements);
 
       // 检查数据是否有变化
@@ -995,6 +1167,7 @@ export default function QuestionDetailScreen({
             lastUpdated: Date.now()
           }
         }));
+        hydrateSupplementCommentCounts(newSupplements);
 
         // 可选：显示数据更新提示
         if (sortBy === supplementsSortBy) {
@@ -1071,9 +1244,21 @@ export default function QuestionDetailScreen({
       const currentPage = isRefresh ? 1 : cacheData.pageNum;
       console.log(`📋 加载补充列表: questionId=${questionId}, page=${currentPage}, sortBy=${sortBy}`);
       const {
-        data
+        data,
+        fromCache
       } = await loadQuestionSupplements(questionId, sortBy, currentPage, isRefresh);
       const newSupplements = normalizeSupplementCacheList(data || []);
+      const otherSortBy = sortBy === 'featured' ? 'newest' : 'featured';
+      logSortPreview({
+        scope: 'supplements',
+        sortBy,
+        total: newSupplements.length,
+        items: newSupplements,
+        source: isRefresh ? 'refresh-request' : 'load-more-request',
+        cacheState: fromCache ? 'dataLoader-cache' : 'network',
+        otherSortBy,
+        otherItems: supplementsCache[otherSortBy]?.list || []
+      });
       syncSupplementInteractionStates(newSupplements);
 
       // 更新对应排序方式的缓存
@@ -1105,6 +1290,7 @@ export default function QuestionDetailScreen({
         }
         return updatedCache;
       });
+      hydrateSupplementCommentCounts(newSupplements);
     } catch (error) {
       console.error('❌ 加载补充列表失败:', error);
       if (isRefresh && cacheData.list.length === 0) {
@@ -1151,6 +1337,16 @@ export default function QuestionDetailScreen({
         } else {
           // 有缓存数据，直接使用
           console.log(`📋 ${newSortBy} 补充排序使用缓存，数量: ${newSortCache.list.length}`);
+          logSortPreview({
+            scope: 'supplements',
+            sortBy: newSortBy,
+            total: newSortCache.total ?? newSortCache.list.length,
+            items: newSortCache.list,
+            source: 'cache-switch',
+            cacheState: 'screen-cache',
+            otherSortBy: newSortBy === 'featured' ? 'newest' : 'featured',
+            otherItems: supplementsCache[newSortBy === 'featured' ? 'newest' : 'featured']?.list || []
+          });
         }
       }
     }
@@ -1161,10 +1357,55 @@ export default function QuestionDetailScreen({
     if (!cacheData.lastUpdated) return true;
     return Date.now() - cacheData.lastUpdated > CACHE_EXPIRE_TIME;
   };
+  const getListPreviewIds = (items = [], scope = 'generic') => {
+    if (!Array.isArray(items) || items.length === 0) {
+      return [];
+    }
+    return items.slice(0, 5).map(item => {
+      if (scope === 'answers') {
+        return item?.id ?? item?.answerId ?? item?.answer_id ?? null;
+      }
+      if (scope === 'supplements') {
+        return item?.id ?? item?.supplementId ?? item?.supplement_id ?? null;
+      }
+      return item?.id ?? null;
+    }).filter(id => id !== null && id !== undefined);
+  };
+  const getListPreviewTimes = (items = []) => {
+    if (!Array.isArray(items) || items.length === 0) {
+      return [];
+    }
+    return items.slice(0, 5).map(item => item?.createTime ?? item?.createdAt ?? item?.publishTime ?? item?.gmtCreate ?? item?.time ?? 'unknown');
+  };
+  const logSortPreview = ({
+    scope,
+    sortBy,
+    total,
+    items = [],
+    source = 'request',
+    cacheState,
+    otherSortBy,
+    otherItems = []
+  }) => {
+    const previewIds = getListPreviewIds(items, scope);
+    const previewTimes = getListPreviewTimes(items);
+    console.log(`[SortDebug:${scope}] source=${source} sortBy=${sortBy} total=${total} cache=${cacheState || 'n/a'} firstIds=${previewIds.length ? previewIds.join(',') : 'empty'} firstTimes=${previewTimes.length ? previewTimes.join(' | ') : 'empty'}`);
+    if (otherSortBy) {
+      const otherPreviewIds = getListPreviewIds(otherItems, scope);
+      if (otherPreviewIds.length > 0) {
+        const otherPreviewTimes = getListPreviewTimes(otherItems);
+        const sameFirstIds = JSON.stringify(previewIds) === JSON.stringify(otherPreviewIds);
+        console.log(`[SortDebug:${scope}] compare ${sortBy} vs ${otherSortBy} sameFirstIds=${sameFirstIds} current=${previewIds.length ? previewIds.join(',') : 'empty'} other=${otherPreviewIds.join(',')} currentTimes=${previewTimes.length ? previewTimes.join(' | ') : 'empty'} otherTimes=${otherPreviewTimes.length ? otherPreviewTimes.join(' | ') : 'empty'}`);
+      }
+    }
+  };
   const normalizeAnswerItem = answer => {
     if (!answer || typeof answer !== 'object') {
       return answer;
     }
+    const hasLikeCountField = hasCountValue(answer.likeCount, answer.like_count, answer.likes);
+    const hasDislikeCountField = hasCountValue(answer.dislikeCount, answer.dislike_count, answer.dislikes);
+    const hasCollectCountField = hasCountValue(answer.collectCount, answer.bookmarkCount, answer.bookmark_count, answer.bookmarks);
     const primaryId = answer.answerId ?? answer.answer_id ?? answer.id ?? null;
     const normalizedQuestionId = answer.questionId ?? answer.question_id ?? answer.question?.id ?? null;
     const normalizedAuthorName = answer.userName ?? answer.userNickname ?? answer.authorNickName ?? answer.author ?? '匿名用户';
@@ -1206,6 +1447,9 @@ export default function QuestionDetailScreen({
       bookmarks: normalizedCollectCount,
       superLikeCount: normalizedSuperLikeCount,
       superLikes: normalizedSuperLikeCount,
+      __likeCountResolved: answer.__likeCountResolved ?? hasLikeCountField,
+      __dislikeCountResolved: answer.__dislikeCountResolved ?? hasDislikeCountField,
+      __collectCountResolved: answer.__collectCountResolved ?? hasCollectCountField,
       canAdopt: answer.canAdopt ?? false,
       canEdit: answer.canEdit ?? false
     };
@@ -1226,7 +1470,10 @@ export default function QuestionDetailScreen({
       dislikeCount: payload?.dislikeCount ?? payload?.dislikes ?? fallbackValues.dislikeCount ?? currentAnswer?.dislikeCount ?? currentAnswer?.dislikes,
       collectCount: payload?.collectCount ?? payload?.bookmarkCount ?? payload?.bookmarks ?? fallbackValues.collectCount ?? currentAnswer?.collectCount ?? currentAnswer?.bookmarkCount ?? currentAnswer?.bookmarks,
       commentCount: payload?.commentCount ?? payload?.comments ?? fallbackValues.commentCount ?? currentAnswer?.commentCount ?? currentAnswer?.comments,
-      shareCount: payload?.shareCount ?? payload?.shares ?? fallbackValues.shareCount ?? currentAnswer?.shareCount ?? currentAnswer?.shares
+      shareCount: payload?.shareCount ?? payload?.shares ?? fallbackValues.shareCount ?? currentAnswer?.shareCount ?? currentAnswer?.shares,
+      __likeCountResolved: fallbackValues.likeCount !== undefined ? true : currentAnswer?.__likeCountResolved,
+      __dislikeCountResolved: fallbackValues.dislikeCount !== undefined ? true : currentAnswer?.__dislikeCountResolved,
+      __collectCountResolved: fallbackValues.collectCount !== undefined ? true : currentAnswer?.__collectCountResolved
     });
   };
   const mergeUpdatedAnswerIntoCaches = updatedAnswer => {
@@ -1273,6 +1520,38 @@ export default function QuestionDetailScreen({
     });
     syncAnswerInteractionStates([normalizedAnswer]);
   };
+  const mergeUpdatedSupplementIntoCaches = updatedSupplement => {
+    if (!updatedSupplement) {
+      return;
+    }
+    const normalizedSupplement = normalizeSupplementCacheItem(updatedSupplement);
+    const targetId = normalizedSupplement.id ?? normalizedSupplement.supplementId ?? normalizedSupplement.supplement_id;
+    if (targetId === null || targetId === undefined) {
+      return;
+    }
+    updateSupplementInCaches(targetId, previousItem => ({
+      ...previousItem,
+      liked: !!normalizedSupplement.liked,
+      isLiked: !!normalizedSupplement.liked,
+      disliked: !!normalizedSupplement.disliked,
+      isDisliked: !!normalizedSupplement.disliked,
+      collected: !!normalizedSupplement.collected,
+      isCollected: !!normalizedSupplement.collected,
+      bookmarked: !!normalizedSupplement.collected,
+      isBookmarked: !!normalizedSupplement.collected,
+      likeCount: normalizedSupplement.likeCount ?? normalizedSupplement.likes ?? previousItem?.likeCount ?? previousItem?.likes ?? 0,
+      likes: normalizedSupplement.likeCount ?? normalizedSupplement.likes ?? previousItem?.likeCount ?? previousItem?.likes ?? 0,
+      dislikeCount: normalizedSupplement.dislikeCount ?? normalizedSupplement.dislikes ?? previousItem?.dislikeCount ?? previousItem?.dislikes ?? 0,
+      dislikes: normalizedSupplement.dislikeCount ?? normalizedSupplement.dislikes ?? previousItem?.dislikeCount ?? previousItem?.dislikes ?? 0,
+      collectCount: normalizedSupplement.collectCount ?? normalizedSupplement.bookmarkCount ?? normalizedSupplement.bookmarks ?? previousItem?.collectCount ?? previousItem?.bookmarkCount ?? previousItem?.bookmarks ?? 0,
+      bookmarkCount: normalizedSupplement.collectCount ?? normalizedSupplement.bookmarkCount ?? normalizedSupplement.bookmarks ?? previousItem?.collectCount ?? previousItem?.bookmarkCount ?? previousItem?.bookmarks ?? 0,
+      bookmarks: normalizedSupplement.collectCount ?? normalizedSupplement.bookmarkCount ?? normalizedSupplement.bookmarks ?? previousItem?.collectCount ?? previousItem?.bookmarkCount ?? previousItem?.bookmarks ?? 0,
+      __likeCountResolved: normalizedSupplement.__likeCountResolved ?? previousItem?.__likeCountResolved,
+      __dislikeCountResolved: normalizedSupplement.__dislikeCountResolved ?? previousItem?.__dislikeCountResolved,
+      __collectCountResolved: normalizedSupplement.__collectCountResolved ?? previousItem?.__collectCountResolved
+    }));
+    syncSupplementInteractionStates([normalizedSupplement]);
+  };
   const syncAnswerInteractionStates = (answers = []) => {
     if (!answers.length) {
       return;
@@ -1311,30 +1590,57 @@ export default function QuestionDetailScreen({
       updatedAnswer: undefined
     });
   }, [route?.params?.updatedAnswer]);
-  const normalizeCommentItem = comment => {
+  useEffect(() => {
+    const updatedSupplement = route?.params?.updatedSupplement;
+    if (!updatedSupplement?.id) {
+      return;
+    }
+    mergeUpdatedSupplementIntoCaches(updatedSupplement);
+    navigation.setParams({
+      updatedSupplement: undefined
+    });
+  }, [route?.params?.updatedSupplement]);
+  const normalizeCommentItem = (comment, defaults = {}) => {
     if (!comment || typeof comment !== 'object') {
       return comment;
     }
+    const hasLikeCountField = hasCountValue(comment.likeCount, comment.likes);
+    const hasDislikeCountField = hasCountValue(comment.dislikeCount, comment.dislikes);
+    const hasCollectCountField = hasCountValue(comment.collectCount, comment.bookmarkCount, comment.bookmarks);
     const normalizedId = comment.commentId ?? comment.comment_id ?? comment.id ?? null;
     const normalizedAuthor = comment.userName ?? comment.userNickname ?? comment.authorNickName ?? comment.author ?? '匿名用户';
     const normalizedAvatar = comment.userAvatar ?? comment.authorAvatar ?? comment.avatar ?? null;
+    const normalizedContent = comment.content ?? comment.commentContent ?? comment.contentText ?? comment.commentText ?? comment.text ?? '';
+    const normalizedReplyToUserName = comment.replyToUserName ?? comment.replyUserName ?? comment.toUserName ?? comment.parentUserName ?? comment.replyNickName ?? '';
+    const normalizedReplyToCommentId = comment.replyToCommentId ?? comment.replyCommentId ?? comment.toCommentId ?? comment.parentCommentId ?? comment.parentId ?? 0;
     const normalizedLikeCount = comment.likeCount ?? comment.likes ?? 0;
     const normalizedDislikeCount = comment.dislikeCount ?? comment.dislikes ?? 0;
     const normalizedReplyCount = comment.replyCount ?? comment.replies ?? comment.childCount ?? comment.childrenCount ?? 0;
     const normalizedShareCount = comment.shareCount ?? comment.shares ?? 0;
     const normalizedCollectCount = comment.collectCount ?? comment.bookmarkCount ?? comment.bookmarks ?? 0;
     const normalizedSuperLikeCount = comment.superLikeCount ?? comment.superLikes ?? 0;
-    const normalizedTime = comment.time ?? formatTime(comment.createTime || comment.createdAt);
+    const normalizedCreateTime = comment.createTime ?? comment.createdAt ?? comment.gmtCreate ?? comment.publishTime ?? null;
+    const normalizedTime = comment.time ?? formatTime(normalizedCreateTime);
+    const normalizedTargetType = Number(comment.targetType ?? comment.target_type ?? defaults.targetType ?? 0) || 0;
+    const normalizedTargetId = Number(comment.targetId ?? comment.target_id ?? defaults.targetId ?? 0) || 0;
+    const normalizedParentId = Number(comment.parentId ?? comment.parent_id ?? defaults.parentId ?? 0) || 0;
     return {
       ...comment,
       id: normalizedId,
       commentId: normalizedId,
       comment_id: comment.comment_id ?? normalizedId,
+      targetType: normalizedTargetType,
+      targetId: normalizedTargetId,
+      parentId: normalizedParentId,
       author: normalizedAuthor,
       userName: normalizedAuthor,
       userNickname: comment.userNickname ?? comment.authorNickName ?? normalizedAuthor,
       avatar: normalizedAvatar,
       userAvatar: normalizedAvatar,
+      content: normalizedContent,
+      commentContent: comment.commentContent ?? normalizedContent,
+      replyToUserName: normalizedReplyToUserName,
+      replyToCommentId: normalizedReplyToCommentId,
       likeCount: normalizedLikeCount,
       likes: normalizedLikeCount,
       dislikeCount: normalizedDislikeCount,
@@ -1351,13 +1657,125 @@ export default function QuestionDetailScreen({
       liked: !!(comment.liked ?? comment.isLiked),
       disliked: !!(comment.disliked ?? comment.isDisliked),
       collected: !!(comment.collected ?? comment.isCollected),
-      __likeCountResolved: !!comment.__likeCountResolved,
-      __dislikeCountResolved: !!comment.__dislikeCountResolved,
-      __collectCountResolved: !!comment.__collectCountResolved,
+      createTime: normalizedCreateTime,
+      createdAt: comment.createdAt ?? normalizedCreateTime,
+      __likeCountResolved: comment.__likeCountResolved ?? hasLikeCountField,
+      __dislikeCountResolved: comment.__dislikeCountResolved ?? hasDislikeCountField,
+      __collectCountResolved: comment.__collectCountResolved ?? hasCollectCountField,
       time: normalizedTime
     };
   };
-  const normalizeComments = (rows = []) => rows.map(normalizeCommentItem);
+  const normalizeComments = (rows = [], defaults = {}) => rows.map(row => normalizeCommentItem(row, defaults));
+  const extractCommentRows = response => response?.data?.rows || response?.data?.list || response?.data?.records || [];
+  const extractCommentTotal = (response, fallback = 0) => response?.data?.total ?? response?.data?.count ?? response?.data?.recordsTotal ?? fallback;
+  const buildCommentReplyTree = (rows = [], rootCommentId = null) => {
+    if (!Array.isArray(rows) || !rows.length) {
+      return [];
+    }
+
+    const normalizedRootId = rootCommentId !== undefined && rootCommentId !== null ? String(rootCommentId) : null;
+    const nodeMap = new Map();
+
+    rows.forEach(row => {
+      if (!row?.id) {
+        return;
+      }
+      nodeMap.set(String(row.id), {
+        ...row,
+        children: []
+      });
+    });
+
+    const roots = [];
+
+    rows.forEach(row => {
+      if (!row?.id) {
+        return;
+      }
+
+      const currentId = String(row.id);
+      const node = nodeMap.get(currentId);
+      const directParentId = row.parentId !== undefined && row.parentId !== null ? String(row.parentId) : '';
+      const replyTargetId = row.replyToCommentId !== undefined && row.replyToCommentId !== null ? String(row.replyToCommentId) : '';
+      const structuralParentId = normalizedRootId && directParentId === normalizedRootId && replyTargetId && replyTargetId !== currentId ? replyTargetId : directParentId;
+
+      if (!structuralParentId || structuralParentId === '0' || structuralParentId === currentId || (normalizedRootId && structuralParentId === normalizedRootId)) {
+        roots.push(node);
+        return;
+      }
+
+      const parentNode = nodeMap.get(structuralParentId);
+      if (!parentNode) {
+        roots.push(node);
+        return;
+      }
+
+      parentNode.children.push(node);
+    });
+
+    return roots;
+  };
+  const flattenCommentReplyTree = (nodes = [], level = 0, accumulator = []) => {
+    if (!Array.isArray(nodes) || !nodes.length) {
+      return accumulator;
+    }
+
+    nodes.forEach(node => {
+      if (!node) {
+        return;
+      }
+      accumulator.push({
+        ...node,
+        __level: level
+      });
+      if (Array.isArray(node.children) && node.children.length > 0) {
+        flattenCommentReplyTree(node.children, level + 1, accumulator);
+      }
+    });
+
+    return accumulator;
+  };
+  const inheritInteractionCounts = (item, previousItem) => {
+    if (!item || !previousItem) {
+      return item;
+    }
+    const nextItem = {
+      ...item
+    };
+    if (!item.__likeCountResolved && previousItem.__likeCountResolved) {
+      const previousLikeCount = Number(previousItem.likeCount ?? previousItem.like_count ?? previousItem.likes);
+      if (!Number.isNaN(previousLikeCount)) {
+        nextItem.likeCount = previousLikeCount;
+        nextItem.likes = previousLikeCount;
+        nextItem.__likeCountResolved = true;
+      }
+    }
+    if (!item.__dislikeCountResolved && previousItem.__dislikeCountResolved) {
+      const previousDislikeCount = Number(previousItem.dislikeCount ?? previousItem.dislike_count ?? previousItem.dislikes);
+      if (!Number.isNaN(previousDislikeCount)) {
+        nextItem.dislikeCount = previousDislikeCount;
+        nextItem.dislikes = previousDislikeCount;
+        nextItem.__dislikeCountResolved = true;
+      }
+    }
+    if (!item.__collectCountResolved && previousItem.__collectCountResolved) {
+      const previousCollectCount = Number(previousItem.collectCount ?? previousItem.bookmarkCount ?? previousItem.bookmark_count ?? previousItem.bookmarks);
+      if (!Number.isNaN(previousCollectCount)) {
+        nextItem.collectCount = previousCollectCount;
+        nextItem.bookmarkCount = previousCollectCount;
+        nextItem.bookmarks = previousCollectCount;
+        nextItem.__collectCountResolved = true;
+      }
+    }
+    return nextItem;
+  };
+  const mergeInteractionCounts = (items = [], previousItems = []) => {
+    if (!items.length || !previousItems.length) {
+      return items;
+    }
+    const previousMap = new Map(previousItems.filter(Boolean).map(previousItem => [String(previousItem.id), previousItem]));
+    return items.map(item => inheritInteractionCounts(item, previousMap.get(String(item?.id))));
+  };
   const syncCommentInteractionStates = (comments = []) => {
     if (!comments.length) {
       return;
@@ -1403,6 +1821,152 @@ export default function QuestionDetailScreen({
       });
       return nextCache;
     });
+    setQuestionCommentRepliesMap(prevMap => {
+      let changed = false;
+      const nextMap = {
+        ...prevMap
+      };
+      Object.keys(nextMap).forEach(parentId => {
+        const currentEntry = nextMap[parentId];
+        if (!currentEntry?.list?.length) {
+          return;
+        }
+        let entryChanged = false;
+        const nextList = currentEntry.list.map(comment => {
+          if (String(comment.id) !== String(commentId)) {
+            return comment;
+          }
+          entryChanged = true;
+          changed = true;
+          return normalizeCommentItem(updater(comment));
+        });
+        if (entryChanged) {
+          nextMap[parentId] = {
+            ...currentEntry,
+            list: nextList
+          };
+        }
+      });
+      return changed ? nextMap : prevMap;
+    });
+  };
+  const updateSupplementCommentStates = (commentId, updater) => {
+    if (!commentId) {
+      return;
+    }
+    setSuppCommentListState(prevState => {
+      if (!prevState.list?.length) {
+        return prevState;
+      }
+      let changed = false;
+      const nextList = prevState.list.map(comment => {
+        if (String(comment.id) !== String(commentId)) {
+          return comment;
+        }
+        changed = true;
+        return normalizeCommentItem(updater(comment));
+      });
+      return changed ? {
+        ...prevState,
+        list: nextList
+      } : prevState;
+    });
+    setSuppCommentRepliesMap(prevMap => {
+      let changed = false;
+      const nextMap = {
+        ...prevMap
+      };
+      Object.keys(nextMap).forEach(parentId => {
+        const currentEntry = nextMap[parentId];
+        if (!currentEntry?.list?.length) {
+          return;
+        }
+        let entryChanged = false;
+        const nextList = currentEntry.list.map(comment => {
+          if (String(comment.id) !== String(commentId)) {
+            return comment;
+          }
+          entryChanged = true;
+          changed = true;
+          return normalizeCommentItem(updater(comment));
+        });
+        if (entryChanged) {
+          nextMap[parentId] = {
+            ...currentEntry,
+            list: nextList
+          };
+        }
+      });
+      return changed ? nextMap : prevMap;
+    });
+  };
+  const updateAnswerCommentStates = (commentId, updater) => {
+    if (!commentId) {
+      return;
+    }
+    setAnswerCommentListState(prevState => {
+      if (!prevState.list?.length) {
+        return prevState;
+      }
+      let changed = false;
+      const nextList = prevState.list.map(comment => {
+        if (String(comment.id) !== String(commentId)) {
+          return comment;
+        }
+        changed = true;
+        return normalizeCommentItem(updater(comment));
+      });
+      return changed ? {
+        ...prevState,
+        list: nextList
+      } : prevState;
+    });
+    setAnswerCommentRepliesMap(prevMap => {
+      let changed = false;
+      const nextMap = {
+        ...prevMap
+      };
+      Object.keys(nextMap).forEach(parentId => {
+        const currentEntry = nextMap[parentId];
+        if (!currentEntry?.list?.length) {
+          return;
+        }
+        let entryChanged = false;
+        const nextList = currentEntry.list.map(comment => {
+          if (String(comment.id) !== String(commentId)) {
+            return comment;
+          }
+          entryChanged = true;
+          changed = true;
+          return normalizeCommentItem(updater(comment));
+        });
+        if (entryChanged) {
+          nextMap[parentId] = {
+            ...currentEntry,
+            list: nextList
+          };
+        }
+      });
+      return changed ? nextMap : prevMap;
+    });
+  };
+  const findAnswerCommentById = commentId => {
+    if (!commentId) {
+      return null;
+    }
+    return answerCommentsList.find(comment => String(comment.id) === String(commentId)) || Object.values(answerCommentRepliesMap).flatMap(entry => entry?.list || []).find(comment => String(comment.id) === String(commentId)) || null;
+  };
+  const findQuestionCommentById = commentId => {
+    if (!commentId) {
+      return null;
+    }
+    return commentsList.find(comment => String(comment.id) === String(commentId)) || Object.values(questionCommentRepliesMap).flatMap(entry => entry?.list || []).find(comment => String(comment.id) === String(commentId)) || commentsData.find(comment => String(comment.id) === String(commentId)) || null;
+  };
+  const findSupplementCommentById = commentId => {
+    if (!commentId) {
+      return null;
+    }
+    return suppCommentsList.find(comment => String(comment.id) === String(commentId)) || Object.values(suppCommentRepliesMap).flatMap(entry => entry?.list || []).find(comment => String(comment.id) === String(commentId)) || null;
   };
   const buildCommentFromMutationResponse = (currentComment, responseData, fallbackValues = {}) => {
     const payload = responseData && typeof responseData === 'object' && !Array.isArray(responseData) ? responseData : null;
@@ -1437,28 +2001,47 @@ export default function QuestionDetailScreen({
     if (!supplement || typeof supplement !== 'object') {
       return supplement;
     }
+    const hasLikeCountField = hasCountValue(supplement.likeCount, supplement.likes);
+    const hasDislikeCountField = hasCountValue(supplement.dislikeCount, supplement.dislikes);
+    const hasCollectCountField = hasCountValue(supplement.collectCount, supplement.bookmarkCount, supplement.bookmarks);
+    const normalizedCommentCount = Number(
+      supplement.commentCount ??
+      supplement.comments ??
+      supplement.comment_count
+    ) || 0;
     return {
       ...supplement,
-      __likeCountResolved: !!supplement.__likeCountResolved,
-      __dislikeCountResolved: !!supplement.__dislikeCountResolved
+      commentCount: normalizedCommentCount,
+      comments: normalizedCommentCount,
+      __likeCountResolved: supplement.__likeCountResolved ?? hasLikeCountField,
+      __dislikeCountResolved: supplement.__dislikeCountResolved ?? hasDislikeCountField,
+      __collectCountResolved: supplement.__collectCountResolved ?? hasCollectCountField
     };
   };
   const normalizeSupplementCacheList = (supplements = []) => supplements.map(normalizeSupplementCacheItem);
-  const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, isResolved = false) => {
-    const normalizedBaseCount = Number(baseCount) || 0;
-    const resolvedBaseCount = !!serverState && !isResolved ? normalizedBaseCount + 1 : normalizedBaseCount;
-    if (localState === undefined) {
-      return resolvedBaseCount;
-    }
-    if (!!localState === !!serverState) {
-      return resolvedBaseCount;
-    }
-    return Math.max(resolvedBaseCount + (localState ? 1 : -1), 0);
-  };
+const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, isResolved = false) => {
+  const normalizedBaseCount = Number(baseCount) || 0;
+  const resolvedBaseCount = !!serverState && !isResolved ? normalizedBaseCount + 1 : normalizedBaseCount;
+  if (localState === undefined) {
+    return !!serverState ? Math.max(resolvedBaseCount, 1) : resolvedBaseCount;
+  }
+  if (!!localState === !!serverState) {
+    return !!localState ? Math.max(resolvedBaseCount, 1) : resolvedBaseCount;
+  }
+  const nextDisplayCount = Math.max(resolvedBaseCount + (localState ? 1 : -1), 0);
+  return !!localState ? Math.max(nextDisplayCount, 1) : nextDisplayCount;
+};
   const getCommentLikeDisplayCount = (comment, localState) => getResolvedInteractionDisplayCount(comment?.likeCount ?? comment?.likes, comment?.liked, localState, comment?.__likeCountResolved);
   const getCommentCollectDisplayCount = (comment, localState) => getResolvedInteractionDisplayCount(comment?.collectCount ?? comment?.bookmarkCount ?? comment?.bookmarks, comment?.collected, localState, comment?.__collectCountResolved);
   const getCommentDislikeDisplayCount = (comment, localState) => getResolvedInteractionDisplayCount(comment?.dislikeCount ?? comment?.dislikes, comment?.disliked, localState, comment?.__dislikeCountResolved);
+  const getQuestionLikeDisplayCount = (question, localState) => getResolvedInteractionDisplayCount(question?.likeCount ?? question?.likes, question?.liked, localState, question?.__likeCountResolved);
+  const getQuestionCollectDisplayCount = (question, localState) => getResolvedInteractionDisplayCount(question?.collectCount ?? question?.bookmarkCount ?? question?.bookmarks, question?.collected, localState, question?.__collectCountResolved);
+  const getQuestionDislikeDisplayCount = (question, localState) => getResolvedInteractionDisplayCount(question?.dislikeCount ?? question?.dislikes, question?.disliked, localState, question?.__dislikeCountResolved);
+  const getAnswerLikeDisplayCount = (answer, localState) => getResolvedInteractionDisplayCount(answer?.likeCount ?? answer?.like_count ?? answer?.likes, answer?.liked, localState, answer?.__likeCountResolved);
+  const getAnswerCollectDisplayCount = (answer, localState) => getResolvedInteractionDisplayCount(answer?.collectCount ?? answer?.bookmarkCount ?? answer?.bookmark_count ?? answer?.bookmarks, answer?.collected, localState, answer?.__collectCountResolved);
+  const getAnswerDislikeDisplayCount = (answer, localState) => getResolvedInteractionDisplayCount(answer?.dislikeCount ?? answer?.dislike_count ?? answer?.dislikes, answer?.disliked, localState, answer?.__dislikeCountResolved);
   const getSupplementLikeDisplayCount = (supplement, localState) => getResolvedInteractionDisplayCount(supplement?.likeCount ?? supplement?.likes, supplement?.liked, localState, supplement?.__likeCountResolved);
+  const getSupplementCollectDisplayCount = (supplement, localState) => getResolvedInteractionDisplayCount(supplement?.collectCount ?? supplement?.bookmarkCount ?? supplement?.bookmarks, supplement?.collected, localState, supplement?.__collectCountResolved);
   const getSupplementDislikeDisplayCount = (supplement, localState) => getResolvedInteractionDisplayCount(supplement?.dislikeCount ?? supplement?.dislikes, supplement?.disliked, localState, supplement?.__dislikeCountResolved);
   const syncSupplementInteractionStates = (supplements = []) => {
     if (!supplements.length) {
@@ -1521,6 +2104,549 @@ export default function QuestionDetailScreen({
       return null;
     }
     return supplementsCache[supplementsSortBy]?.list?.find(item => String(item?.id) === String(supplementId)) || Object.values(supplementsCache).flatMap(entry => entry?.list || []).find(item => String(item?.id) === String(supplementId)) || null;
+  };
+  const buildSupplementNavigationItem = supplement => {
+    if (!supplement || typeof supplement !== 'object') {
+      return supplement;
+    }
+    const likedState = suppLiked[supplement.id] ?? supplement.liked ?? supplement.isLiked ?? false;
+    const dislikedState = suppDisliked[supplement.id] ?? supplement.disliked ?? supplement.isDisliked ?? false;
+    const collectedState = suppBookmarked[supplement.id] ?? supplement.collected ?? supplement.isCollected ?? supplement.bookmarked ?? supplement.isBookmarked ?? false;
+    const likeCount = getSupplementLikeDisplayCount(supplement, suppLiked[supplement.id]);
+    const dislikeCount = getSupplementDislikeDisplayCount(supplement, suppDisliked[supplement.id]);
+    const collectCount = getSupplementCollectDisplayCount(supplement, suppBookmarked[supplement.id]);
+    const commentCount = Number(supplement.commentCount ?? supplement.comments ?? supplement.comment_count ?? 0);
+    const shareCount = Number(supplement.shareCount ?? supplement.shares ?? 0);
+    const viewCount = Number(supplement.viewCount ?? supplement.views ?? 0);
+
+    return {
+      ...supplement,
+      liked: !!likedState,
+      isLiked: !!likedState,
+      disliked: !!dislikedState,
+      isDisliked: !!dislikedState,
+      collected: !!collectedState,
+      isCollected: !!collectedState,
+      bookmarked: !!collectedState,
+      isBookmarked: !!collectedState,
+      likeCount,
+      likes: likeCount,
+      dislikeCount,
+      dislikes: dislikeCount,
+      collectCount,
+      bookmarkCount: collectCount,
+      bookmarks: collectCount,
+      commentCount,
+      comments: commentCount,
+      shareCount,
+      shares: shareCount,
+      viewCount,
+      views: viewCount,
+      __likeCountResolved: true,
+      __dislikeCountResolved: true,
+      __collectCountResolved: true
+    };
+  };
+  const getSupplementTargetId = supplement => {
+    if (!supplement || typeof supplement !== 'object') {
+      return null;
+    }
+    return Number(supplement.supplementId ?? supplement.supplement_id ?? supplement.id ?? 0) || null;
+  };
+  const syncSupplementCommentCount = (supplementId, commentCount) => {
+    if (!supplementId) {
+      return;
+    }
+    const normalizedCommentCount = Math.max(Number(commentCount) || 0, 0);
+    updateSupplementInCaches(supplementId, previousItem => ({
+      ...previousItem,
+      commentCount: normalizedCommentCount,
+      comments: normalizedCommentCount
+    }));
+  };
+  const syncAnswerCommentCount = (answerId, commentCount) => {
+    if (!answerId) {
+      return;
+    }
+    const normalizedCommentCount = Math.max(Number(commentCount) || 0, 0);
+    mergeUpdatedAnswerIntoCaches({
+      id: Number(answerId) || answerId,
+      answerId: Number(answerId) || answerId,
+      commentCount: normalizedCommentCount,
+      comments: normalizedCommentCount
+    });
+  };
+  const buildCommentReplyTarget = (comment, fallbackTarget = {}) => {
+    if (!comment || typeof comment !== 'object') {
+      return {
+        targetType: fallbackTarget.targetType ?? 1,
+        targetId: fallbackTarget.targetId ?? null,
+        parentId: fallbackTarget.parentId ?? 0,
+        replyToCommentId: 0,
+        replyToUserId: null,
+        replyToUserName: '',
+        originalComment: null
+      };
+    }
+    const resolvedTargetType = Number(fallbackTarget.targetType ?? comment.targetType ?? comment.target_type ?? 1) || 1;
+    const resolvedTargetId = Number(fallbackTarget.targetId ?? comment.targetId ?? comment.target_id ?? null) || null;
+    const resolvedCommentId = Number(comment.id ?? comment.commentId ?? comment.comment_id ?? 0) || 0;
+    const replyToUserName = comment.userName ?? comment.userNickname ?? comment.authorNickName ?? comment.author ?? '';
+    return {
+      targetType: resolvedTargetType,
+      targetId: resolvedTargetId,
+      parentId: resolvedCommentId,
+      replyToCommentId: resolvedCommentId,
+      replyToUserId: Number(comment.userId ?? comment.user_id ?? 0) || null,
+      replyToUserName,
+      originalComment: normalizeCommentItem(comment, {
+        targetType: resolvedTargetType,
+        targetId: resolvedTargetId,
+        parentId: resolvedCommentId
+      })
+    };
+  };
+  const getAnswerCommentThreadRootId = commentId => {
+    if (!commentId) {
+      return null;
+    }
+
+    let currentComment = findAnswerCommentById(commentId);
+    let safetyCount = 0;
+
+    while (currentComment && Number(currentComment.parentId ?? 0) > 0 && safetyCount < 50) {
+      const parentComment = findAnswerCommentById(currentComment.parentId);
+      if (!parentComment || String(parentComment.id) === String(currentComment.id)) {
+        break;
+      }
+      currentComment = parentComment;
+      safetyCount += 1;
+    }
+
+    return currentComment?.id ?? commentId;
+  };
+  const getQuestionCommentThreadRootId = commentId => {
+    if (!commentId) {
+      return null;
+    }
+
+    let currentComment = findQuestionCommentById(commentId);
+    let safetyCount = 0;
+
+    while (currentComment && Number(currentComment.parentId ?? 0) > 0 && safetyCount < 50) {
+      const parentComment = findQuestionCommentById(currentComment.parentId);
+      if (!parentComment || String(parentComment.id) === String(currentComment.id)) {
+        break;
+      }
+      currentComment = parentComment;
+      safetyCount += 1;
+    }
+
+    return currentComment?.id ?? commentId;
+  };
+  const getSupplementCommentThreadRootId = commentId => {
+    if (!commentId) {
+      return null;
+    }
+
+    let currentComment = findSupplementCommentById(commentId);
+    let safetyCount = 0;
+
+    while (currentComment && Number(currentComment.parentId ?? 0) > 0 && safetyCount < 50) {
+      const parentComment = findSupplementCommentById(currentComment.parentId);
+      if (!parentComment || String(parentComment.id) === String(currentComment.id)) {
+        break;
+      }
+      currentComment = parentComment;
+      safetyCount += 1;
+    }
+
+    return currentComment?.id ?? commentId;
+  };
+  const renderAnswerReplyCard = (reply, options = {}) => {
+    const beforeOpenReply = typeof options.beforeOpenReply === 'function' ? options.beforeOpenReply : () => {};
+    const beforeReport = typeof options.beforeReport === 'function' ? options.beforeReport : () => {};
+    const rootCommentId = options.rootCommentId ?? null;
+    const contextReplyId = options.contextReplyId ?? null;
+    const relationCommentId = Number(reply.replyToCommentId ?? reply.parentId ?? 0) || 0;
+    const relationComment = relationCommentId ? findAnswerCommentById(relationCommentId) : null;
+    const relationUserName = reply.replyToUserName || relationComment?.userName || relationComment?.userNickname || relationComment?.author || '';
+    const shouldHideContextRelation = contextReplyId !== null && String(relationCommentId) === String(contextReplyId);
+    const shouldShowReplyRelation = !!relationUserName && !shouldHideContextRelation && rootCommentId !== null && String(relationCommentId) !== String(rootCommentId) && String(relationCommentId) !== String(reply.id);
+    return <View key={reply.id} style={styles.replyCard}>
+        <View style={styles.replyHeader}>
+          <Avatar uri={reply.userAvatar || reply.avatar} name={reply.userName || reply.userNickname || reply.author} size={24} />
+          <View style={styles.replyAuthorMeta}>
+            <View style={styles.replyAuthorLine}>
+              <Text style={styles.replyAuthor}>{reply.userName || reply.userNickname || reply.author}</Text>
+              {shouldShowReplyRelation ? <>
+                  <Text style={styles.replyAuthorRelation}> 回复 </Text>
+                  <Text style={styles.replyReplyTarget}>{relationUserName}</Text>
+                </> : null}
+            </View>
+          </View>
+          <View style={{flex: 1}} />
+          <Text style={styles.replyTime}>{reply.time}</Text>
+        </View>
+        <Text style={styles.replyText}>{reply.content}</Text>
+        <View style={styles.replyActions}>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentLike(reply.id)} disabled={commentLikeLoading[reply.id]}>
+            <Ionicons name={commentLiked[reply.id] ?? reply.liked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={commentLiked[reply.id] ?? reply.liked ? "#ef4444" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, (commentLiked[reply.id] ?? reply.liked) && {
+          color: '#ef4444'
+        }]}>{getCommentLikeDisplayCount(reply, commentLiked[reply.id])}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
+          beforeOpenReply();
+          openCommentModal(buildCommentReplyTarget(reply, {
+            targetType: 2,
+            targetId: currentAnswerId
+          }));
+        }}>
+            <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
+            <Text style={styles.replyActionText}>{reply.replies || 0}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn}>
+            <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
+            <Text style={styles.replyActionText}>{reply.shares || 0}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentCollect(reply.id)} disabled={commentCollectLoading[reply.id]}>
+            <Ionicons name={commentCollected[reply.id] ?? reply.collected ? "star" : "star-outline"} size={12} color={commentCollected[reply.id] ?? reply.collected ? "#f59e0b" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, (commentCollected[reply.id] ?? reply.collected) && {
+          color: '#f59e0b'
+        }]}>{getCommentCollectDisplayCount(reply, commentCollected[reply.id])}</Text>
+          </TouchableOpacity>
+          <View style={{flex: 1}} />
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentDislike(reply.id)} disabled={commentDislikeLoading[reply.id]}>
+            <Ionicons name={commentDisliked[reply.id] ?? reply.disliked ? "thumbs-down" : "thumbs-down-outline"} size={12} color={commentDisliked[reply.id] ?? reply.disliked ? "#6b7280" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, (commentDisliked[reply.id] ?? reply.disliked) && {
+          color: '#6b7280'
+        }]}>{getCommentDislikeDisplayCount(reply, commentDisliked[reply.id])}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
+          beforeReport();
+          navigation.navigate('Report', {
+            type: 'comment',
+            targetType: 5,
+            targetId: Number(reply.id) || 0
+          });
+        }}>
+            <Ionicons name="flag-outline" size={12} color="#ef4444" />
+            <Text style={styles.replyActionText}>{reply.reports || 0}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>;
+  };
+  const renderQuestionReplyCard = (reply, options = {}) => {
+    const rootCommentId = options.rootCommentId ?? null;
+    const contextReplyId = options.contextReplyId ?? null;
+    const relationCommentId = Number(reply.replyToCommentId ?? reply.parentId ?? 0) || 0;
+    const relationComment = relationCommentId ? findQuestionCommentById(relationCommentId) : null;
+    const relationUserName = reply.replyToUserName || relationComment?.userName || relationComment?.userNickname || relationComment?.author || '';
+    const shouldHideContextRelation = contextReplyId !== null && String(relationCommentId) === String(contextReplyId);
+    const shouldShowReplyRelation = !!relationUserName && !shouldHideContextRelation && rootCommentId !== null && String(relationCommentId) !== String(rootCommentId) && String(relationCommentId) !== String(reply.id);
+    return <View key={reply.id} style={styles.replyCard}>
+        <View style={styles.replyHeader}>
+          <Avatar uri={reply.userAvatar || reply.avatar} name={reply.userName || reply.userNickname || reply.author} size={24} />
+          <View style={styles.replyAuthorMeta}>
+            <View style={styles.replyAuthorLine}>
+              <Text style={styles.replyAuthor}>{reply.userName || reply.userNickname || reply.author}</Text>
+              {shouldShowReplyRelation ? <>
+                  <Text style={styles.replyAuthorRelation}> 回复 </Text>
+                  <Text style={styles.replyReplyTarget}>{relationUserName}</Text>
+                </> : null}
+            </View>
+          </View>
+          <View style={{flex: 1}} />
+          <Text style={styles.replyTime}>{reply.time}</Text>
+        </View>
+        <Text style={styles.replyText}>{reply.content}</Text>
+        <View style={styles.replyActions}>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentLike(reply.id)} disabled={commentLikeLoading[reply.id]}>
+            <Ionicons name={commentLiked[reply.id] ?? reply.liked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={commentLiked[reply.id] ?? reply.liked ? "#ef4444" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, (commentLiked[reply.id] ?? reply.liked) && {
+          color: '#ef4444'
+        }]}>{getCommentLikeDisplayCount(reply, commentLiked[reply.id])}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
+          openCommentModal(buildCommentReplyTarget(reply, {
+            targetType: 1,
+            targetId: route?.params?.id ?? questionData?.id
+          }));
+        }}>
+            <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
+            <Text style={styles.replyActionText}>{reply.replies || 0}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn}>
+            <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
+            <Text style={styles.replyActionText}>{reply.shares || 0}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentCollect(reply.id)} disabled={commentCollectLoading[reply.id]}>
+            <Ionicons name={commentCollected[reply.id] ?? reply.collected ? "star" : "star-outline"} size={12} color={commentCollected[reply.id] ?? reply.collected ? "#f59e0b" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, (commentCollected[reply.id] ?? reply.collected) && {
+          color: '#f59e0b'
+        }]}>{getCommentCollectDisplayCount(reply, commentCollected[reply.id])}</Text>
+          </TouchableOpacity>
+          <View style={{flex: 1}} />
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentDislike(reply.id)} disabled={commentDislikeLoading[reply.id]}>
+            <Ionicons name={commentDisliked[reply.id] ?? reply.disliked ? "thumbs-down" : "thumbs-down-outline"} size={12} color={commentDisliked[reply.id] ?? reply.disliked ? "#6b7280" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, (commentDisliked[reply.id] ?? reply.disliked) && {
+          color: '#6b7280'
+        }]}>{getCommentDislikeDisplayCount(reply, commentDisliked[reply.id])}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
+          navigation.navigate('Report', {
+            type: 'comment',
+            targetType: 5,
+            targetId: Number(reply.id) || 0
+          });
+        }}>
+            <Ionicons name="flag-outline" size={12} color="#ef4444" />
+            <Text style={styles.replyActionText}>{reply.reports || 0}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>;
+  };
+  const renderQuestionReplyTreeNodes = (nodes = [], level = 0, options = {}) => nodes.map(reply => {
+    const childNodes = Array.isArray(reply.children) ? reply.children : [];
+    const hasChildren = childNodes.length > 0;
+    const descendantReplies = hasChildren ? flattenCommentReplyTree(childNodes) : [];
+    const isExpanded = expandedQuestionReplyChildren[reply.id] !== undefined ? expandedQuestionReplyChildren[reply.id] : true;
+
+    return <View key={reply.id}>
+        {renderQuestionReplyCard(reply, options)}
+        {hasChildren ? <View style={styles.replyChildrenSection}>
+            <TouchableOpacity style={styles.replyChildrenToggle} onPress={() => setExpandedQuestionReplyChildren(prev => ({
+          ...prev,
+          [reply.id]: !isExpanded
+        }))}>
+              <Text style={styles.replyChildrenToggleText}>{isExpanded ? `收起回复 (${descendantReplies.length})` : `展开回复 (${descendantReplies.length})`}</Text>
+            </TouchableOpacity>
+            {isExpanded ? descendantReplies.map(childReply => renderQuestionReplyCard(childReply, {
+          ...options,
+          contextReplyId: reply.id
+        })) : null}
+          </View> : null}
+      </View>;
+  });
+  const renderAnswerReplyTreeNodes = (nodes = [], level = 0, options = {}) => nodes.map(reply => {
+    const childNodes = Array.isArray(reply.children) ? reply.children : [];
+    const hasChildren = childNodes.length > 0;
+    const descendantReplies = hasChildren ? flattenCommentReplyTree(childNodes) : [];
+    const isExpanded = expandedAnswerReplyChildren[reply.id] !== undefined ? expandedAnswerReplyChildren[reply.id] : true;
+
+    return <View key={reply.id}>
+        {renderAnswerReplyCard(reply, options)}
+        {hasChildren ? <View style={styles.replyChildrenSection}>
+            <TouchableOpacity style={styles.replyChildrenToggle} onPress={() => setExpandedAnswerReplyChildren(prev => ({
+          ...prev,
+          [reply.id]: !isExpanded
+        }))}>
+              <Text style={styles.replyChildrenToggleText}>{isExpanded ? `收起回复 (${descendantReplies.length})` : `展开回复 (${descendantReplies.length})`}</Text>
+            </TouchableOpacity>
+            {isExpanded ? descendantReplies.map(childReply => renderAnswerReplyCard(childReply, {
+          ...options,
+          contextReplyId: reply.id
+        })) : null}
+          </View> : null}
+      </View>;
+  });
+  const renderSupplementReplyCard = (reply, options = {}) => {
+    const beforeOpenReply = typeof options.beforeOpenReply === 'function' ? options.beforeOpenReply : () => {};
+    const beforeReport = typeof options.beforeReport === 'function' ? options.beforeReport : () => {};
+    const rootCommentId = options.rootCommentId ?? null;
+    const contextReplyId = options.contextReplyId ?? null;
+    const relationCommentId = Number(reply.replyToCommentId ?? reply.parentId ?? 0) || 0;
+    const relationComment = relationCommentId ? findSupplementCommentById(relationCommentId) : null;
+    const relationUserName = reply.replyToUserName || relationComment?.userName || relationComment?.userNickname || relationComment?.author || '';
+    const shouldHideContextRelation = contextReplyId !== null && String(relationCommentId) === String(contextReplyId);
+    const shouldShowReplyRelation = !!relationUserName && !shouldHideContextRelation && rootCommentId !== null && String(relationCommentId) !== String(rootCommentId) && String(relationCommentId) !== String(reply.id);
+    return <View key={reply.id} style={styles.replyCard}>
+        <View style={styles.replyHeader}>
+          <Avatar uri={reply.userAvatar || reply.avatar} name={reply.userName || reply.userNickname || reply.author} size={24} />
+          <View style={styles.replyAuthorMeta}>
+            <View style={styles.replyAuthorLine}>
+              <Text style={styles.replyAuthor}>{reply.userName || reply.userNickname || reply.author}</Text>
+              {shouldShowReplyRelation ? <>
+                  <Text style={styles.replyAuthorRelation}> 回复 </Text>
+                  <Text style={styles.replyReplyTarget}>{relationUserName}</Text>
+                </> : null}
+            </View>
+          </View>
+          <View style={{flex: 1}} />
+          <Text style={styles.replyTime}>{reply.time}</Text>
+        </View>
+        <Text style={styles.replyText}>{reply.content}</Text>
+        <View style={styles.replyActions}>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentLike(reply.id)} disabled={commentLikeLoading[reply.id]}>
+            <Ionicons name={commentLiked[reply.id] ?? reply.liked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={commentLiked[reply.id] ?? reply.liked ? "#ef4444" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, (commentLiked[reply.id] ?? reply.liked) && {
+          color: '#ef4444'
+        }]}>{getCommentLikeDisplayCount(reply, commentLiked[reply.id])}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
+          beforeOpenReply();
+          openCommentModal(buildCommentReplyTarget(reply, {
+            targetType: 3,
+            targetId: currentSuppId
+          }));
+        }}>
+            <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
+            <Text style={styles.replyActionText}>{reply.replies || 0}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn}>
+            <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
+            <Text style={styles.replyActionText}>{reply.shares || 0}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentCollect(reply.id)} disabled={commentCollectLoading[reply.id]}>
+            <Ionicons name={commentCollected[reply.id] ?? reply.collected ? "star" : "star-outline"} size={12} color={commentCollected[reply.id] ?? reply.collected ? "#f59e0b" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, (commentCollected[reply.id] ?? reply.collected) && {
+          color: '#f59e0b'
+        }]}>{getCommentCollectDisplayCount(reply, commentCollected[reply.id])}</Text>
+          </TouchableOpacity>
+          <View style={{flex: 1}} />
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentDislike(reply.id)} disabled={commentDislikeLoading[reply.id]}>
+            <Ionicons name={commentDisliked[reply.id] ?? reply.disliked ? "thumbs-down" : "thumbs-down-outline"} size={12} color={commentDisliked[reply.id] ?? reply.disliked ? "#6b7280" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, (commentDisliked[reply.id] ?? reply.disliked) && {
+          color: '#6b7280'
+        }]}>{getCommentDislikeDisplayCount(reply, commentDisliked[reply.id])}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
+          beforeReport();
+          navigation.navigate('Report', {
+            type: 'comment',
+            targetType: 5,
+            targetId: Number(reply.id) || 0
+          });
+        }}>
+            <Ionicons name="flag-outline" size={12} color="#ef4444" />
+            <Text style={styles.replyActionText}>{reply.reports || 0}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>;
+  };
+  const renderSupplementReplyTreeNodes = (nodes = [], level = 0, options = {}) => nodes.map(reply => {
+    const childNodes = Array.isArray(reply.children) ? reply.children : [];
+    const hasChildren = childNodes.length > 0;
+    const descendantReplies = hasChildren ? flattenCommentReplyTree(childNodes) : [];
+    const isExpanded = expandedSuppReplyChildren[reply.id] !== undefined ? expandedSuppReplyChildren[reply.id] : true;
+
+    return <View key={reply.id}>
+        {renderSupplementReplyCard(reply, options)}
+        {hasChildren ? <View style={styles.replyChildrenSection}>
+            <TouchableOpacity style={styles.replyChildrenToggle} onPress={() => setExpandedSuppReplyChildren(prev => ({
+          ...prev,
+          [reply.id]: !isExpanded
+        }))}>
+              <Text style={styles.replyChildrenToggleText}>{isExpanded ? `收起回复 (${descendantReplies.length})` : `展开回复 (${descendantReplies.length})`}</Text>
+            </TouchableOpacity>
+            {isExpanded ? descendantReplies.map(childReply => renderSupplementReplyCard(childReply, {
+          ...options,
+          contextReplyId: reply.id
+        })) : null}
+          </View> : null}
+      </View>;
+  });
+  const fetchSupplementInteractionCount = async supplementId => {
+    if (!supplementId) {
+      return 0;
+    }
+    const pageSize = 100;
+    let pageNum = 1;
+    let totalTopLevelComments = 0;
+    let fetchedTopLevelComments = 0;
+    while (true) {
+      const response = await commentApi.getComments({
+        targetType: 3,
+        targetId: Number(supplementId),
+        parentId: 0,
+        pageNum,
+        pageSize
+      });
+      if (!(response && response.code === 200)) {
+        break;
+      }
+      const comments = normalizeComments(extractCommentRows(response));
+      const pageTopLevelTotal = extractCommentTotal(response, comments.length);
+      totalTopLevelComments = Math.max(Number(pageTopLevelTotal) || 0, totalTopLevelComments, comments.length);
+      fetchedTopLevelComments += comments.length;
+      if (comments.length === 0 || comments.length < pageSize || fetchedTopLevelComments >= totalTopLevelComments) {
+        break;
+      }
+      pageNum += 1;
+    }
+    return Math.max(totalTopLevelComments, fetchedTopLevelComments);
+  };
+  const hydrateSupplementCommentCounts = async (supplements = []) => {
+    const supplementsToSync = supplements.filter(item => {
+      if (!item?.id) {
+        return false;
+      }
+      return true;
+    });
+    if (!supplementsToSync.length) {
+      return;
+    }
+    try {
+      const commentCountResults = await Promise.all(supplementsToSync.map(async item => {
+        try {
+          return {
+            id: item.id,
+            commentCount: await fetchSupplementInteractionCount(item.id)
+          };
+        } catch (error) {
+          console.log(`⚠️ 补充评论数校准失败: supplementId=${item.id}`, error);
+          return null;
+        }
+      }));
+      const nextCommentCountMap = commentCountResults.reduce((accumulator, result) => {
+        if (!result?.id) {
+          return accumulator;
+        }
+        accumulator[String(result.id)] = result.commentCount;
+        return accumulator;
+      }, {});
+      if (!Object.keys(nextCommentCountMap).length) {
+        return;
+      }
+      setSupplementsCache(prevCache => {
+        const nextCache = {
+          ...prevCache
+        };
+        Object.keys(nextCache).forEach(sortKey => {
+          const currentEntry = nextCache[sortKey];
+          if (!currentEntry?.list?.length) {
+            return;
+          }
+          let changed = false;
+          const nextList = currentEntry.list.map(item => {
+            const nextCommentCount = nextCommentCountMap[String(item?.id)];
+            if (nextCommentCount === undefined) {
+              return item;
+            }
+            const currentCommentCount = Number(item.commentCount ?? item.comments ?? item.comment_count) || 0;
+            if (currentCommentCount === nextCommentCount) {
+              return item;
+            }
+            changed = true;
+            return normalizeSupplementCacheItem({
+              ...item,
+              commentCount: nextCommentCount,
+              comments: nextCommentCount
+            });
+          });
+          if (changed) {
+            nextCache[sortKey] = {
+              ...currentEntry,
+              list: nextList
+            };
+          }
+        });
+        return nextCache;
+      });
+    } catch (error) {
+      console.log('⚠️ 补充评论数批量校准失败', error);
+    }
   };
   const buildSupplementMutationResult = (currentSupplement = {}, responseData, fallbackValues = {}) => {
     const payload = responseData && typeof responseData === 'object' && !Array.isArray(responseData) ? responseData : {};
@@ -1711,6 +2837,17 @@ export default function QuestionDetailScreen({
       if (response && response.code === 200 && response.data) {
         const newAnswers = normalizeAnswers(response.data.rows || []);
         const total = response.data.total || 0;
+        const otherSortBy = sortBy === 'featured' ? 'newest' : 'featured';
+        logSortPreview({
+          scope: 'answers',
+          sortBy,
+          total,
+          items: newAnswers,
+          source: isRefresh ? 'refresh-request' : 'load-more-request',
+          cacheState: 'network',
+          otherSortBy,
+          otherItems: answersCache[otherSortBy]?.list || []
+        });
         syncAnswerInteractionStates(newAnswers);
 
         // 更新对应排序方式的缓存
@@ -1779,7 +2916,11 @@ export default function QuestionDetailScreen({
       console.log('📥 评论列表响应:', response);
       if (response && response.code === 200 && response.data) {
         const rawRows = response.data.rows || response.data.list || response.data.records || [];
-        const newComments = normalizeComments(rawRows);
+        const newComments = mergeInteractionCounts(normalizeComments(rawRows, {
+          targetType: 1,
+          targetId: Number(questionId),
+          parentId: 0
+        }), cacheData.list);
         const total = response.data.total ?? response.data.count ?? response.data.recordsTotal ?? newComments.length;
         syncCommentInteractionStates(newComments);
         setCommentsCache(prevCache => {
@@ -1863,7 +3004,11 @@ export default function QuestionDetailScreen({
       console.log('📥 评论列表更多响应:', response);
       if (response && response.code === 200 && response.data) {
         const rawRows = response.data.rows || response.data.list || response.data.records || [];
-        const newComments = normalizeComments(rawRows);
+        const newComments = mergeInteractionCounts(normalizeComments(rawRows, {
+          targetType: 1,
+          targetId: Number(questionId),
+          parentId: 0
+        }), currentData.list);
         const total = response.data.total ?? response.data.count ?? response.data.recordsTotal ?? currentData.total;
         syncCommentInteractionStates(newComments);
         setCommentsCache(prevCache => ({
@@ -1886,8 +3031,814 @@ export default function QuestionDetailScreen({
       setCommentsLoadingMore(false);
     }
   };
+  const loadSupplementComments = async (supplementId, options = {}) => {
+    const {
+      isRefresh = false,
+      isLoadMore = false
+    } = options;
+    if (!supplementId) {
+      return;
+    }
+    const pageNum = isLoadMore ? suppCommentListState.pageNum : 1;
+    try {
+      setSuppCommentListState(prevState => ({
+        ...prevState,
+        loading: !isRefresh && !isLoadMore,
+        refreshing: isRefresh,
+        loadingMore: isLoadMore,
+        targetId: Number(supplementId)
+      }));
+      const response = await commentApi.getComments({
+        targetType: 3,
+        targetId: Number(supplementId),
+        parentId: 0,
+        pageNum,
+        pageSize: 10
+      });
+      console.log('📥 补充评论列表响应:', response);
+      if (response && response.code === 200 && response.data) {
+        const rawRows = extractCommentRows(response);
+        const newComments = mergeInteractionCounts(normalizeComments(rawRows, {
+          targetType: 3,
+          targetId: Number(supplementId),
+          parentId: 0
+        }), suppCommentListState.list);
+        const total = extractCommentTotal(response, newComments.length);
+        syncCommentInteractionStates(newComments);
+        setSuppCommentListState(prevState => {
+          const nextList = isLoadMore ? [...prevState.list, ...newComments] : newComments;
+          return {
+            ...prevState,
+            list: nextList,
+            total,
+            pageNum: newComments.length < 10 ? pageNum : pageNum + 1,
+            hasMore: newComments.length >= 10 && nextList.length < total,
+            loaded: true,
+            loading: false,
+            refreshing: false,
+            loadingMore: false,
+            targetId: Number(supplementId)
+          };
+        });
+        const interactionCount = await fetchSupplementInteractionCount(supplementId);
+        syncSupplementCommentCount(supplementId, interactionCount);
+      } else {
+        setSuppCommentListState(prevState => ({
+          ...prevState,
+          loading: false,
+          refreshing: false,
+          loadingMore: false
+        }));
+        showToast(response?.msg || '加载补充评论失败', 'error');
+      }
+    } catch (error) {
+      console.error('❌ 加载补充评论失败:', error);
+      setSuppCommentListState(prevState => ({
+        ...prevState,
+        loading: false,
+        refreshing: false,
+        loadingMore: false
+      }));
+      showToast('加载补充评论失败', 'error');
+    }
+  };
+  const loadAnswerComments = async (answerId, options = {}) => {
+    const {
+      isRefresh = false,
+      isLoadMore = false
+    } = options;
+    if (!answerId) {
+      return;
+    }
+    const pageNum = isLoadMore ? answerCommentListState.pageNum : 1;
+    try {
+      setAnswerCommentListState(prevState => ({
+        ...prevState,
+        loading: !isRefresh && !isLoadMore,
+        refreshing: isRefresh,
+        loadingMore: isLoadMore,
+        targetId: Number(answerId)
+      }));
+      const response = await commentApi.getComments({
+        targetType: 2,
+        targetId: Number(answerId),
+        parentId: 0,
+        pageNum,
+        pageSize: 10
+      });
+      console.log('📥 回答评论列表响应:', response);
+      if (response && response.code === 200 && response.data) {
+        const rawRows = extractCommentRows(response);
+        const newComments = mergeInteractionCounts(normalizeComments(rawRows, {
+          targetType: 2,
+          targetId: Number(answerId),
+          parentId: 0
+        }), answerCommentListState.list);
+        const total = extractCommentTotal(response, newComments.length);
+        syncCommentInteractionStates(newComments);
+        setAnswerCommentListState(prevState => {
+          const nextList = isLoadMore ? [...prevState.list, ...newComments] : newComments;
+          return {
+            ...prevState,
+            list: nextList,
+            total,
+            pageNum: newComments.length < 10 ? pageNum : pageNum + 1,
+            hasMore: newComments.length >= 10 && nextList.length < total,
+            loaded: true,
+            loading: false,
+            refreshing: false,
+            loadingMore: false,
+            targetId: Number(answerId)
+          };
+        });
+      } else {
+        setAnswerCommentListState(prevState => ({
+          ...prevState,
+          loading: false,
+          refreshing: false,
+          loadingMore: false
+        }));
+        showToast(response?.msg || '加载回答评论失败', 'error');
+      }
+    } catch (error) {
+      console.error('❌ 加载回答评论失败:', error);
+      setAnswerCommentListState(prevState => ({
+        ...prevState,
+        loading: false,
+        refreshing: false,
+        loadingMore: false
+      }));
+      showToast('加载回答评论失败', 'error');
+    }
+  };
+  const loadQuestionCommentReplies = async parentCommentId => {
+    const questionId = Number(route?.params?.id ?? questionData?.id) || 0;
+    if (!questionId || !parentCommentId) {
+      return;
+    }
+    setQuestionCommentRepliesMap(prevMap => ({
+      ...prevMap,
+      [parentCommentId]: {
+        ...(prevMap[parentCommentId] || {}),
+        loading: true
+      }
+    }));
+    try {
+      const fetchAllDescendantReplies = async rootParentId => {
+        const pageSize = 50;
+        const visitedParentIds = new Set();
+        const collectedReplies = [];
+        const collectedReplyIds = new Set();
+
+        const fetchDirectChildren = async currentParentId => {
+          let pageNum = 1;
+          let directChildren = [];
+
+          while (true) {
+            const response = await commentApi.getComments({
+              targetType: 1,
+              targetId: questionId,
+              parentId: Number(currentParentId),
+              pageNum,
+              pageSize
+            });
+            console.log(`📥 问题评论回复响应: parentId=${currentParentId}, pageNum=${pageNum}`, response);
+
+            if (!(response && response.code === 200 && response.data)) {
+              break;
+            }
+
+            const rawRows = extractCommentRows(response);
+            const normalizedRows = normalizeComments(rawRows, {
+              targetType: 1,
+              targetId: questionId
+            });
+            directChildren = [...directChildren, ...normalizedRows];
+
+            const total = extractCommentTotal(response, directChildren.length);
+            if (!rawRows.length || directChildren.length >= total || rawRows.length < pageSize) {
+              break;
+            }
+
+            pageNum += 1;
+          }
+
+          return directChildren;
+        };
+
+        const traverseChildren = async currentParentId => {
+          const normalizedParentKey = String(currentParentId);
+          if (visitedParentIds.has(normalizedParentKey)) {
+            return;
+          }
+
+          visitedParentIds.add(normalizedParentKey);
+          const children = await fetchDirectChildren(currentParentId);
+
+          for (const child of children) {
+            const childKey = String(child.id);
+            if (!collectedReplyIds.has(childKey)) {
+              collectedReplyIds.add(childKey);
+              collectedReplies.push(child);
+            }
+            await traverseChildren(child.id);
+          }
+        };
+
+        await traverseChildren(rootParentId);
+        return collectedReplies;
+      };
+
+      const rawReplies = await fetchAllDescendantReplies(parentCommentId);
+      const replies = mergeInteractionCounts(rawReplies, questionCommentRepliesMap[parentCommentId]?.list || []);
+      const total = replies.length;
+
+      if (replies.length > 0) {
+        syncCommentInteractionStates(replies);
+        setQuestionCommentRepliesMap(prevMap => ({
+          ...prevMap,
+          [parentCommentId]: {
+            list: replies,
+            total,
+            loaded: true,
+            loading: false
+          }
+        }));
+      } else {
+        setQuestionCommentRepliesMap(prevMap => ({
+          ...prevMap,
+          [parentCommentId]: {
+            ...(prevMap[parentCommentId] || {}),
+            list: [],
+            total: 0,
+            loaded: true,
+            loading: false
+          }
+        }));
+      }
+    } catch (error) {
+      console.error('❌ 加载问题评论回复失败:', error);
+      setQuestionCommentRepliesMap(prevMap => ({
+        ...prevMap,
+        [parentCommentId]: {
+          ...(prevMap[parentCommentId] || {}),
+          loading: false,
+          loaded: true
+        }
+      }));
+      showToast('加载回复失败', 'error');
+    }
+  };
+  const loadAnswerCommentReplies = async parentCommentId => {
+    if (!currentAnswerId || !parentCommentId) {
+      return;
+    }
+    setAnswerCommentRepliesMap(prevMap => ({
+      ...prevMap,
+      [parentCommentId]: {
+        ...(prevMap[parentCommentId] || {}),
+        loading: true
+      }
+    }));
+    try {
+      const fetchAllDescendantReplies = async rootParentId => {
+        const pageSize = 50;
+        const visitedParentIds = new Set();
+        const collectedReplies = [];
+        const collectedReplyIds = new Set();
+
+        const fetchDirectChildren = async currentParentId => {
+          let pageNum = 1;
+          let directChildren = [];
+
+          while (true) {
+            const response = await commentApi.getComments({
+              targetType: 2,
+              targetId: Number(currentAnswerId),
+              parentId: Number(currentParentId),
+              pageNum,
+              pageSize
+            });
+            console.log(`📥 回答评论回复响应: parentId=${currentParentId}, pageNum=${pageNum}`, response);
+
+            if (!(response && response.code === 200 && response.data)) {
+              break;
+            }
+
+            const rawRows = extractCommentRows(response);
+            const normalizedRows = normalizeComments(rawRows, {
+              targetType: 2,
+              targetId: Number(currentAnswerId)
+            });
+            directChildren = [...directChildren, ...normalizedRows];
+
+            const total = extractCommentTotal(response, directChildren.length);
+            if (!rawRows.length || directChildren.length >= total || rawRows.length < pageSize) {
+              break;
+            }
+
+            pageNum += 1;
+          }
+
+          return directChildren;
+        };
+
+        const traverseChildren = async currentParentId => {
+          const normalizedParentKey = String(currentParentId);
+          if (visitedParentIds.has(normalizedParentKey)) {
+            return;
+          }
+
+          visitedParentIds.add(normalizedParentKey);
+          const children = await fetchDirectChildren(currentParentId);
+
+          for (const child of children) {
+            const childKey = String(child.id);
+            if (!collectedReplyIds.has(childKey)) {
+              collectedReplyIds.add(childKey);
+              collectedReplies.push(child);
+            }
+            await traverseChildren(child.id);
+          }
+        };
+
+        await traverseChildren(rootParentId);
+        return collectedReplies;
+      };
+
+      const rawReplies = await fetchAllDescendantReplies(parentCommentId);
+      const replies = mergeInteractionCounts(rawReplies, answerCommentRepliesMap[parentCommentId]?.list || []);
+      const total = replies.length;
+
+      if (replies.length > 0) {
+        syncCommentInteractionStates(replies);
+        setAnswerCommentRepliesMap(prevMap => ({
+          ...prevMap,
+          [parentCommentId]: {
+            list: replies,
+            total,
+            loaded: true,
+            loading: false
+          }
+        }));
+      } else {
+        setAnswerCommentRepliesMap(prevMap => ({
+          ...prevMap,
+          [parentCommentId]: {
+            ...(prevMap[parentCommentId] || {}),
+            list: [],
+            total: 0,
+            loaded: true,
+            loading: false
+          }
+        }));
+      }
+    } catch (error) {
+      console.error('❌ 加载回答评论回复失败:', error);
+      setAnswerCommentRepliesMap(prevMap => ({
+        ...prevMap,
+        [parentCommentId]: {
+          ...(prevMap[parentCommentId] || {}),
+          loading: false,
+          loaded: true
+        }
+      }));
+      showToast('加载回复失败', 'error');
+    }
+  };
+  const loadSupplementCommentReplies = async parentCommentId => {
+    if (!currentSuppId || !parentCommentId) {
+      return;
+    }
+    setSuppCommentRepliesMap(prevMap => ({
+      ...prevMap,
+      [parentCommentId]: {
+        ...(prevMap[parentCommentId] || {}),
+        loading: true
+      }
+    }));
+    try {
+      const fetchAllDescendantReplies = async rootParentId => {
+        const pageSize = 50;
+        const visitedParentIds = new Set();
+        const collectedReplies = [];
+        const collectedReplyIds = new Set();
+
+        const fetchDirectChildren = async currentParentId => {
+          let pageNum = 1;
+          let directChildren = [];
+
+          while (true) {
+            const response = await commentApi.getComments({
+              targetType: 3,
+              targetId: Number(currentSuppId),
+              parentId: Number(currentParentId),
+              pageNum,
+              pageSize
+            });
+            console.log(`📥 补充评论回复响应: parentId=${currentParentId}, pageNum=${pageNum}`, response);
+
+            if (!(response && response.code === 200 && response.data)) {
+              break;
+            }
+
+            const rawRows = extractCommentRows(response);
+            const normalizedRows = normalizeComments(rawRows, {
+              targetType: 3,
+              targetId: Number(currentSuppId)
+            });
+            directChildren = [...directChildren, ...normalizedRows];
+
+            const total = extractCommentTotal(response, directChildren.length);
+            if (!rawRows.length || directChildren.length >= total || rawRows.length < pageSize) {
+              break;
+            }
+
+            pageNum += 1;
+          }
+
+          return directChildren;
+        };
+
+        const traverseChildren = async currentParentId => {
+          const normalizedParentKey = String(currentParentId);
+          if (visitedParentIds.has(normalizedParentKey)) {
+            return;
+          }
+
+          visitedParentIds.add(normalizedParentKey);
+          const children = await fetchDirectChildren(currentParentId);
+
+          for (const child of children) {
+            const childKey = String(child.id);
+            if (!collectedReplyIds.has(childKey)) {
+              collectedReplyIds.add(childKey);
+              collectedReplies.push(child);
+            }
+            await traverseChildren(child.id);
+          }
+        };
+
+        await traverseChildren(rootParentId);
+        return collectedReplies;
+      };
+
+      const rawReplies = await fetchAllDescendantReplies(parentCommentId);
+      const replies = mergeInteractionCounts(rawReplies, suppCommentRepliesMap[parentCommentId]?.list || []);
+      const total = replies.length;
+
+      if (replies.length > 0) {
+        syncCommentInteractionStates(replies);
+        setSuppCommentRepliesMap(prevMap => ({
+          ...prevMap,
+          [parentCommentId]: {
+            list: replies,
+            total,
+            loaded: true,
+            loading: false
+          }
+        }));
+      } else {
+        setSuppCommentRepliesMap(prevMap => ({
+          ...prevMap,
+          [parentCommentId]: {
+            ...(prevMap[parentCommentId] || {}),
+            list: [],
+            total: 0,
+            loaded: true,
+            loading: false
+          }
+        }));
+      }
+    } catch (error) {
+      console.error('❌ 加载补充评论回复失败:', error);
+      setSuppCommentRepliesMap(prevMap => ({
+        ...prevMap,
+        [parentCommentId]: {
+          ...(prevMap[parentCommentId] || {}),
+          list: [],
+          total: 0,
+          loaded: true,
+          loading: false
+        }
+      }));
+      showToast('加载回复失败', 'error');
+    }
+  };
+  const toggleSupplementCommentReplies = async commentId => {
+    const willExpand = !expandedSuppCommentReplies[commentId];
+    setExpandedSuppCommentReplies(prevState => ({
+      ...prevState,
+      [commentId]: willExpand
+    }));
+    if (willExpand && !suppCommentRepliesMap[commentId]?.loaded && !suppCommentRepliesMap[commentId]?.loading) {
+      await loadSupplementCommentReplies(commentId);
+    }
+  };
+  const handleAnswerCommentsLoadMore = () => {
+    if (!currentAnswerId || !answerCommentListState.loaded || !answerCommentListState.hasMore || answerCommentListState.loadingMore || answerCommentListState.loading) {
+      return;
+    }
+    loadAnswerComments(currentAnswerId, {
+      isLoadMore: true
+    });
+  };
+  const handleSupplementCommentsLoadMore = () => {
+    if (!currentSuppId || !suppCommentListState.loaded || !suppCommentListState.hasMore || suppCommentListState.loadingMore || suppCommentListState.loading) {
+      return;
+    }
+    loadSupplementComments(currentSuppId, {
+      isLoadMore: true
+    });
+  };
+  const closeCommentModal = () => {
+    setShowCommentModal(false);
+    setCommentText('');
+    setCommentIdentity('personal');
+    setCommentSelectedTeams([]);
+    setCommentTarget({
+      targetType: 1,
+      targetId: null,
+      parentId: 0,
+      replyToCommentId: 0,
+      replyToUserId: null,
+      replyToUserName: '',
+      originalComment: null
+    });
+  };
+  const openCommentModal = (target = {}) => {
+    const defaultTargetId = route?.params?.id ? Number(route.params.id) : null;
+    setCommentTarget({
+      targetType: target.targetType ?? 1,
+      targetId: target.targetId !== undefined && target.targetId !== null ? Number(target.targetId) : defaultTargetId,
+      parentId: target.parentId ?? 0,
+      replyToCommentId: Number(target.replyToCommentId ?? 0) || 0,
+      replyToUserId: target.replyToUserId !== undefined && target.replyToUserId !== null ? Number(target.replyToUserId) || null : null,
+      replyToUserName: target.replyToUserName ?? '',
+      originalComment: target.originalComment ? normalizeCommentItem(target.originalComment, {
+        targetType: target.targetType ?? 1,
+        targetId: target.targetId !== undefined && target.targetId !== null ? Number(target.targetId) : defaultTargetId,
+        parentId: target.parentId ?? 0
+      }) : null
+    });
+    setShowCommentModal(true);
+  };
+  const handleSubmitComment = async () => {
+    const normalizedCommentText = typeof commentText === 'string' ? commentText.trim() : '';
+    const questionId = route?.params?.id;
+    let targetType = Number(commentTarget?.targetType ?? 1) || 1;
+    let targetId = Number(commentTarget?.targetId ?? questionId) || 0;
+    let parentId = Number(commentTarget?.parentId ?? 0) || 0;
+    if (targetType === 3 && parentId > 0) {
+      const supplementParentComment = findSupplementCommentById(parentId);
+      if (supplementParentComment) {
+        targetId = Number(currentSuppId ?? supplementParentComment.targetId ?? targetId) || targetId;
+      }
+    }
+    const isQuestionRootComment = targetType === 1 && parentId === 0 && String(targetId) === String(questionId);
+    if (!normalizedCommentText) {
+      return;
+    }
+    if (!targetId) {
+      showToast('评论目标不存在', 'error');
+      return;
+    }
+    if (commentSubmitting) {
+      return;
+    }
+    try {
+      setCommentSubmitting(true);
+      const payload = {
+        targetType,
+        targetId,
+        parentId,
+        content: normalizedCommentText
+      };
+      if (commentTarget?.replyToCommentId) {
+        payload.replyToCommentId = Number(commentTarget.replyToCommentId) || 0;
+      }
+      if (commentTarget?.replyToUserId) {
+        payload.replyToUserId = Number(commentTarget.replyToUserId) || null;
+      }
+      if (commentTarget?.replyToUserName) {
+        payload.replyToUserName = commentTarget.replyToUserName;
+      }
+      const response = await commentApi.createComment(payload);
+      console.log('📥 评论发布响应:', response);
+      if (response && response.code === 200) {
+        showToast('评论发布成功', 'success');
+        
+        // 根据 targetType 判断是否需要返回上一级
+        const isQuestionComment = commentTarget.targetType === 1;
+        const isSupplementComment = commentTarget.targetType === 3;
+        const isAnswerComment = commentTarget.targetType === 2;
+        const isReplyToQuestionComment = isQuestionComment && commentTarget.parentId && commentTarget.parentId !== 0;
+        const isReplyToSupplementComment = isSupplementComment && commentTarget.parentId && commentTarget.parentId !== 0;
+        const isReplyToAnswerComment = isAnswerComment && commentTarget.parentId && commentTarget.parentId !== 0;
+
+        if (isReplyToQuestionComment) {
+          setShowCommentModal(false);
+          setCommentText('');
+          setCommentIdentity('personal');
+          setCommentSelectedTeams([]);
+          setShowCommentReplyModal(true);
+        } else if (isReplyToSupplementComment) {
+          // 如果是回复补充评论，返回到补充评论回复列表
+          setShowCommentModal(false);
+          setCommentText('');
+          setCommentIdentity('personal');
+          setCommentSelectedTeams([]);
+          setShowSuppCommentReplyModal(true);
+        } else if (isReplyToAnswerComment) {
+          setShowCommentModal(false);
+          setCommentText('');
+          setCommentIdentity('personal');
+          setCommentSelectedTeams([]);
+          setShowAnswerCommentReplyModal(true);
+        } else if (isSupplementComment) {
+          // 如果是直接给补充写评论，返回到补充评论列表
+          setShowCommentModal(false);
+          setCommentText('');
+          setCommentIdentity('personal');
+          setCommentSelectedTeams([]);
+          setShowSuppCommentListModal(true);
+        } else if (isAnswerComment) {
+          // 如果是给回答写评论，返回到回答评论列表
+          setShowCommentModal(false);
+          setCommentText('');
+          setCommentIdentity('personal');
+          setCommentSelectedTeams([]);
+          setShowAnswerCommentListModal(true);
+        } else {
+          closeCommentModal();
+        }
+        
+        if (isQuestionRootComment) {
+          setQuestionData(prevQuestion => {
+            if (!prevQuestion) {
+              return prevQuestion;
+            }
+            const nextCommentCount = (Number(prevQuestion.commentCount ?? prevQuestion.comments ?? 0) || 0) + 1;
+            return normalizeQuestionDetail({
+              ...prevQuestion,
+              commentCount: nextCommentCount,
+              comments: nextCommentCount
+            });
+          });
+          setCommentsCache(prevCache => ({
+            ...prevCache,
+            likes: {
+              ...prevCache.likes,
+              loaded: false,
+              lastUpdated: null
+            },
+            newest: {
+              ...prevCache.newest,
+              loaded: false,
+              lastUpdated: null
+            }
+          }));
+          setCommentsSortBy('newest');
+          await loadCommentsList(targetId, true, 'newest');
+        } else if (targetType === 1) {
+          await loadCommentsList(targetId, true, commentsSortBy);
+          if (parentId > 0) {
+            const threadRootId = getQuestionCommentThreadRootId(parentId);
+            if (threadRootId) {
+              await loadQuestionCommentReplies(threadRootId);
+            }
+          }
+        } else if (targetType === 3) {
+          const currentSupplement = getSupplementById(targetId);
+          const currentSupplementCommentCount = Number(currentSupplement?.commentCount ?? currentSupplement?.comments ?? 0) || 0;
+          syncSupplementCommentCount(targetId, currentSupplementCommentCount + 1);
+
+          if (String(currentSuppId) === String(targetId)) {
+            await loadSupplementComments(targetId, {
+              isRefresh: true
+            });
+            if (parentId > 0) {
+              const threadRootId = getSupplementCommentThreadRootId(parentId);
+              if (threadRootId) {
+                await loadSupplementCommentReplies(threadRootId);
+              }
+            }
+          }
+        } else if (targetType === 2) {
+          const currentAnswer = answersList.find(item => String(getAnswerPrimaryId(item) ?? item.id) === String(targetId)) || Object.values(answersCache).flatMap(entry => entry?.list || []).find(item => String(getAnswerPrimaryId(item) ?? item.id) === String(targetId)) || null;
+          const currentAnswerCommentCount = Number(currentAnswer?.commentCount ?? currentAnswer?.comments ?? 0) || 0;
+          syncAnswerCommentCount(targetId, currentAnswerCommentCount + 1);
+
+          if (String(currentAnswerId) === String(targetId)) {
+            await loadAnswerComments(targetId, {
+              isRefresh: true
+            });
+            if (parentId > 0) {
+              const threadRootId = getAnswerCommentThreadRootId(parentId);
+              if (threadRootId) {
+                await loadAnswerCommentReplies(threadRootId);
+              }
+            }
+          }
+        }
+      } else {
+        showToast(response?.msg || '评论发布失败', 'error');
+
+        // 失败时也返回上一级
+        const isQuestionComment = commentTarget.targetType === 1;
+        const isSupplementComment = commentTarget.targetType === 3;
+        const isAnswerComment = commentTarget.targetType === 2;
+        const isReplyToQuestionComment = isQuestionComment && commentTarget.parentId && commentTarget.parentId !== 0;
+        const isReplyToSupplementComment = isSupplementComment && commentTarget.parentId && commentTarget.parentId !== 0;
+        const isReplyToAnswerComment = isAnswerComment && commentTarget.parentId && commentTarget.parentId !== 0;
+
+        if (isReplyToQuestionComment) {
+          setShowCommentModal(false);
+          setCommentText('');
+          setCommentIdentity('personal');
+          setCommentSelectedTeams([]);
+          setShowCommentReplyModal(true);
+        } else if (isReplyToSupplementComment) {
+          setShowCommentModal(false);
+          setCommentText('');
+          setCommentIdentity('personal');
+          setCommentSelectedTeams([]);
+          setShowSuppCommentReplyModal(true);
+        } else if (isReplyToAnswerComment) {
+          setShowCommentModal(false);
+          setCommentText('');
+          setCommentIdentity('personal');
+          setCommentSelectedTeams([]);
+          setShowAnswerCommentReplyModal(true);
+        } else if (isSupplementComment) {
+          setShowCommentModal(false);
+          setCommentText('');
+          setCommentIdentity('personal');
+          setCommentSelectedTeams([]);
+          setShowSuppCommentListModal(true);
+        } else if (isAnswerComment) {
+          setShowCommentModal(false);
+          setCommentText('');
+          setCommentIdentity('personal');
+          setCommentSelectedTeams([]);
+          setShowAnswerCommentListModal(true);
+        }
+      }
+    } catch (error) {
+      console.error('❌ 评论发布失败:', error);
+      showToast(error?.message || '网络错误，请稍后重试', 'error');
+      
+      // 异常时也返回上一级
+      const isQuestionComment = commentTarget.targetType === 1;
+      const isSupplementComment = commentTarget.targetType === 3;
+      const isAnswerComment = commentTarget.targetType === 2;
+      const isReplyToQuestionComment = isQuestionComment && commentTarget.parentId && commentTarget.parentId !== 0;
+      const isReplyToSupplementComment = isSupplementComment && commentTarget.parentId && commentTarget.parentId !== 0;
+      const isReplyToAnswerComment = isAnswerComment && commentTarget.parentId && commentTarget.parentId !== 0;
+
+      if (isReplyToQuestionComment) {
+        setShowCommentModal(false);
+        setCommentText('');
+        setCommentIdentity('personal');
+        setCommentSelectedTeams([]);
+        setShowCommentReplyModal(true);
+      } else if (isReplyToSupplementComment) {
+        setShowCommentModal(false);
+        setCommentText('');
+        setCommentIdentity('personal');
+        setCommentSelectedTeams([]);
+        setShowSuppCommentReplyModal(true);
+      } else if (isReplyToAnswerComment) {
+        setShowCommentModal(false);
+        setCommentText('');
+        setCommentIdentity('personal');
+        setCommentSelectedTeams([]);
+        setShowAnswerCommentReplyModal(true);
+      } else if (isSupplementComment) {
+        setShowCommentModal(false);
+        setCommentText('');
+        setCommentIdentity('personal');
+        setCommentSelectedTeams([]);
+        setShowSuppCommentListModal(true);
+      } else if (isAnswerComment) {
+        setShowCommentModal(false);
+        setCommentText('');
+        setCommentIdentity('personal');
+        setCommentSelectedTeams([]);
+        setShowAnswerCommentListModal(true);
+      }
+    } finally {
+      setCommentSubmitting(false);
+    }
+  };
   const handleCommentDislike = async commentId => {
-    const comment = commentsList.find(item => String(item.id) === String(commentId));
+    const questionComment = commentsList.find(item => String(item.id) === String(commentId));
+    const questionReplyComment = Object.values(questionCommentRepliesMap).flatMap(entry => entry?.list || []).find(item => String(item.id) === String(commentId));
+    const answerComment = answerCommentsList.find(item => String(item.id) === String(commentId));
+    const answerReplyComment = Object.values(answerCommentRepliesMap).flatMap(entry => entry?.list || []).find(item => String(item.id) === String(commentId));
+    const supplementRootComment = suppCommentsList.find(item => String(item.id) === String(commentId));
+    const supplementReplyComment = Object.values(suppCommentRepliesMap).flatMap(entry => entry?.list || []).find(item => String(item.id) === String(commentId));
+    const comment = questionComment || questionReplyComment || answerComment || answerReplyComment || supplementRootComment || supplementReplyComment;
     if (!commentId) {
       showToast('操作失败：评论ID不存在', 'error');
       return;
@@ -1909,14 +3860,23 @@ export default function QuestionDetailScreen({
       const response = newState ? await commentApi.dislikeComment(commentId) : await commentApi.undislikeComment(commentId);
       if (response && response.code === 200) {
         showToast(newState ? '已踩' : '已取消踩', 'success');
-        updateCommentInCaches(commentId, currentComment => {
+        const applyDislikeUpdate = currentComment => {
           const currentDislikeCount = getCommentDislikeDisplayCount(currentComment, currentState);
           const fallbackDislikeCount = Math.max(0, currentDislikeCount + (newState ? 1 : -1));
           return buildCommentFromMutationResponse(currentComment, response.data, {
             disliked: newState,
             dislikeCount: fallbackDislikeCount
           });
-        });
+        };
+        if (questionComment || questionReplyComment) {
+          updateCommentInCaches(commentId, applyDislikeUpdate);
+        }
+        if (answerComment || answerReplyComment) {
+          updateAnswerCommentStates(commentId, applyDislikeUpdate);
+        }
+        if (supplementRootComment || supplementReplyComment) {
+          updateSupplementCommentStates(commentId, applyDislikeUpdate);
+        }
       } else {
         setCommentDisliked(prev => ({
           ...prev,
@@ -1939,7 +3899,13 @@ export default function QuestionDetailScreen({
     }
   };
   const handleCommentLike = async commentId => {
-    const comment = commentsList.find(item => String(item.id) === String(commentId));
+    const questionComment = commentsList.find(item => String(item.id) === String(commentId));
+    const questionReplyComment = Object.values(questionCommentRepliesMap).flatMap(entry => entry?.list || []).find(item => String(item.id) === String(commentId));
+    const answerComment = answerCommentsList.find(item => String(item.id) === String(commentId));
+    const answerReplyComment = Object.values(answerCommentRepliesMap).flatMap(entry => entry?.list || []).find(item => String(item.id) === String(commentId));
+    const supplementRootComment = suppCommentsList.find(item => String(item.id) === String(commentId));
+    const supplementReplyComment = Object.values(suppCommentRepliesMap).flatMap(entry => entry?.list || []).find(item => String(item.id) === String(commentId));
+    const comment = questionComment || questionReplyComment || answerComment || answerReplyComment || supplementRootComment || supplementReplyComment;
     if (!commentId) {
       showToast('操作失败：评论ID不存在', 'error');
       return;
@@ -1961,14 +3927,23 @@ export default function QuestionDetailScreen({
       const response = newState ? await commentApi.likeComment(commentId) : await commentApi.unlikeComment(commentId);
       if (response && response.code === 200) {
         showToast(newState ? '已点赞' : '已取消点赞', 'success');
-        updateCommentInCaches(commentId, currentComment => {
+        const applyLikeUpdate = currentComment => {
           const currentLikeCount = getCommentLikeDisplayCount(currentComment, currentState);
           const fallbackLikeCount = Math.max(0, currentLikeCount + (newState ? 1 : -1));
           return buildCommentFromMutationResponse(currentComment, response.data, {
             liked: newState,
             likeCount: fallbackLikeCount
           });
-        });
+        };
+        if (questionComment || questionReplyComment) {
+          updateCommentInCaches(commentId, applyLikeUpdate);
+        }
+        if (answerComment || answerReplyComment) {
+          updateAnswerCommentStates(commentId, applyLikeUpdate);
+        }
+        if (supplementRootComment || supplementReplyComment) {
+          updateSupplementCommentStates(commentId, applyLikeUpdate);
+        }
       } else {
         setCommentLiked(prev => ({
           ...prev,
@@ -1991,7 +3966,13 @@ export default function QuestionDetailScreen({
     }
   };
   const handleCommentCollect = async commentId => {
-    const comment = commentsList.find(item => String(item.id) === String(commentId));
+    const questionComment = commentsList.find(item => String(item.id) === String(commentId));
+    const questionReplyComment = Object.values(questionCommentRepliesMap).flatMap(entry => entry?.list || []).find(item => String(item.id) === String(commentId));
+    const answerComment = answerCommentsList.find(item => String(item.id) === String(commentId));
+    const answerReplyComment = Object.values(answerCommentRepliesMap).flatMap(entry => entry?.list || []).find(item => String(item.id) === String(commentId));
+    const supplementRootComment = suppCommentsList.find(item => String(item.id) === String(commentId));
+    const supplementReplyComment = Object.values(suppCommentRepliesMap).flatMap(entry => entry?.list || []).find(item => String(item.id) === String(commentId));
+    const comment = questionComment || questionReplyComment || answerComment || answerReplyComment || supplementRootComment || supplementReplyComment;
     if (!commentId) {
       showToast('操作失败：评论ID不存在', 'error');
       return;
@@ -2001,6 +3982,11 @@ export default function QuestionDetailScreen({
     }
     const currentState = commentCollected[commentId] !== undefined ? commentCollected[commentId] : !!comment?.collected;
     const newState = !currentState;
+    const collectPayload = {
+      targetType: Number(comment?.targetType ?? 0) || undefined,
+      targetId: Number(comment?.targetId ?? 0) || undefined,
+      parentId: Number(comment?.parentId ?? 0) || 0
+    };
     setCommentCollected(prev => ({
       ...prev,
       [commentId]: newState
@@ -2010,17 +3996,26 @@ export default function QuestionDetailScreen({
         ...prev,
         [commentId]: true
       }));
-      const response = newState ? await commentApi.collectComment(commentId) : await commentApi.uncollectComment(commentId);
+      const response = newState ? await commentApi.collectComment(commentId, collectPayload) : await commentApi.uncollectComment(commentId, collectPayload);
       if (response && response.code === 200) {
         showToast(newState ? '已收藏' : '已取消收藏', 'success');
-        updateCommentInCaches(commentId, currentComment => {
+        const applyCollectUpdate = currentComment => {
           const currentCollectCount = getCommentCollectDisplayCount(currentComment, currentState);
           const fallbackCollectCount = Math.max(0, currentCollectCount + (newState ? 1 : -1));
           return buildCommentFromMutationResponse(currentComment, response.data, {
             collected: newState,
             collectCount: fallbackCollectCount
           });
-        });
+        };
+        if (questionComment || questionReplyComment) {
+          updateCommentInCaches(commentId, applyCollectUpdate);
+        }
+        if (answerComment || answerReplyComment) {
+          updateAnswerCommentStates(commentId, applyCollectUpdate);
+        }
+        if (supplementRootComment || supplementReplyComment) {
+          updateSupplementCommentStates(commentId, applyCollectUpdate);
+        }
       } else {
         setCommentCollected(prev => ({
           ...prev,
@@ -2078,6 +4073,16 @@ export default function QuestionDetailScreen({
         } else {
           // 有缓存数据，直接使用
           console.log(`📋 ${newSortBy} 排序使用缓存，数量: ${newSortCache.list.length}`);
+          logSortPreview({
+            scope: 'answers',
+            sortBy: newSortBy,
+            total: newSortCache.total ?? newSortCache.list.length,
+            items: newSortCache.list,
+            source: 'cache-switch',
+            cacheState: 'screen-cache',
+            otherSortBy: newSortBy === 'featured' ? 'newest' : 'featured',
+            otherItems: answersCache[newSortBy === 'featured' ? 'newest' : 'featured']?.list || []
+          });
         }
       }
     }
@@ -3126,7 +5131,9 @@ export default function QuestionDetailScreen({
             <Ionicons name="arrow-redo-outline" size={22} color="#374151" />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('Report', {
-          type: 'question'
+          type: 'question',
+          targetType: 1,
+          targetId: Number(route?.params?.id ?? questionData?.id) || 0
         })}>
             <Ionicons name="flag-outline" size={22} color="#ef4444" />
           </TouchableOpacity>
@@ -3193,10 +5200,17 @@ export default function QuestionDetailScreen({
                 <Ionicons name="at" size={18} color="#3b82f6" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.smallActionBtn} onPress={() => navigation.navigate('GroupChat', {
+                questionId: questionData.id,
+                groupId: questionData.groupId ?? questionData.publicGroupId ?? questionData.questionGroupId ?? null,
                 question: {
                   id: questionData.id,
+                  userId: questionData.userId,
                   title: questionData.title,
-                  author: questionData.userName
+                  author: questionData.isAnonymous === 1 ? '匿名用户' : questionData.userName || questionData.userNickname || '匿名用户',
+                  avatar: questionData.userAvatar || questionData.authorAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${questionData.userId}`,
+                  groupId: questionData.groupId ?? null,
+                  publicGroupId: questionData.publicGroupId ?? null,
+                  questionGroupId: questionData.questionGroupId ?? null,
                 }
               })}>
                 <Ionicons name="chatbubbles-outline" size={18} color="#8b5cf6" />
@@ -3428,8 +5442,19 @@ export default function QuestionDetailScreen({
               console.log('补充问题作者:', item.author);
               console.log('导航对象存在:', !!navigation);
               console.log('准备导航到 SupplementDetail');
+              const navigationSupplement = buildSupplementNavigationItem(item);
               navigation.navigate('SupplementDetail', {
-                supplement: item
+                supplement: navigationSupplement,
+                sourceRouteKey: route.key,
+                parentQuestionId: questionData?.id ?? route?.params?.id ?? null,
+                originalQuestion: {
+                  id: questionData?.id ?? route?.params?.id ?? null,
+                  title: questionData?.title || '',
+                  author: questionData?.author || questionData?.userName || questionData?.userNickname || '匿名用户',
+                  avatar: questionData?.userAvatar || questionData?.authorAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${questionData?.userId ?? route?.params?.id ?? 'question'}`,
+                  time: formatTime(questionData?.createTime || questionData?.createdAt),
+                  location: questionData?.location || '未知'
+                }
               });
             }} activeOpacity={0.7}>
                   <View style={styles.suppHeader}>
@@ -3504,11 +5529,11 @@ export default function QuestionDetailScreen({
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.suppActionBtn} onPress={e => {
                     e.stopPropagation();
-                    setCurrentSuppId(item.id);
+                    setCurrentSuppId(getSupplementTargetId(item) ?? item.id);
                     setShowSuppCommentListModal(true);
                   }}>
                         <Ionicons name="chatbubble-outline" size={16} color="#6b7280" />
-                        <Text style={styles.suppActionText}>{Number(item.commentCount ?? item.comments ?? 0)}</Text>
+                    <Text style={styles.suppActionText}>{Number(item.commentCount ?? item.comments ?? item.comment_count ?? 0)}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.suppActionBtn} onPress={e => e.stopPropagation()}>
                         <Ionicons name="arrow-redo-outline" size={16} color="#6b7280" />
@@ -3522,17 +5547,23 @@ export default function QuestionDetailScreen({
                         <Text style={[styles.suppActionText, (suppBookmarked[item.id] ?? item.collected) && {
                       color: '#f59e0b'
                     }]}>
-                          {getInteractionDisplayCount(item.collectCount ?? item.bookmarkCount ?? item.bookmarks, item.collected, suppBookmarked[item.id])}
+                          {getSupplementCollectDisplayCount(item, suppBookmarked[item.id])}
                         </Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.suppActionBtn} onPress={e => {
                     e.stopPropagation();
                     navigation.navigate('GroupChat', {
+                      questionId: questionData.id,
+                      groupId: questionData.groupId ?? questionData.publicGroupId ?? questionData.questionGroupId ?? null,
                       question: {
-                        title: '如何在三个月内从零基础学会Python编程？',
-                        author: '张三丰',
-                        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user1',
-                        memberCount: 128
+                        id: questionData.id,
+                        userId: questionData.userId,
+                        title: questionData.title,
+                        author: questionData.isAnonymous === 1 ? '匿名用户' : questionData.userName || questionData.userNickname || '匿名用户',
+                        avatar: questionData.userAvatar || questionData.authorAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${questionData.userId}`,
+                        groupId: questionData.groupId ?? null,
+                        publicGroupId: questionData.publicGroupId ?? null,
+                        questionGroupId: questionData.questionGroupId ?? null,
                       }
                     });
                   }}>
@@ -3542,7 +5573,7 @@ export default function QuestionDetailScreen({
                     <View style={styles.suppFooterRight}>
                       <TouchableOpacity style={styles.suppMoreBtn} onPress={e => {
                     e.stopPropagation();
-                    setCurrentSuppId(item.id);
+                    setCurrentSuppId(getSupplementTargetId(item) ?? item.id);
                     setShowSuppMoreModal(true);
                   }}>
                         <Ionicons key={`more-${item.id}`} name="ellipsis-horizontal-outline" size={20} color="#6b7280" />
@@ -3662,7 +5693,9 @@ export default function QuestionDetailScreen({
                         }]}>{commentDislikeCount}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.commentActionBtn} onPress={() => navigation.navigate('Report', {
-                        type: 'comment'
+                        type: 'comment',
+                        targetType: 5,
+                        targetId: Number(comment.id) || 0
                       })}>
                           <Ionicons name="flag-outline" size={14} color="#ef4444" />
                         </TouchableOpacity>
@@ -3826,9 +5859,9 @@ export default function QuestionDetailScreen({
               const isCollected = answerBookmarked[answer.id] !== undefined ? answerBookmarked[answer.id] : !!answer.collected;
               const isDisliked = answerDisliked[answer.id] !== undefined ? answerDisliked[answer.id] : !!answer.disliked;
               const canAdopt = answer.canAdopt !== undefined ? answer.canAdopt : true;
-              const likeCount = getInteractionDisplayCount(answer.likeCount || answer.like_count || answer.likes || 0, answer.liked, answerLiked[answer.id]);
-              const collectCount = getInteractionDisplayCount(answer.collectCount || answer.bookmarkCount || answer.bookmark_count || answer.bookmarks || 0, answer.collected, answerBookmarked[answer.id]);
-              const dislikeCount = getInteractionDisplayCount(answer.dislikeCount || answer.dislike_count || answer.dislikes || 0, answer.disliked, answerDisliked[answer.id]);
+              const likeCount = getAnswerLikeDisplayCount(answer, answerLiked[answer.id]);
+              const collectCount = getAnswerCollectDisplayCount(answer, answerBookmarked[answer.id]);
+              const dislikeCount = getAnswerDislikeDisplayCount(answer, answerDisliked[answer.id]);
               return <TouchableOpacity key={answerStateKey} style={[styles.answerCard, isAdopted && styles.answerCardAdopted]} onPress={() => navigation.navigate('AnswerDetail', {
                 answer,
                 defaultTab: 'supplements'
@@ -4017,7 +6050,7 @@ export default function QuestionDetailScreen({
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.answerActionBtn} onPress={e => {
                       e.stopPropagation();
-                      setCurrentAnswerId(answer.id);
+                      setCurrentAnswerId(currentAnswerId);
                       setShowAnswerCommentListModal(true);
                     }}>
                     <Ionicons name="chatbubble-outline" size={16} color="#6b7280" />
@@ -4055,7 +6088,9 @@ export default function QuestionDetailScreen({
                   <TouchableOpacity style={styles.answerActionBtn} onPress={e => {
                       e.stopPropagation();
                       navigation.navigate('Report', {
-                        type: 'answer'
+                        type: 'answer',
+                        targetType: 2,
+                        targetId: Number(answer.id) || 0
                       });
                     }}>
                     <Ionicons name="flag-outline" size={16} color="#ef4444" />
@@ -4180,7 +6215,7 @@ export default function QuestionDetailScreen({
           <Text style={[styles.bottomActionText, (liked.main ?? questionData?.liked) && {
           color: '#ef4444'
         }]}>
-            {getInteractionDisplayCount(questionData?.likeCount ?? questionData?.likes, questionData?.liked, liked.main)}
+            {getQuestionLikeDisplayCount(questionData, liked.main)}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.bottomActionBtn} onPress={handleQuestionCollect}>
@@ -4188,13 +6223,17 @@ export default function QuestionDetailScreen({
           <Text style={[styles.bottomActionText, (bookmarked ?? questionData?.collected) && {
           color: '#f59e0b'
         }]}>
-            {getInteractionDisplayCount(questionData?.collectCount ?? questionData?.bookmarkCount ?? questionData?.bookmarks, questionData?.collected, bookmarked)}
+            {getQuestionCollectDisplayCount(questionData, bookmarked)}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.bottomActionBtn} onPress={() => {
         console.log('评论按钮被点击');
         console.log('当前 showCommentModal 状态:', showCommentModal);
-        setShowCommentModal(true);
+        openCommentModal({
+          targetType: 1,
+          targetId: route?.params?.id,
+          parentId: 0
+        });
         console.log('设置 showCommentModal 为 true');
       }}>
           <Ionicons name="chatbubble-outline" size={20} color="#6b7280" />
@@ -4215,7 +6254,7 @@ export default function QuestionDetailScreen({
           <Text style={[styles.bottomActionText, (liked.dislike ?? questionData?.disliked) && {
           color: '#6b7280'
         }]}>
-            {getInteractionDisplayCount(questionData?.dislikeCount ?? questionData?.dislikes, questionData?.disliked, liked.dislike)}
+            {getQuestionDislikeDisplayCount(questionData, liked.dislike)}
           </Text>
         </TouchableOpacity>
       </View>
@@ -4237,7 +6276,11 @@ export default function QuestionDetailScreen({
               </TouchableOpacity>
               <TouchableOpacity style={styles.moreActionItem} onPress={() => {
               setShowActionModal(false);
-              setShowReportModal(true);
+              navigation.navigate('Report', {
+              type: 'question',
+              targetType: 1,
+              targetId: Number(route?.params?.id ?? questionData?.id) || 0
+            });
             }}>
                 <Ionicons name="flag-outline" size={22} color="#ef4444" />
                 <Text style={[styles.moreActionItemText, {
@@ -4320,11 +6363,18 @@ export default function QuestionDetailScreen({
             </View>
             
             <ScrollView style={styles.commentListScroll} showsVerticalScrollIndicator={false}>
-              {commentsData.map(comment => <View key={comment.id}>
+              {(suppCommentListState.loading || suppCommentListState.refreshing) && suppCommentsList.length === 0 ? <View style={styles.supplementsLoadingContainer}>
+                  <ActivityIndicator size="large" color="#ef4444" />
+                  <Text style={styles.supplementsLoadingText}>加载评论中...</Text>
+                </View> : suppCommentsList.length === 0 ? <View style={styles.supplementsEmptyContainer}>
+                  <Ionicons name="chatbubble-outline" size={48} color="#d1d5db" />
+                  <Text style={styles.supplementsEmptyText}>暂无评论</Text>
+                  <Text style={styles.supplementsEmptyDesc}>成为第一个评论的人</Text>
+                </View> : suppCommentsList.map(comment => <View key={comment.id}>
                   <View style={styles.commentListCard}>
                     <View style={styles.commentListHeader}>
-                      <Avatar uri={comment.avatar} name={comment.author} size={24} />
-                      <Text style={styles.commentListAuthor}>{comment.author}</Text>
+                      <Avatar uri={comment.userAvatar || comment.avatar} name={comment.userName || comment.userNickname || comment.author} size={24} />
+                      <Text style={styles.commentListAuthor}>{comment.userName || comment.userNickname || comment.author}</Text>
                       <View style={{
                     flex: 1
                   }} />
@@ -4333,59 +6383,79 @@ export default function QuestionDetailScreen({
                     <View style={styles.commentListContent}>
                       <Text style={styles.commentListText}>{comment.content}</Text>
                       <View style={styles.commentListActions}>
-                        <TouchableOpacity style={styles.commentListActionBtn} onPress={() => setCommentLiked({
-                      ...commentLiked,
-                      [comment.id]: !commentLiked[comment.id]
-                    })}>
-                          <Ionicons name={commentLiked[comment.id] ? "thumbs-up" : "thumbs-up-outline"} size={14} color={commentLiked[comment.id] ? "#ef4444" : "#9ca3af"} />
-                          <Text style={[styles.commentListActionText, commentLiked[comment.id] && {
+                        <TouchableOpacity style={styles.commentListActionBtn} onPress={() => handleCommentLike(comment.id)} disabled={commentLikeLoading[comment.id]}>
+                          <Ionicons name={commentLiked[comment.id] ?? comment.liked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={commentLiked[comment.id] ?? comment.liked ? "#ef4444" : "#9ca3af"} />
+                          <Text style={[styles.commentListActionText, (commentLiked[comment.id] ?? comment.liked) && {
                         color: '#ef4444'
-                      }]}>{comment.likes + (commentLiked[comment.id] ? 1 : 0)}</Text>
+                      }]}>{getCommentLikeDisplayCount(comment, commentLiked[comment.id])}</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.commentListActionBtn} onPress={() => setExpandedComments({
-                      ...expandedComments,
-                      [comment.id]: !expandedComments[comment.id]
-                    })}>
+                        <TouchableOpacity style={styles.commentListActionBtn} onPress={() => {
+                      setCurrentSuppCommentId(comment.id);
+                      setShowSuppCommentListModal(false);
+                      setShowSuppCommentReplyModal(true);
+                    }}>
                           <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
-                          <Text style={styles.commentListActionText}>{comment.replies}</Text>
+                          <Text style={styles.commentListActionText}>{Number(comment.replyCount ?? comment.replies ?? 0)}</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.commentListActionBtn}>
-                          <Text style={styles.commentListReplyBtn}>回复</Text>
+                        <TouchableOpacity style={styles.commentListActionBtn} onPress={() => handleCommentCollect(comment.id)} disabled={commentCollectLoading[comment.id]}>
+                          <Ionicons name={commentCollected[comment.id] ?? comment.collected ? "star" : "star-outline"} size={14} color={commentCollected[comment.id] ?? comment.collected ? "#f59e0b" : "#9ca3af"} />
+                          <Text style={[styles.commentListActionText, (commentCollected[comment.id] ?? comment.collected) && {
+                        color: '#f59e0b'
+                      }]}>{getCommentCollectDisplayCount(comment, commentCollected[comment.id])}</Text>
+                        </TouchableOpacity>
+                        <View style={{flex: 1}} />
+                        <TouchableOpacity style={styles.commentListActionBtn} onPress={() => handleCommentDislike(comment.id)} disabled={commentDislikeLoading[comment.id]}>
+                          <Ionicons name={commentDisliked[comment.id] ?? comment.disliked ? "thumbs-down" : "thumbs-down-outline"} size={14} color={commentDisliked[comment.id] ?? comment.disliked ? "#6b7280" : "#9ca3af"} />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.commentListActionBtn} onPress={() => {
+                      setShowSuppCommentListModal(false);
+                      navigation.navigate('Report', {
+                        type: 'comment',
+                        targetType: 5,
+                        targetId: Number(comment.id) || 0
+                      });
+                    }}>
+                          <Ionicons name="flag-outline" size={14} color="#ef4444" />
                         </TouchableOpacity>
                       </View>
                     </View>
                   </View>
                   
                   {/* 回复列表 */}
-                  {Boolean(expandedComments[comment.id] && repliesData[comment.id]) && <View style={styles.repliesContainer}>
-                      {repliesData[comment.id].map(reply => <View key={reply.id} style={styles.replyCard}>
-                          <View style={styles.replyHeader}>
-                            <Avatar uri={reply.avatar} name={reply.author} size={24} />
-                            <Text style={styles.replyAuthor}>{reply.author}</Text>
-                            <View style={{
-                      flex: 1
-                    }} />
-                            <Text style={styles.replyTime}>{reply.time}</Text>
-                          </View>
-                          <Text style={styles.replyText}>{reply.content}</Text>
-                          <View style={styles.replyActions}>
-                            <TouchableOpacity style={styles.replyActionBtn}>
-                              <Ionicons name="thumbs-up-outline" size={12} color="#9ca3af" />
-                              <Text style={styles.replyActionText}>{reply.likes}</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.replyActionBtn}>
-                              <Text style={styles.replyReplyBtn}>回复</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>)}
+                  {Boolean(expandedSuppCommentReplies[comment.id]) && <View style={styles.repliesContainer}>
+                      {Boolean(suppCommentRepliesMap[comment.id]?.loading) && <View style={styles.loadingIndicator}>
+                          <Text style={styles.loadingText}>加载回复中...</Text>
+                        </View>}
+                      {!suppCommentRepliesMap[comment.id]?.loading && Boolean(suppCommentRepliesMap[comment.id]?.loaded && (!suppCommentRepliesMap[comment.id]?.list || suppCommentRepliesMap[comment.id]?.list.length === 0)) && <View style={styles.loadingIndicator}>
+                          <Text style={styles.loadingText}>暂无回复</Text>
+                        </View>}
+                      {suppCommentRepliesMap[comment.id]?.list?.length ? renderSupplementReplyTreeNodes(buildCommentReplyTree(suppCommentRepliesMap[comment.id].list, comment.id), 0, {
+                    rootCommentId: comment.id,
+                    beforeOpenReply: () => setShowSuppCommentListModal(false),
+                    beforeReport: () => setShowSuppCommentListModal(false)
+                  }) : null}
                     </View>}
                 </View>)}
+              {Boolean(suppCommentListState.loadingMore) && <View style={styles.loadingIndicator}>
+                  <Text style={styles.loadingText}>加载更多评论中...</Text>
+                </View>}
+              {Boolean(suppCommentsHasMore && !suppCommentListState.loadingMore && suppCommentsList.length > 0) && <TouchableOpacity style={styles.loadMoreBtn} onPress={handleSupplementCommentsLoadMore}>
+                  <Text style={styles.loadMoreText}>加载更多评论</Text>
+                  <Ionicons name="chevron-down" size={16} color="#ef4444" />
+                </TouchableOpacity>}
+              {!suppCommentsHasMore && suppCommentsList.length > 0 && <View style={styles.supplementsNoMore}>
+                  <Text style={styles.supplementsNoMoreText}>没有更多评论了</Text>
+                </View>}
             </ScrollView>
 
             <View style={styles.commentListBottomBar}>
               <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
               setShowSuppCommentListModal(false);
-              setShowCommentModal(true);
+              openCommentModal({
+                targetType: 3,
+                targetId: currentSuppId,
+                parentId: 0
+              });
             }}>
                 <Ionicons name="create-outline" size={18} color="#6b7280" />
                 <Text style={styles.commentListWriteText}>写评论...</Text>
@@ -4420,7 +6490,9 @@ export default function QuestionDetailScreen({
               <TouchableOpacity style={styles.suppMoreActionItem} onPress={() => {
               setShowSuppMoreModal(false);
               navigation.navigate('Report', {
-                type: 'supplement'
+                type: 'supplement',
+                targetType: 3,
+                targetId: Number(currentSuppId) || 0
               });
             }}>
                 <Ionicons name="flag-outline" size={22} color="#ef4444" />
@@ -4438,57 +6510,95 @@ export default function QuestionDetailScreen({
       </Modal>
 
       {/* 评论弹窗 */}
-      <Modal visible={showCommentModal} animationType="slide" presentationStyle="fullScreen" onShow={() => console.log('评论弹窗已显示')} onRequestClose={() => {
+      <Modal visible={showCommentModal} transparent animationType="slide" onRequestClose={() => {
       console.log('评论弹窗请求关闭');
-      setShowCommentModal(false);
-      setCommentText('');
+      // 根据 targetType 返回到对应的上一页
+      if (commentTarget.targetType === 3 && commentTarget.parentId && commentTarget.parentId !== 0) {
+        // 如果是回复补充评论，返回到补充评论回复列表
+        setShowCommentModal(false);
+        setShowSuppCommentReplyModal(true);
+      } else {
+        closeCommentModal();
+      }
     }}>
-        <SafeAreaView style={styles.commentModal}>
-          <View style={styles.commentModalHeader}>
-            <TouchableOpacity onPress={() => {
-            setShowCommentModal(false);
-            setCommentText('');
-          }} style={styles.commentCloseBtn}>
-              <Ionicons name="close" size={26} color="#333" />
-            </TouchableOpacity>
-            <View style={styles.commentHeaderCenter}>
-              <Text style={styles.commentModalTitle}>写评论</Text>
-            </View>
-            <TouchableOpacity style={[styles.commentPublishBtn, !commentText.trim() && styles.commentPublishBtnDisabled]} onPress={() => {
-            if (commentText.trim()) {
-              alert('评论发布成功！');
-              setCommentText('');
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => {
+            // 根据 targetType 返回到对应的上一页
+            if (commentTarget.targetType === 3 && commentTarget.parentId && commentTarget.parentId !== 0) {
+              // 如果是回复补充评论，返回到补充评论回复列表
               setShowCommentModal(false);
+              setShowSuppCommentReplyModal(true);
+            } else {
+              closeCommentModal();
             }
-          }} disabled={!commentText.trim()}>
-              <Text style={[styles.commentPublishText, !commentText.trim() && styles.commentPublishTextDisabled]}>发布</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.commentContentArea} keyboardShouldPersistTaps="handled">
-            <TextInput style={styles.commentTextInput} placeholder="写下你的评论..." placeholderTextColor="#bbb" value={commentText} onChangeText={setCommentText} multiline autoFocus textAlignVertical="top" />
+          }} />
+          
+          <View style={styles.commentListModal}>
+            <View style={styles.commentListModalHandle} />
             
-            {/* 身份选择器 */}
-            <View style={styles.commentIdentitySection}>
-              <IdentitySelector selectedIdentity={commentIdentity} selectedTeams={commentSelectedTeams} onIdentityChange={setCommentIdentity} onTeamsChange={setCommentSelectedTeams} />
+            {/* Header */}
+            <View style={styles.commentListModalHeader}>
+              <TouchableOpacity onPress={() => {
+                // 根据 targetType 返回到对应的上一页
+                if (commentTarget.targetType === 3 && commentTarget.parentId && commentTarget.parentId !== 0) {
+                  // 如果是回复补充评论，返回到补充评论回复列表
+                  setShowCommentModal(false);
+                  setShowSuppCommentReplyModal(true);
+                } else {
+                  closeCommentModal();
+                }
+              }} style={styles.commentListCloseBtn}>
+                <Ionicons name="close" size={26} color="#1f2937" />
+              </TouchableOpacity>
+              <Text style={styles.commentListModalTitle}>写评论</Text>
+              <View style={styles.commentListHeaderRight} />
             </View>
-          </ScrollView>
+            
+            {/* 原评论卡片 - 如果是回复评论则显示 */}
+            {Boolean(currentComposerOriginalComment) && <View style={styles.originalCommentCard}>
+                <View style={styles.originalCommentHeader}>
+                  <Avatar uri={currentComposerOriginalComment.userAvatar || currentComposerOriginalComment.avatar} name={currentComposerOriginalComment.userName || currentComposerOriginalComment.userNickname || currentComposerOriginalComment.author} size={32} />
+                  <Text style={styles.originalCommentAuthor}>
+                    {currentComposerOriginalComment.userName || currentComposerOriginalComment.userNickname || currentComposerOriginalComment.author}
+                  </Text>
+                  <View style={{flex: 1}} />
+                  <Text style={styles.originalCommentTime}>{currentComposerOriginalComment.time}</Text>
+                </View>
+                <Text style={styles.originalCommentText}>{currentComposerOriginalComment.content}</Text>
+              </View>}
+            
+            <ScrollView style={styles.commentListScroll} keyboardShouldPersistTaps="handled">
+              {/* 输入区域 */}
+              <View style={styles.commentInputSection}>
+                <TextInput style={styles.commentTextInput} placeholder="写下你的评论..." placeholderTextColor="#bbb" value={commentText} onChangeText={setCommentText} multiline autoFocus textAlignVertical="top" />
+                
+                {/* 身份选择器 */}
+                <View style={styles.commentIdentitySection}>
+                  <IdentitySelector selectedIdentity={commentIdentity} selectedTeams={commentSelectedTeams} onIdentityChange={setCommentIdentity} onTeamsChange={setCommentSelectedTeams} />
+                </View>
+              </View>
+            </ScrollView>
 
-          <View style={styles.commentToolbar}>
-            <View style={styles.commentToolsLeft}>
-              <TouchableOpacity style={styles.commentToolItem}>
-                <Ionicons name="image-outline" size={24} color="#666" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.commentToolItem}>
-                <Ionicons name="at-outline" size={24} color="#666" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.commentToolItem}>
-                <Ionicons name="happy-outline" size={24} color="#666" />
-              </TouchableOpacity>
+            <View style={styles.commentListBottomBar}>
+              <View style={styles.commentToolbar}>
+                <View style={styles.commentToolsLeft}>
+                  <TouchableOpacity style={styles.commentToolItem}>
+                    <Ionicons name="image-outline" size={24} color="#666" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.commentToolItem}>
+                    <Ionicons name="at-outline" size={24} color="#666" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.commentToolItem}>
+                    <Ionicons name="happy-outline" size={24} color="#666" />
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity style={[styles.commentPublishBtn, (!commentText.trim() || commentSubmitting) && styles.commentPublishBtnDisabled]} onPress={handleSubmitComment} disabled={!commentText.trim() || commentSubmitting}>
+                  <Text style={[styles.commentPublishText, (!commentText.trim() || commentSubmitting) && styles.commentPublishTextDisabled]}>{commentSubmitting ? '发布中...' : '发布'}</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <Text style={styles.commentWordCount}>{commentText.length}/500</Text>
           </View>
-        </SafeAreaView>
+        </View>
       </Modal>
 
       {/* 评论回复列表弹窗 - 今日头条风格 */}
@@ -4504,7 +6614,7 @@ export default function QuestionDetailScreen({
                 <Ionicons name="close" size={26} color="#1f2937" />
               </TouchableOpacity>
               <Text style={styles.commentListModalTitle}>
-                {currentReplyComment?.replyCount || (currentCommentId && repliesData[currentCommentId] ? repliesData[currentCommentId].length : 0)}条回复
+                {Number(currentReplyComment?.replyCount ?? currentReplyComment?.replies ?? questionCommentRepliesMap[currentCommentId]?.total ?? questionCommentRepliesMap[currentCommentId]?.list?.length ?? 0)}条回复
               </Text>
               <View style={styles.commentListHeaderRight} />
             </View>
@@ -4534,32 +6644,20 @@ export default function QuestionDetailScreen({
             </View>
             
             <ScrollView style={styles.commentListScroll} showsVerticalScrollIndicator={false}>
-              {currentCommentId && repliesData[currentCommentId] && repliesData[currentCommentId].map(reply => <View key={reply.id} style={styles.replyCard}>
-                  <View style={styles.replyHeader}>
-                    <Avatar uri={reply.avatar} name={reply.author} size={24} />
-                    <Text style={styles.replyAuthor}>{reply.author}</Text>
-                    <View style={{
-                  flex: 1
-                }} />
-                    <Text style={styles.replyTime}>{reply.time}</Text>
-                  </View>
-                  <Text style={styles.replyText}>{reply.content}</Text>
-                  <View style={styles.replyActions}>
-                    <TouchableOpacity style={styles.replyActionBtn}>
-                      <Ionicons name="thumbs-up-outline" size={12} color="#9ca3af" />
-                      <Text style={styles.replyActionText}>{reply.likes}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.replyActionBtn}>
-                      <Text style={styles.replyReplyBtn}>回复</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>)}
+              {currentCommentId && questionCommentRepliesMap[currentCommentId]?.list ? renderQuestionReplyTreeNodes(buildCommentReplyTree(questionCommentRepliesMap[currentCommentId].list, currentCommentId), 0, {
+            rootCommentId: currentCommentId
+          }) : null}
+              {currentCommentId && questionCommentRepliesMap[currentCommentId]?.loaded && (!questionCommentRepliesMap[currentCommentId]?.list || questionCommentRepliesMap[currentCommentId].list.length === 0) && <View style={styles.loadingIndicator}>
+                  <Text style={styles.loadingText}>暂无回复</Text>
+                </View>}
             </ScrollView>
 
             <View style={styles.commentListBottomBar}>
               <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
-              setShowCommentReplyModal(false);
-              setShowCommentModal(true);
+              openCommentModal(buildCommentReplyTarget(currentReplyComment, {
+                targetType: 1,
+                targetId: route?.params?.id ?? questionData?.id
+              }));
             }}>
                 <Ionicons name="create-outline" size={18} color="#6b7280" />
                 <Text style={styles.commentListWriteText}>写回复...</Text>
@@ -4569,93 +6667,178 @@ export default function QuestionDetailScreen({
         </View>
       </Modal>
 
-      {/* 编写回答弹窗 - 今日头条风格 */}
-      <Modal visible={showAnswerModal} animationType="slide">
-        <SafeAreaView style={styles.answerModal}>
-          <View style={styles.answerModalHeader}>
-            <TouchableOpacity onPress={() => {
-            setShowAnswerModal(false);
-            setCurrentSupplement(null);
-          }} style={styles.answerCloseBtn}>
-              <Ionicons name="close" size={26} color="#333" />
-            </TouchableOpacity>
-            <View style={styles.answerHeaderCenter}>
-              <Text style={styles.answerModalTitle}>写回答</Text>
-            </View>
-            <TouchableOpacity style={[styles.answerPublishBtn, !answerText.trim() && styles.answerPublishBtnDisabled]} onPress={handleSubmitAnswer} disabled={!answerText.trim()}>
-              <Text style={[styles.answerPublishText, !answerText.trim() && styles.answerPublishTextDisabled]}>发布</Text>
-            </TouchableOpacity>
-          </View>
+      {/* 回答评论回复列表弹窗 - 今日头条风格 */}
+      <Modal visible={showAnswerCommentReplyModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => {
+            setShowAnswerCommentListModal(true);
+            setTimeout(() => setShowAnswerCommentReplyModal(false), 50);
+          }} />
 
-          <View style={styles.answerQuestionCard}>
-            <View style={styles.answerQuestionIcon}>
-              <Ionicons name="help-circle" size={20} color="#ef4444" />
-            </View>
-            <View style={styles.answerQuestionContent}>
-              <Text style={styles.answerQuestionText} numberOfLines={2}>{currentQuestion.title}</Text>
-              {Boolean(currentSupplement) && <View style={styles.answerSupplementInfo}>
-                  <Ionicons name="arrow-forward" size={14} color="#f59e0b" />
-                  <Text style={styles.answerSupplementLabel}>补充问题：</Text>
-                  <Text style={styles.answerSupplementText} numberOfLines={2}>{currentSupplement.content}</Text>
-                </View>}
-            </View>
-          </View>
+          <View style={styles.commentListModal}>
+            <View style={styles.commentListModalHandle} />
 
-          <ScrollView style={styles.answerContentArea} keyboardShouldPersistTaps="handled">
-            <TextInput style={styles.answerTextInput} placeholder="写下你的回答，帮助有需要的人..." placeholderTextColor="#bbb" value={answerText} onChangeText={setAnswerText} multiline autoFocus textAlignVertical="top" />
-            
-            {/* 图片预览区域 */}
-            {answerImages.length > 0 && <View style={styles.answerImagesPreview}>
-                {answerImages.map((imageUri, index) => <View key={index} style={styles.answerImagePreviewItem}>
-                    <Image source={{
-                uri: imageUri
-              }} style={styles.answerImagePreview} />
-                    <TouchableOpacity style={styles.answerImageRemoveBtn} onPress={() => {
-                setAnswerImages(answerImages.filter((_, i) => i !== index));
-              }}>
-                      <Ionicons name="close-circle" size={20} color="#ef4444" />
-                    </TouchableOpacity>
-                  </View>)}
+            <View style={styles.commentListModalHeader}>
+              <TouchableOpacity onPress={() => {
+              setShowAnswerCommentListModal(true);
+              setTimeout(() => setShowAnswerCommentReplyModal(false), 50);
+            }} style={[styles.commentListCloseBtn, {
+              left: 16,
+              right: 'auto'
+            }]}>
+                <Ionicons name="arrow-back" size={26} color="#1f2937" />
+              </TouchableOpacity>
+              <Text style={styles.commentListModalTitle}>
+                {Number(currentAnswerReplyComment?.replyCount ?? currentAnswerReplyComment?.replies ?? answerCommentRepliesMap[currentAnswerCommentId]?.total ?? answerCommentRepliesMap[currentAnswerCommentId]?.list?.length ?? 0)}条回复
+              </Text>
+              <View style={styles.commentListHeaderRight} />
+            </View>
+
+            {Boolean(currentAnswerReplyComment) && <View style={styles.originalCommentCard}>
+                <View style={styles.originalCommentHeader}>
+                  <Avatar uri={currentAnswerReplyComment.userAvatar || currentAnswerReplyComment.avatar} name={currentAnswerReplyComment.userName || currentAnswerReplyComment.userNickname || currentAnswerReplyComment.author} size={32} />
+                  <Text style={styles.originalCommentAuthor}>
+                    {currentAnswerReplyComment.userName || currentAnswerReplyComment.userNickname || currentAnswerReplyComment.author}
+                  </Text>
+                  <View style={{flex: 1}} />
+                  <Text style={styles.originalCommentTime}>
+                    {currentAnswerReplyComment.time}
+                  </Text>
+                </View>
+                <Text style={styles.originalCommentText}>
+                  {currentAnswerReplyComment.content}
+                </Text>
               </View>}
-            
-            {/* 身份选择器 */}
-            <View style={styles.answerIdentitySection}>
-              <IdentitySelector selectedIdentity={answerIdentity} selectedTeams={answerSelectedTeams} onIdentityChange={setAnswerIdentity} onTeamsChange={setAnswerSelectedTeams} />
-            </View>
-          </ScrollView>
 
-          <View style={styles.answerToolbar}>
-            <View style={styles.answerToolsLeft}>
-              <TouchableOpacity style={styles.answerToolItem} onPress={() => {
-              if (answerImages.length >= 9) {
-                showToast('最多只能添加9张图片', 'warning');
-                return;
-              }
-              setShowAnswerImagePicker(true);
+            <View style={styles.repliesSectionHeader}>
+              <Text style={styles.repliesSectionTitle}>全部回复</Text>
+            </View>
+
+            <ScrollView style={styles.commentListScroll} showsVerticalScrollIndicator={false}>
+              {currentAnswerCommentId && answerCommentRepliesMap[currentAnswerCommentId]?.list ? renderAnswerReplyTreeNodes(buildCommentReplyTree(answerCommentRepliesMap[currentAnswerCommentId].list, currentAnswerCommentId), 0, {
+            rootCommentId: currentAnswerCommentId,
+            beforeOpenReply: () => setShowAnswerCommentReplyModal(false),
+            beforeReport: () => setShowAnswerCommentReplyModal(false)
+          }) : null}
+              {currentAnswerCommentId && answerCommentRepliesMap[currentAnswerCommentId]?.loaded && (!answerCommentRepliesMap[currentAnswerCommentId]?.list || answerCommentRepliesMap[currentAnswerCommentId].list.length === 0) && <View style={styles.loadingIndicator}>
+                  <Text style={styles.loadingText}>暂无回复</Text>
+                </View>}
+            </ScrollView>
+
+            <View style={styles.commentListBottomBar}>
+              <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
+              const currentComment = answerCommentsList.find(c => String(c.id) === String(currentAnswerCommentId));
+              setShowAnswerCommentReplyModal(false);
+              openCommentModal(buildCommentReplyTarget(currentComment, {
+                targetType: 2,
+                targetId: currentAnswerId
+              }));
             }}>
-                <Ionicons name="image-outline" size={24} color="#666" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.answerToolItem}>
-                <Ionicons name="at-outline" size={24} color="#666" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.answerToolItem}>
-                <Ionicons name="pricetag-outline" size={24} color="#666" />
+                <Ionicons name="create-outline" size={18} color="#6b7280" />
+                <Text style={styles.commentListWriteText}>写回复...</Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.answerWordCount}>{answerText.length}/2000</Text>
           </View>
-        </SafeAreaView>
+        </View>
       </Modal>
 
-      {/* 回答图片选择器 */}
-      <ImagePickerSheet visible={showAnswerImagePicker} onClose={() => setShowAnswerImagePicker(false)} onImageSelected={imageUri => {
-      if (answerImages.length < 9) {
-        setAnswerImages([...answerImages, imageUri]);
-      } else {
-        showToast('最多只能添加9张图片', 'warning');
-      }
-      setShowAnswerImagePicker(false);
-    }} />
+      {/* 补充评论回复列表弹窗 - 今日头条风格 */}
+      <Modal visible={showSuppCommentReplyModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => {
+            setShowSuppCommentListModal(true);
+            setTimeout(() => setShowSuppCommentReplyModal(false), 50);
+          }} />
+          
+          <View style={styles.commentListModal}>
+            <View style={styles.commentListModalHandle} />
+            
+            {/* Header - 显示回复数量 */}
+            <View style={styles.commentListModalHeader}>
+              <TouchableOpacity onPress={() => {
+                setShowSuppCommentListModal(true);
+                setTimeout(() => setShowSuppCommentReplyModal(false), 50);
+              }} style={[styles.commentListCloseBtn, {left: 16, right: 'auto'}]}>
+                <Ionicons name="arrow-back" size={26} color="#1f2937" />
+              </TouchableOpacity>
+              <Text style={styles.commentListModalTitle}>
+                {Number(currentSuppReplyComment?.replyCount ?? currentSuppReplyComment?.replies ?? suppCommentRepliesMap[currentSuppCommentId]?.total ?? suppCommentRepliesMap[currentSuppCommentId]?.list?.length ?? 0)}条回复
+              </Text>
+              <View style={styles.commentListHeaderRight} />
+            </View>
+            
+            {/* 原评论卡片 - 今日头条风格 */}
+            {Boolean(currentSuppReplyComment) && <View style={styles.originalCommentCard}>
+                <View style={styles.originalCommentHeader}>
+                  <Avatar uri={currentSuppReplyComment.userAvatar || currentSuppReplyComment.avatar} name={currentSuppReplyComment.userName || currentSuppReplyComment.userNickname || currentSuppReplyComment.author} size={32} />
+                  <Text style={styles.originalCommentAuthor}>
+                    {currentSuppReplyComment.userName || currentSuppReplyComment.userNickname || currentSuppReplyComment.author}
+                  </Text>
+                  <View style={{flex: 1}} />
+                  <Text style={styles.originalCommentTime}>
+                    {currentSuppReplyComment.time}
+                  </Text>
+                </View>
+                <Text style={styles.originalCommentText}>
+                  {currentSuppReplyComment.content}
+                </Text>
+              </View>}
+            
+            {/* 全部回复标题 */}
+            <View style={styles.repliesSectionHeader}>
+              <Text style={styles.repliesSectionTitle}>全部回复</Text>
+            </View>
+            
+            <ScrollView style={styles.commentListScroll} showsVerticalScrollIndicator={false}>
+              {currentSuppCommentId && suppCommentRepliesMap[currentSuppCommentId]?.list ? renderSupplementReplyTreeNodes(buildCommentReplyTree(suppCommentRepliesMap[currentSuppCommentId].list, currentSuppCommentId), 0, {
+            rootCommentId: currentSuppCommentId,
+            beforeOpenReply: () => setShowSuppCommentReplyModal(false),
+            beforeReport: () => setShowSuppCommentReplyModal(false)
+          }) : null}
+              {currentSuppCommentId && suppCommentRepliesMap[currentSuppCommentId]?.loaded && (!suppCommentRepliesMap[currentSuppCommentId]?.list || suppCommentRepliesMap[currentSuppCommentId].list.length === 0) && <View style={styles.loadingIndicator}>
+                  <Text style={styles.loadingText}>暂无回复</Text>
+                </View>}
+            </ScrollView>
+
+            <View style={styles.commentListBottomBar}>
+              <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
+              const currentComment = suppCommentsList.find(c => c.id === currentSuppCommentId);
+              setShowSuppCommentReplyModal(false);
+              openCommentModal(buildCommentReplyTarget(currentComment, {
+                targetType: 3,
+                targetId: currentSuppId
+              }));
+            }}>
+                <Ionicons name="create-outline" size={18} color="#6b7280" />
+                <Text style={styles.commentListWriteText}>写回复...</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <WriteAnswerModal
+        visible={showAnswerModal}
+        onClose={() => {
+          setShowAnswerModal(false);
+          setCurrentSupplement(null);
+        }}
+        onSubmit={handleSubmitAnswer}
+        title="写回答"
+        publishText="发布"
+        questionTitle={currentQuestion.title}
+        supplementText={currentSupplement?.content || ''}
+        text={answerText}
+        onChangeText={setAnswerText}
+        placeholder="写下你的回答，帮助有需要的人..."
+        selectedIdentity={answerIdentity}
+        selectedTeams={answerSelectedTeams}
+        onIdentityChange={setAnswerIdentity}
+        onTeamsChange={setAnswerSelectedTeams}
+        images={answerImages}
+        onChangeImages={setAnswerImages}
+        wordLimit={2000}
+      />
 
       {/* 发布补充问题弹窗 */}
       <Modal visible={showSupplementModal} animationType="slide">
@@ -4745,72 +6928,110 @@ export default function QuestionDetailScreen({
             </View>
             
             <ScrollView style={styles.commentListScroll} showsVerticalScrollIndicator={false}>
-              {commentsData.map(comment => <View key={comment.id}>
-                  <View style={styles.commentListCard}>
-                    <View style={styles.commentListHeader}>
-                      <Avatar uri={comment.avatar} name={comment.author} size={24} />
-                      <Text style={styles.commentListAuthor}>{comment.author}</Text>
-                      <View style={{
-                    flex: 1
-                  }} />
-                      <Text style={styles.commentListTime}>{comment.time}</Text>
-                    </View>
-                    <View style={styles.commentListContent}>
-                      <Text style={styles.commentListText}>{comment.content}</Text>
-                      <View style={styles.commentListActions}>
-                        <TouchableOpacity style={styles.commentListActionBtn} onPress={() => setCommentLiked({
-                      ...commentLiked,
-                      [comment.id]: !commentLiked[comment.id]
-                    })}>
-                          <Ionicons name={commentLiked[comment.id] ? "thumbs-up" : "thumbs-up-outline"} size={14} color={commentLiked[comment.id] ? "#ef4444" : "#9ca3af"} />
-                          <Text style={[styles.commentListActionText, commentLiked[comment.id] && {
-                        color: '#ef4444'
-                      }]}>{comment.likes + (commentLiked[comment.id] ? 1 : 0)}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.commentListActionBtn} onPress={() => setExpandedComments({
-                      ...expandedComments,
-                      [comment.id]: !expandedComments[comment.id]
-                    })}>
-                          <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
-                          <Text style={styles.commentListActionText}>{comment.replies}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.commentListActionBtn}>
-                          <Text style={styles.commentListReplyBtn}>回复</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                  
-                  {/* 回复列表 */}
-                  {Boolean(expandedComments[comment.id] && repliesData[comment.id]) && <View style={styles.repliesContainer}>
-                      {repliesData[comment.id].map(reply => <View key={reply.id} style={styles.replyCard}>
-                          <View style={styles.replyHeader}>
-                            <Avatar uri={reply.avatar} name={reply.author} size={24} />
-                            <Text style={styles.replyAuthor}>{reply.author}</Text>
-                            <View style={{
+              {answerCommentListState.loading && answerCommentsList.length === 0 ? <View style={styles.supplementsLoadingContainer}>
+                  <ActivityIndicator size="large" color="#ef4444" />
+                  <Text style={styles.supplementsLoadingText}>加载评论中...</Text>
+                </View> : answerCommentsList.length === 0 ? <View style={styles.supplementsEmptyContainer}>
+                  <Ionicons name="chatbubble-outline" size={48} color="#d1d5db" />
+                  <Text style={styles.supplementsEmptyText}>暂无评论</Text>
+                  <Text style={styles.supplementsEmptyDesc}>成为第一个评论的人</Text>
+                </View> : answerCommentsList.map(comment => {
+                const isCommentLiked = commentLiked[comment.id] !== undefined ? commentLiked[comment.id] : !!comment.liked;
+                const isCommentCollected = commentCollected[comment.id] !== undefined ? commentCollected[comment.id] : !!comment.collected;
+                const isCommentDisliked = commentDisliked[comment.id] !== undefined ? commentDisliked[comment.id] : !!comment.disliked;
+                const commentLikeCount = getCommentLikeDisplayCount(comment, commentLiked[comment.id]);
+                const commentCollectCount = getCommentCollectDisplayCount(comment, commentCollected[comment.id]);
+                const commentDislikeCount = getCommentDislikeDisplayCount(comment, commentDisliked[comment.id]);
+                return <View key={comment.id}>
+                    <View style={styles.commentListCard}>
+                      <View style={styles.commentListHeader}>
+                        <Avatar uri={comment.userAvatar || comment.avatar} name={comment.userName || comment.userNickname || comment.author} size={24} />
+                        <Text style={styles.commentListAuthor}>{comment.userName || comment.userNickname || comment.author}</Text>
+                        <View style={{
                       flex: 1
                     }} />
-                            <Text style={styles.replyTime}>{reply.time}</Text>
-                          </View>
-                          <Text style={styles.replyText}>{reply.content}</Text>
-                          <View style={styles.replyActions}>
-                            <TouchableOpacity style={styles.replyActionBtn}>
-                              <Ionicons name="thumbs-up-outline" size={12} color="#9ca3af" />
-                              <Text style={styles.replyActionText}>{reply.likes}</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.replyActionBtn}>
-                              <Text style={styles.replyReplyBtn}>回复</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>)}
-                    </View>}
-                </View>)}
+                        <Text style={styles.commentListTime}>{comment.time}</Text>
+                      </View>
+                      <View style={styles.commentListContent}>
+                        <Text style={styles.commentListText}>{comment.content}</Text>
+                        <View style={styles.commentListActions}>
+                          <TouchableOpacity style={styles.commentListActionBtn} onPress={() => handleCommentLike(comment.id)} disabled={commentLikeLoading[comment.id]}>
+                            <Ionicons name={isCommentLiked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={isCommentLiked ? "#ef4444" : "#9ca3af"} />
+                            <Text style={[styles.commentListActionText, isCommentLiked && {
+                          color: '#ef4444'
+                        }]}>{commentLikeCount}</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.commentListActionBtn} onPress={() => {
+                        setCurrentAnswerCommentId(comment.id);
+                        setShowAnswerCommentListModal(false);
+                        setShowAnswerCommentReplyModal(true);
+                      }}>
+                            <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
+                            <Text style={styles.commentListActionText}>{Number(comment.replyCount ?? comment.replies ?? 0)}</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.commentListActionBtn}>
+                            <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
+                            <Text style={styles.commentListActionText}>{Number(comment.shareCount ?? comment.shares ?? 0)}</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.commentListActionBtn} onPress={() => handleCommentCollect(comment.id)} disabled={commentCollectLoading[comment.id]}>
+                            <Ionicons name={isCommentCollected ? "star" : "star-outline"} size={14} color={isCommentCollected ? "#f59e0b" : "#9ca3af"} />
+                            <Text style={[styles.commentListActionText, isCommentCollected && {
+                          color: '#f59e0b'
+                        }]}>{commentCollectCount}</Text>
+                          </TouchableOpacity>
+                          <View style={{
+                        flex: 1
+                      }} />
+                          <TouchableOpacity style={styles.commentListActionBtn} onPress={() => handleCommentDislike(comment.id)} disabled={commentDislikeLoading[comment.id]}>
+                            <Ionicons name={isCommentDisliked ? "thumbs-down" : "thumbs-down-outline"} size={14} color={isCommentDisliked ? "#6b7280" : "#9ca3af"} />
+                            <Text style={[styles.commentListActionText, isCommentDisliked && {
+                          color: '#6b7280'
+                        }]}>{commentDislikeCount}</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.commentListActionBtn} onPress={() => {
+                        Alert.alert('举报', '确定要举报这条评论吗？', [{
+                          text: '取消',
+                          style: 'cancel'
+                        }, {
+                          text: '确定',
+                          onPress: () => {
+                            setShowAnswerCommentListModal(false);
+                            navigation.navigate('Report', {
+                              type: 'comment',
+                              targetType: 5,
+                              targetId: Number(comment.id) || 0
+                            });
+                          }
+                        }]);
+                      }}>
+                            <Ionicons name="flag-outline" size={14} color="#ef4444" />
+                            <Text style={styles.commentListActionText}>{comment.reports || 0}</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
+                  </View>;
+              })}
+              {Boolean(answerCommentListState.loadingMore) && <View style={styles.loadingIndicator}>
+                  <Text style={styles.loadingText}>加载更多评论中...</Text>
+                </View>}
+              {Boolean(answerCommentsHasMore && !answerCommentListState.loadingMore && answerCommentsList.length > 0) && <TouchableOpacity style={styles.loadMoreBtn} onPress={handleAnswerCommentsLoadMore}>
+                  <Text style={styles.loadMoreText}>加载更多评论</Text>
+                  <Ionicons name="chevron-down" size={16} color="#ef4444" />
+                </TouchableOpacity>}
+              {!answerCommentsHasMore && answerCommentsList.length > 0 && <View style={styles.supplementsNoMore}>
+                  <Text style={styles.supplementsNoMoreText}>没有更多评论了</Text>
+                </View>}
             </ScrollView>
 
             <View style={styles.commentListBottomBar}>
               <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
               setShowAnswerCommentListModal(false);
-              setShowCommentModal(true);
+              openCommentModal({
+                targetType: 2,
+                targetId: currentAnswerId,
+                parentId: 0
+              });
             }}>
                 <Ionicons name="create-outline" size={18} color="#6b7280" />
                 <Text style={styles.commentListWriteText}>写评论...</Text>
@@ -7025,7 +9246,7 @@ const styles = StyleSheet.create({
   commentListActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 20
+    gap: 12
   },
   commentListActionBtn: {
     flexDirection: 'row',
@@ -8269,10 +10490,27 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     gap: 8
   },
+  replyAuthorMeta: {
+    flexShrink: 1
+  },
+  replyAuthorLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap'
+  },
   replyAuthor: {
     fontSize: 12,
     fontWeight: '500',
     color: '#9ca3af'
+  },
+  replyAuthorRelation: {
+    fontSize: 12,
+    color: '#9ca3af'
+  },
+  replyReplyTarget: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#6b7280'
   },
   replyTime: {
     fontSize: 12,
@@ -8287,12 +10525,47 @@ const styles = StyleSheet.create({
   replyActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16
+    gap: 12
   },
   replyActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3
+  },
+  replyChildrenSection: {
+    marginTop: 4,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10
+  },
+  replyChildrenToggle: {
+    paddingBottom: 6
+  },
+  replyChildrenToggleText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500'
+  },
+  replyChildItem: {
+    paddingVertical: 4
+  },
+  replyChildText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#374151'
+  },
+  replyChildAuthor: {
+    color: '#111827',
+    fontWeight: '600'
+  },
+  replyChildSeparator: {
+    color: '#111827'
+  },
+  replyChildReplyPrefix: {
+    color: '#6b7280'
   },
   replyActionText: {
     fontSize: 11,

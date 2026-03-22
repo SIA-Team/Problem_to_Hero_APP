@@ -689,6 +689,8 @@
       "questioner": "Questioner",
       "messagesSection": "Group Messages",
       "messageCount": "messages",
+      "featuredTab": "Featured",
+      "allTab": "All",
       "justNow": "Just now",
       "minutesAgo": "minutes ago",
       "hoursAgo": "hours ago",
@@ -701,7 +703,15 @@
       "reportTitle": "Report",
       "reportConfirm": "Are you sure you want to report this content?",
       "reportSuccess": "Report submitted, we will process it as soon as possible",
-      "hint": "Hint"
+      "hint": "Hint",
+      "loadFailed": "Failed to load group messages",
+      "groupInfoUnavailable": "Question group service is unavailable right now",
+      "groupNotFound": "This question is not linked to any group yet",
+      "publishFailed": "Failed to publish message",
+      "replyFailed": "Failed to publish reply",
+      "imageUploadUnsupported": "Image upload is not supported for group messages yet",
+      "mentionHint": "Continue typing a member name after @",
+      "uploadImageTitle": "Upload Image"
     },
     "hotListScreen": {
       "title": "Hot List",
@@ -812,10 +822,11 @@
         "supplements": "Supplement Answers",
         "comments": "All Comments"
       },
-      "filter": {
-        "featured": "Featured",
-        "latest": "Latest"
-      },
+        "filter": {
+          "featured": "Featured",
+          "mostLikes": "Most Likes",
+          "latest": "Latest"
+        },
         "actions": {
           "follow": "Follow",
           "following": "Following",
@@ -989,7 +1000,7 @@
         "supplement": "Report Supplement",
         "comment": "Report Comment"
       },
-      "subtitle": "Please select report reason(s) (multiple selection allowed)",
+      "subtitle": "Please select a report reason",
       "reasons": {
         "spam": "Spam",
         "illegal": "Illegal Content",
@@ -1000,7 +1011,7 @@
       },
       "remarkLabel": "Additional Details (Optional)",
       "remarkPlaceholder": "Please describe the reason for reporting in detail to help us handle it better...",
-      "charCount": "{current}/200",
+      "charCount": "{current}/1000",
       "submitButton": "Submit Report",
       "cancelButton": "Cancel",
       "alerts": {

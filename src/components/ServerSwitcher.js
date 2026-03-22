@@ -40,7 +40,7 @@ export default function ServerSwitcher() {
         url: customUrl
       };
     }
-    Alert.alert('切换服务器', `确定要切换到 ${server.name} (${server.url}) 吗？\n\n切换后需要手动重启应用才能生效。`, [{
+    Alert.alert('切换服务器', `确定要切换到 ${server.name} (${server.url}) 吗？\n\n切换后将立即生效，无需重启应用。`, [{
       text: '取消',
       style: 'cancel'
     }, {
@@ -50,7 +50,7 @@ export default function ServerSwitcher() {
         const success = await switchServerAndReload(serverKey, serverKey === 'custom' ? customUrl : '');
         setSwitching(false);
         if (success) {
-          Alert.alert('切换成功', '服务器已切换，请手动关闭并重新打开应用使其生效。', [{
+          Alert.alert('切换成功', '服务器已切换并立即生效，您可以继续使用。', [{
             text: '知道了'
           }]);
         } else {
@@ -128,7 +128,7 @@ export default function ServerSwitcher() {
         </View>}
       
       <Text style={styles.hint}>
-        💡 切换服务器后需要手动重启应用才能生效
+        💡 切换服务器后立即生效，无需重启应用
       </Text>
     </View>;
 }

@@ -55,6 +55,7 @@ const CONTENT_BASE_URL = ENV.contentApiUrl || ENV.apiUrl;
 
 // Mock 服务器的 baseURL
 const MOCK_BASE_URL = 'https://m1.apifoxmock.com/m1/7857964-7606903-default';
+const SKIP_AUTO_LOGOUT_URLS = ['/app/content/emergency-help/quota'];
 
 // 创建内容服务的 axios 实例
 const contentApiClient = axios.create({
@@ -165,6 +166,13 @@ contentApiClient.interceptors.response.use(
     
     // 检查业务层面的401错误（HTTP状态码200但业务code是401）
     if (responseData && responseData.code === 401) {
+      const shouldSkipAutoLogout = SKIP_AUTO_LOGOUT_URLS.some(url => response.config?.url === url);
+      if (shouldSkipAutoLogout) {
+        if (__DEV__) {
+          console.log(`ℹ️ [内容服务] 接口 ${response.config?.url} 返回401，跳过自动登出`);
+        }
+        return responseData;
+      }
       console.log('🚪 [内容服务] 检测到业务层面401错误，触发登出');
       await handleTokenExpired();
       

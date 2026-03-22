@@ -689,6 +689,8 @@
       "questioner": "提问者",
       "messagesSection": "群组留言",
       "messageCount": "条留言",
+      "featuredTab": "精选",
+      "allTab": "全部",
       "justNow": "刚刚",
       "minutesAgo": "分钟前",
       "hoursAgo": "小时前",
@@ -701,7 +703,15 @@
       "reportTitle": "举报",
       "reportConfirm": "确定要举报该内容吗？",
       "reportSuccess": "举报已提交，我们会尽快处理",
-      "hint": "提示"
+      "hint": "提示",
+      "loadFailed": "加载群组留言失败",
+      "groupInfoUnavailable": "问题群组服务异常，暂时无法获取群组信息",
+      "groupNotFound": "当前问题暂未关联群组",
+      "publishFailed": "发布留言失败",
+      "replyFailed": "发布回复失败",
+      "imageUploadUnsupported": "当前群组留言暂不支持图片上传",
+      "mentionHint": "请在 @ 后继续输入成员昵称",
+      "uploadImageTitle": "上传图片"
     },
     "hotListScreen": {
       "title": "热榜",
@@ -812,10 +822,11 @@
         "supplements": "补充回答",
         "comments": "全部评论"
       },
-      "filter": {
-        "featured": "精选",
-        "latest": "最新"
-      },
+        "filter": {
+          "featured": "精选",
+          "mostLikes": "最多点赞",
+          "latest": "最新"
+        },
         "actions": {
           "follow": "关注",
           "following": "已关注",
@@ -989,7 +1000,7 @@
         "supplement": "举报补充",
         "comment": "举报评论"
       },
-      "subtitle": "请选择举报原因（可多选）",
+      "subtitle": "请选择举报原因",
       "reasons": {
         "spam": "垃圾广告",
         "illegal": "违法违规",
@@ -1000,7 +1011,7 @@
       },
       "remarkLabel": "补充说明（选填）",
       "remarkPlaceholder": "请详细描述举报原因，帮助我们更好地处理...",
-      "charCount": "{current}/200",
+      "charCount": "{current}/1000",
       "submitButton": "提交举报",
       "cancelButton": "取消",
       "alerts": {

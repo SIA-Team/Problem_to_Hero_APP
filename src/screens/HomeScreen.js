@@ -1067,7 +1067,7 @@ export default function HomeScreen({ navigation }) {
                 {selectedQuestion && bookmarkedItems[selectedQuestion.id] ? '已收藏' : '收藏'} ({formatNumber(selectedQuestion?.collectCount || 0)})
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); navigation.navigate('GroupChat', { question: selectedQuestion }); }}>
+            <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); navigation.navigate('GroupChat', { question: selectedQuestion, groupId: selectedQuestion?.groupId ?? selectedQuestion?.publicGroupId ?? selectedQuestion?.questionGroupId ?? null }); }}>
               <Ionicons name="people-outline" size={22} color="#1f2937" />
               <Text style={styles.actionItemText}>加入群聊</Text>
             </TouchableOpacity>

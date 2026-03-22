@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { updateDynamicServer } from '../config/env';
 
 const SERVER_KEY = '@app_server_selection';
 const CUSTOM_SERVER_URL_KEY = '@app_custom_server_url';
@@ -82,25 +83,37 @@ export const setCustomServerUrl = async (url) => {
 };
 
 /**
- * 切换服务器并重新加载应用
+ * 切换服务器并立即生效
  */
 export const switchServerAndReload = async (serverKey, customUrl = '') => {
   try {
+    console.log('🔄 开始切换服务器...');
+    console.log('   目标服务器:', serverKey);
+    
+    // 保存到 AsyncStorage
     await setCurrentServer(serverKey);
     
     // 如果是自定义服务器，保存自定义地址
     if (serverKey === 'custom') {
       const normalizedCustomUrl = normalizeServerUrl(customUrl);
       if (!normalizedCustomUrl) {
+        console.error('❌ 自定义服务器地址为空');
         return false;
       }
       await setCustomServerUrl(normalizedCustomUrl);
+      console.log('   自定义地址:', normalizedCustomUrl);
+      
+      // 立即更新内存中的配置
+      updateDynamicServer(serverKey, normalizedCustomUrl);
+    } else {
+      // 立即更新内存中的配置
+      updateDynamicServer(serverKey);
     }
     
-    // 提示用户手动重启应用
+    console.log('✅ 服务器切换成功，配置已立即生效');
     return true;
   } catch (error) {
-    console.error('切换服务器失败:', error);
+    console.error('❌ 切换服务器失败:', error);
     return false;
   }
 };

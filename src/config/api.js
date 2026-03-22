@@ -61,7 +61,18 @@ export const API_ENDPOINTS = {
     FOLLOWERS: '/user/followers',
     FOLLOWING: '/user/following',
   },
-  
+
+  WALLET: {
+    BALANCE: '/app/wallet/balance',
+  },
+
+  GROUP: {
+    PUBLIC_QUESTION: '/app/group/public/question/:questionId',
+    PUBLIC_QUESTION_IDS: '/app/group/public/ids/question/:questionId',
+    MESSAGE_LIST: '/app/group-message/list',
+    MESSAGE_CREATE: '/app/group-message/create',
+  },
+
   // 问题相关
   QUESTION: {
     LIST: buildApiPath(SERVICES.CONTENT, '/app/content/question/list'),  // 问题列表（新接口）
@@ -124,6 +135,7 @@ export const API_ENDPOINTS = {
   
   // 团队相关
   TEAM: {
+    PUBLIC_QUESTION: '/app/team/public/question/:questionId',
     LIST: '/teams',
     DETAIL: '/teams/:id',
     CREATE: '/teams',
@@ -146,6 +158,7 @@ export const API_ENDPOINTS = {
     CREATE: '/emergency',
     DETAIL: '/emergency/:id',
     RESPOND: '/emergency/:id/respond',
+    QUOTA: '/app/content/emergency-help/quota',
   },
   
   // Twitter 相关
@@ -168,6 +181,10 @@ export const API_ENDPOINTS = {
   },
   
   // 上传相关
+  REPORT: {
+    SUBMIT: buildApiPath(SERVICES.CONTENT, '/app/content/report'),
+  },
+
   UPLOAD: {
     IMAGE: buildApiPath(SERVICES.CONTENT, '/app/content/image/upload'),
     FILE: '/upload/file',

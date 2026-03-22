@@ -6,6 +6,8 @@ import userApi from './userApi';
 import questionApi from './questionApi';
 import answerApi from './answerApi';
 import uploadApi from './uploadApi';
+import reportApi from './reportApi';
+import emergencyApi from './emergencyApi';
 
 export {
   authApi,
@@ -13,6 +15,8 @@ export {
   questionApi,
   answerApi,
   uploadApi,
+  reportApi,
+  emergencyApi,
 };
 
 // 默认导出所有 API
@@ -22,4 +26,6 @@ export default {
   question: questionApi,
   answer: answerApi,
   upload: uploadApi,
+  report: reportApi,
+  emergency: emergencyApi,
 };

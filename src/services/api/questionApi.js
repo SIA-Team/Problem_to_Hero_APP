@@ -52,6 +52,16 @@ const questionApi = {
   },
 
   /**
+   * 获取问题团队列表
+   * @param {string|number} questionId - 问题ID
+   * @returns {Promise<Object>}
+   */
+  getQuestionTeams: (questionId) => {
+    const url = replaceUrlParams(API_ENDPOINTS.TEAM.PUBLIC_QUESTION, { questionId });
+    return apiClient.get(url);
+  },
+
+  /**
    * 发布问题
    * @param {Object} data - 问题数据
    * @param {number} data.id - 问题ID（0=新建问题，有值=更新问题）

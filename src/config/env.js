@@ -27,6 +27,8 @@ const normalizeServerUrl = (url) => {
   return url.trim().replace(/\/+$/, '');
 };
 
+export const FIXED_GROUP_SERVER_URL = 'http://8.146.230.62:8080';
+
 const getServerLabel = (server) => {
   switch (server) {
     case 'server1':
@@ -120,6 +122,13 @@ const API_SERVER_CONFIG = {
   [buildServicePath(SERVICES.USER, '/app/user/profile/me')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/user/profile/username')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/user/profile/avatar')]: getCurrentServerSync,
+  ['/app/wallet/balance']: FIXED_GROUP_SERVER_URL,
+  ['/app/group/public/question/*']: getCurrentServerSync,
+  ['/app/team/public/question/*']: FIXED_GROUP_SERVER_URL,
+  ['/app/group/public/ids/question/*']: FIXED_GROUP_SERVER_URL,
+  ['/app/group-message/list']: FIXED_GROUP_SERVER_URL,
+  ['/app/group-message/create']: FIXED_GROUP_SERVER_URL,
+  ['/app/content/emergency-help/quota']: FIXED_GROUP_SERVER_URL,
   
   // 分类相关接口
   [buildServicePath(SERVICES.CONTENT, '/app/content/category/list')]: getCurrentServerSync,
@@ -183,6 +192,10 @@ const API_SERVER_CONFIG = {
 };
 
 const resolveServerUrl = (serverType, currentEnv) => {
+  if (typeof serverType === 'string' && /^https?:\/\//i.test(serverType)) {
+    return normalizeServerUrl(serverType);
+  }
+
   switch (serverType) {
     case 'server1':
       return currentEnv.server1Url;
