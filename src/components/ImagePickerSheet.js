@@ -11,10 +11,10 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { showToast } from '../utils/toast';
 import { modalTokens } from './modalTokens';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -28,7 +28,7 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
  * @param {string} title - 弹窗标题，默认为"选择图片"
  */
 export default function ImagePickerSheet({ visible, onClose, onImageSelected, title = '选择图片' }) {
-  const insets = useSafeAreaInsets();
+  const bottomSafeInset = useBottomSafeInset(20);
   const [slideAnim] = React.useState(new Animated.Value(SCREEN_HEIGHT));
 
   React.useEffect(() => {
@@ -159,6 +159,7 @@ export default function ImagePickerSheet({ visible, onClose, onImageSelected, ti
       animationType="fade"
       onRequestClose={handleClose}
       statusBarTranslucent
+      navigationBarTranslucent
     >
       <View style={styles.overlay}>
         <TouchableWithoutFeedback onPress={handleClose}>
@@ -170,7 +171,7 @@ export default function ImagePickerSheet({ visible, onClose, onImageSelected, ti
             styles.container,
             {
               transform: [{ translateY: slideAnim }],
-              paddingBottom: insets.bottom || 20,
+              paddingBottom: bottomSafeInset,
             },
           ]}
           pointerEvents="box-none"

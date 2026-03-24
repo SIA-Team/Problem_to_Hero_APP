@@ -1,9 +1,6 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_CONFIG } from '../../config/api';
-
-const EMERGENCY_QUOTA_URL = 'http://8.146.230.62:8080/app/content/emergency-help/quota';
-const EMERGENCY_PUBLISH_URL = 'http://8.146.230.62:8080/app/content/emergency-help/publish';
+import { API_CONFIG, API_ENDPOINTS, getFullApiUrl } from '../../config/api';
 
 const requestWithAuth = async ({ method, url, data }) => {
   const token = await AsyncStorage.getItem('authToken');
@@ -35,8 +32,8 @@ const requestWithAuth = async ({ method, url, data }) => {
 };
 
 const emergencyApi = {
-  getQuota: () => requestWithAuth({ method: 'get', url: EMERGENCY_QUOTA_URL }),
-  publish: (data) => requestWithAuth({ method: 'post', url: EMERGENCY_PUBLISH_URL, data }),
+  getQuota: () => requestWithAuth({ method: 'get', url: getFullApiUrl(API_ENDPOINTS.EMERGENCY.QUOTA) }),
+  publish: (data) => requestWithAuth({ method: 'post', url: getFullApiUrl(API_ENDPOINTS.EMERGENCY.PUBLISH), data }),
 };
 
 export default emergencyApi;

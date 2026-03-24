@@ -452,7 +452,7 @@ export default function LoginScreen({ navigation, onLogin }) {
           <View style={styles.serverSwitcherContainer}>
             <View style={styles.serverSwitcherHeader}>
               <Ionicons name="server-outline" size={18} color="#6b7280" />
-              <Text style={styles.serverSwitcherTitle}>开发工具 - 服务器切换</Text>
+              <Text style={styles.serverSwitcherTitle}>服务器设置</Text>
             </View>
             
             <View style={styles.serverList}>

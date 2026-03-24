@@ -614,11 +614,7 @@ export default function PublishScreen({
         showToast('请至少邀请一位专家', 'warning');
         return;
       }
-      const amount = parseFloat(targetedReward);
-      if (isNaN(amount) || amount < 0) {
-        showToast('定向问题奖赏金额不能小于$0', 'warning');
-        return;
-      }
+      // 定向问题的悬赏金额可以是$0或任意金额，不需要验证最小值
     }
 
     // 4. 验证付费查看答案
@@ -1105,7 +1101,7 @@ export default function PublishScreen({
           </View>}
 
         {/* 定向问题 - 邀请专家 */}
-        {Boolean(selectedType === 2 && (expertLoading || expertList.length > 0 || targetedUsers.length > 0)) &&
+        {selectedType === 2 &&
       // 2 = 定向问题
       <>
             <View style={styles.section}>
@@ -1201,9 +1197,9 @@ export default function PublishScreen({
               </View>
             </View>
 
-            {/* 定向问题奖赏 */}
+            {/* 定向问题悬赏金额 */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>设置奖赏金额 <Text style={styles.required}>*</Text></Text>
+              <Text style={styles.sectionTitle}>设置悬赏金额</Text>
               <Text style={styles.sectionDesc}>可以设置为 $0（不设悬赏）或任意金额</Text>
               <View style={styles.quickAmounts}>
                 {rewardAmounts.map(amount => <TouchableOpacity key={amount} style={[styles.amountBtn, targetedReward === String(amount) && styles.amountBtnActive]} onPress={() => setTargetedReward(String(amount))}>
@@ -1212,7 +1208,7 @@ export default function PublishScreen({
               </View>
               <View style={styles.customAmount}>
                 <Text style={styles.customLabel}>自定义金额：</Text>
-                <TextInput style={styles.customInput} placeholder="输入金额（最低$0）" keyboardType="numeric" value={targetedReward} onChangeText={text => {
+                <TextInput style={styles.customInput} placeholder="输入金额（可以是$0）" keyboardType="numeric" value={targetedReward} onChangeText={text => {
               // 只允许输入数字和小数点
               const filtered = text.replace(/[^0-9.]/g, '');
               setTargetedReward(filtered);

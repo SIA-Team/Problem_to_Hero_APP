@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { updateDynamicServer } from '../config/env';
+import { clearAllCache } from './cacheManager';
 
 const SERVER_KEY = '@app_server_selection';
 const CUSTOM_SERVER_URL_KEY = '@app_custom_server_url';
@@ -49,6 +50,8 @@ export const getCurrentServer = async () => {
 export const setCurrentServer = async (serverKey) => {
   try {
     await AsyncStorage.setItem(SERVER_KEY, serverKey);
+    await clearAllCache();
+    console.log('🧹 服务器切换后已清理业务缓存');
     return true;
   } catch (error) {
     console.error('保存服务器配置失败:', error);

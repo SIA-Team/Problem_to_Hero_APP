@@ -41,6 +41,17 @@ const questionApi = {
     return response;
   },
 
+  getBrowseHistoryList: (params = {}) => {
+    const { pageNum = 1, pageSize = 10 } = params;
+
+    return contentApiClient.get(API_ENDPOINTS.QUESTION.BROWSE_MY, {
+      params: {
+        pageNum,
+        pageSize,
+      },
+    });
+  },
+
   /**
    * 获取问题详情
    * @param {string} questionId - 问题ID

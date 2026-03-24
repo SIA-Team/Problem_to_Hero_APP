@@ -11,6 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // 内存缓存对象
 const memoryCache = new Map();
+const CACHE_IDENTITY_KEY = '@app_cache_identity_v1';
 
 // 缓存配置
 const CACHE_CONFIG = {
@@ -206,6 +207,45 @@ export const clearAllCache = async () => {
     console.log(`🗑️ 已清除所有缓存 (${cacheKeys.length} 条)`);
   } catch (error) {
     console.error('清除所有缓存失败:', error);
+  }
+};
+
+export const syncCacheIdentity = async (identity) => {
+  if (!identity) {
+    return {
+      changed: false,
+      previousIdentity: null,
+      currentIdentity: null,
+    };
+  }
+
+  try {
+    const previousIdentity = await AsyncStorage.getItem(CACHE_IDENTITY_KEY);
+
+    if (previousIdentity === identity) {
+      return {
+        changed: false,
+        previousIdentity,
+        currentIdentity: identity,
+      };
+    }
+
+    await clearAllCache();
+    await AsyncStorage.setItem(CACHE_IDENTITY_KEY, identity);
+
+    return {
+      changed: true,
+      previousIdentity,
+      currentIdentity: identity,
+    };
+  } catch (error) {
+    console.error('同步缓存身份失败:', error);
+    return {
+      changed: false,
+      previousIdentity: null,
+      currentIdentity: identity,
+      error,
+    };
   }
 };
 

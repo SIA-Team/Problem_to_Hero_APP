@@ -17,6 +17,7 @@
     "recommend": "Recommended",
     "hotList": "Hot List",
     "incomeRanking": "Income Ranking",
+    "rewardRanking": "Reward Ranking",
     "questionRanking": "Question Ranking",
     "sameCity": "Same City",
     "country": "Country",
@@ -1047,6 +1048,16 @@
       },
       "organizer": {
         "platform": "Platform"
+      },
+      "detail": {
+        "notFound": "This activity does not exist or has been removed",
+        "organizer": "Organizer",
+        "participants": "Participants",
+        "schedule": "Schedule",
+        "location": "Location",
+        "progress": "My Progress",
+        "guideTitle": "Participation Guide",
+        "guideBody": "You can join from the activity list first, then return here to view the full activity info, schedule, and organizer details."
       },
       "actions": {
         "join": "Join",

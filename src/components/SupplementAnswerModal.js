@@ -9,6 +9,7 @@ import { modalTokens } from './modalTokens';
 import { toast } from '../utils/toast';
 import answerApi from '../services/api/answerApi';
 import uploadApi from '../services/api/uploadApi';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 
 /**
  * 补充回答弹窗组件
@@ -25,6 +26,7 @@ export default function SupplementAnswerModal({
   questionId,
   onSuccess
 }) {
+  const bottomSafeInset = useBottomSafeInset();
   const [supplementAnswerText, setSupplementAnswerText] = useState('');
   const [supplementIdentity, setSupplementIdentity] = useState('personal');
   const [supplementSelectedTeams, setSupplementSelectedTeams] = useState([]);
@@ -153,8 +155,14 @@ export default function SupplementAnswerModal({
   if (!answer) {
     return null;
   }
-  return <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
-      <SafeAreaView style={styles.container}>
+  return <Modal
+      visible={visible}
+      animationType="slide"
+      onRequestClose={handleClose}
+      statusBarTranslucent
+      navigationBarTranslucent
+    >
+      <SafeAreaView style={styles.container} edges={['top']}>
         {/* 头部 */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
@@ -213,7 +221,14 @@ export default function SupplementAnswerModal({
         </ScrollView>
 
         {/* 底部工具栏 */}
-        <View style={styles.toolbar}>
+        <View
+          style={[
+            styles.toolbar,
+            {
+              paddingBottom: bottomSafeInset + 8
+            }
+          ]}
+        >
           <View style={styles.toolsLeft}>
             <TouchableOpacity style={styles.toolItem} onPress={() => setShowImagePicker(true)} disabled={uploadingImages || images.length >= 9}>
               <Ionicons name="image-outline" size={24} color={uploadingImages || images.length >= 9 ? '#ccc' : '#666'} />

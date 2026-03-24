@@ -13,6 +13,8 @@ import EmptyState from '../components/EmptyState';
 import { toast } from '../utils/toast';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
+import { normalizeEntityId } from '../utils/jsonLongId';
+import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
 import answerApi from '../services/api/answerApi';
 import commentApi from '../services/api/commentApi';
 
@@ -364,6 +366,7 @@ export default function AnswerDetailScreen({
 
   // 获取完整的回答数据（包含统计信息）
   const answer = normalizeAnswerDetail(answerData || route?.params?.updatedAnswer || route?.params?.answer) || DEFAULT_ANSWER_DETAIL;
+  const openPublicProfile = (target, options = {}) => navigateToPublicProfile(navigation, target, options);
   const normalizeSupplementAnswerItem = item => {
     if (!item || typeof item !== 'object') {
       return item;
@@ -639,7 +642,7 @@ export default function AnswerDetailScreen({
       targetId: target?.targetId ?? answer.id ?? null,
       parentId: Number(target?.parentId ?? 0) || 0,
       replyToCommentId: Number(target?.replyToCommentId ?? 0) || 0,
-      replyToUserId: target?.replyToUserId !== undefined && target?.replyToUserId !== null ? Number(target.replyToUserId) || null : null,
+      replyToUserId: normalizeEntityId(target?.replyToUserId),
       replyToUserName: target?.replyToUserName ?? '',
       originalComment: target?.originalComment ? normalizeCommentItem(target.originalComment, {
         targetType: 2,
@@ -662,7 +665,7 @@ export default function AnswerDetailScreen({
       targetId: answer.id ?? null,
       parentId: resolvedCommentId,
       replyToCommentId: resolvedCommentId,
-      replyToUserId: Number(comment.userId ?? comment.user_id ?? 0) || null,
+      replyToUserId: normalizeEntityId(comment.userId ?? comment.user_id),
       replyToUserName,
       originalComment: normalizeCommentItem(comment, {
         targetType: 2,
@@ -870,7 +873,7 @@ export default function AnswerDetailScreen({
       targetId,
       parentId: resolvedCommentId,
       replyToCommentId: resolvedCommentId,
-      replyToUserId: Number(comment.userId ?? comment.user_id ?? 0) || null,
+      replyToUserId: normalizeEntityId(comment.userId ?? comment.user_id),
       replyToUserName,
       originalComment: normalizeCommentItem(comment, {
         targetId,
@@ -928,7 +931,7 @@ export default function AnswerDetailScreen({
         payload.replyToCommentId = Number(answerCommentTarget.replyToCommentId) || 0;
       }
       if (answerCommentTarget?.replyToUserId) {
-        payload.replyToUserId = Number(answerCommentTarget.replyToUserId) || null;
+        payload.replyToUserId = answerCommentTarget.replyToUserId;
       }
       if (answerCommentTarget?.replyToUserName) {
         payload.replyToUserName = answerCommentTarget.replyToUserName;
@@ -1891,7 +1894,7 @@ export default function AnswerDetailScreen({
       targetId: target?.targetId ?? currentSupplementCommentTargetId,
       parentId: Number(target?.parentId ?? 0) || 0,
       replyToCommentId: Number(target?.replyToCommentId ?? 0) || 0,
-      replyToUserId: target?.replyToUserId !== undefined && target?.replyToUserId !== null ? Number(target.replyToUserId) || null : null,
+      replyToUserId: normalizeEntityId(target?.replyToUserId),
       replyToUserName: target?.replyToUserName ?? '',
       originalComment: target?.originalComment ? normalizeCommentItem(target.originalComment, {
         targetId: target?.targetId ?? currentSupplementCommentTargetId,
@@ -1922,7 +1925,7 @@ export default function AnswerDetailScreen({
         payload.replyToCommentId = Number(supplementCommentTarget.replyToCommentId) || 0;
       }
       if (supplementCommentTarget?.replyToUserId) {
-        payload.replyToUserId = Number(supplementCommentTarget.replyToUserId) || null;
+        payload.replyToUserId = supplementCommentTarget.replyToUserId;
       }
       if (supplementCommentTarget?.replyToUserName) {
         payload.replyToUserName = supplementCommentTarget.replyToUserName;
@@ -2110,7 +2113,7 @@ export default function AnswerDetailScreen({
     const shouldHideContextRelation = contextReplyId !== null && String(relationCommentId) === String(contextReplyId);
     const shouldShowReplyRelation = !!relationUserName && !shouldHideContextRelation && rootCommentId !== null && String(relationCommentId) !== String(rootCommentId) && String(relationCommentId) !== String(reply.id);
     return <View key={reply.id} style={styles.replyCard}>
-        <View style={styles.replyHeader}>
+        <TouchableOpacity style={styles.replyHeader} activeOpacity={0.7} onPress={() => openPublicProfile(reply)}>
           <Avatar uri={reply.userAvatar || reply.avatar} name={reply.userName || reply.userNickname || reply.author} size={24} />
           <View style={styles.replyAuthorMeta}>
             <View style={styles.replyAuthorLine}>
@@ -2123,7 +2126,7 @@ export default function AnswerDetailScreen({
           </View>
           <View style={{ flex: 1 }} />
           <Text style={styles.replyTime}>{reply.time}</Text>
-        </View>
+        </TouchableOpacity>
         <Text style={styles.replyText}>{reply.content}</Text>
         <View style={styles.replyActions}>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleSupplementCommentLike(reply.id)} disabled={supplementCommentLikeLoading[reply.id]}>
@@ -2166,7 +2169,7 @@ export default function AnswerDetailScreen({
     const shouldHideContextRelation = contextReplyId !== null && String(relationCommentId) === String(contextReplyId);
     const shouldShowReplyRelation = !!relationUserName && !shouldHideContextRelation && rootCommentId !== null && String(relationCommentId) !== String(rootCommentId) && String(relationCommentId) !== String(reply.id);
     return <View key={reply.id} style={styles.replyCard}>
-        <View style={styles.replyHeader}>
+        <TouchableOpacity style={styles.replyHeader} activeOpacity={0.7} onPress={() => openPublicProfile(reply)}>
           <Avatar uri={reply.userAvatar || reply.avatar} name={reply.userName || reply.userNickname || reply.author} size={24} />
           <View style={styles.replyAuthorMeta}>
             <View style={styles.replyAuthorLine}>
@@ -2179,7 +2182,7 @@ export default function AnswerDetailScreen({
           </View>
           <View style={{ flex: 1 }} />
           <Text style={styles.replyTime}>{reply.time}</Text>
-        </View>
+        </TouchableOpacity>
         <Text style={styles.replyText}>{reply.content}</Text>
         <View style={styles.replyActions}>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleAnswerCommentLike(reply.id)} disabled={answerCommentLikeLoading[reply.id]}>
@@ -2406,6 +2409,7 @@ export default function AnswerDetailScreen({
         {/* 鍥炵瓟鍐呭 */}
         <View style={styles.answerSection}>
           <View style={styles.answerHeader}>
+            <TouchableOpacity style={styles.answerHeaderMain} activeOpacity={0.7} onPress={() => openPublicProfile(answer)}>
             <Avatar uri={answer.authorAvatar || answer.userAvatar || answer.avatar} name={answer.authorNickName || answer.userNickname || answer.userName || answer.author || t('home.anonymous')} size={48} style={styles.answerAvatar} />
             <View style={styles.answerAuthorInfo}>
               <View style={styles.answerAuthorRow}>
@@ -2427,6 +2431,7 @@ export default function AnswerDetailScreen({
               </View>
               {!!answer.title && <Text style={styles.answerAuthorTitle}>{answer.title}</Text>}
             </View>
+            </TouchableOpacity>
             <TouchableOpacity style={[styles.followBtn, following && styles.followBtnActive]} onPress={() => setFollowing(!following)}>
               <Text style={[styles.followBtnText, following && styles.followBtnTextActive]}>
                 {following ? t('screens.answerDetail.actions.following') : t('screens.answerDetail.actions.follow')}
@@ -2522,6 +2527,7 @@ export default function AnswerDetailScreen({
                     style={styles.supplementCard}
                   >
                     <View style={styles.supplementHeader}>
+                      <TouchableOpacity style={styles.supplementHeaderMain} activeOpacity={0.7} onPress={() => openPublicProfile(supplement)}>
                       <Avatar uri={supplement.authorAvatar || supplement.userAvatar || supplement.avatar} name={supplement.authorNickName || supplement.userNickname || supplement.userName || supplement.author || t('home.anonymous')} size={32} style={styles.supplementAvatar} />
                       <View style={styles.supplementAuthorInfo}>
                         <View style={styles.supplementAuthorRow}>
@@ -2543,11 +2549,12 @@ export default function AnswerDetailScreen({
                       text: t('screens.answerDetail.alerts.confirm'),
                       onPress: () => {}
                     }]);
-                  }}>
+                          }}>
                             <Text style={styles.adoptAnswerBtnText}>{t('screens.answerDetail.actions.adopt')}</Text>
                           </TouchableOpacity>
                         </View>
                       </View>
+                      </TouchableOpacity>
                     </View>
                     <Text style={styles.supplementContent}>{supplement.content}</Text>
                     <View style={styles.supplementActions}>
@@ -2617,12 +2624,14 @@ export default function AnswerDetailScreen({
                 const isCommentCollected = answerCommentCollected[comment.id] !== undefined ? answerCommentCollected[comment.id] : !!comment.collected;
                 const isCommentDisliked = answerCommentDisliked[comment.id] !== undefined ? answerCommentDisliked[comment.id] : !!comment.disliked;
                 return <View key={comment.id} style={styles.commentCard}>
-                  <Avatar uri={comment.userAvatar || comment.avatar} name={comment.userName || comment.userNickname || comment.author} size={36} />
+                  <TouchableOpacity activeOpacity={0.7} onPress={() => openPublicProfile(comment)}>
+                    <Avatar uri={comment.userAvatar || comment.avatar} name={comment.userName || comment.userNickname || comment.author} size={36} />
+                  </TouchableOpacity>
                   <View style={styles.commentContent}>
-                    <View style={styles.commentHeader}>
+                    <TouchableOpacity style={styles.commentHeader} activeOpacity={0.7} onPress={() => openPublicProfile(comment)}>
                       <Text style={styles.commentAuthor}>{comment.userName || comment.userNickname || comment.author}</Text>
                       <Text style={styles.commentTime}>{comment.time}</Text>
-                    </View>
+                    </TouchableOpacity>
                     <Text style={styles.commentText}>{comment.content}</Text>
                     <View style={styles.commentActions}>
                       <View style={styles.commentActionsLeft}>
@@ -2730,14 +2739,14 @@ export default function AnswerDetailScreen({
             </View>
 
             {Boolean(currentAnswerReplyComment) && <View style={styles.originalCommentCard}>
-                <View style={styles.originalCommentHeader}>
+                <TouchableOpacity style={styles.originalCommentHeader} activeOpacity={0.7} onPress={() => openPublicProfile(currentAnswerReplyComment)}>
                   <Avatar uri={currentAnswerReplyComment.userAvatar || currentAnswerReplyComment.avatar} name={currentAnswerReplyComment.userName || currentAnswerReplyComment.userNickname || currentAnswerReplyComment.author} size={32} />
                   <Text style={styles.originalCommentAuthor}>
                     {currentAnswerReplyComment.userName || currentAnswerReplyComment.userNickname || currentAnswerReplyComment.author}
                   </Text>
                   <View style={{ flex: 1 }} />
                   <Text style={styles.originalCommentTime}>{currentAnswerReplyComment.time}</Text>
-                </View>
+                </TouchableOpacity>
                 <Text style={styles.originalCommentText}>{currentAnswerReplyComment.content}</Text>
               </View>}
 
@@ -2796,12 +2805,12 @@ export default function AnswerDetailScreen({
               const isCommentDisliked = supplementCommentDisliked[comment.id] !== undefined ? supplementCommentDisliked[comment.id] : !!comment.disliked;
               return <View key={comment.id}>
                     <View style={styles.commentListCard}>
-                      <View style={styles.commentListCardHeader}>
+                      <TouchableOpacity style={styles.commentListCardHeader} activeOpacity={0.7} onPress={() => openPublicProfile(comment)}>
                         <Avatar uri={comment.userAvatar || comment.avatar} name={comment.userName || comment.userNickname || comment.author} size={24} />
                         <Text style={styles.commentListAuthor}>{comment.userName || comment.userNickname || comment.author}</Text>
                         <View style={{ flex: 1 }} />
                         <Text style={styles.commentListTime}>{comment.time}</Text>
-                      </View>
+                      </TouchableOpacity>
                       <View style={styles.commentListContent}>
                         <Text style={styles.commentListText}>{comment.content}</Text>
                         <View style={styles.commentListActions}>
@@ -2890,14 +2899,14 @@ export default function AnswerDetailScreen({
             </View>
 
             {Boolean(currentSupplementReplyComment) && <View style={styles.originalCommentCard}>
-                <View style={styles.originalCommentHeader}>
+                <TouchableOpacity style={styles.originalCommentHeader} activeOpacity={0.7} onPress={() => openPublicProfile(currentSupplementReplyComment)}>
                   <Avatar uri={currentSupplementReplyComment.userAvatar || currentSupplementReplyComment.avatar} name={currentSupplementReplyComment.userName || currentSupplementReplyComment.userNickname || currentSupplementReplyComment.author} size={32} />
                   <Text style={styles.originalCommentAuthor}>
                     {currentSupplementReplyComment.userName || currentSupplementReplyComment.userNickname || currentSupplementReplyComment.author}
                   </Text>
                   <View style={{ flex: 1 }} />
                   <Text style={styles.originalCommentTime}>{currentSupplementReplyComment.time}</Text>
-                </View>
+                </TouchableOpacity>
                 <Text style={styles.originalCommentText}>{currentSupplementReplyComment.content}</Text>
               </View>}
 
@@ -3093,6 +3102,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 12
   },
+  answerHeaderMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start'
+  },
   answerAvatar: {
     width: 48,
     height: 48,
@@ -3276,6 +3290,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: 12
+  },
+  supplementHeaderMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start'
   },
   supplementAvatar: {
     width: 32,

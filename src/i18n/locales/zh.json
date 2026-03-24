@@ -17,6 +17,7 @@
     "recommend": "推荐",
     "hotList": "热榜",
     "incomeRanking": "收入榜",
+    "rewardRanking": "悬赏榜",
     "questionRanking": "问题榜",
     "sameCity": "同城",
     "country": "国家",
@@ -1205,6 +1206,16 @@
       },
       "organizer": {
         "platform": "平台"
+      },
+      "detail": {
+        "notFound": "活动不存在或已被移除",
+        "organizer": "发起方",
+        "participants": "参与人数",
+        "schedule": "活动时间",
+        "location": "活动地址",
+        "progress": "我的进度",
+        "guideTitle": "参与说明",
+        "guideBody": "你可以先在活动列表页点击参加，再回到这里查看活动完整信息、时间安排和组织方说明。"
       },
       "actions": {
         "join": "参加",

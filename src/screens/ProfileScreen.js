@@ -15,7 +15,62 @@ import authApi from '../services/api/authApi';
 import userApi from '../services/api/userApi';
 import questionApi from '../services/api/questionApi';
 import { showAppAlert } from '../utils/appAlert';
+import { formatTime } from '../utils/timeFormatter';
+import { formatNumber } from '../utils/numberFormatter';
 import ServerSwitcher from '../components/ServerSwitcher';
+
+const HISTORY_PAGE_SIZE = 10;
+
+const getFirstNonEmptyValue = (...values) => values.find(value => value !== undefined && value !== null && value !== '');
+
+const extractBrowseHistoryRows = response => {
+  const rawData = response?.data;
+  const payload = rawData?.data && typeof rawData?.data === 'object' ? rawData.data : rawData;
+
+  if (Array.isArray(payload)) {
+    return {
+      rows: payload,
+      total: payload.length
+    };
+  }
+
+  const rows = payload?.rows || payload?.list || payload?.records || payload?.items || [];
+  const total = Number(payload?.total ?? payload?.count ?? payload?.totalCount ?? rows.length) || rows.length;
+
+  return {
+    rows: Array.isArray(rows) ? rows : [],
+    total
+  };
+};
+
+const formatBrowseHistoryTime = rawTime => {
+  if (!rawTime) return '';
+
+  const parsedTime = new Date(rawTime);
+  if (Number.isNaN(parsedTime.getTime())) {
+    return String(rawTime);
+  }
+
+  return formatTime(rawTime) || String(rawTime);
+};
+
+const normalizeBrowseHistoryItem = item => {
+  const targetId = getFirstNonEmptyValue(item?.questionId, item?.contentId, item?.targetId, item?.businessId, item?.bizId, item?.id);
+  const recordId = getFirstNonEmptyValue(item?.id, item?.browseId, item?.recordId, targetId);
+  const rawTime = getFirstNonEmptyValue(item?.browseTime, item?.browsedAt, item?.viewTime, item?.createTime, item?.createdAt, item?.updateTime, item?.updatedAt);
+  const title = getFirstNonEmptyValue(item?.title, item?.questionTitle, item?.contentTitle, item?.targetTitle, item?.name, '');
+  const author = getFirstNonEmptyValue(item?.authorNickName, item?.authorNickname, item?.authorName, item?.nickName, item?.nickname, item?.userName, item?.username, '');
+
+  return {
+    ...item,
+    id: recordId,
+    targetId,
+    title: String(title || ''),
+    author: String(author || ''),
+    time: formatBrowseHistoryTime(rawTime)
+  };
+};
+
 export default function ProfileScreen({
   navigation,
   onLogout
@@ -180,6 +235,9 @@ export default function ProfileScreen({
     views: '1.2k',
     comments: 56,
     likes: 128,
+    shares: 34,
+    collects: 89,
+    dislikes: 5,
     time: t('profile.time.hoursAgo').replace('{hours}', '2')
   }, {
     id: 2,
@@ -189,6 +247,9 @@ export default function ProfileScreen({
     views: '2.5k',
     comments: 89,
     likes: 256,
+    shares: 67,
+    collects: 145,
+    dislikes: 8,
     time: t('profile.time.yesterday')
   }, {
     id: 3,
@@ -198,6 +259,9 @@ export default function ProfileScreen({
     views: '5.6k',
     comments: 456,
     likes: 1200,
+    shares: 234,
+    collects: 567,
+    dislikes: 23,
     time: t('profile.time.daysAgo').replace('{days}', '3')
   }], [t]);
   const myAnswers = React.useMemo(() => [{
@@ -206,6 +270,9 @@ export default function ProfileScreen({
     content: '作为一个自学了多门技能的人，我来分享一下我的经验...',
     likes: 256,
     comments: 23,
+    shares: 45,
+    collects: 78,
+    dislikes: 3,
     adopted: true,
     time: t('profile.time.hoursAgo').replace('{hours}', '1')
   }, {
@@ -214,6 +281,9 @@ export default function ProfileScreen({
     content: '首先需要掌握Python基础语法，然后学习NumPy和Pandas...',
     likes: 189,
     comments: 15,
+    shares: 28,
+    collects: 56,
+    dislikes: 2,
     adopted: false,
     time: t('profile.time.hoursAgo').replace('{hours}', '3')
   }, {
@@ -222,6 +292,9 @@ export default function ProfileScreen({
     content: '完全来得及！我就是35岁转行的，现在已经工作2年了...',
     likes: 512,
     comments: 45,
+    shares: 89,
+    collects: 167,
+    dislikes: 7,
     adopted: true,
     time: t('profile.time.yesterday')
   }, {
@@ -272,24 +345,6 @@ export default function ProfileScreen({
     }]
   }), [t]);
 
-  // 浏览历史数据
-  const historyList = React.useMemo(() => [{
-    id: 1,
-    title: 'AI大模型会取代程序员吗？',
-    author: 'AI研究员',
-    time: t('profile.time.hoursAgo').replace('{hours}', '1')
-  }, {
-    id: 2,
-    title: '2026年最值得学习的编程语言',
-    author: '技术博主',
-    time: t('profile.time.hoursAgo').replace('{hours}', '3')
-  }, {
-    id: 3,
-    title: '如何克服社交恐惧症？',
-    author: '心理咨询师',
-    time: t('profile.time.yesterday')
-  }], [t]);
-
   // 获取草稿列表
   const loadDraftsList = async (isLoadMore = false) => {
     if (draftsLoading) return;
@@ -328,6 +383,9 @@ export default function ProfileScreen({
   // 退出登录确认弹窗状态
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [showFavoritesModal, setShowFavoritesModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showDraftsModal, setShowDraftsModal] = useState(false);
 
   // Initialize activeTab with translated value
   React.useEffect(() => {
@@ -335,16 +393,68 @@ export default function ProfileScreen({
       setActiveTab(t('profile.contentTabs.questions'));
     }
   }, [t, activeTab]);
-  const [showFavoritesModal, setShowFavoritesModal] = useState(false);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [showDraftsModal, setShowDraftsModal] = useState(false);
 
   // 草稿数据状态
   const [draftsList, setDraftsList] = useState([]);
   const [draftsLoading, setDraftsLoading] = useState(false);
   const [draftsPageNum, setDraftsPageNum] = useState(1);
   const [draftsHasMore, setDraftsHasMore] = useState(true);
+  const [historyList, setHistoryList] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyPageNum, setHistoryPageNum] = useState(1);
+  const [historyHasMore, setHistoryHasMore] = useState(true);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [favoritesTab, setFavoritesTab] = useState('questions');
+
+  const loadBrowseHistoryList = React.useCallback(async (isLoadMore = false) => {
+    if (historyLoading || (isLoadMore && !historyHasMore)) return;
+
+    try {
+      setHistoryLoading(true);
+      const pageNum = isLoadMore ? historyPageNum + 1 : 1;
+      const response = await questionApi.getBrowseHistoryList({
+        pageNum,
+        pageSize: HISTORY_PAGE_SIZE
+      });
+
+      if (response.code === 200 || response.code === 0) {
+        const {
+          rows = [],
+          total = 0
+        } = extractBrowseHistoryRows(response);
+        const normalizedRows = rows.map(normalizeBrowseHistoryItem);
+
+        if (isLoadMore) {
+          const nextList = [...historyList, ...normalizedRows];
+          setHistoryList(nextList);
+          setHistoryPageNum(pageNum);
+          setHistoryHasMore(nextList.length < total);
+        } else {
+          setHistoryList(normalizedRows);
+          setHistoryPageNum(1);
+          setHistoryHasMore(normalizedRows.length < total);
+        }
+
+        setHistoryLoaded(true);
+      }
+    } catch (error) {
+      console.error('获取浏览历史列表失败:', error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [historyHasMore, historyList, historyLoading, historyPageNum]);
+
+  React.useEffect(() => {
+    if (activeTab === t('profile.contentTabs.history') && !historyLoaded && !historyLoading) {
+      loadBrowseHistoryList();
+    }
+  }, [activeTab, historyLoaded, historyLoading, loadBrowseHistoryList, t]);
+
+  React.useEffect(() => {
+    if (showHistoryModal && !historyLoaded && !historyLoading) {
+      loadBrowseHistoryList();
+    }
+  }, [historyLoaded, historyLoading, loadBrowseHistoryList, showHistoryModal]);
 
   // 认证状态: 'none' | 'personal' | 'enterprise' | 'government'
   const [verificationType, setVerificationType] = useState('none'); // 示例：未认证（显示"去认证"按钮）
@@ -482,6 +592,7 @@ export default function ProfileScreen({
     switch (item.label) {
       case t('profile.browsingHistory'):
         setShowHistoryModal(true);
+        loadBrowseHistoryList();
         break;
       case t('profile.myDrafts'):
         setShowDraftsModal(true);
@@ -502,7 +613,7 @@ export default function ProfileScreen({
       case t('profile.viewPublicProfile'):
         // 导航到公开主页（使用当前用户ID）
         navigation.navigate('PublicProfile', {
-          userId: 'current-user-123'
+          userId: String(userProfile.userId || '')
         });
         break;
       case t('profile.verification'):
@@ -566,8 +677,12 @@ export default function ProfileScreen({
   };
   const handleHistoryPress = item => {
     setShowHistoryModal(false);
+    const questionId = item?.targetId ?? item?.id;
+    if (!questionId) {
+      return;
+    }
     navigation.navigate('QuestionDetail', {
-      id: item.id
+      id: questionId
     });
   };
   const handleDraftPress = async item => {
@@ -1066,8 +1181,8 @@ export default function ProfileScreen({
           </View>
         </View>
 
-        {/* 超级赞余额卡片 */}
-        <View style={styles.superLikeCard}>
+        {/* 超级赞余额卡片 - 已隐藏 */}
+        {/* <View style={styles.superLikeCard}>
           <View style={styles.superLikeHeader}>
             <View style={styles.superLikeTitle}>
               <Ionicons name="star" size={20} color="#f59e0b" />
@@ -1085,7 +1200,7 @@ export default function ProfileScreen({
               <Text style={[styles.superLikeBtnText, styles.superLikeBtnTextSecondary]}>{t('profile.history')}</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </View> */}
 
         {/* 功能菜单 */}
         <View style={styles.menuSection}>
@@ -1099,8 +1214,8 @@ export default function ProfileScreen({
             </TouchableOpacity>)}
         </View>
 
-        {/* 开发工具 - 服务器切换 */}
-        {Boolean(__DEV__) && <ServerSwitcher />}
+        {/* 服务器切换 */}
+        <ServerSwitcher />
 
         {/* 我的内容 */}
         <View style={styles.contentSection}>
@@ -1130,17 +1245,49 @@ export default function ProfileScreen({
                 </Text>
                 <View style={styles.questionStats}>
                   <View style={styles.questionStatItem}>
-                    <Ionicons name="eye-outline" size={12} color="#9ca3af" />
-                    <Text style={styles.questionStatText}>{q.views}</Text>
+                    <Ionicons name="thumbs-up-outline" size={12} color="#9ca3af" />
+                    <Text style={styles.questionStatText}>{formatNumber(q.likes)}</Text>
                   </View>
                   <View style={styles.questionStatItem}>
                     <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
-                    <Text style={styles.questionStatText}>{q.comments}</Text>
+                    <Text style={styles.questionStatText}>{formatNumber(q.comments)}</Text>
                   </View>
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    showAppAlert('转发', '转发功能');
+                  }}>
+                    <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
+                    <Text style={styles.questionStatText}>{formatNumber(q.shares)}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    showAppAlert('收藏', '收藏功能');
+                  }}>
+                    <Ionicons name="star-outline" size={12} color="#9ca3af" />
+                    <Text style={styles.questionStatText}>{formatNumber(q.collects)}</Text>
+                  </TouchableOpacity>
                   <View style={styles.questionStatItem}>
-                    <Ionicons name="thumbs-up-outline" size={12} color="#9ca3af" />
-                    <Text style={styles.questionStatText}>{q.likes}</Text>
+                    <Ionicons name="eye-outline" size={12} color="#9ca3af" />
+                    <Text style={styles.questionStatText}>{q.views}</Text>
                   </View>
+                  <View style={{flex: 1}} />
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    showAppAlert('踩', '踩功能');
+                  }}>
+                    <Ionicons name="thumbs-down-outline" size={12} color="#9ca3af" />
+                    <Text style={styles.questionStatText}>{formatNumber(q.dislikes)}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    navigation.navigate('Report', {
+                      type: 'question',
+                      targetType: 1,
+                      targetId: q.id
+                    });
+                  }}>
+                    <Ionicons name="flag-outline" size={12} color="#ef4444" />
+                  </TouchableOpacity>
                 </View>
               </TouchableOpacity>)}
           </View>
@@ -1166,12 +1313,44 @@ export default function ProfileScreen({
                 <View style={styles.answerStats}>
                   <View style={styles.questionStatItem}>
                     <Ionicons name="thumbs-up-outline" size={12} color="#9ca3af" />
-                    <Text style={styles.questionStatText}>{a.likes}</Text>
+                    <Text style={styles.questionStatText}>{formatNumber(a.likes)}</Text>
                   </View>
                   <View style={styles.questionStatItem}>
                     <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
-                    <Text style={styles.questionStatText}>{a.comments}</Text>
+                    <Text style={styles.questionStatText}>{formatNumber(a.comments)}</Text>
                   </View>
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    showAppAlert('转发', '转发功能');
+                  }}>
+                    <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
+                    <Text style={styles.questionStatText}>{formatNumber(a.shares)}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    showAppAlert('收藏', '收藏功能');
+                  }}>
+                    <Ionicons name="star-outline" size={12} color="#9ca3af" />
+                    <Text style={styles.questionStatText}>{formatNumber(a.collects)}</Text>
+                  </TouchableOpacity>
+                  <View style={{flex: 1}} />
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    showAppAlert('踩', '踩功能');
+                  }}>
+                    <Ionicons name="thumbs-down-outline" size={12} color="#9ca3af" />
+                    <Text style={styles.questionStatText}>{formatNumber(a.dislikes)}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    navigation.navigate('Report', {
+                      type: 'answer',
+                      targetType: 2,
+                      targetId: a.id
+                    });
+                  }}>
+                    <Ionicons name="flag-outline" size={12} color="#ef4444" />
+                  </TouchableOpacity>
                 </View>
               </TouchableOpacity>)}
           </View>
@@ -1206,6 +1385,38 @@ export default function ProfileScreen({
                   <View style={styles.favoriteItemMeta}>
                     <Text style={styles.favoriteItemAuthor}>{item.author}</Text>
                     <Text style={styles.favoriteItemTime}>{item.time}</Text>
+                    <View style={{flex: 1}} />
+                    <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                      e.stopPropagation();
+                      showAppAlert('转发', '转发功能');
+                    }}>
+                      <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
+                      <Text style={styles.questionStatText}>0</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                      e.stopPropagation();
+                      showAppAlert('取消收藏', '取消收藏功能');
+                    }}>
+                      <Ionicons name="star" size={12} color="#f59e0b" />
+                      <Text style={[styles.questionStatText, {color: '#f59e0b'}]}>1</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                      e.stopPropagation();
+                      showAppAlert('踩', '踩功能');
+                    }}>
+                      <Ionicons name="thumbs-down-outline" size={12} color="#9ca3af" />
+                      <Text style={styles.questionStatText}>0</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                      e.stopPropagation();
+                      navigation.navigate('Report', {
+                        type: favoritesTab === 'questions' ? 'question' : favoritesTab === 'answers' ? 'answer' : 'comment',
+                        targetType: favoritesTab === 'questions' ? 1 : favoritesTab === 'answers' ? 2 : 5,
+                        targetId: item.id
+                      });
+                    }}>
+                      <Ionicons name="flag-outline" size={12} color="#ef4444" />
+                    </TouchableOpacity>
                   </View>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#d1d5db" />

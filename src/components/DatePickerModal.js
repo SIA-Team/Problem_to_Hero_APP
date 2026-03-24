@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { modalTokens } from './modalTokens';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 
 /**
  * 日期选择弹窗组件（纯 JS 实现，无需原生包）
  * 底部弹出式滚轮选择器
  */
 export default function DatePickerModal({ visible, onClose, currentDate, onSelect }) {
-  const insets = useSafeAreaInsets();
+  const bottomSafeInset = useBottomSafeInset(20);
   
   // 解析当前日期
   const parseDate = (dateStr) => {
@@ -93,6 +93,8 @@ export default function DatePickerModal({ visible, onClose, currentDate, onSelec
       animationType="slide"
       transparent={true}
       onRequestClose={onClose}
+      statusBarTranslucent
+      navigationBarTranslucent
     >
       <TouchableOpacity
         style={styles.overlay}
@@ -101,7 +103,7 @@ export default function DatePickerModal({ visible, onClose, currentDate, onSelec
       >
         <TouchableOpacity
           activeOpacity={1}
-          style={[styles.modalContainer, { paddingBottom: insets.bottom || 20 }]}
+          style={[styles.modalContainer, { paddingBottom: bottomSafeInset }]}
           onPress={(e) => e.stopPropagation()}
         >
           {/* 头部操作栏 */}

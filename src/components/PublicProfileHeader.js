@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Platform, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,7 +9,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
  * 中间：留空
  * 右侧：转发按钮
  */
-export default function PublicProfileHeader({ bio, onBack, onShare }) {
+export default function PublicProfileHeader({
+  bio,
+  onBack,
+  onShare,
+  showBlacklist = false,
+  onBlacklist,
+  blacklistLabel = '加入黑名单',
+  blacklistDisabled = false,
+}) {
   const insets = useSafeAreaInsets();
   
   // 计算安全的顶部内边距
@@ -24,6 +32,12 @@ export default function PublicProfileHeader({ bio, onBack, onShare }) {
     }
   };
 
+  const handleBlacklist = () => {
+    if (onBlacklist) {
+      onBlacklist();
+    }
+  };
+
   return (
     <View style={[styles.container, { paddingTop: safeTopPadding + 12 }]}>
       {/* 返回按钮 */}
@@ -35,9 +49,14 @@ export default function PublicProfileHeader({ bio, onBack, onShare }) {
       <View style={styles.centerSection} />
 
       {/* 转发按钮 */}
-      <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-        <Ionicons name="arrow-redo-outline" size={24} color="#1f2937" />
-      </TouchableOpacity>
+      <View style={styles.actions}>
+        {showBlacklist ? <TouchableOpacity style={[styles.blacklistButton, blacklistDisabled && styles.blacklistButtonDisabled]} onPress={handleBlacklist} disabled={blacklistDisabled}>
+            <Text style={styles.blacklistText}>{blacklistLabel}</Text>
+          </TouchableOpacity> : null}
+        <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
+          <Ionicons name="arrow-redo-outline" size={24} color="#1f2937" />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -65,10 +84,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 16,
   },
-  shareButton: {
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    minWidth: 40,
+  },
+  actionButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
-    alignItems: 'flex-end',
+    alignItems: 'center',
+  },
+  blacklistButton: {
+    minWidth: 88,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  blacklistButtonDisabled: {
+    opacity: 0.6,
+  },
+  blacklistText: {
+    fontSize: 14,
+    color: '#1f2937',
+    fontWeight: '500',
   },
 });

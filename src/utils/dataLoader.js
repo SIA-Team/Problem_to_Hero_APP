@@ -172,6 +172,19 @@ const transformApiDataToHomeFormat = (apiData) => {
   }
   
   return filteredData.map((item, index) => {
+    const normalizedPublicUserId =
+      item.publicUserId ??
+      item.authorUserId ??
+      item.authorId ??
+      item.author_id ??
+      item.userId ??
+      item.user_id ??
+      item.createBy ??
+      item.create_by ??
+      item.creatorId ??
+      item.creator_id ??
+      item.uid ??
+      null;
     // 生成一个合理的时间（如果API没有提供时间字段）
     let timeDisplay = '刚刚';
     
@@ -186,6 +199,9 @@ const transformApiDataToHomeFormat = (apiData) => {
     // 基础数据转换
     const transformedItem = {
       id: item.id,
+      publicUserId: normalizedPublicUserId,
+      authorId: item.authorId ?? item.author_id ?? normalizedPublicUserId,
+      userId: item.userId ?? item.user_id ?? normalizedPublicUserId,
       title: processTitle(item.title) || '无标题',
       author: item.authorNickName || item.userName || item.userNickname || '匿名用户',
       authorNickName: item.authorNickName || item.userName || item.userNickname || null,

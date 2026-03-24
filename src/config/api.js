@@ -1,4 +1,4 @@
-import ENV, { shouldUseMock, getApiServerUrl } from './env';
+import ENV, { getApiServerUrl } from './env';
 
 // 微服务配置
 export const SERVICES = {
@@ -43,7 +43,7 @@ export const API_ENDPOINTS = {
     TOKEN_LOGIN: buildApiPath(SERVICES.USER, '/app/user/auth/token-login'),  // Token 自动登录
     REGISTER: buildApiPath(SERVICES.USER, '/app/user/auth/register'),
     LOGOUT: buildApiPath(SERVICES.USER, '/app/user/auth/logout'),
-    REFRESH_TOKEN: '/auth/refresh',
+    REFRESH_TOKEN: buildApiPath(SERVICES.USER, '/auth/refresh'),
     VERIFY_CODE: '/auth/verify-code',
     RESET_PASSWORD: '/auth/reset-password',
     CHANGE_PASSWORD: buildApiPath(SERVICES.USER, '/app/user/auth/password'),
@@ -53,6 +53,10 @@ export const API_ENDPOINTS = {
   USER: {
     PROFILE: buildApiPath(SERVICES.USER, '/app/user/profile'),
     PROFILE_ME: buildApiPath(SERVICES.USER, '/app/user/profile/me'),  // 获取当前用户详细信息
+    PUBLIC_PROFILE: buildApiPath(SERVICES.USER, '/app/user/profile/public/:userId'),
+    QUERY_BLACKLIST: buildApiPath(SERVICES.USER, '/app/user/settings/queryBlacklist'),
+    ADD_BLACKLIST: buildApiPath(SERVICES.USER, '/app/user/settings/addBlacklist'),
+    REMOVE_BLACKLIST: buildApiPath(SERVICES.USER, '/app/user/settings/removeBlacklist/:blockedUserId'),
     UPDATE_PROFILE: buildApiPath(SERVICES.USER, '/app/user/profile'),
     UPDATE_USERNAME: buildApiPath(SERVICES.USER, '/app/user/profile/username'),  // 修改用户名
     AVATAR: buildApiPath(SERVICES.USER, '/app/user/profile/avatar'),  // 上传头像
@@ -63,14 +67,14 @@ export const API_ENDPOINTS = {
   },
 
   WALLET: {
-    BALANCE: '/app/wallet/balance',
+    BALANCE: buildApiPath(SERVICES.USER, '/app/wallet/balance'),
   },
 
   GROUP: {
-    PUBLIC_QUESTION: '/app/group/public/question/:questionId',
-    PUBLIC_QUESTION_IDS: '/app/group/public/ids/question/:questionId',
-    MESSAGE_LIST: '/app/group-message/list',
-    MESSAGE_CREATE: '/app/group-message/create',
+    PUBLIC_QUESTION: buildApiPath(SERVICES.USER, '/app/group/public/question/:questionId'),
+    PUBLIC_QUESTION_IDS: buildApiPath(SERVICES.USER, '/app/group/public/ids/question/:questionId'),
+    MESSAGE_LIST: buildApiPath(SERVICES.USER, '/app/group-message/list'),
+    MESSAGE_CREATE: buildApiPath(SERVICES.USER, '/app/group-message/create'),
   },
 
   // 问题相关
@@ -98,6 +102,7 @@ export const API_ENDPOINTS = {
     DELETE: '/questions/:id',
     DRAFT: buildApiPath(SERVICES.CONTENT, '/app/content/question/draft'),  // 保存草稿
     DRAFTS: buildApiPath(SERVICES.CONTENT, '/app/content/question/drafts'),  // 获取草稿列表
+    BROWSE_MY: buildApiPath(SERVICES.CONTENT, '/app/content/browse/my'),  // 获取我的浏览历史
     HOT: '/questions/hot',
     RANKING: '/questions/ranking',
     SEARCH: '/questions/search',
@@ -135,7 +140,7 @@ export const API_ENDPOINTS = {
   
   // 团队相关
   TEAM: {
-    PUBLIC_QUESTION: '/app/team/public/question/:questionId',
+    PUBLIC_QUESTION: buildApiPath(SERVICES.USER, '/app/team/public/question/:questionId'),
     LIST: '/teams',
     DETAIL: '/teams/:id',
     CREATE: '/teams',
@@ -158,7 +163,8 @@ export const API_ENDPOINTS = {
     CREATE: '/emergency',
     DETAIL: '/emergency/:id',
     RESPOND: '/emergency/:id/respond',
-    QUOTA: '/app/content/emergency-help/quota',
+    QUOTA: buildApiPath(SERVICES.USER, '/app/content/emergency-help/quota'),
+    PUBLISH: buildApiPath(SERVICES.USER, '/app/content/emergency-help/publish'),
   },
   
   // Twitter 相关

@@ -3,7 +3,8 @@ import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import NetInfo from '@react-native-community/netinfo';
-import ENV from '../config/env';
+import { getApiServerUrl } from '../config/env';
+import { API_ENDPOINTS, getFullApiUrl } from '../config/api';
 import DeviceInfo from '../utils/deviceInfo';
 import authApi from '../services/api/authApi';
 
@@ -16,6 +17,8 @@ export default function NetworkTestScreen({
 }) {
   const [testing, setTesting] = useState(false);
   const [results, setResults] = useState([]);
+  const registerTestUrl = getFullApiUrl(API_ENDPOINTS.AUTH.REGISTER);
+  const currentServerUrl = getApiServerUrl(API_ENDPOINTS.AUTH.REGISTER);
   const addResult = (title, status, message, details = null) => {
     setResults(prev => [...prev, {
       title,
@@ -43,7 +46,7 @@ export default function NetworkTestScreen({
       // 测试 2: 服务器连接测试
       addResult('服务器连接测试', 'testing', '测试中...');
       try {
-        const response = await fetch(`${ENV.apiUrl}/app/user/auth/register`, {
+        const response = await fetch(registerTestUrl, {
           method: 'GET',
           // 故意用 GET 测试连接
           timeout: 10000
@@ -52,18 +55,18 @@ export default function NetworkTestScreen({
           // 返回 500 说明服务器可访问（只是不支持 GET）
           addResult('服务器连接测试', 'success', '服务器可访问', {
             status: response.status,
-            url: `${ENV.apiUrl}/app/user/auth/register`
+            url: registerTestUrl
           });
         } else {
           addResult('服务器连接测试', 'warning', `服务器响应: ${response.status}`, {
             status: response.status,
-            url: `${ENV.apiUrl}/app/user/auth/register`
+            url: registerTestUrl
           });
         }
       } catch (error) {
         addResult('服务器连接测试', 'error', `无法连接: ${error.message}`, {
           error: error.message,
-          url: `${ENV.apiUrl}/app/user/auth/register`
+          url: registerTestUrl
         });
         setTesting(false);
         return;
@@ -186,7 +189,7 @@ export default function NetworkTestScreen({
       {/* Server Info */}
       <View style={styles.serverInfo}>
         <Text style={styles.serverInfoLabel}>服务器地址:</Text>
-        <Text style={styles.serverInfoValue}>{ENV.apiUrl}</Text>
+        <Text style={styles.serverInfoValue}>{currentServerUrl}</Text>
       </View>
     </SafeAreaView>;
 }

@@ -62,7 +62,7 @@ export default function ServerSwitcher() {
   return <View style={styles.container}>
       <View style={styles.header}>
         <Ionicons name="server-outline" size={18} color="#6b7280" />
-        <Text style={styles.title}>开发工具 - 服务器切换</Text>
+        <Text style={styles.title}>服务器设置</Text>
       </View>
       
       <View style={styles.serverList}>

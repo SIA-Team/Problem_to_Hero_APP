@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, Modal, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { modalTokens } from './modalTokens';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 
 /**
  * 性别选择弹窗组件（底部弹出式 ActionSheet 风格）
@@ -13,7 +13,7 @@ export default function GenderPickerModal({
   currentGender,
   onSelect
 }) {
-  const insets = useSafeAreaInsets();
+  const bottomSafeInset = useBottomSafeInset(20);
   const genderOptions = [{
     value: '男',
     label: '男'
@@ -28,10 +28,10 @@ export default function GenderPickerModal({
     onSelect(value);
     onClose();
   };
-  return <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
+  return <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} style={[styles.modalContainer, {
-        paddingBottom: insets.bottom || 20
+        paddingBottom: bottomSafeInset
       }]} onPress={e => e.stopPropagation()}>
           {/* 标题 */}
           <View style={styles.header}>

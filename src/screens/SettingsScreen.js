@@ -755,7 +755,8 @@ export default function SettingsScreen({
               <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem} onPress={handleBindPhone}>
+            {/* 绑定手机功能已隐藏 */}
+            {/* <TouchableOpacity style={styles.menuItem} onPress={handleBindPhone}>
               <View style={styles.menuLeft}>
                 <Ionicons name="phone-portrait-outline" size={22} color="#6b7280" />
                 <Text style={styles.menuLabel}>{t('screens.settings.account.bindPhone')}</Text>
@@ -766,7 +767,7 @@ export default function SettingsScreen({
                 </Text>
                 <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
               </View>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
 
             <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]} onPress={handleBindEmail}>
               <View style={styles.menuLeft}>
@@ -879,7 +880,7 @@ export default function SettingsScreen({
             }} thumbColor={allowMessage ? '#ef4444' : '#f3f4f6'} />
             </View>
 
-            <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]} onPress={() => showAppAlert(t('screens.settings.alerts.blacklist.title'), t('screens.settings.alerts.blacklist.message'))}>
+            <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]} onPress={() => navigation.navigate('Blacklist')}>
               <View style={styles.menuLeft}>
                 <Ionicons name="ban-outline" size={22} color="#6b7280" />
                 <Text style={styles.menuLabel}>{t('screens.settings.privacy.blacklist')}</Text>
@@ -893,16 +894,27 @@ export default function SettingsScreen({
         <View style={styles.sectionGroup}>
           <Text style={styles.groupTitle}>{t('screens.settings.general.groupTitle')}</Text>
           <View style={styles.section}>
-            {/* 开发阶段：服务器切换 */}
-            {Boolean(__DEV__) && <TouchableOpacity style={styles.menuItem} onPress={() => setShowServerSwitcher(true)}>
+            {/* 服务器切换 */}
+            <TouchableOpacity style={styles.menuItem} onPress={() => setShowServerSwitcher(true)}>
                 <View style={styles.menuLeft}>
                   <Ionicons name="server-outline" size={22} color="#ef4444" />
                   <Text style={[styles.menuLabel, {
                 color: '#ef4444'
-              }]}>切换服务器 (开发)</Text>
+              }]}>切换服务器</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
-              </TouchableOpacity>}
+              </TouchableOpacity>
+
+            {/* API 调试 */}
+            <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('ApiDebug')}>
+                <View style={styles.menuLeft}>
+                  <Ionicons name="bug-outline" size={22} color="#3b82f6" />
+                  <Text style={[styles.menuLabel, {
+                color: '#3b82f6'
+              }]}>API 调试</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
+              </TouchableOpacity>
 
             <TouchableOpacity style={styles.menuItem} onPress={() => showAppAlert(t('screens.settings.alerts.clearCache.title'), t('screens.settings.alerts.clearCache.message'), [{
             text: t('common.cancel'),
@@ -968,19 +980,7 @@ export default function SettingsScreen({
               <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem} onPress={() => showAppAlert(t('screens.settings.alerts.customerService.title'), t('screens.settings.alerts.customerService.message'))}>
-              <View style={styles.menuLeft}>
-                <Ionicons name="chatbubbles-outline" size={22} color="#6b7280" />
-                <Text style={styles.menuLabel}>{t('screens.settings.help.customerService')}</Text>
-              </View>
-              <View style={styles.menuRight}>
-                <View style={styles.onlineDot} />
-                <Text style={styles.onlineText}>{t('screens.settings.help.online')}</Text>
-                <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]} onPress={() => showAppAlert(t('screens.settings.alerts.feedback.title'), t('screens.settings.alerts.feedback.message'))}>
+            <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]} onPress={() => navigation.navigate('Feedback')}>
               <View style={styles.menuLeft}>
                 <Ionicons name="create-outline" size={22} color="#6b7280" />
                 <Text style={styles.menuLabel}>{t('screens.settings.help.feedback')}</Text>
@@ -1029,10 +1029,10 @@ export default function SettingsScreen({
               <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('DeviceInfo')}>
+            <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('UpdateDebug')}>
               <View style={styles.menuLeft}>
-                <Ionicons name="phone-portrait-outline" size={22} color="#6b7280" />
-                <Text style={styles.menuLabel}>设备信息</Text>
+                <Ionicons name="cloud-download-outline" size={22} color="#6b7280" />
+                <Text style={styles.menuLabel}>热更新调试</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
             </TouchableOpacity>

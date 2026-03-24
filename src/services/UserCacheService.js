@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import userApi from './api/userApi';
-import { shouldUseMock } from '../config/env';
 
 /**
  * 用户信息缓存服务
@@ -10,12 +9,9 @@ class UserCacheService {
   // 缓存键名
   static CACHE_KEY = 'userProfileCache';
   
-  // 缓存过期时间
-  // Mock 环境：24小时（避免频繁刷新导致数据变化）
-  // 真实环境：30分钟
+  // 缓存过期时间：30分钟
   static getCacheExpiry() {
-    const useMock = shouldUseMock('/app/user/profile/me');
-    return useMock ? 24 * 60 * 60 * 1000 : 30 * 60 * 1000;
+    return 30 * 60 * 1000;
   }
   
   static get CACHE_EXPIRY() {
@@ -156,7 +152,6 @@ class UserCacheService {
 
   /**
    * 大厂级别策略：启动时读缓存 + 后台刷新
-   * Mock 环境：优先使用缓存，减少刷新频率
    * @param {Function} onCacheLoaded - 缓存加载完成回调
    * @param {Function} onFreshDataLoaded - 最新数据加载完成回调
    * @returns {Promise<void>}
@@ -169,18 +164,7 @@ class UserCacheService {
         onCacheLoaded(cachedProfile);
       }
       
-      // 2. Mock 环境：检查缓存是否过期，未过期则不刷新
-      const useMock = shouldUseMock('/app/user/profile/me');
-      if (useMock) {
-        const isExpired = await this.isCacheExpired();
-        if (!isExpired && cachedProfile) {
-          console.log('🔧 Mock 环境：使用缓存数据，跳过刷新');
-          return;
-        }
-        console.log('🔧 Mock 环境：缓存已过期或不存在，刷新数据');
-      }
-      
-      // 3. 后台静默刷新最新数据
+      // 2. 后台静默刷新最新数据
       const freshProfile = await this.fetchAndCacheUserProfile(true);
       
       if (freshProfile && onFreshDataLoaded) {

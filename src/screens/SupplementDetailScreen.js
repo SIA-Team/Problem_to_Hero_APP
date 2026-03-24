@@ -10,6 +10,9 @@ import WriteAnswerModal from '../components/WriteAnswerModal';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import { showToast } from '../utils/toast';
+import { formatNumber } from '../utils/numberFormatter';
+import { normalizeEntityId } from '../utils/jsonLongId';
+import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
 import answerApi from '../services/api/answerApi';
 import commentApi from '../services/api/commentApi';
 import questionApi from '../services/api/questionApi';
@@ -822,6 +825,7 @@ export default function SupplementDetailScreen({
   const {
     t
   } = useTranslation();
+  const openPublicProfile = (target, options = {}) => navigateToPublicProfile(navigation, target, options);
   const [activeTab, setActiveTab] = useState(TAB_KEYS.ANSWERS);
   const [sortFilter, setSortFilter] = useState(SORT_KEYS.FEATURED);
   const [liked, setLiked] = useState({});
@@ -1231,7 +1235,7 @@ export default function SupplementDetailScreen({
       targetId: Number(fallbackTarget.targetId ?? comment.targetId ?? supplementId ?? 0) || null,
       parentId: resolvedCommentId,
       replyToCommentId: resolvedCommentId,
-      replyToUserId: Number(comment.userId ?? comment.user_id ?? 0) || null,
+      replyToUserId: normalizeEntityId(comment.userId ?? comment.user_id),
       replyToUserName,
       threadRootId: Number(fallbackTarget.threadRootId ?? getCommentThreadRootId(resolvedCommentId) ?? resolvedCommentId) || resolvedCommentId,
       originalComment: normalizeCommentItem(comment, {
@@ -1265,7 +1269,7 @@ export default function SupplementDetailScreen({
       targetId: target?.targetId ?? supplementId ?? null,
       parentId: Number(target?.parentId ?? 0) || 0,
       replyToCommentId: Number(target?.replyToCommentId ?? 0) || 0,
-      replyToUserId: target?.replyToUserId !== undefined && target?.replyToUserId !== null ? Number(target.replyToUserId) || null : null,
+      replyToUserId: normalizeEntityId(target?.replyToUserId),
       replyToUserName: target?.replyToUserName ?? '',
       threadRootId: target?.threadRootId !== undefined && target?.threadRootId !== null ? Number(target.threadRootId) || null : null,
       originalComment: target?.originalComment ? normalizeCommentItem(target.originalComment, {
@@ -1411,7 +1415,7 @@ export default function SupplementDetailScreen({
     const isDisliked = commentDisliked[reply.id] ?? reply.disliked;
 
     return <View key={reply.id} style={styles.replyCard}>
-        <View style={styles.replyHeader}>
+        <TouchableOpacity style={styles.replyHeader} activeOpacity={0.7} onPress={() => openPublicProfile(reply)}>
           <Avatar uri={reply.userAvatar || reply.avatar} name={reply.userName || reply.userNickname || reply.author} size={24} />
           <View style={styles.replyAuthorMeta}>
             <View style={styles.replyAuthorLine}>
@@ -1424,7 +1428,7 @@ export default function SupplementDetailScreen({
           </View>
           <View style={{ flex: 1 }} />
           <Text style={styles.replyTime}>{reply.time}</Text>
-        </View>
+        </TouchableOpacity>
         <Text style={styles.replyText}>{reply.content}</Text>
         <View style={styles.replyActions}>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentLike(reply.id)} disabled={commentLikeLoading[reply.id]}>
@@ -1442,7 +1446,7 @@ export default function SupplementDetailScreen({
           </TouchableOpacity>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => showToast(t('screens.supplementDetail.alerts.forwardFunction'), 'info')}>
             <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
-            <Text style={styles.replyActionText}>{reply.shares || 0}</Text>
+            <Text style={styles.replyActionText}>{formatNumber(reply.shares || 0)}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentCollect(reply.id)} disabled={commentCollectLoading[reply.id]}>
             <Ionicons name={isCollected ? "star" : "star-outline"} size={12} color={isCollected ? "#f59e0b" : "#9ca3af"} />
@@ -1694,7 +1698,7 @@ export default function SupplementDetailScreen({
         payload.replyToCommentId = replyToCommentId;
       }
       if (commentComposerTarget?.replyToUserId) {
-        payload.replyToUserId = Number(commentComposerTarget.replyToUserId) || null;
+        payload.replyToUserId = commentComposerTarget.replyToUserId;
       }
       if (commentComposerTarget?.replyToUserName) {
         payload.replyToUserName = commentComposerTarget.replyToUserName;
@@ -2301,6 +2305,7 @@ export default function SupplementDetailScreen({
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.supplementSection}>
           <View style={styles.supplementHeader}>
+            <TouchableOpacity style={styles.supplementHeaderMain} activeOpacity={0.7} onPress={() => openPublicProfile(resolvedSupplementQuestion || routeSupplement)}>
             <Avatar uri={supplementDisplayAvatar} name={supplementDisplayAuthor} size={40} />
             <View style={styles.supplementAuthorInfo}>
               <View style={styles.supplementAuthorRow}>
@@ -2316,6 +2321,7 @@ export default function SupplementDetailScreen({
                 <Text style={styles.supplementTime}>路 {supplementDisplayTime}</Text>
               </View>
             </View>
+            </TouchableOpacity>
           </View>
           <Text style={styles.supplementContent}>{supplementDisplayContent}</Text>
           <View style={styles.supplementViewsRow}>
@@ -2335,11 +2341,13 @@ export default function SupplementDetailScreen({
             <Text style={styles.originalQuestionLabel}>{t('screens.supplementDetail.originalQuestion.label')}</Text>
           </View>
           <Text style={styles.originalQuestionTitle} numberOfLines={2}>{resolvedOriginalQuestion.title}</Text>
-          <View style={styles.originalQuestionFooter}>
+          <TouchableOpacity style={styles.originalQuestionFooter} activeOpacity={0.7} onPress={() => openPublicProfile(resolvedOriginalQuestion, {
+          allowAnonymous: false
+        })}>
             <Avatar uri={resolvedOriginalQuestion.avatar} name={resolvedOriginalQuestion.author} size={20} />
             <Text style={styles.originalQuestionAuthor}>{resolvedOriginalQuestion.author}</Text>
             <Text style={styles.originalQuestionTime}>路 {resolvedOriginalQuestion.time}</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.tabsSection}>
@@ -2406,7 +2414,10 @@ export default function SupplementDetailScreen({
             answer,
             defaultTab: 'supplements'
           })} activeOpacity={0.7}>
-                  <View style={styles.answerHeader}>
+                  <TouchableOpacity style={styles.answerHeader} activeOpacity={0.7} onPress={e => {
+                  e.stopPropagation();
+                  openPublicProfile(answer);
+                }}>
                     <Avatar uri={answer.userAvatar || answer.avatar} name={answer.userName || answer.userNickname || answer.author} size={40} />
                     <View style={styles.answerAuthorInfo}>
                       <View style={styles.answerAuthorRow}>
@@ -2415,7 +2426,7 @@ export default function SupplementDetailScreen({
                       </View>
                       <Text style={styles.answerAuthorTitle}>{answer.title || ' '}</Text>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                   <Text style={styles.answerContent}>{answer.content}</Text>
                   <View style={styles.answerFooter}>
                     <View style={styles.answerFooterLeft}>
@@ -2608,14 +2619,14 @@ export default function SupplementDetailScreen({
             const isCollected = commentBookmarked[comment.id] ?? comment.collected;
             const isDisliked = commentDisliked[comment.id] ?? comment.disliked;
             return <View key={comment.id} style={styles.commentCard}>
-                    <View style={styles.commentHeader}>
+                    <TouchableOpacity style={styles.commentHeader} activeOpacity={0.7} onPress={() => openPublicProfile(comment)}>
                       <Avatar uri={comment.userAvatar || comment.avatar} name={comment.userName || comment.userNickname || comment.author} size={24} />
                       <Text style={styles.commentAuthor}>{comment.userName || comment.userNickname || comment.author}</Text>
                       <View style={{
                     flex: 1
                   }} />
                       <Text style={styles.commentTime}>{comment.time}</Text>
-                    </View>
+                    </TouchableOpacity>
                     <View style={styles.commentContent}>
                       <Text style={styles.commentText}>{comment.content}</Text>
                       <View style={styles.commentFooter}>
@@ -2831,14 +2842,14 @@ export default function SupplementDetailScreen({
             </View>
 
             {Boolean(currentReplyComment) && <View style={styles.originalCommentCard}>
-                <View style={styles.originalCommentHeader}>
+                <TouchableOpacity style={styles.originalCommentHeader} activeOpacity={0.7} onPress={() => openPublicProfile(currentReplyComment)}>
                   <Avatar uri={currentReplyComment.userAvatar || currentReplyComment.avatar} name={currentReplyComment.userName || currentReplyComment.userNickname || currentReplyComment.author} size={32} />
                   <Text style={styles.originalCommentAuthor}>
                     {currentReplyComment.userName || currentReplyComment.userNickname || currentReplyComment.author}
                   </Text>
                   <View style={{ flex: 1 }} />
                   <Text style={styles.originalCommentTime}>{currentReplyComment.time}</Text>
-                </View>
+                </TouchableOpacity>
                 <Text style={styles.originalCommentText}>{currentReplyComment.content}</Text>
               </View>}
 
@@ -2939,6 +2950,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: 12
+  },
+  supplementHeaderMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start'
   },
   supplementAvatar: {
     width: 44,

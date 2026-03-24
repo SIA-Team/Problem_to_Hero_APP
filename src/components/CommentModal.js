@@ -3,6 +3,7 @@ import { View, Text, Modal, TouchableOpacity, TextInput, StyleSheet } from 'reac
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import IdentitySelector from './IdentitySelector';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 
 const CommentModal = ({ 
   visible, 
@@ -11,6 +12,7 @@ const CommentModal = ({
   placeholder = "写下你的评论...", 
   title = "写评论" 
 }) => {
+  const bottomSafeInset = useBottomSafeInset();
   const [text, setText] = useState('');
   const [selectedIdentity, setSelectedIdentity] = useState('personal');
 
@@ -23,8 +25,14 @@ const CommentModal = ({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <SafeAreaView style={styles.container}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      statusBarTranslucent
+      navigationBarTranslucent
+    >
+      <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
             <Ionicons name="close" size={24} color="#1f2937" />
@@ -57,7 +65,14 @@ const CommentModal = ({
             onIdentityChange={setSelectedIdentity}
           />
           
-          <View style={styles.bottomToolbar}>
+          <View
+            style={[
+              styles.bottomToolbar,
+              {
+                paddingBottom: bottomSafeInset + 8,
+              },
+            ]}
+          >
             <View style={styles.toolbarLeft}>
               <TouchableOpacity style={styles.toolbarBtn}>
                 <Ionicons name="image-outline" size={24} color="#6b7280" />
@@ -131,7 +146,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 20,
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
   },

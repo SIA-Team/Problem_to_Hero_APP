@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
 import { showToast } from '../utils/toast';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 
 export default function WriteAnswerModal({
   visible,
@@ -27,6 +28,7 @@ export default function WriteAnswerModal({
   wordLimit = 2000,
   submitting = false,
 }) {
+  const bottomSafeInset = useBottomSafeInset();
   const [showImagePicker, setShowImagePicker] = useState(false);
 
   const canSubmit = !!text.trim() && !submitting;
@@ -57,8 +59,13 @@ export default function WriteAnswerModal({
 
   return (
     <>
-      <Modal visible={visible} animationType="slide">
-        <SafeAreaView style={styles.answerModal}>
+      <Modal
+        visible={visible}
+        animationType="slide"
+        statusBarTranslucent
+        navigationBarTranslucent
+      >
+        <SafeAreaView style={styles.answerModal} edges={['top']}>
           <View style={styles.answerModalHeader}>
             <TouchableOpacity onPress={onClose} style={styles.answerCloseBtn}>
               <Ionicons name="close" size={26} color="#333" />
@@ -132,7 +139,14 @@ export default function WriteAnswerModal({
             </View>
           </ScrollView>
 
-          <View style={styles.answerToolbar}>
+          <View
+            style={[
+              styles.answerToolbar,
+              {
+                paddingBottom: bottomSafeInset + 8,
+              },
+            ]}
+          >
             <View style={styles.answerToolsLeft}>
               <TouchableOpacity style={styles.answerToolItem} onPress={handleOpenImagePicker}>
                 <Ionicons name="image-outline" size={24} color="#666" />

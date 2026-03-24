@@ -1,240 +1,409 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  TouchableOpacity,
   ActivityIndicator,
-  SafeAreaView,
+  FlatList,
   RefreshControl,
+  SafeAreaView,
+  Share,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from '../i18n/useTranslation';
-import ProfileHeader from '../components/ProfileHeader';
 import PublicProfileHeader from '../components/PublicProfileHeader';
 import ContentTabs from '../components/ContentTabs';
 import QuestionListItem from '../components/QuestionListItem';
 import AnswerListItem from '../components/AnswerListItem';
 import FavoriteListItem from '../components/FavoriteListItem';
 import UserContentSearchModal from '../components/UserContentSearchModal';
+import PublicProfileHero from '../components/PublicProfileHero';
+import userApi from '../services/api/userApi';
+import blacklistApi from '../services/api/blacklistApi';
+import { addBlockedUser, removeBlockedUser } from '../services/blacklistState';
+import UserCacheService from '../services/UserCacheService';
+import { showAppAlert } from '../utils/appAlert';
+import { showToast } from '../utils/toast';
+import { invalidateBlacklistRelatedCaches } from '../utils/blacklistContent';
 
-/**
- * @typedef {Object} UserVerification
- * @property {'none' | 'personal' | 'enterprise' | 'government'} type - 认证类型
- * @property {boolean} verified - 是否已认证
- * @property {string | null} verifiedAt - 认证时间
- * @property {string} verificationText - 认证信息文字
- */
+const EMPTY_TAB_PAGES = {
+  questions: 1,
+  answers: 1,
+  favorites: 1,
+};
 
-/**
- * @typedef {Object} UserMCN
- * @property {boolean} hasMcn - 是否有MCN
- * @property {string | null} mcnName - MCN名称
- * @property {string | null} mcnId - MCN ID
- */
+const EMPTY_HAS_MORE = {
+  questions: false,
+  answers: false,
+  favorites: false,
+};
 
-/**
- * @typedef {Object} UserStats
- * @property {number} followingCount - 关注数
- * @property {number} followersCount - 粉丝数
- * @property {number} likesCount - 获赞数
- */
+const resolveProfilePayload = response => {
+  if (!response || typeof response !== 'object') {
+    return {};
+  }
 
-/**
- * @typedef {Object} UserProfile
- * @property {string} id - 用户ID
- * @property {string} username - 用户名
- * @property {string} avatar - 头像URL
- * @property {string} bio - 用户简介
- * @property {string} location - 地区
- * @property {string} occupation - 职业
- * @property {'male' | 'female' | 'other' | null} gender - 性别
- * @property {UserVerification} verification - 认证信息
- * @property {string[]} tags - 用户标签
- * @property {UserMCN} mcn - MCN信息
- * @property {UserStats} stats - 统计数据
- * @property {number} influence - 影响力
- * @property {number} wisdomIndex - 智慧指数
- */
+  if (
+    response.data &&
+    typeof response.data === 'object' &&
+    !Array.isArray(response.data) &&
+    response.data.userBaseInfo &&
+    typeof response.data.userBaseInfo === 'object'
+  ) {
+    return response.data.userBaseInfo;
+  }
 
-/**
- * @typedef {Object} ContentItem
- * @property {string} id - 内容ID
- * @property {'article' | 'video' | 'micropost' | 'repost'} type - 内容类型
- * @property {string} createdAt - 创建时间
- * @property {string} [title] - 标题（文章/视频）
- * @property {string} [coverImage] - 封面图（文章）
- * @property {string} [summary] - 摘要（文章）
- * @property {string} [videoUrl] - 视频URL
- * @property {number} [videoDuration] - 视频时长（秒）
- * @property {string} [videoThumbnail] - 视频缩略图
- * @property {string} [content] - 内容文字（微头条）
- * @property {string[]} [images] - 配图（微头条）
- * @property {ContentItem} [originalContent] - 原内容（转发）
- * @property {string} [repostComment] - 转发评论
- * @property {number} viewsCount - 浏览数
- * @property {number} commentsCount - 评论数
- * @property {number} likesCount - 点赞数
- * @property {number} sharesCount - 分享数
- * @property {number} collectsCount - 收藏数
- */
+  if (response.data && typeof response.data === 'object' && !Array.isArray(response.data)) {
+    return response.data;
+  }
 
-/**
- * @typedef {Object} ShowcaseItem
- * @property {string} id - 橱窗ID
- * @property {string} title - 标题
- * @property {string} coverImage - 封面图
- * @property {string} description - 描述
- * @property {'product' | 'content' | 'course'} type - 类型
- * @property {number} [price] - 价格
- */
+  if (response.userBaseInfo && typeof response.userBaseInfo === 'object') {
+    return response.userBaseInfo;
+  }
 
-/**
- * 可分享用户主页组件
- * @param {Object} props
- * @param {Object} props.navigation - 导航对象
- * @param {Object} props.route - 路由对象
- * @param {Object} props.route.params - 路由参数
- * @param {string} props.route.params.userId - 用户ID
- */
+  return response;
+};
+
+const normalizeVerification = profile => {
+  const verifiedValue = profile?.verified;
+  const numericVerified = Number(verifiedValue);
+  const verified =
+    verifiedValue === true ||
+    numericVerified === 1 ||
+    (Number.isFinite(numericVerified) && numericVerified > 0);
+
+  return {
+    verified,
+    type: profile?.verificationType || profile?.verifyType || 'personal',
+    text: profile?.verificationText || (verified ? '已认证' : ''),
+  };
+};
+
+const normalizeGender = profile => {
+  const rawGender = profile?.gender ?? profile?.sex;
+
+  if (rawGender === 'male' || rawGender === '0' || rawGender === 0) {
+    return 'male';
+  }
+
+  if (rawGender === 'female' || rawGender === '1' || rawGender === 1) {
+    return 'female';
+  }
+
+  return null;
+};
+
+const buildProfileViewModel = (profile, fallbackUserId) => {
+  const resolvedUserId = String(profile?.userId ?? profile?.id ?? fallbackUserId ?? '');
+  const likeCount = Number(profile?.likeCount ?? 0) || 0;
+  const fanCount = Number(profile?.fanCount ?? 0) || 0;
+  const followCount = Number(profile?.followCount ?? 0) || 0;
+  const answerCount = Number(profile?.answerCount ?? 0) || 0;
+  const verification = normalizeVerification(profile);
+
+  return {
+    id: resolvedUserId,
+    userId: resolvedUserId,
+    username:
+      profile?.nickName ||
+      profile?.nickname ||
+      profile?.userName ||
+      profile?.authorNickName ||
+      profile?.username ||
+      '匿名用户',
+    avatar: profile?.avatar || profile?.authorAvatar || profile?.userAvatar || null,
+    coverImage: profile?.coverImage || profile?.cover || profile?.backgroundImage || null,
+    bio: profile?.signature || profile?.bio || '',
+    occupation: profile?.profession || profile?.occupation || '',
+    location: profile?.location || '',
+    gender: normalizeGender(profile),
+    verification,
+    statsItems: [
+      { key: 'likes', label: '点赞', value: likeCount, pressType: 'likes' },
+      { key: 'followers', label: '粉丝', value: fanCount, pressType: 'followers' },
+      { key: 'following', label: '关注', value: followCount, pressType: 'following' },
+      { key: 'answers', label: '回答', value: answerCount, pressType: 'answers' },
+    ],
+  };
+};
+
+const resolveBlacklistStatus = (blacklistItems, targetUserId) => {
+  const normalizedTargetUserId = String(targetUserId ?? '');
+
+  if (!normalizedTargetUserId || !Array.isArray(blacklistItems)) {
+    return false;
+  }
+
+  return blacklistItems.some(item => {
+    const normalizedBlockedUserId = String(item?.blockedUserId ?? item?.blockedUid ?? item?.userId ?? '');
+    return normalizedBlockedUserId === normalizedTargetUserId;
+  });
+};
+
+const normalizeBlockedUserId = value => {
+  const normalizedValue = String(value ?? '').trim();
+  return /^\d+$/.test(normalizedValue) ? normalizedValue : '';
+};
+
 export default function PublicProfileScreen({ navigation, route }) {
   const { t } = useTranslation();
   const { userId } = route.params;
-
-  // 用户数据状态
-  const [userData, setUserData] = useState(/** @type {UserProfile | null} */ (null));
-  
-  // 橱窗数据状态
-  const [showcaseData, setShowcaseData] = useState(/** @type {ShowcaseItem[]} */ ([]));
-  
-  // 内容数据状态 - 为每个标签单独缓存数据
-  const [questionsData, setQuestionsData] = useState(/** @type {ContentItem[]} */ ([]));
-  const [answersData, setAnswersData] = useState(/** @type {ContentItem[]} */ ([]));
-  const [favoritesData, setFavoritesData] = useState(/** @type {ContentItem[]} */ ([]));
-  
-  const [activeTab, setActiveTab] = useState(/** @type {'questions' | 'answers' | 'favorites'} */ ('questions'));
-  
-  // 加载状态 - 为每个标签单独记录
-  const [loadedTabs, setLoadedTabs] = useState(/** @type {Set<string>} */ (new Set()));
+  const [userData, setUserData] = useState(null);
+  const [activeTab, setActiveTab] = useState('questions');
+  const [questionsData, setQuestionsData] = useState([]);
+  const [answersData, setAnswersData] = useState([]);
+  const [favoritesData, setFavoritesData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  
-  // 分页状态 - 为每个标签单独记录
-  const [tabPages, setTabPages] = useState({
-    questions: 1,
-    answers: 1,
-    favorites: 1,
-  });
-  const [tabHasMore, setTabHasMore] = useState({
-    questions: true,
-    answers: true,
-    favorites: true,
-  });
-  
-  // 错误状态
-  const [error, setError] = useState(/** @type {string | null} */ (null));
-  
-  // 关注状态
+  const [loadedTabs, setLoadedTabs] = useState(new Set());
+  const [tabPages, setTabPages] = useState(EMPTY_TAB_PAGES);
+  const [tabHasMore, setTabHasMore] = useState(EMPTY_HAS_MORE);
+  const [error, setError] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
-  
-  // 搜索模态框状态
+  const [isBlacklisted, setIsBlacklisted] = useState(false);
+  const [isBlacklistSubmitting, setIsBlacklistSubmitting] = useState(false);
   const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
-  // 加载用户数据
+  const isOwnProfile = useMemo(
+    () => String(currentUserId || '') !== '' && String(currentUserId) === String(userId),
+    [currentUserId, userId]
+  );
+
   useEffect(() => {
     loadUserData();
   }, [userId]);
 
-  // 当标签切换时，检查是否需要加载数据
   useEffect(() => {
+    if (isBlacklisted) {
+      return;
+    }
+
     if (!loadedTabs.has(activeTab)) {
       loadContentData(activeTab, 1);
     }
-  }, [activeTab]);
+  }, [activeTab, loadedTabs, isBlacklisted]);
 
-  /**
-   * 加载用户数据
-   */
   const loadUserData = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      
-      // TODO: 实现API调用
-      // const response = await getUserPublicProfile(userId);
-      // setUserData(response.data);
-      
-      // 模拟数据（临时）
-      setTimeout(() => {
-        setUserData({
-          id: userId,
-          username: '张三',
-          avatar: 'https://via.placeholder.com/100',
-          coverImage: 'https://fakeimg.pl/800x400/0066cc/ffffff/?text=专业法律咨询+维护公平正义&font=noto', // 带文字的背景图
-          bio: '执业律师，专注民商事诉讼与法律顾问服务，为您提供专业的法律解决方案',
-          location: '四川',
-          occupation: '律师',
-          gender: 'male',
-          verification: {
-            type: 'personal',
-            verified: true,
-            verifiedAt: '2024-01-01',
-            verificationText: '执业律师 法律顾问',
-          },
-          tags: ['民商事诉讼', '合同纠纷', '公司法务', '法律咨询'],
-          mcn: {
-            hasMcn: true,
-            mcnName: '慕容智造',
-            mcnId: 'mcn123',
-          },
-          stats: {
-            likesCount: 3500, // 点赞 3.5K
-            followersCount: 1200, // 粉丝 1.2K
-            followingCount: 128, // 关注 128
-            friendsCount: 56, // 朋友 56
-          },
-          influence: 95,
-          wisdomIndex: 88,
+
+      const [profileResponse, cachedProfile, blacklistItems] = await Promise.all([
+        userApi.getPublicProfile(userId),
+        UserCacheService.getUserProfile(),
+        blacklistApi.getBlacklist().catch(blacklistError => {
+          console.error('Load blacklist status failed:', blacklistError);
+          return [];
+        }),
+      ]);
+
+      const currentProfile =
+        cachedProfile || (await UserCacheService.fetchAndCacheUserProfile(true));
+      const profilePayload = resolveProfilePayload(profileResponse);
+      const nextUserData = buildProfileViewModel(profilePayload, userId);
+      const nextCurrentUserId = currentProfile?.userId ? String(currentProfile.userId) : null;
+      const nextIsOwnProfile =
+        String(nextCurrentUserId || '') !== '' &&
+        String(nextCurrentUserId) === String(nextUserData.userId || userId);
+      const nextIsBlacklisted = nextIsOwnProfile
+        ? false
+        : resolveBlacklistStatus(blacklistItems, nextUserData.userId || userId);
+
+      if (__DEV__) {
+        console.log('[PublicProfile] raw response:', profileResponse);
+        console.log('[PublicProfile] resolved payload:', profilePayload);
+        console.log('[PublicProfile] mapped fields:', {
+          username: nextUserData.username,
+          bio: nextUserData.bio,
+          occupation: nextUserData.occupation,
+          location: nextUserData.location,
+          verification: nextUserData.verification,
+          statsItems: nextUserData.statsItems,
+          isBlacklisted: nextIsBlacklisted,
+          blacklistTargetUserId: nextUserData.userId || userId,
+          blacklistBlockedUserIds: Array.isArray(blacklistItems)
+            ? blacklistItems.map(item => String(item?.blockedUserId ?? item?.blockedUid ?? item?.userId ?? ''))
+            : [],
         });
-        
-        // 加载模拟内容数据
-        loadContentData('all');
-        
-        setIsLoading(false);
-      }, 1000);
+      }
+
+      setCurrentUserId(nextCurrentUserId);
+      setUserData(nextUserData);
+      setQuestionsData([]);
+      setAnswersData([]);
+      setFavoritesData([]);
+      setIsBlacklisted(nextIsBlacklisted);
+      setLoadedTabs(new Set());
+      setTabPages(EMPTY_TAB_PAGES);
+      setTabHasMore(EMPTY_HAS_MORE);
     } catch (err) {
-      setError(err.message || '加载失败');
+      setError(err?.message || '加载失败');
+    } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
     }
   };
 
-  /**
-   * 加载内容数据
-   */
+  useFocusEffect(
+    React.useCallback(() => {
+      loadUserData();
+    }, [userId])
+  );
+
+  const handleRetry = () => {
+    loadUserData();
+  };
+
+  const handleGoBack = () => {
+    navigation.goBack();
+  };
+
+  const handleStatPress = type => {
+    const labelMap = {
+      likes: '点赞',
+      followers: '粉丝',
+      following: '关注',
+      answers: '回答',
+    };
+
+    showToast(`${labelMap[type] || '统计'}功能开发中`, 'info');
+  };
+
+  const handleShare = () => {
+    const profileName = userData?.username || '用户';
+
+    Share.share({
+      title: profileName,
+      message: `${profileName} 的公开主页`,
+    }).catch(() => {
+      showToast('分享失败，请稍后重试', 'error');
+    });
+  };
+
+  const confirmAddToBlacklist = blockedUserId => {
+    if (isBlacklistSubmitting) {
+      return;
+    }
+
+    showAppAlert(
+      '加入黑名单',
+      `确定将 ${userData?.username || '该用户'} 加入黑名单吗？`,
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '确认',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsBlacklistSubmitting(true);
+              const response = await blacklistApi.addToBlacklist(blockedUserId);
+
+              if (response?.code === 200) {
+                addBlockedUser(blockedUserId);
+                await invalidateBlacklistRelatedCaches();
+                setIsBlacklisted(true);
+                setQuestionsData([]);
+                setAnswersData([]);
+                setFavoritesData([]);
+                setLoadedTabs(new Set());
+                setTabHasMore(EMPTY_HAS_MORE);
+                showToast(response?.msg || '已加入黑名单', 'success');
+                return;
+              }
+
+              showToast(response?.msg || '加入黑名单失败，请稍后重试', 'error');
+            } catch (blacklistError) {
+              showToast(blacklistError?.message || '加入黑名单失败，请稍后重试', 'error');
+            } finally {
+              setIsBlacklistSubmitting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const confirmRemoveFromBlacklist = blockedUserId => {
+    if (isBlacklistSubmitting) {
+      return;
+    }
+
+    showAppAlert(
+      '移除黑名单',
+      `确定将 ${userData?.username || '该用户'} 移出黑名单吗？`,
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '确认',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsBlacklistSubmitting(true);
+              const response = await blacklistApi.removeFromBlacklist(blockedUserId);
+
+              if (response?.code === 200) {
+                removeBlockedUser(blockedUserId);
+                await invalidateBlacklistRelatedCaches();
+                setIsBlacklisted(false);
+                showToast(response?.msg || '已移除黑名单', 'success');
+                return;
+              }
+
+              showToast(response?.msg || '移除黑名单失败，请稍后重试', 'error');
+            } catch (blacklistError) {
+              showToast(blacklistError?.message || '移除黑名单失败，请稍后重试', 'error');
+            } finally {
+              setIsBlacklistSubmitting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleBlacklist = () => {
+    const blockedUserId = normalizeBlockedUserId(userData?.id || userData?.userId || userId);
+
+    if (!blockedUserId) {
+      showToast('拉黑失败，用户ID无效', 'error');
+      return;
+    }
+
+    if (isBlacklisted) {
+      showToast('请前往设置中的黑名单列表移除', 'info');
+      return;
+    }
+
+    confirmAddToBlacklist(blockedUserId);
+  };
+
+  const handleFollowPress = React.useCallback(async follow => {
+    setIsFollowing(follow);
+    showToast(follow ? '已关注' : '已取消关注', 'success');
+  }, []);
+
   const loadContentData = async (tab = activeTab, page = 1) => {
+    if (isBlacklisted) {
+      return;
+    }
+
     try {
-      // 如果是第一页，不显示加载更多状态
-      if (page === 1) {
-        // 不清空数据，保持现有数据显示
-      } else {
+      if (page > 1) {
         setIsLoadingMore(true);
       }
-      
-      // TODO: 实现API调用
-      // const response = await getUserContents(userId, tab, page);
-      
-      // 模拟数据
+
       setTimeout(() => {
         let mockData = [];
-        
+
         if (tab === 'questions') {
-          // 提问列表数据
           mockData = [
             {
               id: `q${page}-1`,
               type: 'question',
-              title: '如何在三个月内从零基础学会Python编程？',
+              title: '如何在三个月内从零基础学会 Python 编程？',
               questionType: 'reward',
               reward: 50,
               solved: false,
@@ -256,13 +425,12 @@ export default function PublicProfileScreen({ navigation, route }) {
             },
           ];
         } else if (tab === 'answers') {
-          // 回答列表数据
           mockData = [
             {
               id: `a${page}-1`,
               type: 'answer',
               questionTitle: '如何高效学习一门新技能？',
-              content: '作为一个自学了多门技能的人，我来分享一下我的经验...',
+              content: '作为一个自学了多门技能的人，我来分享一下自己的经验。',
               adopted: true,
               createdAt: new Date(Date.now() - 3600000).toISOString(),
               likesCount: 256,
@@ -271,8 +439,8 @@ export default function PublicProfileScreen({ navigation, route }) {
             {
               id: `a${page}-2`,
               type: 'answer',
-              questionTitle: 'Python数据分析入门需要学什么？',
-              content: '首先需要掌握Python基础语法，然后学习NumPy和Pandas...',
+              questionTitle: 'Python 数据分析入门需要学什么？',
+              content: '先掌握 Python 基础语法，再学习 NumPy、Pandas 等常用库。',
               adopted: false,
               createdAt: new Date(Date.now() - 10800000).toISOString(),
               likesCount: 189,
@@ -280,7 +448,6 @@ export default function PublicProfileScreen({ navigation, route }) {
             },
           ];
         } else if (tab === 'favorites') {
-          // 收藏列表数据
           mockData = [
             {
               id: `f${page}-1`,
@@ -300,178 +467,63 @@ export default function PublicProfileScreen({ navigation, route }) {
             },
           ];
         }
-        
-        // 更新对应标签的数据
-        if (page === 1) {
-          // 第一页，直接设置数据
-          if (tab === 'questions') {
-            setQuestionsData(mockData);
-          } else if (tab === 'answers') {
-            setAnswersData(mockData);
-          } else if (tab === 'favorites') {
-            setFavoritesData(mockData);
-          }
-        } else {
-          // 追加数据
-          if (tab === 'questions') {
-            setQuestionsData([...questionsData, ...mockData]);
-          } else if (tab === 'answers') {
-            setAnswersData([...answersData, ...mockData]);
-          } else if (tab === 'favorites') {
-            setFavoritesData([...favoritesData, ...mockData]);
-          }
+
+        if (tab === 'questions') {
+          setQuestionsData(prev => (page === 1 ? mockData : [...prev, ...mockData]));
+        } else if (tab === 'answers') {
+          setAnswersData(prev => (page === 1 ? mockData : [...prev, ...mockData]));
+        } else if (tab === 'favorites') {
+          setFavoritesData(prev => (page === 1 ? mockData : [...prev, ...mockData]));
         }
-        
-        // 更新分页状态
-        setTabPages({
-          ...tabPages,
+
+        setTabPages(prev => ({
+          ...prev,
           [tab]: page,
-        });
-        
-        // 更新是否还有更多数据
-        setTabHasMore({
-          ...tabHasMore,
-          [tab]: page < 3, // 模拟只有3页
-        });
-        
-        // 标记该标签已加载
-        setLoadedTabs(new Set([...loadedTabs, tab]));
-        
+        }));
+        setTabHasMore(prev => ({
+          ...prev,
+          [tab]: page < 3,
+        }));
+        setLoadedTabs(prev => new Set([...prev, tab]));
         setIsLoadingMore(false);
-      }, 800);
-    } catch (err) {
-      console.error('Load content failed:', err);
+      }, 0);
+    } catch (loadError) {
+      console.error('Load public profile content failed:', loadError);
       setIsLoadingMore(false);
     }
   };
 
-  /**
-   * 重试加载
-   */
-  const handleRetry = () => {
-    loadUserData();
-  };
-
-  /**
-   * 返回上一页
-   */
-  const handleGoBack = () => {
-    navigation.goBack();
-  };
-
-  /**
-   * 处理统计数据点击
-   * @param {'following' | 'followers' | 'likes'} type
-   */
-  const handleStatPress = (type) => {
-    switch (type) {
-      case 'following':
-        // TODO: 导航到关注列表
-        console.log('Navigate to following list');
-        break;
-      case 'followers':
-        // TODO: 导航到粉丝列表
-        console.log('Navigate to followers list');
-        break;
-      case 'likes':
-        // TODO: 显示获赞详情
-        console.log('Show likes detail');
-        break;
-    }
-  };
-
-  /**
-   * 处理分享
-   */
-  const handleShare = () => {
-    // TODO: 实现分享功能
-    console.log('Share profile');
-  };
-
-  /**
-   * 处理关注/取消关注
-   * @param {boolean} follow - true表示关注，false表示取消关注
-   */
-  const handleFollowPress = React.useCallback(async (follow) => {
-    try {
-      // TODO: 调用API
-      // await followUser(userId, follow);
-      setIsFollowing(follow);
-      console.log(follow ? 'Followed user' : 'Unfollowed user');
-    } catch (err) {
-      console.error('Follow action failed:', err);
-    }
-  }, [userId]);
-
-  /**
-   * 处理发私信
-   */
-  const handleMessagePress = () => {
-    // TODO: 导航到私信页面
-    console.log('Navigate to messages');
-  };
-
-  /**
-   * 处理需要登录
-   */
-  const handleLoginRequired = () => {
-    // TODO: 导航到登录页面
-    console.log('Navigate to login');
-  };
-
-  /**
-   * 检查是否是自己的主页
-   */
-  const isOwnProfile = () => {
-    // TODO: 实现检查逻辑
-    // return currentUserId === userId;
-    return false;
-  };
-
-  /**
-   * 处理标签切换
-   */
-  const handleTabChange = (tab) => {
+  const handleTabChange = tab => {
     setActiveTab(tab);
-    // 不需要手动调用 loadContentData，useEffect 会处理
   };
 
-  /**
-   * 处理搜索
-   */
   const handleSearchPress = () => {
     setIsSearchModalVisible(true);
   };
 
-  /**
-   * 处理内容卡片点击
-   */
-  const handleContentPress = (item) => {
-    console.log('Navigate to content detail:', item.type, item.id);
-    // TODO: 根据类型导航到不同的详情页面
+  const handleContentPress = item => {
+    console.log('Navigate to content detail:', item?.type, item?.id);
   };
 
-  /**
-   * 处理加载更多
-   */
   const handleLoadMore = () => {
-    const currentPage = tabPages[activeTab];
-    const hasMore = tabHasMore[activeTab];
-    
-    if (!isLoadingMore && hasMore) {
-      loadContentData(activeTab, currentPage + 1);
+    if (isBlacklisted) {
+      return;
+    }
+
+    if (!isLoadingMore && tabHasMore[activeTab]) {
+      loadContentData(activeTab, tabPages[activeTab] + 1);
     }
   };
 
-  /**
-   * 处理下拉刷新
-   */
   const handleRefresh = () => {
     loadUserData();
   };
 
-  // 获取当前标签的数据
   const getCurrentTabData = () => {
+    if (isBlacklisted) {
+      return [];
+    }
+
     switch (activeTab) {
       case 'questions':
         return questionsData;
@@ -484,7 +536,6 @@ export default function PublicProfileScreen({ navigation, route }) {
     }
   };
 
-  // 加载中状态
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -496,7 +547,6 @@ export default function PublicProfileScreen({ navigation, route }) {
     );
   }
 
-  // 错误状态
   if (error) {
     return (
       <SafeAreaView style={styles.container}>
@@ -511,7 +561,6 @@ export default function PublicProfileScreen({ navigation, route }) {
     );
   }
 
-  // 用户不存在
   if (!userData) {
     return (
       <SafeAreaView style={styles.container}>
@@ -528,49 +577,63 @@ export default function PublicProfileScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* 顶部导航栏 */}
-      <PublicProfileHeader 
-        bio={userData.bio} 
+      <PublicProfileHeader
+        bio={userData.bio}
         onBack={handleGoBack}
         onShare={handleShare}
+        showBlacklist={!isOwnProfile}
+        onBlacklist={handleBlacklist}
+        blacklistLabel={isBlacklisted ? '已加入黑名单' : '加入黑名单'}
+        blacklistDisabled={isBlacklisted}
       />
-      
+
       <FlatList
         data={getCurrentTabData()}
         renderItem={({ item }) => {
           if (activeTab === 'questions') {
             return <QuestionListItem item={item} onPress={handleContentPress} />;
-          } else if (activeTab === 'answers') {
+          }
+
+          if (activeTab === 'answers') {
             return <AnswerListItem item={item} onPress={handleContentPress} />;
-          } else if (activeTab === 'favorites') {
+          }
+
+          if (activeTab === 'favorites') {
             return <FavoriteListItem item={item} onPress={handleContentPress} />;
           }
+
           return null;
         }}
-        keyExtractor={(item) => item.id}
+        keyExtractor={item => String(item.id)}
         ListHeaderComponent={() => (
           <>
-            {/* 用户信息头部 */}
-            <ProfileHeader 
-              userData={userData} 
-              onStatPress={handleStatPress}
+            <PublicProfileHero
+              userData={userData}
               isFollowing={isFollowing}
               onFollowPress={handleFollowPress}
-              isOwnProfile={isOwnProfile()}
+              isOwnProfile={isOwnProfile}
+              onStatPress={handleStatPress}
             />
-            
-            {/* 内容标签栏 */}
-            <ContentTabs
-              activeTab={activeTab}
-              onTabChange={handleTabChange}
-              onSearchPress={handleSearchPress}
-            />
+            {isBlacklisted ? (
+              <View style={styles.blockedContentBanner}>
+                <Ionicons name="ban-outline" size={18} color="#6b7280" />
+                <Text style={styles.blockedContentText}>已加入黑名单，该用户内容已隐藏</Text>
+              </View>
+            ) : (
+              <ContentTabs
+                activeTab={activeTab}
+                onTabChange={handleTabChange}
+                onSearchPress={handleSearchPress}
+              />
+            )}
           </>
         )}
         ListEmptyComponent={() => (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>{t('profile.noContent')}</Text>
-          </View>
+          isBlacklisted ? null : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>{t('profile.noContent')}</Text>
+            </View>
+          )
         )}
         ListFooterComponent={() => {
           if (isLoadingMore) {
@@ -580,15 +643,15 @@ export default function PublicProfileScreen({ navigation, route }) {
               </View>
             );
           }
-          const currentTabData = getCurrentTabData();
-          const hasMore = tabHasMore[activeTab];
-          if (!hasMore && currentTabData.length > 0) {
+
+          if (!tabHasMore[activeTab] && getCurrentTabData().length > 0) {
             return (
               <View style={styles.footerContainer}>
                 <Text style={styles.footerText}>{t('common.noMoreContent')}</Text>
               </View>
             );
           }
+
           return null;
         }}
         onEndReached={handleLoadMore}
@@ -603,7 +666,6 @@ export default function PublicProfileScreen({ navigation, route }) {
         }
       />
 
-      {/* 搜索模态框 */}
       <UserContentSearchModal
         visible={isSearchModalVisible}
         onClose={() => setIsSearchModalVisible(false)}
@@ -661,6 +723,23 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: '#9ca3af',
+  },
+  blockedContentBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    backgroundColor: '#f9fafb',
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  blockedContentText: {
+    fontSize: 14,
+    color: '#6b7280',
   },
   footerContainer: {
     paddingVertical: 20,

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from './Avatar';
 import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 
 const WriteCommentModal = ({
   visible,
@@ -16,6 +17,7 @@ const WriteCommentModal = ({
   placeholder = '写下你的评论...',
   title = '写评论'
 }) => {
+  const bottomSafeInset = useBottomSafeInset();
   const [text, setText] = useState('');
   const [selectedIdentity, setSelectedIdentity] = useState('personal');
   const [selectedImages, setSelectedImages] = useState([]);
@@ -82,17 +84,28 @@ const WriteCommentModal = ({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      statusBarTranslucent
+      navigationBarTranslucent
+    >
       <View style={styles.overlay}>
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top']}>
           <View style={styles.header}>
             {renderHeaderSide('left')}
             <Text style={styles.title}>{title}</Text>
             {renderHeaderSide('right')}
           </View>
 
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.content}
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
             {originalComment ? (
               <View style={styles.originalCommentCard}>
                 <View style={styles.originalCommentHeader}>
@@ -144,7 +157,14 @@ const WriteCommentModal = ({
             />
           </ScrollView>
 
-          <View style={styles.bottomToolbar}>
+          <View
+            style={[
+              styles.bottomToolbar,
+              {
+                paddingBottom: bottomSafeInset + 8
+              }
+            ]}
+          >
             <View style={styles.toolbarLeft}>
               <TouchableOpacity style={styles.toolbarBtn} onPress={() => setShowImagePicker(true)}>
                 <Ionicons name="image-outline" size={24} color="#6b7280" />
@@ -254,6 +274,9 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16
   },
+  contentContainer: {
+    paddingBottom: 16
+  },
   originalCommentCard: {
     padding: 14,
     borderRadius: 14,
@@ -296,7 +319,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 20,
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
     backgroundColor: '#ffffff'

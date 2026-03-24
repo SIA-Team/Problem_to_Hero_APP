@@ -15,6 +15,9 @@ import commentApi from '../services/api/commentApi';
 import uploadApi from '../services/api/uploadApi';
 import { loadQuestionSupplements } from '../utils/dataLoader';
 import { showToast } from '../utils/toast';
+import { formatNumber } from '../utils/numberFormatter';
+import { normalizeEntityId } from '../utils/jsonLongId';
+import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
 const answers = [{
   id: 1,
   author: 'Python老司机',
@@ -894,6 +897,7 @@ export default function QuestionDetailScreen({
     if (!question || typeof question !== 'object') {
       return question;
     }
+    const normalizedPublicUserId = question.publicUserId ?? question.authorUserId ?? question.authorId ?? question.author_id ?? question.userId ?? question.user_id ?? question.createBy ?? question.create_by ?? question.creatorId ?? question.creator_id ?? question.uid ?? null;
     const hasLikeCountField = hasCountValue(question.likeCount, question.likes);
     const hasCollectCountField = hasCountValue(question.collectCount, question.bookmarkCount, question.bookmarks);
     const hasDislikeCountField = hasCountValue(question.dislikeCount, question.dislikes);
@@ -923,6 +927,8 @@ export default function QuestionDetailScreen({
       questionId: question.questionId ?? question.id ?? null,
       title: question.title ?? question.questionTitle ?? '无标题',
       description: question.description ?? question.content ?? question.questionDescription ?? '',
+      publicUserId: normalizedPublicUserId,
+      authorId: question.authorId ?? question.author_id ?? normalizedPublicUserId,
       userName: normalizedAuthorName,
       userNickname: question.userNickname ?? question.authorNickName ?? normalizedAuthorName,
       authorNickName: question.authorNickName ?? normalizedAuthorName,
@@ -1065,7 +1071,11 @@ export default function QuestionDetailScreen({
 
           // 步骤2: 验证问题详情数据
           if (detailResponse && detailResponse.code === 200 && detailResponse.data) {
-            console.log('✅ 问题详情:', detailResponse.data);
+            console.log('✅ 问题详情接口响应完整数据:');
+            console.log('==================== 开始 ====================');
+            console.log(JSON.stringify(detailResponse, null, 2));
+            console.log('==================== 结束 ====================');
+            console.log('✅ 问题详情 data 字段:', detailResponse.data);
 
             // 步骤3: 准备所有数据
             const supplements = normalizeSupplementCacheList(supplementsResponse?.data || []);
@@ -1600,6 +1610,8 @@ export default function QuestionDetailScreen({
       updatedSupplement: undefined
     });
   }, [route?.params?.updatedSupplement]);
+  const resolveCommentUserId = comment => normalizeEntityId(comment?.userId ?? comment?.user_id ?? comment?.authorId ?? comment?.author_id ?? comment?.createBy ?? comment?.create_by ?? comment?.creatorId ?? comment?.creator_id ?? comment?.uid ?? comment?.user?.id);
+  const openPublicProfile = (target, options = {}) => navigateToPublicProfile(navigation, target, options);
   const normalizeCommentItem = (comment, defaults = {}) => {
     if (!comment || typeof comment !== 'object') {
       return comment;
@@ -1624,6 +1636,8 @@ export default function QuestionDetailScreen({
     const normalizedTargetType = Number(comment.targetType ?? comment.target_type ?? defaults.targetType ?? 0) || 0;
     const normalizedTargetId = Number(comment.targetId ?? comment.target_id ?? defaults.targetId ?? 0) || 0;
     const normalizedParentId = Number(comment.parentId ?? comment.parent_id ?? defaults.parentId ?? 0) || 0;
+    const normalizedUserId = resolveCommentUserId(comment);
+    const normalizedReplyToUserId = normalizeEntityId(comment.replyToUserId ?? comment.reply_user_id ?? comment.toUserId ?? comment.parentUserId ?? comment.replyUserId ?? comment.to_user_id);
     return {
       ...comment,
       id: normalizedId,
@@ -1635,11 +1649,14 @@ export default function QuestionDetailScreen({
       author: normalizedAuthor,
       userName: normalizedAuthor,
       userNickname: comment.userNickname ?? comment.authorNickName ?? normalizedAuthor,
+      userId: normalizedUserId,
+      user_id: comment.user_id ?? normalizedUserId,
       avatar: normalizedAvatar,
       userAvatar: normalizedAvatar,
       content: normalizedContent,
       commentContent: comment.commentContent ?? normalizedContent,
       replyToUserName: normalizedReplyToUserName,
+      replyToUserId: normalizedReplyToUserId,
       replyToCommentId: normalizedReplyToCommentId,
       likeCount: normalizedLikeCount,
       likes: normalizedLikeCount,
@@ -2031,18 +2048,18 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
   const nextDisplayCount = Math.max(resolvedBaseCount + (localState ? 1 : -1), 0);
   return !!localState ? Math.max(nextDisplayCount, 1) : nextDisplayCount;
 };
-  const getCommentLikeDisplayCount = (comment, localState) => getResolvedInteractionDisplayCount(comment?.likeCount ?? comment?.likes, comment?.liked, localState, comment?.__likeCountResolved);
-  const getCommentCollectDisplayCount = (comment, localState) => getResolvedInteractionDisplayCount(comment?.collectCount ?? comment?.bookmarkCount ?? comment?.bookmarks, comment?.collected, localState, comment?.__collectCountResolved);
-  const getCommentDislikeDisplayCount = (comment, localState) => getResolvedInteractionDisplayCount(comment?.dislikeCount ?? comment?.dislikes, comment?.disliked, localState, comment?.__dislikeCountResolved);
-  const getQuestionLikeDisplayCount = (question, localState) => getResolvedInteractionDisplayCount(question?.likeCount ?? question?.likes, question?.liked, localState, question?.__likeCountResolved);
-  const getQuestionCollectDisplayCount = (question, localState) => getResolvedInteractionDisplayCount(question?.collectCount ?? question?.bookmarkCount ?? question?.bookmarks, question?.collected, localState, question?.__collectCountResolved);
-  const getQuestionDislikeDisplayCount = (question, localState) => getResolvedInteractionDisplayCount(question?.dislikeCount ?? question?.dislikes, question?.disliked, localState, question?.__dislikeCountResolved);
-  const getAnswerLikeDisplayCount = (answer, localState) => getResolvedInteractionDisplayCount(answer?.likeCount ?? answer?.like_count ?? answer?.likes, answer?.liked, localState, answer?.__likeCountResolved);
-  const getAnswerCollectDisplayCount = (answer, localState) => getResolvedInteractionDisplayCount(answer?.collectCount ?? answer?.bookmarkCount ?? answer?.bookmark_count ?? answer?.bookmarks, answer?.collected, localState, answer?.__collectCountResolved);
-  const getAnswerDislikeDisplayCount = (answer, localState) => getResolvedInteractionDisplayCount(answer?.dislikeCount ?? answer?.dislike_count ?? answer?.dislikes, answer?.disliked, localState, answer?.__dislikeCountResolved);
-  const getSupplementLikeDisplayCount = (supplement, localState) => getResolvedInteractionDisplayCount(supplement?.likeCount ?? supplement?.likes, supplement?.liked, localState, supplement?.__likeCountResolved);
-  const getSupplementCollectDisplayCount = (supplement, localState) => getResolvedInteractionDisplayCount(supplement?.collectCount ?? supplement?.bookmarkCount ?? supplement?.bookmarks, supplement?.collected, localState, supplement?.__collectCountResolved);
-  const getSupplementDislikeDisplayCount = (supplement, localState) => getResolvedInteractionDisplayCount(supplement?.dislikeCount ?? supplement?.dislikes, supplement?.disliked, localState, supplement?.__dislikeCountResolved);
+  const getCommentLikeDisplayCount = (comment, localState) => formatNumber(getResolvedInteractionDisplayCount(comment?.likeCount ?? comment?.likes, comment?.liked, localState, comment?.__likeCountResolved));
+  const getCommentCollectDisplayCount = (comment, localState) => formatNumber(getResolvedInteractionDisplayCount(comment?.collectCount ?? comment?.bookmarkCount ?? comment?.bookmarks, comment?.collected, localState, comment?.__collectCountResolved));
+  const getCommentDislikeDisplayCount = (comment, localState) => formatNumber(getResolvedInteractionDisplayCount(comment?.dislikeCount ?? comment?.dislikes, comment?.disliked, localState, comment?.__dislikeCountResolved));
+  const getQuestionLikeDisplayCount = (question, localState) => formatNumber(getResolvedInteractionDisplayCount(question?.likeCount ?? question?.likes, question?.liked, localState, question?.__likeCountResolved));
+  const getQuestionCollectDisplayCount = (question, localState) => formatNumber(getResolvedInteractionDisplayCount(question?.collectCount ?? question?.bookmarkCount ?? question?.bookmarks, question?.collected, localState, question?.__collectCountResolved));
+  const getQuestionDislikeDisplayCount = (question, localState) => formatNumber(getResolvedInteractionDisplayCount(question?.dislikeCount ?? question?.dislikes, question?.disliked, localState, question?.__dislikeCountResolved));
+  const getAnswerLikeDisplayCount = (answer, localState) => formatNumber(getResolvedInteractionDisplayCount(answer?.likeCount ?? answer?.like_count ?? answer?.likes, answer?.liked, localState, answer?.__likeCountResolved));
+  const getAnswerCollectDisplayCount = (answer, localState) => formatNumber(getResolvedInteractionDisplayCount(answer?.collectCount ?? answer?.bookmarkCount ?? answer?.bookmark_count ?? answer?.bookmarks, answer?.collected, localState, answer?.__collectCountResolved));
+  const getAnswerDislikeDisplayCount = (answer, localState) => formatNumber(getResolvedInteractionDisplayCount(answer?.dislikeCount ?? answer?.dislike_count ?? answer?.dislikes, answer?.disliked, localState, answer?.__dislikeCountResolved));
+  const getSupplementLikeDisplayCount = (supplement, localState) => formatNumber(getResolvedInteractionDisplayCount(supplement?.likeCount ?? supplement?.likes, supplement?.liked, localState, supplement?.__likeCountResolved));
+  const getSupplementCollectDisplayCount = (supplement, localState) => formatNumber(getResolvedInteractionDisplayCount(supplement?.collectCount ?? supplement?.bookmarkCount ?? supplement?.bookmarks, supplement?.collected, localState, supplement?.__collectCountResolved));
+  const getSupplementDislikeDisplayCount = (supplement, localState) => formatNumber(getResolvedInteractionDisplayCount(supplement?.dislikeCount ?? supplement?.dislikes, supplement?.disliked, localState, supplement?.__dislikeCountResolved));
   const syncSupplementInteractionStates = (supplements = []) => {
     if (!supplements.length) {
       return;
@@ -2197,7 +2214,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       targetId: resolvedTargetId,
       parentId: resolvedCommentId,
       replyToCommentId: resolvedCommentId,
-      replyToUserId: Number(comment.userId ?? comment.user_id ?? 0) || null,
+      replyToUserId: resolveCommentUserId(comment),
       replyToUserName,
       originalComment: normalizeCommentItem(comment, {
         targetType: resolvedTargetType,
@@ -2274,7 +2291,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     const shouldHideContextRelation = contextReplyId !== null && String(relationCommentId) === String(contextReplyId);
     const shouldShowReplyRelation = !!relationUserName && !shouldHideContextRelation && rootCommentId !== null && String(relationCommentId) !== String(rootCommentId) && String(relationCommentId) !== String(reply.id);
     return <View key={reply.id} style={styles.replyCard}>
-        <View style={styles.replyHeader}>
+        <TouchableOpacity style={styles.replyHeader} activeOpacity={0.7} onPress={() => openPublicProfile(reply)}>
           <Avatar uri={reply.userAvatar || reply.avatar} name={reply.userName || reply.userNickname || reply.author} size={24} />
           <View style={styles.replyAuthorMeta}>
             <View style={styles.replyAuthorLine}>
@@ -2287,7 +2304,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           </View>
           <View style={{flex: 1}} />
           <Text style={styles.replyTime}>{reply.time}</Text>
-        </View>
+        </TouchableOpacity>
         <Text style={styles.replyText}>{reply.content}</Text>
         <View style={styles.replyActions}>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentLike(reply.id)} disabled={commentLikeLoading[reply.id]}>
@@ -2346,7 +2363,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     const shouldHideContextRelation = contextReplyId !== null && String(relationCommentId) === String(contextReplyId);
     const shouldShowReplyRelation = !!relationUserName && !shouldHideContextRelation && rootCommentId !== null && String(relationCommentId) !== String(rootCommentId) && String(relationCommentId) !== String(reply.id);
     return <View key={reply.id} style={styles.replyCard}>
-        <View style={styles.replyHeader}>
+        <TouchableOpacity style={styles.replyHeader} activeOpacity={0.7} onPress={() => openPublicProfile(reply)}>
           <Avatar uri={reply.userAvatar || reply.avatar} name={reply.userName || reply.userNickname || reply.author} size={24} />
           <View style={styles.replyAuthorMeta}>
             <View style={styles.replyAuthorLine}>
@@ -2359,7 +2376,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           </View>
           <View style={{flex: 1}} />
           <Text style={styles.replyTime}>{reply.time}</Text>
-        </View>
+        </TouchableOpacity>
         <Text style={styles.replyText}>{reply.content}</Text>
         <View style={styles.replyActions}>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentLike(reply.id)} disabled={commentLikeLoading[reply.id]}>
@@ -2462,7 +2479,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     const shouldHideContextRelation = contextReplyId !== null && String(relationCommentId) === String(contextReplyId);
     const shouldShowReplyRelation = !!relationUserName && !shouldHideContextRelation && rootCommentId !== null && String(relationCommentId) !== String(rootCommentId) && String(relationCommentId) !== String(reply.id);
     return <View key={reply.id} style={styles.replyCard}>
-        <View style={styles.replyHeader}>
+        <TouchableOpacity style={styles.replyHeader} activeOpacity={0.7} onPress={() => openPublicProfile(reply)}>
           <Avatar uri={reply.userAvatar || reply.avatar} name={reply.userName || reply.userNickname || reply.author} size={24} />
           <View style={styles.replyAuthorMeta}>
             <View style={styles.replyAuthorLine}>
@@ -2475,7 +2492,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           </View>
           <View style={{flex: 1}} />
           <Text style={styles.replyTime}>{reply.time}</Text>
-        </View>
+        </TouchableOpacity>
         <Text style={styles.replyText}>{reply.content}</Text>
         <View style={styles.replyActions}>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentLike(reply.id)} disabled={commentLikeLoading[reply.id]}>
@@ -3573,7 +3590,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       targetId: target.targetId !== undefined && target.targetId !== null ? Number(target.targetId) : defaultTargetId,
       parentId: target.parentId ?? 0,
       replyToCommentId: Number(target.replyToCommentId ?? 0) || 0,
-      replyToUserId: target.replyToUserId !== undefined && target.replyToUserId !== null ? Number(target.replyToUserId) || null : null,
+      replyToUserId: normalizeEntityId(target.replyToUserId),
       replyToUserName: target.replyToUserName ?? '',
       originalComment: target.originalComment ? normalizeCommentItem(target.originalComment, {
         targetType: target.targetType ?? 1,
@@ -3608,6 +3625,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     }
     try {
       setCommentSubmitting(true);
+      const parentComment = parentId > 0 ? targetType === 3 ? findSupplementCommentById(parentId) : targetType === 2 ? findAnswerCommentById(parentId) : findQuestionCommentById(parentId) : null;
+      const resolvedReplyToUserId = normalizeEntityId(commentTarget?.replyToUserId ?? parentComment?.replyToUserId ?? resolveCommentUserId(parentComment));
+      const resolvedReplyToUserName = commentTarget?.replyToUserName ?? parentComment?.replyToUserName ?? parentComment?.userName ?? parentComment?.userNickname ?? parentComment?.author ?? '';
       const payload = {
         targetType,
         targetId,
@@ -3617,11 +3637,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       if (commentTarget?.replyToCommentId) {
         payload.replyToCommentId = Number(commentTarget.replyToCommentId) || 0;
       }
-      if (commentTarget?.replyToUserId) {
-        payload.replyToUserId = Number(commentTarget.replyToUserId) || null;
+      if (resolvedReplyToUserId) {
+        payload.replyToUserId = resolvedReplyToUserId;
       }
-      if (commentTarget?.replyToUserName) {
-        payload.replyToUserName = commentTarget.replyToUserName;
+      if (resolvedReplyToUserName) {
+        payload.replyToUserName = resolvedReplyToUserName;
       }
       const response = await commentApi.createComment(payload);
       console.log('📥 评论发布响应:', response);
@@ -5175,8 +5195,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           
           {/* 作者信息和操作按钮行 - 紧跟标题 */}
           <View style={styles.authorActionsRow}>
-            <View style={styles.authorInfoLeft}>
-              <Avatar uri={questionData.userAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${questionData.userId}`} name={questionData.userName || questionData.userNickname || '匿名用户'} size={32} />
+            <TouchableOpacity style={styles.authorInfoLeft} activeOpacity={0.7} onPress={() => openPublicProfile(questionData, {
+            userId: questionData.publicUserId ?? questionData.authorId ?? questionData.userId,
+            allowAnonymous: false
+          })}>
+              <Avatar uri={questionData.userAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${questionData.publicUserId ?? questionData.userId}`} name={questionData.userName || questionData.userNickname || '匿名用户'} size={32} />
               <View style={styles.authorMetaInfo}>
                 <View style={styles.authorNameRow}>
                   <Text style={styles.smallAuthorName}>
@@ -5194,7 +5217,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   {formatTime(questionData.createTime || questionData.createdAt)} · {questionData.location || '未知'}
                 </Text>
               </View>
-            </View>
+            </TouchableOpacity>
             <View style={styles.actionButtonsRight}>
               <TouchableOpacity style={styles.smallActionBtn} onPress={() => navigation.navigate('InviteAnswer')}>
                 <Ionicons name="at" size={18} color="#3b82f6" />
@@ -5277,7 +5300,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           <View style={styles.viewsAndTags}>
             <View style={styles.viewsRow}>
               <Ionicons name="eye-outline" size={14} color="#9ca3af" />
-              <Text style={styles.viewsText}>{questionData.viewCount || 0} {t('screens.questionDetail.stats.views')}</Text>
+              <Text style={styles.viewsText}>{formatNumber(questionData.viewCount || 0)} {t('screens.questionDetail.stats.views')}</Text>
             </View>
             {/* 话题标签 */}
             {Boolean(questionData.topicNames && questionData.topicNames.length > 0) && <View style={styles.topicTags}>
@@ -5458,6 +5481,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               });
             }} activeOpacity={0.7}>
                   <View style={styles.suppHeader}>
+                    <TouchableOpacity style={styles.suppAuthorInfoRow} activeOpacity={0.7} onPress={e => {
+                    e.stopPropagation();
+                    openPublicProfile(item);
+                  }}>
                     <Avatar uri={item.avatar} name={item.author} size={24} />
                     <View style={styles.suppAuthorInfo}>
                       <View style={styles.suppAuthorRow}>
@@ -5503,6 +5530,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                         </TouchableOpacity>
                       </View>
                     </View>
+                    </TouchableOpacity>
                     <TouchableOpacity style={styles.suppAnswerBtnTop} onPress={e => {
                   e.stopPropagation();
                   setCurrentSupplement(item);
@@ -5533,11 +5561,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     setShowSuppCommentListModal(true);
                   }}>
                         <Ionicons name="chatbubble-outline" size={16} color="#6b7280" />
-                    <Text style={styles.suppActionText}>{Number(item.commentCount ?? item.comments ?? item.comment_count ?? 0)}</Text>
+                    <Text style={styles.suppActionText}>{formatNumber(Number(item.commentCount ?? item.comments ?? item.comment_count ?? 0))}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.suppActionBtn} onPress={e => e.stopPropagation()}>
                         <Ionicons name="arrow-redo-outline" size={16} color="#6b7280" />
-                        <Text style={styles.suppActionText}>{Number(item.shareCount ?? item.shares ?? 0)}</Text>
+                        <Text style={styles.suppActionText}>{formatNumber(Number(item.shareCount ?? item.shares ?? 0))}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.suppActionBtn} onPress={e => {
                     e.stopPropagation();
@@ -5613,7 +5641,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               const commentCollectCount = getCommentCollectDisplayCount(comment, commentCollected[comment.id]);
               const commentDislikeCount = getCommentDislikeDisplayCount(comment, commentDisliked[comment.id]);
               return <View key={comment.id} style={styles.commentCard}>
-                  <View style={styles.commentHeader}>
+                  <TouchableOpacity style={styles.commentHeader} activeOpacity={0.7} onPress={() => openPublicProfile(comment)}>
                     <Avatar uri={comment.userAvatar || comment.avatar} name={comment.userName || comment.userNickname || comment.author} size={24} />
                     <Text style={styles.commentAuthor}>{comment.userName || comment.userNickname || comment.author}</Text>
                     
@@ -5655,7 +5683,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     flex: 1
                   }} />
                     <Text style={styles.commentTime}>{comment.time}</Text>
-                  </View>
+                  </TouchableOpacity>
                   <View style={styles.commentContent}>
                     <Text style={styles.commentText}>{comment.content}</Text>
                     
@@ -5672,11 +5700,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                         setShowCommentReplyModal(true);
                       }}>
                           <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
-                          <Text style={styles.commentActionText}>{comment.replyCount || comment.replies || 0}</Text>
+                          <Text style={styles.commentActionText}>{formatNumber(comment.replyCount || comment.replies || 0)}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.commentActionBtn}>
                           <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
-                          <Text style={styles.commentActionText}>{comment.shareCount || comment.shares || 0}</Text>
+                          <Text style={styles.commentActionText}>{formatNumber(comment.shareCount || comment.shares || 0)}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.commentActionBtn} onPress={() => handleCommentCollect(comment.id)} disabled={commentCollectLoading[comment.id]}>
                           <Ionicons name={isCommentCollected ? "star" : "star-outline"} size={14} color={isCommentCollected ? "#f59e0b" : "#9ca3af"} />
@@ -5867,6 +5895,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 defaultTab: 'supplements'
               })}>
               <View style={styles.answerHeader}>
+                <TouchableOpacity style={styles.answerHeaderMain} activeOpacity={0.7} onPress={e => {
+                  e.stopPropagation();
+                  openPublicProfile(answer);
+                }}>
                 <Avatar uri={answer.userAvatar || answer.avatar} name={answer.userName || answer.userNickname || answer.author || '匿名用户'} size={24} />
                 <View style={styles.answerAuthorInfo}>
                   <View style={styles.answerAuthorRow}>
@@ -5885,6 +5917,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   </View>
                   <Text style={styles.answerAuthorTitle}>{answer.title}</Text>
                 </View>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.answerSupplementBtnTop} onPress={e => {
                     e.stopPropagation();
                     setCurrentAnswer(answer);
@@ -6054,11 +6087,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       setShowAnswerCommentListModal(true);
                     }}>
                     <Ionicons name="chatbubble-outline" size={16} color="#6b7280" />
-                    <Text style={styles.answerActionText}>{answer.commentCount || answer.comment_count || answer.comments || 0}</Text>
+                    <Text style={styles.answerActionText}>{formatNumber(answer.commentCount || answer.comment_count || answer.comments || 0)}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.answerActionBtn} onPress={e => e.stopPropagation()}>
                     <Ionicons name="arrow-redo-outline" size={16} color="#6b7280" />
-                    <Text style={styles.answerActionText}>{answer.shareCount || answer.share_count || answer.shares || 34}</Text>
+                    <Text style={styles.answerActionText}>{formatNumber(answer.shareCount || answer.share_count || answer.shares || 0)}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.answerActionBtn, answerCollectLoading[answer.id] && styles.answerActionBtnLoading]} onPress={e => {
                       e.stopPropagation();
@@ -6272,7 +6305,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             <View style={styles.actionListSection}>
               <TouchableOpacity style={styles.moreActionItem}>
                 <Ionicons name="thumbs-down-outline" size={22} color="#6b7280" />
-                <Text style={styles.moreActionItemText}>踩一下 ({questionData?.dislikeCount || 0})</Text>
+                <Text style={styles.moreActionItemText}>踩一下 ({formatNumber(questionData?.dislikeCount || 0)})</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.moreActionItem} onPress={() => {
               setShowActionModal(false);
@@ -6372,14 +6405,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   <Text style={styles.supplementsEmptyDesc}>成为第一个评论的人</Text>
                 </View> : suppCommentsList.map(comment => <View key={comment.id}>
                   <View style={styles.commentListCard}>
-                    <View style={styles.commentListHeader}>
+                    <TouchableOpacity style={styles.commentListHeader} activeOpacity={0.7} onPress={() => openPublicProfile(comment)}>
                       <Avatar uri={comment.userAvatar || comment.avatar} name={comment.userName || comment.userNickname || comment.author} size={24} />
                       <Text style={styles.commentListAuthor}>{comment.userName || comment.userNickname || comment.author}</Text>
                       <View style={{
                     flex: 1
                   }} />
                       <Text style={styles.commentListTime}>{comment.time}</Text>
-                    </View>
+                    </TouchableOpacity>
                     <View style={styles.commentListContent}>
                       <Text style={styles.commentListText}>{comment.content}</Text>
                       <View style={styles.commentListActions}>
@@ -6556,14 +6589,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             
             {/* 原评论卡片 - 如果是回复评论则显示 */}
             {Boolean(currentComposerOriginalComment) && <View style={styles.originalCommentCard}>
-                <View style={styles.originalCommentHeader}>
+                <TouchableOpacity style={styles.originalCommentHeader} activeOpacity={0.7} onPress={() => openPublicProfile(currentComposerOriginalComment)}>
                   <Avatar uri={currentComposerOriginalComment.userAvatar || currentComposerOriginalComment.avatar} name={currentComposerOriginalComment.userName || currentComposerOriginalComment.userNickname || currentComposerOriginalComment.author} size={32} />
                   <Text style={styles.originalCommentAuthor}>
                     {currentComposerOriginalComment.userName || currentComposerOriginalComment.userNickname || currentComposerOriginalComment.author}
                   </Text>
                   <View style={{flex: 1}} />
                   <Text style={styles.originalCommentTime}>{currentComposerOriginalComment.time}</Text>
-                </View>
+                </TouchableOpacity>
                 <Text style={styles.originalCommentText}>{currentComposerOriginalComment.content}</Text>
               </View>}
             
@@ -6621,18 +6654,18 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             
             {/* 原评论卡片 - 今日头条风格 */}
             {Boolean(currentReplyComment) && <View style={styles.originalCommentCard}>
-                <View style={styles.originalCommentHeader}>
+                <TouchableOpacity style={styles.originalCommentHeader} activeOpacity={0.7} onPress={() => openPublicProfile(currentReplyComment)}>
                   <Avatar uri={currentReplyComment.userAvatar || currentReplyComment.avatar} name={currentReplyComment.userName || currentReplyComment.userNickname || currentReplyComment.author} size={32} />
                   <Text style={styles.originalCommentAuthor}>
                     {currentReplyComment.userName || currentReplyComment.userNickname || currentReplyComment.author}
                   </Text>
                   <View style={{
                 flex: 1
-              }} />
+                  }} />
                   <Text style={styles.originalCommentTime}>
                     {currentReplyComment.time}
                   </Text>
-                </View>
+                </TouchableOpacity>
                 <Text style={styles.originalCommentText}>
                   {currentReplyComment.content}
                 </Text>
@@ -6695,7 +6728,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             </View>
 
             {Boolean(currentAnswerReplyComment) && <View style={styles.originalCommentCard}>
-                <View style={styles.originalCommentHeader}>
+                <TouchableOpacity style={styles.originalCommentHeader} activeOpacity={0.7} onPress={() => openPublicProfile(currentAnswerReplyComment)}>
                   <Avatar uri={currentAnswerReplyComment.userAvatar || currentAnswerReplyComment.avatar} name={currentAnswerReplyComment.userName || currentAnswerReplyComment.userNickname || currentAnswerReplyComment.author} size={32} />
                   <Text style={styles.originalCommentAuthor}>
                     {currentAnswerReplyComment.userName || currentAnswerReplyComment.userNickname || currentAnswerReplyComment.author}
@@ -6704,7 +6737,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   <Text style={styles.originalCommentTime}>
                     {currentAnswerReplyComment.time}
                   </Text>
-                </View>
+                </TouchableOpacity>
                 <Text style={styles.originalCommentText}>
                   {currentAnswerReplyComment.content}
                 </Text>
@@ -6769,7 +6802,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             
             {/* 原评论卡片 - 今日头条风格 */}
             {Boolean(currentSuppReplyComment) && <View style={styles.originalCommentCard}>
-                <View style={styles.originalCommentHeader}>
+                <TouchableOpacity style={styles.originalCommentHeader} activeOpacity={0.7} onPress={() => openPublicProfile(currentSuppReplyComment)}>
                   <Avatar uri={currentSuppReplyComment.userAvatar || currentSuppReplyComment.avatar} name={currentSuppReplyComment.userName || currentSuppReplyComment.userNickname || currentSuppReplyComment.author} size={32} />
                   <Text style={styles.originalCommentAuthor}>
                     {currentSuppReplyComment.userName || currentSuppReplyComment.userNickname || currentSuppReplyComment.author}
@@ -6778,7 +6811,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   <Text style={styles.originalCommentTime}>
                     {currentSuppReplyComment.time}
                   </Text>
-                </View>
+                </TouchableOpacity>
                 <Text style={styles.originalCommentText}>
                   {currentSuppReplyComment.content}
                 </Text>
@@ -6802,7 +6835,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
 
             <View style={styles.commentListBottomBar}>
               <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
-              const currentComment = suppCommentsList.find(c => c.id === currentSuppCommentId);
+              const currentComment = suppCommentsList.find(c => String(c.id) === String(currentSuppCommentId));
               setShowSuppCommentReplyModal(false);
               openCommentModal(buildCommentReplyTarget(currentComment, {
                 targetType: 3,
@@ -6944,14 +6977,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 const commentDislikeCount = getCommentDislikeDisplayCount(comment, commentDisliked[comment.id]);
                 return <View key={comment.id}>
                     <View style={styles.commentListCard}>
-                      <View style={styles.commentListHeader}>
+                      <TouchableOpacity style={styles.commentListHeader} activeOpacity={0.7} onPress={() => openPublicProfile(comment)}>
                         <Avatar uri={comment.userAvatar || comment.avatar} name={comment.userName || comment.userNickname || comment.author} size={24} />
                         <Text style={styles.commentListAuthor}>{comment.userName || comment.userNickname || comment.author}</Text>
                         <View style={{
                       flex: 1
                     }} />
                         <Text style={styles.commentListTime}>{comment.time}</Text>
-                      </View>
+                      </TouchableOpacity>
                       <View style={styles.commentListContent}>
                         <Text style={styles.commentListText}>{comment.content}</Text>
                         <View style={styles.commentListActions}>
@@ -7005,7 +7038,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                         }]);
                       }}>
                             <Ionicons name="flag-outline" size={14} color="#ef4444" />
-                            <Text style={styles.commentListActionText}>{comment.reports || 0}</Text>
+                            <Text style={styles.commentListActionText}>{formatNumber(comment.reports || 0)}</Text>
                           </TouchableOpacity>
                         </View>
                       </View>
@@ -8589,6 +8622,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12
   },
+  answerHeaderMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
   answerAvatar: {
     width: 36,
     height: 36,
@@ -8768,6 +8806,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 10
+  },
+  suppAuthorInfoRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center'
   },
   suppAvatar: {
     width: 36,

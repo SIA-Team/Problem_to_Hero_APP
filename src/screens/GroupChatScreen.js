@@ -25,7 +25,6 @@ import { showAppAlert } from '../utils/appAlert';
 import { showToast } from '../utils/toast';
 import apiClient from '../services/api/apiClient';
 import { API_ENDPOINTS, replaceUrlParams } from '../config/api';
-import { FIXED_GROUP_SERVER_URL } from '../config/env';
 
 const DEFAULT_QUESTION = {
   title: '',
@@ -167,9 +166,7 @@ const getGroupChatErrorMessage = (error, fallbackMessage) => {
   return rawMessage;
 };
 
-const GROUP_API_REQUEST_CONFIG = {
-  baseURL: FIXED_GROUP_SERVER_URL,
-};
+const GROUP_API_REQUEST_CONFIG = {};
 
 const toSafeNumber = value => {
   const parsed = Number(value);

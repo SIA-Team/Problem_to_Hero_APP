@@ -7,7 +7,9 @@ import { StatusBar } from 'expo-status-bar';
 import { View, Text, Modal, TouchableOpacity, TextInput, StyleSheet, ScrollView, SafeAreaView, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import * as Font from 'expo-font';
+import * as Updates from 'expo-updates';
 import i18n from './src/i18n';
 import superLikeCreditService from './src/services/SuperLikeCreditService';
 import DeviceInfo from './src/utils/deviceInfo';
@@ -18,7 +20,7 @@ import ToastContainer from './src/components/ToastContainer';
 import AppAlertContainer from './src/components/AppAlertContainer';
 import { setToastRef, showToast } from './src/utils/toast';
 import { setAppAlertRef } from './src/utils/appAlert';
-import LocalMockService from './src/services/LocalMockService';
+import { syncCacheIdentity } from './src/utils/cacheManager';
 // import UpdateChecker from './src/components/UpdateChecker'; // 临时注释：构建APK时不需要热更新功能
 
 import HomeScreen from './src/screens/HomeScreen';
@@ -30,11 +32,13 @@ import QuestionDetailScreen from './src/screens/QuestionDetailScreen';
 import FollowScreen from './src/screens/FollowScreen';
 import HotListScreen from './src/screens/HotListScreen';
 import IncomeRankingScreen from './src/screens/IncomeRankingScreen';
+import RewardRankingScreen from './src/screens/RewardRankingScreen';
 import QuestionRankingScreen from './src/screens/QuestionRankingScreen';
 import GroupChatScreen from './src/screens/GroupChatScreen';
 import AnswerDetailScreen from './src/screens/AnswerDetailScreen';
 import SupplementDetailScreen from './src/screens/SupplementDetailScreen';
 import ActivityScreen from './src/screens/ActivityScreen';
+import ActivityDetailScreen from './src/screens/ActivityDetailScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import QuestionActivityListScreen from './src/screens/QuestionActivityListScreen';
 import MyTeamsScreen from './src/screens/MyTeamsScreen';
@@ -62,10 +66,27 @@ import NetworkTestScreen from './src/screens/NetworkTestScreen';
 import DeviceInfoScreen from './src/screens/DeviceInfoScreen';
 import ChangePasswordScreen from './src/screens/ChangePasswordScreen';
 import ConnectionStatusScreen from './src/screens/ConnectionStatusScreen';
+import UpdateDebugScreen from './src/screens/UpdateDebugScreen';
+import ApiDebugScreen from './src/screens/ApiDebugScreen';
+import FeedbackScreen from './src/screens/FeedbackScreen';
+import BlacklistScreen from './src/screens/BlacklistScreen';
 import { modalTokens } from './src/components/modalTokens';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+const SERVER_SELECTION_STORAGE_KEY = '@app_server_selection';
+
+const getCurrentBundleFingerprint = () => {
+  const runtimeVersion =
+    Updates.runtimeVersion ||
+    Constants.expoConfig?.runtimeVersion ||
+    'unknown-runtime';
+  const updateId =
+    Updates.updateId ||
+    (Updates.isEmbeddedLaunch ? 'embedded' : 'no-update-id');
+
+  return `${runtimeVersion}:${updateId}`;
+};
 
 // Emergency Help Modal Component
 function EmergencyModal({ visible, onClose, onSubmit }) {
@@ -516,12 +537,18 @@ export default function App() {
         console.log('⚙️  环境:', __DEV__ ? '开发环境' : '生产环境');
         console.log('');
         
-        // 初始化本地 Mock 服务（Mock 环境）
-        if (__DEV__) {
-          await LocalMockService.initialize();
-        }
-        
         // 初始化超级赞积分系统（异步，不阻塞）
+        const selectedServer =
+          (await AsyncStorage.getItem(SERVER_SELECTION_STORAGE_KEY)) || 'server2';
+        const cacheIdentity = `${selectedServer}|${getCurrentBundleFingerprint()}`;
+        const cacheIdentityResult = await syncCacheIdentity(cacheIdentity);
+
+        if (cacheIdentityResult.changed) {
+          console.log('🧹 检测到服务器或 bundle 指纹变化，已自动清理业务缓存');
+          console.log('   上次身份:', cacheIdentityResult.previousIdentity || '无');
+          console.log('   当前身份:', cacheIdentityResult.currentIdentity);
+        }
+
         superLikeCreditService.initialize().catch(error => {
           console.error('⚠️ Service initialization failed:', error);
         });
@@ -761,9 +788,11 @@ export default function App() {
           <Stack.Screen name="QuestionDetail" component={QuestionDetailScreen} />
           <Stack.Screen name="SupplementDetail" component={SupplementDetailScreen} />
           <Stack.Screen name="QuestionActivityList" component={QuestionActivityListScreen} />
+          <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
         <Stack.Screen name="Follow" component={FollowScreen} />
         <Stack.Screen name="HotList" component={HotListScreen} />
         <Stack.Screen name="IncomeRanking" component={IncomeRankingScreen} />
+        <Stack.Screen name="RewardRanking" component={RewardRankingScreen} />
         <Stack.Screen name="QuestionRanking" component={QuestionRankingScreen} />
         <Stack.Screen name="Messages" component={MessagesScreen} />
         <Stack.Screen name="GroupChat" component={GroupChatScreen} />
@@ -792,6 +821,10 @@ export default function App() {
         <Stack.Screen name="NetworkTest" component={NetworkTestScreen} />
         <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
         <Stack.Screen name="ConnectionStatus" component={ConnectionStatusScreen} />
+        <Stack.Screen name="UpdateDebug" component={UpdateDebugScreen} />
+        <Stack.Screen name="ApiDebug" component={ApiDebugScreen} />
+        <Stack.Screen name="Feedback" component={FeedbackScreen} />
+        <Stack.Screen name="Blacklist" component={BlacklistScreen} />
         </Stack.Navigator>
           <AppAlertContainer ref={appAlertRef} />
           <ToastContainer ref={toastRef} />

@@ -89,20 +89,12 @@ export const updateDynamicServer = (server, customUrl = '') => {
 };
 
 /**
- * 环境切换配置
- * USE_MOCK: 设置为 true 使用 Apifox Mock 环境（用于前端独立开发）
- * SIMULATE_PRODUCTION: 设置为 true 模拟生产环境（用于开发环境测试生产逻辑）
- */
-const USE_MOCK = false;  // 改为 false 使用真实服务器
-
-/**
  * 接口服务器地址配置
  * 支持不同接口使用不同的服务器地址
  * 
  * 配置方式：
  * - 'server1': 使用 http://123.144.149.59:30560 (开发服务器，备用)
  * - 'server2': 使用 http://8.146.230.62:8080 (生产服务器，当前默认)
- * - 'mock': 使用 Mock 服务器
  * - 不配置：使用默认服务器地址 (当前为生产服务器 server2)
  * 
  * 当前状态：所有接口都使用生产服务器，开发服务器配置已准备好供将来使用
@@ -115,20 +107,23 @@ const API_SERVER_CONFIG = {
   [buildServicePath(SERVICES.USER, '/app/user/auth/login')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/user/auth/token-login')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/user/auth/logout')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/auth/refresh')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/user/auth/password')]: getCurrentServerSync,
   
   // 用户相关接口
   [buildServicePath(SERVICES.USER, '/app/user/profile')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/user/profile/me')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/user/profile/public/*')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/user/profile/username')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/user/profile/avatar')]: getCurrentServerSync,
-  ['/app/wallet/balance']: FIXED_GROUP_SERVER_URL,
-  ['/app/group/public/question/*']: getCurrentServerSync,
-  ['/app/team/public/question/*']: FIXED_GROUP_SERVER_URL,
-  ['/app/group/public/ids/question/*']: FIXED_GROUP_SERVER_URL,
-  ['/app/group-message/list']: FIXED_GROUP_SERVER_URL,
-  ['/app/group-message/create']: FIXED_GROUP_SERVER_URL,
-  ['/app/content/emergency-help/quota']: FIXED_GROUP_SERVER_URL,
+  [buildServicePath(SERVICES.USER, '/app/wallet/balance')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/group/public/question/*')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/team/public/question/*')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/group/public/ids/question/*')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/group-message/list')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/group-message/create')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/content/emergency-help/quota')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/content/emergency-help/publish')]: getCurrentServerSync,
   
   // 分类相关接口
   [buildServicePath(SERVICES.CONTENT, '/app/content/category/list')]: getCurrentServerSync,
@@ -203,8 +198,6 @@ const resolveServerUrl = (serverType, currentEnv) => {
       return currentEnv.server2Url;
     case 'custom':
       return getCustomServerUrlSync() || currentEnv.apiUrl;
-    case 'mock':
-      return ENV.mock.apiUrl;
     default:
       return currentEnv.apiUrl;
   }
@@ -216,11 +209,6 @@ const resolveServerUrl = (serverType, currentEnv) => {
  * @returns {string} 服务器地址
  */
 export const getApiServerUrl = (url) => {
-  // 如果使用 Mock 模式，直接返回 Mock 地址
-  if (USE_MOCK) {
-    return ENV.mock.apiUrl;
-  }
-  
   // 检查是否有特定的服务器配置
   let serverConfig = API_SERVER_CONFIG[url];
   
@@ -252,36 +240,6 @@ export const getApiServerUrl = (url) => {
   return resolveServerUrl(getCurrentServerSync(), currentEnv);
 };
 
-/**
- * 判断指定接口是否使用 Mock（保持向后兼容）
- * @param {string} url - 接口路径
- * @returns {boolean} 是否使用 Mock
- */
-export const shouldUseMock = (url) => {
-  // 如果全局开启 Mock，直接返回 true
-  if (USE_MOCK) {
-    return true;
-  }
-  
-  // 检查特定接口是否配置为 Mock
-  const serverConfig = API_SERVER_CONFIG[url];
-  if (serverConfig === 'mock') {
-    return true;
-  }
-  
-  // 支持通配符匹配
-  for (const [pattern, serverType] of Object.entries(API_SERVER_CONFIG)) {
-    if (pattern.includes('*')) {
-      const regex = new RegExp(pattern.replace(/\*/g, '[^/]+'));
-      if (regex.test(url) && serverType === 'mock') {
-        return true;
-      }
-    }
-  }
-  
-  return false;
-};
-
 // 环境配置
 const ENV = {
   dev: {
@@ -299,36 +257,25 @@ const ENV = {
   prod: {
     apiUrl: 'http://8.146.230.62:8080',
     contentApiUrl: 'http://8.146.230.62:8080',  // 内容服务
-    server1Url: 'http://8.146.230.62:8080',     // 生产环境统一使用生产服务器
-    server2Url: 'http://8.146.230.62:8080',     // 生产环境统一使用生产服务器
-  },
-  // Apifox Mock 环境（用于前端独立开发和测试）
-  mock: {
-    apiUrl: 'https://m1.apifoxmock.com/m1/7857964-7606903-default',
-    contentApiUrl: 'https://m1.apifoxmock.com/m1/7857964-7606903-default',  // Mock环境使用同一个地址
+    server1Url: 'http://123.144.149.59:30560',  // 开发服务器（备用）
+    server2Url: 'http://8.146.230.62:8080',     // 生产服务器
   }
 };
 
 // 自动判断环境
 const getEnvVars = () => {
-  // 优先级 1: 如果开启了 Mock 模式，使用 Apifox Mock 环境
-  if (USE_MOCK) {
-    console.log('使用 Apifox Mock 环境');
-    return ENV.mock;
-  }
-  
-  // 优先级 2: 如果开启了模拟生产环境，返回生产配置
+  // 优先级 1: 如果开启了模拟生产环境，返回生产配置
   if (SIMULATE_PRODUCTION) {
     console.log('使用生产环境配置（模拟模式）');
     return ENV.prod;
   }
   
-  // 优先级 3: 通过 __DEV__ 判断是否为开发环境
+  // 优先级 2: 通过 __DEV__ 判断是否为开发环境
   if (__DEV__) {
     return ENV.dev;
   }
   
-  // 优先级 4: 通过 releaseChannel 判断环境
+  // 优先级 3: 通过 releaseChannel 判断环境
   const releaseChannel = Constants.expoConfig?.releaseChannel;
   
   if (releaseChannel === 'staging') {
@@ -345,4 +292,4 @@ const getEnvVars = () => {
 
 // 导出环境配置和相关函数
 export default getEnvVars();
-export { USE_MOCK, API_SERVER_CONFIG };
+export { API_SERVER_CONFIG };

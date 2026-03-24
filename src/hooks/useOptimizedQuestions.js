@@ -104,7 +104,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
     const tabType = getTabType(activeTab);
     
     try {
-      const data = await loadData(tabType, 1, false);
+      const data = await loadData(tabType, 1, true);
       setQuestionList(data);
       setPage(1);
       setHasMore(data.length >= 20);

@@ -11,7 +11,9 @@ import { useTranslation } from '../i18n/useTranslation';
 import { getRegionData } from '../data/regionData';
 import { useOptimizedQuestions } from '../hooks/useOptimizedQuestions';
 import { showToast } from '../utils/toast';
+import { navigateToPublicProfile, resolvePublicUserId } from '../utils/publicProfileNavigation';
 import questionApi from '../services/api/questionApi';
+import { getBlockedUserIds, subscribeBlockedUsers } from '../services/blacklistState';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -54,7 +56,8 @@ export default function HomeScreen({ navigation }) {
     t('home.topics'),
     t('home.recommend'),
     t('home.hotList'),
-    t('home.incomeRanking'),
+    // t('home.incomeRanking'), // 暂时隐藏收入榜，后期再启用
+    t('home.rewardRanking'), // 悬赏榜
     t('home.questionRanking'),
     t('home.sameCity'),
     t('home.country'),
@@ -214,6 +217,36 @@ export default function HomeScreen({ navigation }) {
 
   // 同城地区数据 - 使用与主区域选择器相同的多语言数据
   const cityRegionData = regionData;
+
+  const filterBlockedQuestions = React.useCallback((items, blockedIds) => {
+    if (!Array.isArray(items) || !blockedIds?.size) {
+      return items;
+    }
+
+    const filteredItems = items.filter((item) => {
+      const candidateUserId = resolvePublicUserId(item);
+      return !candidateUserId || !blockedIds.has(String(candidateUserId));
+    });
+
+    return filteredItems.length === items.length ? items : filteredItems;
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeBlockedUsers((blockedIds) => {
+      setQuestionList((prevList) => filterBlockedQuestions(prevList, blockedIds));
+    });
+
+    return unsubscribe;
+  }, [filterBlockedQuestions, setQuestionList]);
+
+  useEffect(() => {
+    const blockedIds = getBlockedUserIds();
+    if (!blockedIds.size) {
+      return;
+    }
+
+    setQuestionList((prevList) => filterBlockedQuestions(prevList, blockedIds));
+  }, [questionList, filterBlockedQuestions, setQuestionList]);
 
 
 
@@ -558,8 +591,10 @@ export default function HomeScreen({ navigation }) {
                   navigation.navigate('Follow');
                 } else if (tab === t('home.hotList')) {
                   navigation.navigate('HotList');
-                } else if (tab === t('home.incomeRanking')) {
-                  navigation.navigate('IncomeRanking');
+                // } else if (tab === t('home.incomeRanking')) {
+                //   navigation.navigate('IncomeRanking'); // 暂时隐藏收入榜
+                } else if (tab === t('home.rewardRanking')) {
+                  navigation.navigate('RewardRanking');
                 } else if (tab === t('home.questionRanking')) {
                   navigation.navigate('QuestionRanking');
                 } else {
@@ -873,7 +908,14 @@ export default function HomeScreen({ navigation }) {
 
                   {/* 头像、姓名、时间、地区 - 全部放在一行,右侧放点赞和评论 */}
                   <View style={styles.cardHeader}>
-                    <View style={styles.cardHeaderLeft}>
+                    <TouchableOpacity
+                      style={styles.cardHeaderLeft}
+                      activeOpacity={0.7}
+                      onPress={e => {
+                        e.stopPropagation();
+                        navigateToPublicProfile(navigation, item, { allowAnonymous: false });
+                      }}
+                    >
                       <Avatar 
                         uri={item.authorAvatar} 
                         name={item.authorNickName || t('home.anonymous')} 
@@ -888,7 +930,7 @@ export default function HomeScreen({ navigation }) {
                       <Text style={styles.metaSeparator}>·</Text>
                       <Ionicons name="location-outline" size={9} color="#9ca3af" />
                       <Text style={styles.locationText}>{getLocationDisplay(item)}</Text>
-                    </View>
+                    </TouchableOpacity>
                     <View style={styles.cardHeaderRight}>
                       <TouchableOpacity style={styles.headerActionBtn} onPress={() => toggleLike(item.id)}>
                         <Ionicons name={isLiked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={isLiked ? "#ef4444" : "#9ca3af"} />
