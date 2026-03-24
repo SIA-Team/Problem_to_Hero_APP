@@ -78,6 +78,25 @@ export default function ProfileScreen({
   const {
     t
   } = useTranslation();
+  
+  /**
+   * 获取所在地的显示文本（只显示最后一级）
+   */
+  const getLocationDisplay = (location) => {
+    if (!location) return '';
+    
+    // 按空格分割
+    const parts = location.split(' ').filter(Boolean);
+    
+    // 如果有多级，只返回最后一级
+    if (parts.length >= 2) {
+      return parts[parts.length - 1];
+    }
+    
+    // 如果只有一级，返回原值
+    return location;
+  };
+  
   const [walletData, setWalletData] = useState({
     balance: 0,
     currency: 'usd'
@@ -589,6 +608,13 @@ export default function ProfileScreen({
     }
   };
   const handleMenuPress = item => {
+    const rootNavigation = navigation.getParent ? navigation.getParent() || navigation : navigation;
+
+    if (item.label === t('profile.myActivities')) {
+      rootNavigation.navigate('MyActivities');
+      return;
+    }
+
     switch (item.label) {
       case t('profile.browsingHistory'):
         setShowHistoryModal(true);
@@ -599,10 +625,10 @@ export default function ProfileScreen({
         loadDraftsList(); // 加载草稿数据
         break;
       case t('profile.myGroups'):
-        navigation.navigate('MyGroups');
+        rootNavigation.navigate('MyGroups');
         break;
       case t('profile.myTeams'):
-        navigation.navigate('MyTeams');
+        rootNavigation.navigate('MyTeams');
         break;
       case t('profile.myActivities'):
         // 使用jumpTo跳转到活动Tab
@@ -807,15 +833,14 @@ export default function ProfileScreen({
         showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.idNumberRequired'));
         return;
       }
-      if (!data.qualifications || data.qualifications.length === 0) {
-        showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.qualificationsRequired'));
-        return;
-      }
-      // 检查是否所有资质都填写了名称
-      const unnamedQualification = data.qualifications.find(q => !q.name || q.name.trim() === '');
-      if (unnamedQualification) {
-        showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.qualificationNameRequired'));
-        return;
+      // 专业资质认证改为可选，不再验证
+      // 如果用户上传了资质，检查是否所有资质都填写了名称
+      if (data.qualifications && data.qualifications.length > 0) {
+        const unnamedQualification = data.qualifications.find(q => !q.name || q.name.trim() === '');
+        if (unnamedQualification) {
+          showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.qualificationNameRequired'));
+          return;
+        }
       }
     } else if (selectedVerificationType === 'enterprise') {
       if (!data.name || !data.taxNumber || !data.address) {
@@ -1065,7 +1090,7 @@ export default function ProfileScreen({
             </TouchableOpacity>
             <TouchableOpacity style={{
             marginLeft: 16
-          }} onPress={() => navigation.navigate('Settings')} hitSlop={{
+          }} onPress={() => (navigation.getParent ? navigation.getParent() || navigation : navigation).navigate('Settings')} hitSlop={{
             top: 10,
             bottom: 10,
             left: 10,
@@ -1111,7 +1136,7 @@ export default function ProfileScreen({
           <View style={styles.userMeta}>
             {userProfile.location ? <View style={styles.metaItem}>
                 <Ionicons name="location-outline" size={14} color="#9ca3af" />
-                <Text style={styles.metaText}>{userProfile.location}</Text>
+                <Text style={styles.metaText}>{getLocationDisplay(userProfile.location)}</Text>
               </View> : null}
             {userProfile.occupation ? <View style={styles.metaItem}>
                 <Ionicons name="briefcase-outline" size={14} color="#9ca3af" />
@@ -1120,7 +1145,7 @@ export default function ProfileScreen({
           </View>
           
           {/* 影响力和智慧指数 */}
-          <View style={styles.indexRow}>
+          {/* <View style={styles.indexRow}>
             <View style={styles.indexItem}>
               <View style={styles.indexIconWrapper}>
                 <Ionicons name="flame" size={18} color="#ef4444" />
@@ -1140,7 +1165,7 @@ export default function ProfileScreen({
                 <Text style={styles.indexValue}>92.5</Text>
               </View>
             </TouchableOpacity>
-          </View>
+          </View> */}
           
           <View style={styles.statsRow}>
             {stats.map((stat, idx) => <TouchableOpacity key={idx} style={styles.statItem} onPress={() => handleStatPress(stat)}>
@@ -1156,7 +1181,15 @@ export default function ProfileScreen({
             <View style={styles.walletIcon}><Ionicons name="wallet" size={20} color="#f59e0b" /></View>
             <View style={styles.walletInfo}>
               <Text style={styles.walletLabel}>{t('profile.myWallet')}</Text>
-              <Text style={styles.walletBalance}>{formattedWalletBalance}</Text>
+              <TouchableOpacity 
+                activeOpacity={0.7}
+                onPress={() => navigation.navigate('WalletDetail', { 
+                  balance: walletData.balance, 
+                  currency: walletData.currency 
+                })}
+              >
+                <Text style={styles.walletBalance}>{formattedWalletBalance}</Text>
+              </TouchableOpacity>
             </View>
             <View style={styles.walletActions}>
               <TouchableOpacity style={styles.rechargeBtn} onPress={() => handleWalletAction('recharge')}><Text style={styles.rechargeBtnText}>{t('profile.recharge')}</Text></TouchableOpacity>
@@ -1692,10 +1725,10 @@ export default function ProfileScreen({
                   </View>
                 </View>
 
-                {/* 专业资质认证（必填） */}
+                {/* 专业资质认证（可选） */}
                 <View style={styles.uploadSection}>
                   <View style={styles.qualificationHeader}>
-                    <Text style={styles.uploadSectionTitle}>专业资质认证 <Text style={styles.required}>*</Text></Text>
+                    <Text style={styles.uploadSectionTitle}>专业资质认证</Text>
                   </View>
                   <Text style={styles.qualificationDesc}>请上传您的专业资质证书（如：律师证、医师证、教师证等）</Text>
                   

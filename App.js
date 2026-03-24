@@ -41,7 +41,9 @@ import ActivityScreen from './src/screens/ActivityScreen';
 import ActivityDetailScreen from './src/screens/ActivityDetailScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import QuestionActivityListScreen from './src/screens/QuestionActivityListScreen';
+import MyActivitiesScreen from './src/screens/MyActivitiesScreen';
 import MyTeamsScreen from './src/screens/MyTeamsScreen';
+import MyGroupsScreen from './src/screens/MyGroupsScreen';
 import TeamDetailScreen from './src/screens/TeamDetailScreen';
 import QuestionTeamsScreen from './src/screens/QuestionTeamsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -70,6 +72,7 @@ import UpdateDebugScreen from './src/screens/UpdateDebugScreen';
 import ApiDebugScreen from './src/screens/ApiDebugScreen';
 import FeedbackScreen from './src/screens/FeedbackScreen';
 import BlacklistScreen from './src/screens/BlacklistScreen';
+import WalletDetailScreen from './src/screens/WalletDetailScreen';
 import { modalTokens } from './src/components/modalTokens';
 
 const Stack = createNativeStackNavigator();
@@ -797,7 +800,9 @@ export default function App() {
         <Stack.Screen name="Messages" component={MessagesScreen} />
         <Stack.Screen name="GroupChat" component={GroupChatScreen} />
         <Stack.Screen name="AnswerDetail" component={AnswerDetailScreen} />
+        <Stack.Screen name="MyActivities" component={MyActivitiesScreen} />
         <Stack.Screen name="MyTeams" component={MyTeamsScreen} />
+        <Stack.Screen name="MyGroups" component={MyGroupsScreen} />
         <Stack.Screen name="QuestionTeams" component={QuestionTeamsScreen} />
         <Stack.Screen name="TeamDetail" component={TeamDetailScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
@@ -825,6 +830,7 @@ export default function App() {
         <Stack.Screen name="ApiDebug" component={ApiDebugScreen} />
         <Stack.Screen name="Feedback" component={FeedbackScreen} />
         <Stack.Screen name="Blacklist" component={BlacklistScreen} />
+        <Stack.Screen name="WalletDetail" component={WalletDetailScreen} />
         </Stack.Navigator>
           <AppAlertContainer ref={appAlertRef} />
           <ToastContainer ref={toastRef} />

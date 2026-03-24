@@ -186,14 +186,14 @@ export default function FollowScreen({
     t
   } = useTranslation();
 
-  // Tabs array using translation
-  const tabs = React.useMemo(() => [t('follow.questions'), t('follow.users'), t('follow.topics')], [t]);
+  // Tabs array using translation - 移除了问题tab
+  const tabs = React.useMemo(() => [t('follow.users'), t('follow.topics')], [t]);
   const [activeTab, setActiveTab] = useState('');
 
   // Initialize activeTab with translated value
   React.useEffect(() => {
     if (!activeTab) {
-      setActiveTab(t('follow.questions'));
+      setActiveTab(t('follow.users'));
     }
   }, [t, activeTab]);
   const [likedItems, setLikedItems] = useState({});
@@ -245,65 +245,6 @@ export default function FollowScreen({
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* 问题列表 */}
-        <View style={{
-        display: activeTab === t('follow.questions') ? 'flex' : 'none'
-      }}>
-          {followedQuestions.map(item => <TouchableOpacity key={item.id} style={styles.questionCard} onPress={() => navigation.navigate('QuestionDetail', {
-          id: item.id
-        })}>
-              <View style={styles.questionTitleWrapper}>
-                <Text style={styles.questionTitle}>
-                  {item.type === 'reward' && item.reward && <Text style={styles.rewardTagInline}> ${item.reward} </Text>}
-                  {translatedContent[item.id]?.title || item.title}
-                </Text>
-                
-                {/* 翻译按钮 */}
-                <TranslateButton text={item.title} compact={false} onTranslated={(translatedText, isTranslated) => {
-              setTranslatedContent(prev => ({
-                ...prev,
-                [item.id]: {
-                  ...prev[item.id],
-                  title: isTranslated ? translatedText : null
-                }
-              }));
-            }} />
-              </View>
-              <View style={styles.questionHeaderRow}>
-                <View style={styles.questionHeaderLeft}>
-                  <Avatar uri={item.avatar} name={item.author} size={17} />
-                  <Text style={styles.authorName}>{item.author}</Text>
-                  {Boolean(item.verified) && <Ionicons name="checkmark-circle" size={10} color="#3b82f6" style={{
-                marginLeft: 2
-              }} />}
-                  <Text style={styles.metaSeparator}>·</Text>
-                  <Text style={styles.questionTime}>{item.time}</Text>
-                </View>
-              </View>
-              <View style={styles.questionFooter}>
-                <View style={styles.questionStats}>
-                  <TouchableOpacity style={styles.statBtn} onPress={() => toggleLike(item.id)}>
-                    <Ionicons name={likedItems[item.id] ? "thumbs-up" : "thumbs-up-outline"} size={16} color={likedItems[item.id] ? "#ef4444" : "#6b7280"} />
-                    <Text style={[styles.statText, likedItems[item.id] && {
-                  color: '#ef4444'
-                }]}>{formatNumber(item.likes + (likedItems[item.id] ? 1 : 0))}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.statBtn}>
-                    <Ionicons name="chatbubble-outline" size={16} color="#6b7280" />
-                    <Text style={styles.statText}>{item.comments}</Text>
-                  </TouchableOpacity>
-                </View>
-                <TouchableOpacity style={styles.answerBtn} onPress={() => navigation.navigate('QuestionDetail', {
-              id: item.id,
-              openAnswerModal: true
-            })}>
-                  <Ionicons name="create-outline" size={14} color="#fff" />
-                  <Text style={styles.answerBtnText}>{t('follow.answer')}</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>)}
-        </View>
-
         {/* 用户列表 */}
         <View style={{
         display: activeTab === t('follow.users') ? 'flex' : 'none'

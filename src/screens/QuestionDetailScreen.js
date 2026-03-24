@@ -706,6 +706,13 @@ export default function QuestionDetailScreen({
     time: '30分钟前'
   }]);
 
+  // 格式化数量显示，超过 999 显示 "999+"
+  const formatCount = (count) => {
+    const num = Number(count);
+    if (!Number.isFinite(num) || num < 0) return 0;
+    return num > 999 ? '999+' : num;
+  };
+
   // 使用 useMemo 创建 answerTabs，避免在模块加载时调用 t()
   // 优化：只在初始数据加载完成后才显示数量，彻底避免闪烁
   const answerTabs = React.useMemo(() => {
@@ -717,8 +724,8 @@ export default function QuestionDetailScreen({
       return [t('screens.questionDetail.tabs.supplements'), t('screens.questionDetail.tabs.answers'), t('screens.questionDetail.tabs.comments'), t('screens.questionDetail.tabs.invite')];
     }
 
-    // 初始数据已加载，显示实际数量
-    return [`${t('screens.questionDetail.tabs.supplements')} (${supplementsList.length})`, `${t('screens.questionDetail.tabs.answers')} (${answersTotal})`, `${t('screens.questionDetail.tabs.comments')} (${commentsTotal || questionData?.commentCount || 0})`, t('screens.questionDetail.tabs.invite')];
+    // 初始数据已加载，显示实际数量（格式化后）
+    return [`${t('screens.questionDetail.tabs.supplements')} (${formatCount(supplementsList.length)})`, `${t('screens.questionDetail.tabs.answers')} (${formatCount(answersTotal)})`, `${t('screens.questionDetail.tabs.comments')} (${formatCount(commentsTotal || questionData?.commentCount || 0)})`, t('screens.questionDetail.tabs.invite')];
   }, [t, supplementsList.length, answersTotal, commentsTotal, questionData?.commentCount, supplementsCache.featured.loaded, answersCache.featured.loaded]);
 
   // 设置默认选中的标签页 - 使用 useLayoutEffect 确保在渲染前执行
@@ -8346,11 +8353,16 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     position: 'relative',
-    alignItems: 'center'
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 0, // 允许内容收缩
   },
   answerTabText: {
     fontSize: 14,
-    color: '#6b7280'
+    color: '#6b7280',
+    textAlign: 'center',
+    flexShrink: 1, // 允许文本收缩
+    minWidth: 0, // 允许内容收缩
   },
   answerTabTextActive: {
     color: '#ef4444',

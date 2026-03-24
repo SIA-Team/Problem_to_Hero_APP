@@ -1457,6 +1457,154 @@
         },
         "createSuccess": "活动创建成功！"
       }
+    },
+    "wisdomIndex": {
+      "title": "智慧指数",
+      "currentIndexLabel": "当前智慧指数",
+      "exceedsUsers": "超过了 {percent}% 的用户",
+      "indicators": {
+        "title": "关键指标",
+        "answerCount": "回答数",
+        "adoptedCount": "采纳数",
+        "fansCount": "粉丝数",
+        "questionCount": "提问数"
+      },
+      "avgScore": {
+        "title": "平均考核分数",
+        "unit": "分"
+      },
+      "actions": {
+        "dailyImprovement": "每日提升",
+        "examDetail": "考核详情",
+        "questionBank": "题库"
+      },
+      "recentExams": {
+        "title": "最近考核记录",
+        "viewAll": "查看全部",
+        "platform": "平台",
+        "scoreUnit": "分",
+        "rank": {
+          "excellent": "优秀",
+          "good": "良好"
+        }
+      }
+    },
+    "examHistory": {
+      "title": "考核详情",
+      "stats": {
+        "totalExams": "总考核",
+        "passed": "已通过",
+        "avgScore": "平均分"
+      },
+      "rank": {
+        "excellent": "优秀",
+        "good": "良好",
+        "pass": "及格",
+        "fail": "不及格"
+      },
+      "scoreUnit": "分",
+      "correctCount": "{correct}/{total}题正确",
+      "duration": "用时 {time}",
+      "viewDetail": "查看详情"
+    },
+    "examDetail": {
+      "title": "考核详情",
+      "scoreUnit": "分",
+      "scoreLabel": "考核得分",
+      "stats": {
+        "correct": "答对",
+        "wrong": "答错",
+        "duration": "用时"
+      },
+      "examTime": "考核时间：",
+      "questionsTitle": "答题详情",
+      "questionNumber": "第 {number} 题",
+      "status": {
+        "correct": "正确",
+        "wrong": "错误"
+      },
+      "answerNote": {
+        "yourAnswer": "你的答案：",
+        "correctAnswer": " 正确答案："
+      },
+      "rank": {
+        "excellent": "优秀",
+        "good": "良好",
+        "pass": "及格",
+        "fail": "不及格"
+      }
+    },
+    "wisdomExam": {
+      "title": "智慧考核",
+      "start": {
+        "title": "智慧考核",
+        "description": "通过考核提升你的智慧指数",
+        "rulesTitle": "考核规则",
+        "rule1": "共10道题，每题10分",
+        "rule2": "限时10分钟完成",
+        "rule3": "60分及格，90分以上优秀",
+        "rule4": "考核结果将影响智慧指数",
+        "startButton": "开始考核"
+      },
+      "exam": {
+        "questionNumber": "第 {number} 题",
+        "questionCount": "{current}/{total}",
+        "answerSheet": "答题卡",
+        "previous": "上一题",
+        "next": "下一题",
+        "submit": "提交"
+      },
+      "result": {
+        "title": "考核结果",
+        "passed": "恭喜通过！",
+        "failed": "未通过考核",
+        "totalQuestions": "总题数",
+        "correct": "答对",
+        "wrong": "答错",
+        "backButton": "返回",
+        "retryButton": "再考一次",
+        "rank": {
+          "excellent": "优秀",
+          "good": "良好",
+          "pass": "及格",
+          "fail": "不及格"
+        }
+      },
+      "explanation": {
+        "title": "考核说明",
+        "completed": "考核已完成！",
+        "description": "以下是你的考核概况",
+        "overviewTitle": "考核概况",
+        "examTime": "考核用时",
+        "answeredCount": "已答题数",
+        "correctCount": "答对题数",
+        "estimatedScore": "预估得分",
+        "wisdomNoticeTitle": "智慧指数提示",
+        "wisdomNoticeText": "本次考核结果将影响你的智慧指数，优秀的成绩可以大幅提升指数哦！",
+        "tipsTitle": "温馨提示",
+        "tip1": "• 考核结果仅供参考，重在学习提升",
+        "tip2": "• 可以多次参加考核，取最高分",
+        "tip3": "• 建议定期参加考核，保持学习状态",
+        "viewResultButton": "查看结果"
+      },
+      "confirmModal": {
+        "title": "确认提交？",
+        "description": "提交后将无法修改答案，请确认是否提交考核。",
+        "answeredLabel": "已答题数",
+        "timeLeftLabel": "剩余时间",
+        "cancelButton": "继续答题",
+        "confirmButton": "确认提交"
+      }
+    },
+    "questionBank": {
+      "title": "题库",
+      "upload": "上传",
+      "tabs": {
+        "platform": "平台题库",
+        "user": "用户题库"
+      },
+      "questionCount": "题",
+      "startExam": "开始考核"
     }
   },
   "common": {

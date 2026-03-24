@@ -132,21 +132,13 @@ export default function ActivityScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const viewerScrollRef = useRef(null);
+  const isFromProfile = false;
 
-  const isFromProfile = route?.params?.fromProfile === true;
-  const initialTab = isFromProfile ? t('screens.activity.tabs.mine') : t('screens.activity.tabs.all');
-
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const [activeTab, setActiveTab] = useState(t('screens.activity.tabs.all'));
   const [activities, setActivities] = useState(initialActivities);
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [viewerImages, setViewerImages] = useState([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-
-  useEffect(() => {
-    if (route?.params?.fromProfile) {
-      setActiveTab(t('screens.activity.tabs.mine'));
-    }
-  }, [route?.params?.fromProfile, t]);
 
   useEffect(() => {
     if (!showImageViewer) {

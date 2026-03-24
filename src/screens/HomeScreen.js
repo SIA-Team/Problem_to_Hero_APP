@@ -1109,10 +1109,6 @@ export default function HomeScreen({ navigation }) {
                 {selectedQuestion && bookmarkedItems[selectedQuestion.id] ? '已收藏' : '收藏'} ({formatNumber(selectedQuestion?.collectCount || 0)})
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); navigation.navigate('GroupChat', { question: selectedQuestion, groupId: selectedQuestion?.groupId ?? selectedQuestion?.publicGroupId ?? selectedQuestion?.questionGroupId ?? null }); }}>
-              <Ionicons name="people-outline" size={22} color="#1f2937" />
-              <Text style={styles.actionItemText}>加入群聊</Text>
-            </TouchableOpacity>
             <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); showToast('加入团队功能', 'info'); }}>
               <Ionicons name="people-circle-outline" size={22} color="#1f2937" />
               <Text style={styles.actionItemText}>加入团队</Text>
@@ -1143,10 +1139,6 @@ export default function HomeScreen({ navigation }) {
             <TouchableOpacity style={styles.actionItem} onPress={() => openSocialModal('twitter')}>
               <FontAwesome5 name="twitter" size={20} color="#1DA1F2" />
               <Text style={styles.actionItemText}>@推特</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionItem} onPress={() => openSocialModal('facebook')}>
-              <FontAwesome5 name="facebook" size={20} color="#4267B2" />
-              <Text style={styles.actionItemText}>@Facebook</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.actionItem, styles.reportItem]}>
               <Ionicons name="flag-outline" size={22} color="#ef4444" />

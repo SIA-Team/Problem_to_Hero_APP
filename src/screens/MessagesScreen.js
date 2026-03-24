@@ -66,6 +66,42 @@ const arbitrationInvites = [{
   status: 'voted'
 }];
 
+// 紧急求助数据
+const emergencyRequests = [{
+  id: 1,
+  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=emergency1',
+  name: '王小明',
+  title: '车辆抛锚急需拖车救援',
+  location: '北京市朝阳区建国路88号',
+  distance: '2.3km',
+  time: '3分钟前',
+  rescuerCount: 3,
+  status: 'urgent', // urgent: 紧急, responding: 响应中, completed: 已完成
+  urgencyLevel: 'high' // high: 高, medium: 中, low: 低
+}, {
+  id: 2,
+  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=emergency2',
+  name: '李华',
+  title: '突发疾病需要紧急送医',
+  location: '上海市浦东新区世纪大道1号',
+  distance: '5.8km',
+  time: '8分钟前',
+  rescuerCount: 5,
+  status: 'responding',
+  urgencyLevel: 'high'
+}, {
+  id: 3,
+  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=emergency3',
+  name: '张伟',
+  title: '钥匙锁车内需要开锁服务',
+  location: '广州市天河区珠江新城',
+  distance: '1.2km',
+  time: '15分钟前',
+  rescuerCount: 2,
+  status: 'urgent',
+  urgencyLevel: 'medium'
+}];
+
 // 消息列表数据
 const messageGroups = [{
   type: 'official',
@@ -314,8 +350,108 @@ export default function MessagesScreen({
             </TouchableOpacity>)}
         </View>
 
-        {/* 仲裁邀请 */}
-        <View style={styles.arbitrationSection}>
+        {/* 紧急求助模块 */}
+        <View style={styles.emergencySection}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleRow}>
+              <Ionicons name="alert-circle" size={20} color="#ef4444" />
+              <Text style={styles.sectionTitle}>紧急求助</Text>
+              <View style={styles.emergencyPulse}>
+                <View style={styles.emergencyPulseDot} />
+              </View>
+            </View>
+            <TouchableOpacity onPress={() => navigation.navigate('Emergency')}>
+              <Text style={styles.sectionMore}>查看全部</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {emergencyRequests.map(item => (
+            <TouchableOpacity 
+              key={item.id} 
+              style={[
+                styles.emergencyItem,
+                item.urgencyLevel === 'high' && styles.emergencyItemHigh
+              ]}
+              activeOpacity={0.7}
+            >
+              {/* 紧急标识条 */}
+              {item.urgencyLevel === 'high' && (
+                <View style={styles.emergencyIndicator} />
+              )}
+              
+              <View style={styles.emergencyHeader}>
+                <Avatar uri={item.avatar} name={item.name} size={44} />
+                <View style={styles.emergencyHeaderContent}>
+                  <View style={styles.emergencyNameRow}>
+                    <Text style={styles.emergencyName}>{item.name}</Text>
+                    {item.status === 'urgent' && (
+                      <View style={styles.urgentBadge}>
+                        <Ionicons name="warning" size={10} color="#fff" />
+                        <Text style={styles.urgentBadgeText}>紧急</Text>
+                      </View>
+                    )}
+                    {item.status === 'responding' && (
+                      <View style={styles.respondingBadge}>
+                        <Ionicons name="people" size={10} color="#fff" />
+                        <Text style={styles.respondingBadgeText}>响应中</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.emergencyTime}>{item.time}</Text>
+                </View>
+              </View>
+
+              <Text style={styles.emergencyTitle} numberOfLines={2}>
+                {item.title}
+              </Text>
+
+              <View style={styles.emergencyInfo}>
+                <View style={styles.emergencyInfoItem}>
+                  <Ionicons name="location" size={14} color="#ef4444" />
+                  <Text style={styles.emergencyLocation} numberOfLines={1}>
+                    {item.location}
+                  </Text>
+                </View>
+                <View style={styles.emergencyDistance}>
+                  <Ionicons name="navigate" size={12} color="#f59e0b" />
+                  <Text style={styles.emergencyDistanceText}>{item.distance}</Text>
+                </View>
+              </View>
+
+              <View style={styles.emergencyFooter}>
+                <View style={styles.emergencyRescuerInfo}>
+                  <Ionicons name="people-outline" size={16} color="#6b7280" />
+                  <Text style={styles.emergencyRescuerText}>
+                    需要 {item.rescuerCount} 人救援
+                  </Text>
+                </View>
+                
+                {item.status === 'urgent' ? (
+                  <TouchableOpacity 
+                    style={styles.respondBtn}
+                    onPress={() => {
+                      showAppAlert('确认响应', `确定要响应 ${item.name} 的紧急求助吗？`, [
+                        { text: '取消', style: 'cancel' },
+                        { text: '立即响应', onPress: () => showAppAlert('成功', '已响应求助，请尽快前往现场') }
+                      ]);
+                    }}
+                  >
+                    <Ionicons name="flash" size={14} color="#fff" />
+                    <Text style={styles.respondBtnText}>立即响应</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity style={styles.viewDetailBtn}>
+                    <Text style={styles.viewDetailBtnText}>查看详情</Text>
+                    <Ionicons name="chevron-forward" size={14} color="#6b7280" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* 仲裁邀请 - 已隐藏 */}
+        {/* <View style={styles.arbitrationSection}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
               <Ionicons name="gavel" size={18} color="#ef4444" />
@@ -355,7 +491,7 @@ export default function MessagesScreen({
                   </TouchableOpacity>}
               </View>
             </View>)}
-        </View>
+        </View> */}
 
         {/* 消息分组 */}
         <View style={styles.messageGroupSection}>
@@ -702,6 +838,193 @@ const styles = StyleSheet.create({
   inviteBtnText: {
     fontSize: 12,
     color: '#fff',
+    fontWeight: '500'
+  },
+  // 紧急求助样式
+  emergencySection: {
+    backgroundColor: '#fff',
+    marginTop: 8,
+    padding: 12
+  },
+  emergencyPulse: {
+    marginLeft: 6,
+    width: 8,
+    height: 8,
+    position: 'relative'
+  },
+  emergencyPulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ef4444',
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 4
+  },
+  emergencyItem: {
+    backgroundColor: '#fef2f2',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#fee2e2',
+    position: 'relative',
+    overflow: 'hidden'
+  },
+  emergencyItemHigh: {
+    backgroundColor: '#fff5f5',
+    borderColor: '#fecaca',
+    borderWidth: 2
+  },
+  emergencyIndicator: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: '#ef4444'
+  },
+  emergencyHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10
+  },
+  emergencyHeaderContent: {
+    flex: 1,
+    marginLeft: 10
+  },
+  emergencyNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2
+  },
+  emergencyName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1f2937'
+  },
+  urgentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8
+  },
+  urgentBadgeText: {
+    fontSize: 10,
+    color: '#fff',
+    fontWeight: '700'
+  },
+  respondingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#f59e0b',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8
+  },
+  respondingBadgeText: {
+    fontSize: 10,
+    color: '#fff',
+    fontWeight: '600'
+  },
+  emergencyTime: {
+    fontSize: 12,
+    color: '#9ca3af'
+  },
+  emergencyTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1f2937',
+    lineHeight: 22,
+    marginBottom: 10
+  },
+  emergencyInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: '#fff',
+    borderRadius: 8
+  },
+  emergencyInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flex: 1
+  },
+  emergencyLocation: {
+    fontSize: 13,
+    color: '#4b5563',
+    flex: 1
+  },
+  emergencyDistance: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#fffbeb',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10
+  },
+  emergencyDistanceText: {
+    fontSize: 12,
+    color: '#d97706',
+    fontWeight: '600'
+  },
+  emergencyFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  emergencyRescuerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4
+  },
+  emergencyRescuerText: {
+    fontSize: 13,
+    color: '#6b7280'
+  },
+  respondBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3
+  },
+  respondBtnText: {
+    fontSize: 13,
+    color: '#fff',
+    fontWeight: '700'
+  },
+  viewDetailBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16
+  },
+  viewDetailBtnText: {
+    fontSize: 12,
+    color: '#6b7280',
     fontWeight: '500'
   },
   // 消息分组样式

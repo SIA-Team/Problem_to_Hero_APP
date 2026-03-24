@@ -214,6 +214,49 @@ const userApi = {
   getWalletBalance: () => {
     return apiClient.get(API_ENDPOINTS.WALLET.BALANCE);
   },
+
+  /**
+   * 获取消息通知设置
+   * @returns {Promise<Object>} 返回消息通知设置数据
+   */
+  getNotificationSettings: async () => {
+    console.log('\n📡 调用 getNotificationSettings API...');
+    console.log('   请求 URL: /app/user/settings/queryNotification');
+    
+    const response = await apiClient.get('/app/user/settings/queryNotification');
+    
+    console.log('\n📥 /app/user/settings/queryNotification 接口返回数据:');
+    console.log('─────────────────────────────────────────────────────────────────');
+    console.log(JSON.stringify(response, null, 2));
+    console.log('─────────────────────────────────────────────────────────────────');
+    
+    return response;
+  },
+
+  /**
+   * 更新消息通知设置
+   * @param {Object} settings - 消息通知设置
+   * @param {number} settings.pushEnabled - 推送通知总开关 0-关 1-开
+   * @param {number} settings.notifyLikes - 赞和喜欢 0-关 1-开
+   * @param {number} settings.notifyComments - 评论 0-关 1-开
+   * @param {number} settings.notifyFollowers - 新增关注 0-关 1-开
+   * @param {number} settings.notifySystem - 系统消息 0-关 1-开
+   * @returns {Promise<Object>}
+   */
+  updateNotificationSettings: async (settings) => {
+    console.log('\n📡 调用 updateNotificationSettings API...');
+    console.log('   请求 URL: /app/user/settings/updateNotification');
+    console.log('   请求参数:', JSON.stringify(settings, null, 2));
+    
+    const response = await apiClient.post('/app/user/settings/updateNotification', settings);
+    
+    console.log('\n📥 /app/user/settings/updateNotification 接口返回数据:');
+    console.log('─────────────────────────────────────────────────────────────────');
+    console.log(JSON.stringify(response, null, 2));
+    console.log('─────────────────────────────────────────────────────────────────');
+    
+    return response;
+  },
 };
 
 export default userApi;

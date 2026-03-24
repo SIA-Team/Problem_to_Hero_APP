@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert, Image, Platform, Modal, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,14 +10,7 @@ import { modalTokens } from '../components/modalTokens';
 import { showAppAlert } from '../utils/appAlert';
 import { getRegionData } from '../data/regionData';
 import emergencyApi from '../services/api/emergencyApi';
-import {
-  buildEmergencyAddressText,
-  getChinaCityOptions,
-  getChinaDistrictOptions,
-  getChinaProvinceOptions,
-  getChinaRegionByCodes,
-  resolveChinaRegionFromAddress,
-} from '../utils/chinaRegionMatcher';
+import { API_ENDPOINTS, getFullApiUrl } from '../config/api';
 
 export default function EmergencyScreen({ navigation }) {
   const t = (key) => {
@@ -27,6 +20,9 @@ export default function EmergencyScreen({ navigation }) {
     return i18n.t(key);
   };
   
+  // 获取区域数据（与首页相同）
+  const regionData = React.useMemo(() => getRegionData(), []);
+  
   const [emergencyForm, setEmergencyForm] = useState({ 
     title: '', 
     description: '', 
@@ -34,23 +30,30 @@ export default function EmergencyScreen({ navigation }) {
     contact: '', 
     rescuerCount: 1 
   });
-  const [emergencyImages, setEmergencyImages] = useState([]); // 紧急求助图片
+  const [emergencyImages, setEmergencyImages] = useState([]); // 紧急求助图片片?
   const [showProgressModal, setShowProgressModal] = useState(false); // 显示进度模态框
   const [emergencyQuota, setEmergencyQuota] = useState(null);
-  const [selectedEmergencyLocation, setSelectedEmergencyLocation] = useState(null);
+  
+  // 使用首页的区域选择逻辑
+  const [showRegionModal, setShowRegionModal] = useState(false);
+  const [regionStep, setRegionStep] = useState(0);
+  const [selectedRegion, setSelectedRegion] = useState({ country: '', city: '', state: '', district: '' });
+  
   const [isLocating, setIsLocating] = useState(false);
-  const [showLocationModal, setShowLocationModal] = useState(false);
-  const [locationPickerStep, setLocationPickerStep] = useState('country');
-  const [locationDraft, setLocationDraft] = useState({
-    country: null,
-    province: null,
-    city: null,
-    district: null,
-  });
 
   const loadEmergencyQuota = React.useCallback(async () => {
     try {
+      // 显示完整的请求 URL
+      const fullUrl = getFullApiUrl(API_ENDPOINTS.EMERGENCY.QUOTA);
+      console.log('=== Emergency Quota Request ===');
+      console.log('完整请求 URL:', fullUrl);
+      console.log('===============================');
+      
       const response = await emergencyApi.getQuota();
+      
+      console.log('=== Emergency Quota Response ===');
+      console.log('响应数据:', JSON.stringify(response, null, 2));
+      console.log('================================');
 
       if ((response?.code === 0 || response?.code === 200) && response?.data) {
         const total = Number(response.data.total);
@@ -63,6 +66,7 @@ export default function EmergencyScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Failed to load emergency quota:', error);
+      console.error('错误详情:', error?.response?.data || error?.message);
     }
   }, []);
 
@@ -79,32 +83,73 @@ export default function EmergencyScreen({ navigation }) {
   const remainingFree = Number.isFinite(remainingFreeValue) && remainingFreeValue >= 0 ? remainingFreeValue : 0;
   const freeCountDisplay = quotaLoaded ? `${remainingFree}/${freeCount}` : '--/--';
   const hasRemainingFree = !quotaLoaded || remainingFree > 0;
-  const regionData = React.useMemo(() => getRegionData(), []);
-  const countryOptions = React.useMemo(() => {
-    const countries = Array.isArray(regionData?.countries) ? regionData.countries.filter(Boolean) : [];
-    const chinaAliases = ['中国', 'China', '中华人民共和国'];
-
-    if (countries.some((item) => chinaAliases.includes(item))) {
-      return countries;
-    }
-
-    return ['中国', ...countries];
-  }, [regionData]);
-  const provinceOptions = React.useMemo(() => getChinaProvinceOptions(), []);
-  const cityOptions = React.useMemo(
-    () => (locationDraft.province ? getChinaCityOptions(locationDraft.province.code) : []),
-    [locationDraft.province]
-  );
-  const districtOptions = React.useMemo(
-    () => (locationDraft.city ? getChinaDistrictOptions(locationDraft.city.code) : []),
-    [locationDraft.city]
-  );
+  
   const freeRescuerLimit = 5;
   const extraRescuerFee = 2;
   
   const calculateRescuerFee = (count) => {
     if (count <= freeRescuerLimit) return 0;
     return (count - freeRescuerLimit) * extraRescuerFee;
+  };
+  
+  // 区域选择函数（与首页完全相同）
+  const getRegionOptions = () => {
+    if (regionStep === 0) return regionData.countries;
+    if (regionStep === 1) return regionData.cities[selectedRegion.country] || [];
+    if (regionStep === 2) return regionData.states[selectedRegion.city] || [];
+    if (regionStep === 3) return regionData.districts[selectedRegion.state] || [];
+    return [];
+  };
+
+  const selectRegion = (value) => {
+    if (regionStep === 0) { 
+      setSelectedRegion({ ...selectedRegion, country: value, city: '', state: '', district: '' }); 
+      // 自动跳转到下一层
+      if (regionData.cities[value] && regionData.cities[value].length > 0) {
+        setRegionStep(1);
+      }
+    }
+    else if (regionStep === 1) { 
+      setSelectedRegion({ ...selectedRegion, city: value, state: '', district: '' }); 
+      // 自动跳转到下一层
+      if (regionData.states[value] && regionData.states[value].length > 0) {
+        setRegionStep(2);
+      }
+    }
+    else if (regionStep === 2) { 
+      setSelectedRegion({ ...selectedRegion, state: value, district: '' }); 
+      // 自动跳转到下一层
+      if (regionData.districts[value] && regionData.districts[value].length > 0) {
+        setRegionStep(3);
+      }
+    }
+    else { 
+      setSelectedRegion({ ...selectedRegion, district: value }); 
+    }
+  };
+
+  const getRegionTitle = () => ['选择国家', '选择省份', '选择城市', '选择区县'][regionStep];
+  
+  const getDisplayRegion = () => {
+    const parts = [selectedRegion.country, selectedRegion.city, selectedRegion.state, selectedRegion.district].filter(Boolean);
+    // 只显示最后一级，如果没有选择则显示"当前位置"
+    if (parts.length === 0) return '当前位置';
+    return parts[parts.length - 1];
+  };
+  
+  // 确认区域选择
+  const confirmRegionSelection = () => {
+    const parts = [selectedRegion.country, selectedRegion.city, selectedRegion.state, selectedRegion.district].filter(Boolean);
+    const locationText = parts.join(' ');
+    setEmergencyForm((prev) => ({ ...prev, location: locationText }));
+    setShowRegionModal(false);
+    setRegionStep(0);
+  };
+  
+  // 打开区域选择器
+  const openRegionSelector = () => {
+    setShowRegionModal(true);
+    setRegionStep(0);
   };
 
   const rescuerFee = calculateRescuerFee(emergencyForm.rescuerCount || 1);
@@ -234,125 +279,6 @@ export default function EmergencyScreen({ navigation }) {
     return phoneRegex.test(normalizePhoneNumber(phone));
   };
 
-  const isChinaCountry = React.useCallback((countryName) => {
-    const value = String(countryName || '').trim().toLowerCase();
-    return value === '中国' || value === 'china' || value === '中华人民共和国';
-  }, []);
-
-  const applySelectedLocation = React.useCallback((locationData) => {
-    if (!locationData) {
-      setSelectedEmergencyLocation(null);
-      setEmergencyForm((prev) => ({ ...prev, location: '' }));
-      return;
-    }
-
-    setSelectedEmergencyLocation(locationData);
-    setEmergencyForm((prev) => ({
-      ...prev,
-      location: locationData.addressText,
-    }));
-  }, []);
-
-  const resetLocationDraft = React.useCallback(() => {
-    setLocationPickerStep('country');
-    setLocationDraft({
-      country: null,
-      province: null,
-      city: null,
-      district: null,
-    });
-  }, []);
-
-  const openLocationSelector = React.useCallback(() => {
-    if (selectedEmergencyLocation) {
-      const currentSelection = getChinaRegionByCodes(selectedEmergencyLocation);
-      setLocationDraft({
-        country: { code: 'CN', name: selectedEmergencyLocation.countryName || '中国' },
-        province: currentSelection.province,
-        city: currentSelection.city,
-        district: currentSelection.district,
-      });
-      setLocationPickerStep(
-        currentSelection.district
-          ? 'district'
-          : currentSelection.city
-            ? 'city'
-            : currentSelection.province
-              ? 'province'
-              : 'country'
-      );
-    } else {
-      resetLocationDraft();
-    }
-
-    setShowLocationModal(true);
-  }, [resetLocationDraft, selectedEmergencyLocation]);
-
-  const handleCountrySelect = (countryName) => {
-    if (!isChinaCountry(countryName)) {
-      showAppAlert('提示', '紧急求助发布目前仅支持中国地区，请选择中国。');
-      return;
-    }
-
-    setLocationDraft({
-      country: { code: 'CN', name: countryName },
-      province: null,
-      city: null,
-      district: null,
-    });
-    setLocationPickerStep('province');
-  };
-
-  const handleProvinceSelect = (province) => {
-    setLocationDraft((prev) => ({
-      ...prev,
-      province,
-      city: null,
-      district: null,
-    }));
-    setLocationPickerStep('city');
-  };
-
-  const handleCitySelect = (city) => {
-    setLocationDraft((prev) => ({
-      ...prev,
-      city,
-      district: null,
-    }));
-    setLocationPickerStep('district');
-  };
-
-  const handleDistrictSelect = (district) => {
-    const country = locationDraft.country;
-    const province = locationDraft.province;
-    const city = locationDraft.city;
-
-    if (!country || !province || !city) {
-      return;
-    }
-
-    setLocationDraft((prev) => ({
-      ...prev,
-      district,
-    }));
-
-    applySelectedLocation({
-      countryName: country.name,
-      provinceId: Number(province.code),
-      cityId: Number(city.code),
-      districtId: Number(district.code),
-      provinceName: province.name,
-      cityName: city.name,
-      districtName: district.name,
-      addressText: buildEmergencyAddressText({
-        provinceName: province.name,
-        cityName: city.name,
-        districtName: district.name,
-      }),
-    });
-    setShowLocationModal(false);
-  };
-
   const handleLocate = async () => {
     try {
       setIsLocating(true);
@@ -360,7 +286,7 @@ export default function EmergencyScreen({ navigation }) {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         showAppAlert('提示', '需要定位权限才能获取当前位置，您也可以手动选择地区。', [
-          { text: '手动选择', onPress: openLocationSelector },
+          { text: '手动选择', onPress: openRegionSelector },
           { text: '知道了', style: 'cancel' },
         ]);
         return;
@@ -376,39 +302,29 @@ export default function EmergencyScreen({ navigation }) {
 
       if (!addressList || addressList.length === 0) {
         showAppAlert('提示', '未能识别当前位置，请手动选择地区。', [
-          { text: '手动选择', onPress: openLocationSelector },
+          { text: '手动选择', onPress: openRegionSelector },
           { text: '知道了', style: 'cancel' },
         ]);
         return;
       }
 
       const address = addressList[0];
-      const matchedRegion = resolveChinaRegionFromAddress(address);
-
-      if (!matchedRegion) {
-        showAppAlert('提示', '当前位置暂时无法自动匹配地区编码，请手动选择地区。', [
-          { text: '手动选择', onPress: openLocationSelector },
-          { text: '知道了', style: 'cancel' },
-        ]);
-        return;
-      }
-
-      applySelectedLocation({
-        ...matchedRegion,
-        countryName: address.country || '中国',
-        addressText: buildEmergencyAddressText({
-          provinceName: matchedRegion.provinceName,
-          cityName: matchedRegion.cityName,
-          districtName: matchedRegion.districtName,
-          street: address.street,
-          streetNumber: address.streetNumber,
-          name: address.name,
-        }),
-      });
+      // 构建地址文本
+      const locationParts = [
+        address.country,
+        address.region || address.city,
+        address.city,
+        address.district || address.subregion
+      ].filter(Boolean);
+      
+      const locationText = locationParts.join(' ');
+      
+      setEmergencyForm(prev => ({ ...prev, location: locationText }));
+      showAppAlert('成功', '已获取当前位置');
     } catch (error) {
       console.error('Failed to locate emergency address:', error);
       showAppAlert('提示', '定位失败，请稍后重试或手动选择地区。', [
-        { text: '手动选择', onPress: openLocationSelector },
+        { text: '手动选择', onPress: openRegionSelector },
         { text: '知道了', style: 'cancel' },
       ]);
     } finally {
@@ -416,7 +332,7 @@ export default function EmergencyScreen({ navigation }) {
     }
   };
 
-  const resetEmergencyForm = React.useCallback(() => {
+  const resetEmergencyForm = () => {
     setEmergencyForm({
       title: '',
       description: '',
@@ -425,9 +341,9 @@ export default function EmergencyScreen({ navigation }) {
       rescuerCount: 1,
     });
     setEmergencyImages([]);
-    setSelectedEmergencyLocation(null);
-    resetLocationDraft();
-  }, [resetLocationDraft]);
+    setSelectedRegion({ country: '', city: '', state: '', district: '' });
+    setRegionStep(0);
+  };
 
   const handleSubmit = async () => {
     if (!emergencyForm.title.trim()) {
@@ -450,12 +366,7 @@ export default function EmergencyScreen({ navigation }) {
       return;
     }
 
-    if (
-      !selectedEmergencyLocation?.provinceId ||
-      !selectedEmergencyLocation?.cityId ||
-      !selectedEmergencyLocation?.districtId ||
-      !selectedEmergencyLocation?.addressText
-    ) {
+    if (!emergencyForm.location.trim()) {
       showAppAlert('提示', '请先定位或手动选择地区');
       return;
     }
@@ -467,10 +378,7 @@ export default function EmergencyScreen({ navigation }) {
         title: emergencyForm.title.trim(),
         description: emergencyForm.description.trim(),
         contactPhone: normalizePhoneNumber(emergencyForm.contact),
-        provinceId: selectedEmergencyLocation.provinceId,
-        cityId: selectedEmergencyLocation.cityId,
-        districtId: selectedEmergencyLocation.districtId,
-        addressText: selectedEmergencyLocation.addressText,
+        location: emergencyForm.location.trim(),
       };
 
       const response = await emergencyApi.publish(payload);
@@ -624,7 +532,7 @@ export default function EmergencyScreen({ navigation }) {
                 </View>
               )}
             </View>
-            <Text style={styles.imageHint}>最多可上传3张图片，帮助他人更好地了解情况</Text>
+            <Text style={styles.imageHint}>最多可上传3张图片，帮助他人更好地了解情况况?</Text>
           </View>
         </View>
 
@@ -632,7 +540,7 @@ export default function EmergencyScreen({ navigation }) {
         <View style={styles.formGroup}>
           <Text style={styles.formLabel}>{t('emergency.location')}</Text>
           <View style={styles.locationRow}>
-            <TouchableOpacity style={styles.locationInput} activeOpacity={0.85} onPress={openLocationSelector}>
+            <TouchableOpacity style={styles.locationInput} activeOpacity={0.85} onPress={openRegionSelector}>
               <Ionicons name="location" size={18} color="#ef4444" />
               <Text
                 style={[
@@ -753,129 +661,94 @@ export default function EmergencyScreen({ navigation }) {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      <Modal
-        visible={showLocationModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowLocationModal(false)}
-      >
-        <View style={styles.locationModalOverlay}>
-          <TouchableOpacity style={styles.locationModalBackdrop} activeOpacity={1} onPress={() => setShowLocationModal(false)} />
-          <View style={styles.locationModalContent}>
-            <View style={styles.locationModalHeader}>
-              <TouchableOpacity
-                style={styles.locationModalIconBtn}
-                onPress={() => {
-                  if (locationPickerStep === 'district') {
-                    setLocationPickerStep('city');
-                    return;
-                  }
-                  if (locationPickerStep === 'city') {
-                    setLocationPickerStep('province');
-                    return;
-                  }
-                  if (locationPickerStep === 'province') {
-                    setLocationPickerStep('country');
-                    return;
-                  }
-                  setShowLocationModal(false);
-                }}
-              >
-                <Ionicons name={locationPickerStep === 'country' ? 'close' : 'chevron-back'} size={22} color="#1f2937" />
+      {/* 区域选择弹窗 - 与首页完全相同 */}
+      <Modal visible={showRegionModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity 
+            style={styles.modalBackdrop}
+            activeOpacity={1} 
+            onPress={() => { setShowRegionModal(false); setRegionStep(0); }}
+          />
+          <View style={[styles.regionModal, { paddingBottom: 30 }]}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => { setShowRegionModal(false); setRegionStep(0); }}>
+                <Ionicons name="close" size={24} color="#1f2937" />
               </TouchableOpacity>
-              <Text style={styles.locationModalTitle}>
-                {locationPickerStep === 'country'
-                  ? '选择国家'
-                  : locationPickerStep === 'province'
-                    ? '选择省份'
-                    : locationPickerStep === 'city'
-                      ? '选择城市'
-                      : '选择区县'}
-              </Text>
-              <TouchableOpacity style={styles.locationModalIconBtn} onPress={() => setShowLocationModal(false)}>
-                <Ionicons name="close" size={22} color="#1f2937" />
+              <Text style={styles.modalTitle}>选择区域</Text>
+              <TouchableOpacity onPress={confirmRegionSelection}>
+                <Text style={styles.confirmText}>确认</Text>
               </TouchableOpacity>
             </View>
-
-            <View style={styles.locationBreadcrumbs}>
-              <TouchableOpacity onPress={() => setLocationPickerStep('country')}>
-                <Text style={[styles.locationBreadcrumbText, locationPickerStep === 'country' && styles.locationBreadcrumbTextActive]}>
-                  {locationDraft.country?.name || selectedEmergencyLocation?.countryName || '国家'}
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.locationBreadcrumbDivider}>/</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  if (locationDraft.country || selectedEmergencyLocation?.countryName) {
-                    setLocationPickerStep('province');
-                  }
-                }}
-                disabled={!(locationDraft.country || selectedEmergencyLocation?.countryName)}
-              >
-                <Text style={[styles.locationBreadcrumbText, locationPickerStep === 'province' && styles.locationBreadcrumbTextActive]}>
-                  {locationDraft.province?.name || selectedEmergencyLocation?.provinceName || '省份'}
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.locationBreadcrumbDivider}>/</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  if (locationDraft.province || selectedEmergencyLocation?.provinceName) {
-                    setLocationPickerStep('city');
-                  }
-                }}
-                disabled={!(locationDraft.province || selectedEmergencyLocation?.provinceName)}
-              >
-                <Text style={[styles.locationBreadcrumbText, locationPickerStep === 'city' && styles.locationBreadcrumbTextActive]}>
-                  {locationDraft.city?.name || selectedEmergencyLocation?.cityName || '城市'}
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.locationBreadcrumbDivider}>/</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  if (locationDraft.city || selectedEmergencyLocation?.cityName) {
-                    setLocationPickerStep('district');
-                  }
-                }}
-                disabled={!(locationDraft.city || selectedEmergencyLocation?.cityName)}
-              >
-                <Text style={[styles.locationBreadcrumbText, locationPickerStep === 'district' && styles.locationBreadcrumbTextActive]}>
-                  {locationDraft.district?.name || selectedEmergencyLocation?.districtName || '区县'}
-                </Text>
-              </TouchableOpacity>
+            
+            {/* 面包屑导航 */}
+            <View style={styles.breadcrumbContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.breadcrumbScrollContent}>
+                <TouchableOpacity 
+                  style={styles.breadcrumbItem}
+                  onPress={() => setRegionStep(0)}
+                >
+                  <Text style={[styles.breadcrumbText, regionStep === 0 && styles.breadcrumbTextActive]}>
+                    {selectedRegion.country || '国家'}
+                  </Text>
+                </TouchableOpacity>
+                
+                {selectedRegion.country && (
+                  <>
+                    <View style={styles.breadcrumbSeparatorWrapper}>
+                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.breadcrumbItem}
+                      onPress={() => setRegionStep(1)}
+                    >
+                      <Text style={[styles.breadcrumbText, regionStep === 1 && styles.breadcrumbTextActive]}>
+                        {selectedRegion.city || '省份'}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+                
+                {selectedRegion.city && (
+                  <>
+                    <View style={styles.breadcrumbSeparatorWrapper}>
+                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.breadcrumbItem}
+                      onPress={() => setRegionStep(2)}
+                    >
+                      <Text style={[styles.breadcrumbText, regionStep === 2 && styles.breadcrumbTextActive]}>
+                        {selectedRegion.state || '城市'}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+                
+                {selectedRegion.state && (
+                  <>
+                    <View style={styles.breadcrumbSeparatorWrapper}>
+                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.breadcrumbItem}
+                      onPress={() => setRegionStep(3)}
+                    >
+                      <Text style={[styles.breadcrumbText, regionStep === 3 && styles.breadcrumbTextActive]}>
+                        {selectedRegion.district || '区县'}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </ScrollView>
             </View>
-
-            <ScrollView style={styles.locationOptionsList} keyboardShouldPersistTaps="handled">
-              {locationPickerStep === 'country' &&
-                countryOptions.map((item) => (
-                  <TouchableOpacity key={item} style={styles.locationOptionItem} onPress={() => handleCountrySelect(item)}>
-                    <Text style={styles.locationOptionText}>{item}</Text>
-                    <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
-                  </TouchableOpacity>
-                ))}
-
-              {locationPickerStep === 'province' &&
-                provinceOptions.map((item) => (
-                  <TouchableOpacity key={item.code} style={styles.locationOptionItem} onPress={() => handleProvinceSelect(item)}>
-                    <Text style={styles.locationOptionText}>{item.name}</Text>
-                    <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
-                  </TouchableOpacity>
-                ))}
-
-              {locationPickerStep === 'city' &&
-                cityOptions.map((item) => (
-                  <TouchableOpacity key={item.code} style={styles.locationOptionItem} onPress={() => handleCitySelect(item)}>
-                    <Text style={styles.locationOptionText}>{item.name}</Text>
-                    <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
-                  </TouchableOpacity>
-                ))}
-
-              {locationPickerStep === 'district' &&
-                districtOptions.map((item) => (
-                  <TouchableOpacity key={item.code} style={styles.locationOptionItem} onPress={() => handleDistrictSelect(item)}>
-                    <Text style={styles.locationOptionText}>{item.name}</Text>
-                    <Ionicons name="checkmark" size={18} color="#ef4444" />
-                  </TouchableOpacity>
-                ))}
+            
+            <ScrollView style={styles.regionList}>
+              {getRegionOptions().map((option, idx) => (
+                <TouchableOpacity key={idx} style={styles.regionOption} onPress={() => selectRegion(option)}>
+                  <Text style={styles.regionOptionText}>{option}</Text>
+                  <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                </TouchableOpacity>
+              ))}
             </ScrollView>
           </View>
         </View>
@@ -1222,6 +1095,48 @@ const styles = StyleSheet.create({
   },
   locationOptionText: { fontSize: 15, color: '#1f2937' },
 
+  // 首页区域选择样式
+  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: modalTokens.overlay },
+  regionModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '70%' },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  modalTitle: { fontSize: 16, fontWeight: '600', color: modalTokens.textPrimary },
+  confirmText: { fontSize: 14, color: '#ef4444', fontWeight: '600' },
+  breadcrumbContainer: { 
+    paddingHorizontal: 16, 
+    paddingVertical: 10, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#fff'
+  },
+  breadcrumbScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  breadcrumbItem: { 
+    paddingHorizontal: 4, 
+    paddingVertical: 4,
+    justifyContent: 'center'
+  },
+  breadcrumbText: { 
+    fontSize: 15, 
+    color: '#6b7280',
+    fontWeight: '400',
+    lineHeight: 20
+  },
+  breadcrumbTextActive: { 
+    color: '#ef4444',
+    fontWeight: '500'
+  },
+  breadcrumbSeparatorWrapper: {
+    paddingHorizontal: 6,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  regionList: { padding: 8 },
+  regionOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  regionOptionText: { fontSize: 15, color: modalTokens.textPrimary },
+
   progressModalOverlay: {
     flex: 1,
     backgroundColor: modalTokens.overlay,
@@ -1327,3 +1242,8 @@ const styles = StyleSheet.create({
     color: '#22c55e',
   },
 });
+
+
+
+
+

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Switch, Alert, TextInput, Modal, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +19,7 @@ import UserCacheService from '../services/UserCacheService';
 import userApi from '../services/api/userApi';
 import authApi from '../services/api/authApi';
 import { showAppAlert } from '../utils/appAlert';
+import { getRegionData } from '../data/regionData';
 export default function SettingsScreen({
   navigation
 }) {
@@ -83,6 +84,15 @@ export default function SettingsScreen({
   // 退出登录弹窗状态
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // 缓存大小状态
+  const [cacheSize, setCacheSize] = useState('计算中...');
+
+  // 区域选择相关状态
+  const [showRegionModal, setShowRegionModal] = useState(false);
+  const [regionStep, setRegionStep] = useState(0);
+  const [selectedRegion, setSelectedRegion] = useState({ country: '', city: '', state: '', district: '' });
+  const regionData = useMemo(() => getRegionData(), []);
 
   // 用户资料数据
   const [userProfile, setUserProfile] = useState({
@@ -165,7 +175,105 @@ export default function SettingsScreen({
       });
     };
     loadUserProfile();
+    
+    // 计算缓存大小
+    calculateCacheSize();
   }, []);
+
+  // 加载消息通知设置
+  useEffect(() => {
+    const loadNotificationSettings = async () => {
+      try {
+        console.log('📡 开始加载消息通知设置...');
+        const response = await userApi.getNotificationSettings();
+        
+        if (response && response.code === 200 && response.data) {
+          const data = response.data;
+          console.log('✅ 消息通知设置加载成功:', data);
+          
+          // 更新状态（将 0/1 转换为 boolean）
+          setPushEnabled(data.pushEnabled === 1);
+          setLikeNotify(data.notifyLikes === 1);
+          setCommentNotify(data.notifyComments === 1);
+          setFollowNotify(data.notifyFollowers === 1);
+          setSystemNotify(data.notifySystem === 1);
+        } else {
+          console.log('⚠️ 消息通知设置返回数据异常:', response);
+        }
+      } catch (error) {
+        console.error('❌ 加载消息通知设置失败:', error);
+        // 失败时保持默认值，不显示错误提示
+      }
+    };
+    
+    loadNotificationSettings();
+  }, []);
+
+  /**
+   * 更新消息通知设置
+   * @param {string} field - 字段名
+   * @param {boolean} value - 新值
+   */
+  const updateNotificationSetting = async (field, value) => {
+    try {
+      console.log(`📡 更新消息通知设置: ${field} = ${value}`);
+      
+      // 构建请求参数（只发送当前修改的字段）
+      const settings = {};
+      
+      // 根据字段名映射到 API 参数，并将 boolean 转换为 int (0/1)
+      switch (field) {
+        case 'pushEnabled':
+          settings.pushEnabled = value ? 1 : 0;
+          break;
+        case 'likeNotify':
+          settings.notifyLikes = value ? 1 : 0;
+          break;
+        case 'commentNotify':
+          settings.notifyComments = value ? 1 : 0;
+          break;
+        case 'followNotify':
+          settings.notifyFollowers = value ? 1 : 0;
+          break;
+        case 'systemNotify':
+          settings.notifySystem = value ? 1 : 0;
+          break;
+        default:
+          console.error('❌ 未知的通知设置字段:', field);
+          return;
+      }
+      
+      const response = await userApi.updateNotificationSettings(settings);
+      
+      if (response && response.code === 200) {
+        console.log('✅ 消息通知设置更新成功');
+        // 更新成功后，更新本地状态
+        switch (field) {
+          case 'pushEnabled':
+            setPushEnabled(value);
+            break;
+          case 'likeNotify':
+            setLikeNotify(value);
+            break;
+          case 'commentNotify':
+            setCommentNotify(value);
+            break;
+          case 'followNotify':
+            setFollowNotify(value);
+            break;
+          case 'systemNotify':
+            setSystemNotify(value);
+            break;
+        }
+      } else {
+        console.error('❌ 更新消息通知设置失败:', response);
+        showToast('更新失败，请重试', 'error');
+      }
+    } catch (error) {
+      console.error('❌ 更新消息通知设置异常:', error);
+      showToast('更新失败，请重试', 'error');
+    }
+  };
   const handleEditProfile = (field, title, currentValue) => {
     setEditField(field);
     setEditTitle(title);
@@ -195,9 +303,98 @@ export default function SettingsScreen({
     setShowTextModal(true);
   };
 
-  // 保存通用编辑内容
-  const handleSaveText = async newValue => {
-    const field = textModalConfig.field;
+  // 区域选择相关函数
+  const getRegionOptions = () => {
+    if (regionStep === 0) return regionData?.countries || [];
+    if (regionStep === 1) return regionData.cities[selectedRegion.country] || [];
+    if (regionStep === 2) return regionData.states[selectedRegion.city] || [];
+    if (regionStep === 3) return regionData.districts[selectedRegion.state] || [];
+    return [];
+  };
+
+  const selectRegion = (value) => {
+    if (regionStep === 0) { 
+      setSelectedRegion({ ...selectedRegion, country: value, city: '', state: '', district: '' }); 
+      // 自动跳转到下一层
+      if (regionData.cities[value] && regionData.cities[value].length > 0) {
+        setRegionStep(1);
+      }
+    }
+    else if (regionStep === 1) { 
+      setSelectedRegion({ ...selectedRegion, city: value, state: '', district: '' }); 
+      // 自动跳转到下一层
+      if (regionData.states[value] && regionData.states[value].length > 0) {
+        setRegionStep(2);
+      }
+    }
+    else if (regionStep === 2) { 
+      setSelectedRegion({ ...selectedRegion, state: value, district: '' }); 
+      // 自动跳转到下一层
+      if (regionData.districts[value] && regionData.districts[value].length > 0) {
+        setRegionStep(3);
+      }
+    }
+    else { 
+      setSelectedRegion({ ...selectedRegion, district: value }); 
+    }
+  };
+
+  const openRegionModal = () => {
+    // 解析当前所在地，初始化选择状态
+    const currentLocation = userProfile.location || '';
+    // 这里简单处理，如果需要更精确的解析可以添加逻辑
+    setSelectedRegion({ country: '', city: '', state: '', district: '' });
+    setRegionStep(0);
+    setShowRegionModal(true);
+  };
+
+  /**
+   * 获取所在地的显示文本（只显示最后一级）
+   */
+  const getLocationDisplay = (location) => {
+    if (!location) return '';
+    
+    // 按空格分割
+    const parts = location.split(' ').filter(Boolean);
+    
+    // 如果有多级，只返回最后一级
+    if (parts.length >= 2) {
+      return parts[parts.length - 1];
+    }
+    
+    // 如果只有一级，返回原值
+    return location;
+  };
+
+  const confirmRegionSelection = async () => {
+    // 构建所在地字符串
+    const parts = [selectedRegion.country, selectedRegion.city, selectedRegion.state, selectedRegion.district].filter(Boolean);
+    const locationString = parts.join(' ');
+    
+    console.log('=== 选择所在地结果 ===');
+    console.log('selectedRegion:', selectedRegion);
+    console.log('parts:', parts);
+    console.log('最终 locationString:', locationString);
+    console.log('=====================');
+    
+    if (!locationString) {
+      showToast('请选择所在地', 'error');
+      return;
+    }
+
+    // 关闭弹窗
+    setShowRegionModal(false);
+    setRegionStep(0);
+
+    // 直接调用保存接口，传递 field 参数
+    await handleSaveTextDirect('location', locationString);
+  };
+
+  // 直接保存文本（用于区域选择等不使用 textModalConfig 的场景）
+  const handleSaveTextDirect = async (field, newValue) => {
+    console.log('=== handleSaveTextDirect Debug ===');
+    console.log('field:', field);
+    console.log('newValue:', newValue);
 
     // 字段名映射：前端字段名 -> API字段名
     const fieldMapping = {
@@ -207,7 +404,12 @@ export default function SettingsScreen({
       location: 'location'
     };
     const apiFieldName = fieldMapping[field];
+    
+    console.log('apiFieldName:', apiFieldName);
+    console.log('===========================');
+    
     if (!apiFieldName) {
+      console.error('❌ 未找到字段映射，field:', field);
       showAppAlert('错误', '未知的字段类型');
       return;
     }
@@ -216,11 +418,17 @@ export default function SettingsScreen({
     const requestData = {
       nickName: null,
       signature: null,
-      profession: null
+      profession: null,
+      location: null
     };
 
     // 设置当前编辑的字段值（空字符串也发送null）
     requestData[apiFieldName] = newValue.trim() || null;
+    
+    console.log('=== 发送给后端的数据 ===');
+    console.log('requestData:', requestData);
+    console.log('========================');
+    
     setIsLoading(true);
     try {
       // 使用缓存服务更新（自动更新缓存和服务器）
@@ -241,11 +449,84 @@ export default function SettingsScreen({
           email: updatedProfile.email || '',
           phone: updatedProfile.phonenumber || ''
         });
-        showToast(`${textModalConfig.title}已更新`, 'success');
+        showToast('所在地已更新', 'success');
       }
     } catch (error) {
       // 只记录错误类型，不显示详细信息
-      console.error('❌ 更新资料失败');
+      console.error('❌ 更新资料失败:', error);
+      showToast(error.message || '更新失败，请重试', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 保存通用编辑内容
+  const handleSaveText = async newValue => {
+    const field = textModalConfig.field;
+    
+    console.log('=== handleSaveText Debug ===');
+    console.log('textModalConfig:', textModalConfig);
+    console.log('field:', field);
+    console.log('newValue:', newValue);
+
+    // 字段名映射：前端字段名 -> API字段名
+    const fieldMapping = {
+      name: 'nickName',
+      bio: 'signature',
+      occupation: 'profession',
+      location: 'location'
+    };
+    const apiFieldName = fieldMapping[field];
+    
+    console.log('apiFieldName:', apiFieldName);
+    console.log('===========================');
+    
+    if (!apiFieldName) {
+      console.error('❌ 未找到字段映射，field:', field);
+      showAppAlert('错误', '未知的字段类型');
+      return;
+    }
+
+    // 构建API请求数据：只发送当前编辑的字段，其他字段设为null
+    const requestData = {
+      nickName: null,
+      signature: null,
+      profession: null,
+      location: null
+    };
+
+    // 设置当前编辑的字段值（空字符串也发送null）
+    requestData[apiFieldName] = newValue.trim() || null;
+    
+    console.log('=== 发送给后端的数据 ===');
+    console.log('requestData:', requestData);
+    console.log('========================');
+    
+    setIsLoading(true);
+    try {
+      // 使用缓存服务更新（自动更新缓存和服务器）
+      const updatedProfile = await UserCacheService.updateUserProfile(requestData);
+      if (updatedProfile) {
+        // 更新本地状态
+        setUserProfile({
+          userId: updatedProfile.userId || '',
+          username: updatedProfile.username || '',
+          usernameLastModified: updatedProfile.usernameLastModified || null,
+          name: updatedProfile.nickName || '用户',
+          bio: updatedProfile.signature || '',
+          location: updatedProfile.location || '',
+          occupation: updatedProfile.profession || '',
+          gender: updatedProfile.sex === '0' ? '男' : updatedProfile.sex === '1' ? '女' : '保密',
+          birthday: updatedProfile.birthday || '',
+          avatar: updatedProfile.avatar || null,
+          email: updatedProfile.email || '',
+          phone: updatedProfile.phonenumber || ''
+        });
+        showToast(`${textModalConfig.title || '信息'}已更新`, 'success');
+      }
+    } catch (error) {
+      // 只记录错误类型，不显示详细信息
+      console.error('❌ 更新资料失败:', error);
       showToast(error.message || '更新失败，请重试', 'error');
     } finally {
       setIsLoading(false);
@@ -338,6 +619,61 @@ export default function SettingsScreen({
     } catch (error) {
       // 只记录错误类型，不显示详细信息
       console.error('❌ 刷新用户信息失败');
+    }
+  };
+
+  /**
+   * 清除缓存
+   */
+  const handleClearCache = async () => {
+    try {
+      setIsLoading(true);
+      
+      // 清除用户缓存
+      await UserCacheService.clearCache();
+      
+      // 可以在这里添加清除其他缓存的逻辑
+      // 例如：图片缓存、问题列表缓存等
+      
+      // 清除后重新计算缓存大小
+      await calculateCacheSize();
+      
+      showToast('缓存已清除', 'success');
+    } catch (error) {
+      console.error('❌ 清除缓存失败:', error);
+      showToast('清除缓存失败，请重试', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * 计算缓存大小
+   */
+  const calculateCacheSize = async () => {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      let totalSize = 0;
+      
+      for (const key of keys) {
+        const value = await AsyncStorage.getItem(key);
+        if (value) {
+          // 计算字符串的字节大小（UTF-8编码）
+          totalSize += new Blob([value]).size;
+        }
+      }
+      
+      // 转换为合适的单位
+      if (totalSize < 1024) {
+        setCacheSize(`${totalSize} B`);
+      } else if (totalSize < 1024 * 1024) {
+        setCacheSize(`${(totalSize / 1024).toFixed(1)} KB`);
+      } else {
+        setCacheSize(`${(totalSize / 1024 / 1024).toFixed(1)} MB`);
+      }
+    } catch (error) {
+      console.error('❌ 计算缓存大小失败:', error);
+      setCacheSize('未知');
     }
   };
 
@@ -711,17 +1047,13 @@ export default function SettingsScreen({
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem} onPress={() => openTextModal('location', '修改所在地', userProfile.location, {
-            minLength: 0,
-            maxLength: 30,
-            hint: '填写您的所在城市'
-          })}>
+            <TouchableOpacity style={styles.menuItem} onPress={openRegionModal}>
               <View style={styles.menuLeft}>
                 <Ionicons name="location-outline" size={22} color="#6b7280" />
                 <Text style={styles.menuLabel}>{t('screens.settings.profile.location')}</Text>
               </View>
               <View style={styles.menuRight}>
-                <Text style={styles.menuValue}>{userProfile.location}</Text>
+                <Text style={styles.menuValue}>{getLocationDisplay(userProfile.location)}</Text>
                 <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
               </View>
             </TouchableOpacity>
@@ -792,11 +1124,11 @@ export default function SettingsScreen({
               <View style={styles.menuLeft}>
                 <Ionicons name="notifications-outline" size={22} color="#6b7280" />
                 <View style={styles.switchInfo}>
-                  <Text style={styles.menuLabel}>{t('screens.settings.notifications.push')}</Text>
+                  <Text style={styles.switchLabel}>{t('screens.settings.notifications.push')}</Text>
                   <Text style={styles.switchDesc}>{t('screens.settings.notifications.pushDesc')}</Text>
                 </View>
               </View>
-              <Switch value={pushEnabled} onValueChange={setPushEnabled} trackColor={{
+              <Switch value={pushEnabled} onValueChange={(value) => updateNotificationSetting('pushEnabled', value)} trackColor={{
               false: '#d1d5db',
               true: '#fca5a5'
             }} thumbColor={pushEnabled ? '#ef4444' : '#f3f4f6'} />
@@ -807,7 +1139,7 @@ export default function SettingsScreen({
                 <Ionicons name="heart-outline" size={22} color="#6b7280" />
                 <Text style={styles.menuLabel}>{t('screens.settings.notifications.like')}</Text>
               </View>
-              <Switch value={likeNotify} onValueChange={setLikeNotify} trackColor={{
+              <Switch value={likeNotify} onValueChange={(value) => updateNotificationSetting('likeNotify', value)} trackColor={{
               false: '#d1d5db',
               true: '#fca5a5'
             }} thumbColor={likeNotify ? '#ef4444' : '#f3f4f6'} />
@@ -818,7 +1150,7 @@ export default function SettingsScreen({
                 <Ionicons name="chatbubble-outline" size={22} color="#6b7280" />
                 <Text style={styles.menuLabel}>{t('screens.settings.notifications.comment')}</Text>
               </View>
-              <Switch value={commentNotify} onValueChange={setCommentNotify} trackColor={{
+              <Switch value={commentNotify} onValueChange={(value) => updateNotificationSetting('commentNotify', value)} trackColor={{
               false: '#d1d5db',
               true: '#fca5a5'
             }} thumbColor={commentNotify ? '#ef4444' : '#f3f4f6'} />
@@ -829,7 +1161,7 @@ export default function SettingsScreen({
                 <Ionicons name="person-add-outline" size={22} color="#6b7280" />
                 <Text style={styles.menuLabel}>{t('screens.settings.notifications.follow')}</Text>
               </View>
-              <Switch value={followNotify} onValueChange={setFollowNotify} trackColor={{
+              <Switch value={followNotify} onValueChange={(value) => updateNotificationSetting('followNotify', value)} trackColor={{
               false: '#d1d5db',
               true: '#fca5a5'
             }} thumbColor={followNotify ? '#ef4444' : '#f3f4f6'} />
@@ -840,7 +1172,7 @@ export default function SettingsScreen({
                 <Ionicons name="megaphone-outline" size={22} color="#6b7280" />
                 <Text style={styles.menuLabel}>{t('screens.settings.notifications.system')}</Text>
               </View>
-              <Switch value={systemNotify} onValueChange={setSystemNotify} trackColor={{
+              <Switch value={systemNotify} onValueChange={(value) => updateNotificationSetting('systemNotify', value)} trackColor={{
               false: '#d1d5db',
               true: '#fca5a5'
             }} thumbColor={systemNotify ? '#ef4444' : '#f3f4f6'} />
@@ -852,7 +1184,7 @@ export default function SettingsScreen({
         <View style={styles.sectionGroup}>
           <Text style={styles.groupTitle}>{t('screens.settings.privacy.groupTitle')}</Text>
           <View style={styles.section}>
-            <View style={styles.switchItem}>
+            {/* <View style={styles.switchItem}>
               <View style={styles.menuLeft}>
                 <Ionicons name="eye-outline" size={22} color="#6b7280" />
                 <View style={styles.switchInfo}>
@@ -864,13 +1196,13 @@ export default function SettingsScreen({
               false: '#d1d5db',
               true: '#fca5a5'
             }} thumbColor={showOnline ? '#ef4444' : '#f3f4f6'} />
-            </View>
+            </View> */}
 
             <View style={styles.switchItem}>
               <View style={styles.menuLeft}>
                 <Ionicons name="mail-open-outline" size={22} color="#6b7280" />
                 <View style={styles.switchInfo}>
-                  <Text style={styles.menuLabel}>{t('screens.settings.privacy.allowMessage')}</Text>
+                  <Text style={styles.switchLabel}>{t('screens.settings.privacy.allowMessage')}</Text>
                   <Text style={styles.switchDesc}>{t('screens.settings.privacy.allowMessageDesc')}</Text>
                 </View>
               </View>
@@ -916,19 +1248,26 @@ export default function SettingsScreen({
                 <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
               </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem} onPress={() => showAppAlert(t('screens.settings.alerts.clearCache.title'), t('screens.settings.alerts.clearCache.message'), [{
-            text: t('common.cancel'),
-            style: 'cancel'
-          }, {
-            text: t('common.confirm'),
-            onPress: () => showAppAlert(t('common.ok'), t('screens.settings.alerts.clearCache.success'))
-          }])}>
+            <TouchableOpacity style={styles.menuItem} onPress={() => showAppAlert(
+              t('screens.settings.alerts.clearCache.title'), 
+              t('screens.settings.alerts.clearCache.message'), 
+              [
+                {
+                  text: t('common.cancel'),
+                  style: 'cancel'
+                }, 
+                {
+                  text: t('common.confirm'),
+                  onPress: handleClearCache
+                }
+              ]
+            )}>
               <View style={styles.menuLeft}>
                 <Ionicons name="trash-outline" size={22} color="#6b7280" />
                 <Text style={styles.menuLabel}>{t('screens.settings.general.clearCache')}</Text>
               </View>
               <View style={styles.menuRight}>
-                <Text style={styles.menuValue}>128.5 MB</Text>
+                <Text style={styles.menuValue}>{cacheSize}</Text>
                 <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
               </View>
             </TouchableOpacity>
@@ -972,13 +1311,13 @@ export default function SettingsScreen({
         <View style={styles.sectionGroup}>
           <Text style={styles.groupTitle}>{t('screens.settings.help.groupTitle')}</Text>
           <View style={styles.section}>
-            <TouchableOpacity style={styles.menuItem} onPress={() => showAppAlert(t('screens.settings.alerts.faq.title'), t('screens.settings.alerts.faq.message'))}>
+            {/* <TouchableOpacity style={styles.menuItem} onPress={() => showAppAlert(t('screens.settings.alerts.faq.title'), t('screens.settings.alerts.faq.message'))}>
               <View style={styles.menuLeft}>
                 <Ionicons name="help-circle-outline" size={22} color="#6b7280" />
                 <Text style={styles.menuLabel}>{t('screens.settings.help.faq')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
-            </TouchableOpacity>
+            </TouchableOpacity> */}
 
             <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]} onPress={() => navigation.navigate('Feedback')}>
               <View style={styles.menuLeft}>
@@ -1115,6 +1454,99 @@ export default function SettingsScreen({
 
       {/* 退出登录确认弹窗 */}
       <LogoutConfirmModal visible={showLogoutModal} onClose={() => setShowLogoutModal(false)} onConfirm={handleConfirmLogout} username={userProfile.username || userProfile.name} isLoading={isLoggingOut} showDefaultPassword={!userProfile.passwordChanged} />
+
+      {/* 区域选择弹窗 */}
+      <Modal visible={showRegionModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity 
+            style={styles.modalBackdrop}
+            activeOpacity={1} 
+            onPress={() => { setShowRegionModal(false); setRegionStep(0); }}
+          />
+          <View style={styles.regionModal}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => { setShowRegionModal(false); setRegionStep(0); }}>
+                <Ionicons name="close" size={24} color="#1f2937" />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>{t('home.selectRegion')}</Text>
+              <TouchableOpacity onPress={confirmRegionSelection}>
+                <Text style={styles.confirmText}>{t('home.confirm')}</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {/* 面包屑导航 */}
+            <View style={styles.breadcrumbContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.breadcrumbScrollContent}>
+                <TouchableOpacity 
+                  style={styles.breadcrumbItem}
+                  onPress={() => setRegionStep(0)}
+                >
+                  <Text style={[styles.breadcrumbText, regionStep === 0 && styles.breadcrumbTextActive]}>
+                    {selectedRegion.country || t('home.country')}
+                  </Text>
+                </TouchableOpacity>
+                
+                {selectedRegion.country && (
+                  <>
+                    <View style={styles.breadcrumbSeparatorWrapper}>
+                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.breadcrumbItem}
+                      onPress={() => setRegionStep(1)}
+                    >
+                      <Text style={[styles.breadcrumbText, regionStep === 1 && styles.breadcrumbTextActive]}>
+                        {selectedRegion.city}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+                
+                {selectedRegion.city && selectedRegion.state && (
+                  <>
+                    <View style={styles.breadcrumbSeparatorWrapper}>
+                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.breadcrumbItem}
+                      onPress={() => setRegionStep(2)}
+                    >
+                      <Text style={[styles.breadcrumbText, regionStep === 2 && styles.breadcrumbTextActive]}>
+                        {selectedRegion.state}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+                
+                {selectedRegion.state && selectedRegion.district && (
+                  <>
+                    <View style={styles.breadcrumbSeparatorWrapper}>
+                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.breadcrumbItem}
+                      onPress={() => setRegionStep(3)}
+                    >
+                      <Text style={[styles.breadcrumbText, regionStep === 3 && styles.breadcrumbTextActive]}>
+                        {selectedRegion.district}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </ScrollView>
+            </View>
+            
+            <ScrollView style={styles.regionList}>
+              {getRegionOptions().map((option, idx) => (
+                <TouchableOpacity key={idx} style={styles.regionOption} onPress={() => selectRegion(option)}>
+                  <Text style={styles.regionOptionText}>{option}</Text>
+                  <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>;
 }
 const styles = StyleSheet.create({
@@ -1242,6 +1674,10 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     flex: 1
   },
+  switchLabel: {
+    fontSize: 15,
+    color: '#1f2937'
+  },
   switchDesc: {
     fontSize: 12,
     color: '#9ca3af',
@@ -1337,5 +1773,85 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: modalTokens.textMuted,
     marginTop: 8
+  },
+  // 区域选择弹窗样式（从 HomeScreen 复制）
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end'
+  },
+  modalBackdrop: {
+    flex: 1
+  },
+  regionModal: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    height: '80%',
+    display: 'flex',
+    flexDirection: 'column',
+    paddingBottom: 30
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#1f2937'
+  },
+  confirmText: {
+    fontSize: 16,
+    color: '#ef4444',
+    fontWeight: '600'
+  },
+  breadcrumbContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  breadcrumbScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  breadcrumbItem: {
+    paddingHorizontal: 8,
+    paddingVertical: 4
+  },
+  breadcrumbText: {
+    fontSize: 14,
+    color: '#9ca3af'
+  },
+  breadcrumbTextActive: {
+    color: '#ef4444',
+    fontWeight: '600'
+  },
+  breadcrumbSeparatorWrapper: {
+    paddingHorizontal: 4
+  },
+  regionList: {
+    flex: 1,
+    minHeight: 200
+  },
+  regionOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  regionOptionText: {
+    fontSize: 15,
+    color: '#1f2937'
   }
 });
