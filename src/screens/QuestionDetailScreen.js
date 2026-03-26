@@ -441,6 +441,7 @@ export default function QuestionDetailScreen({
   const [hearted, setHearted] = useState(false);
   const [showAnswerModal, setShowAnswerModal] = useState(false);
   const [showSupplementModal, setShowSupplementModal] = useState(false);
+  const [supplementPublishBlockedMessage, setSupplementPublishBlockedMessage] = useState('');
   const [showActionModal, setShowActionModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [answerText, setAnswerText] = useState('');
@@ -1079,6 +1080,34 @@ export default function QuestionDetailScreen({
     }
     return formatTime(value);
   };
+  const extractBusinessResponse = response => {
+    if (response?.data && typeof response.data === 'object' && !Array.isArray(response.data) && (response.data.code !== undefined || response.data.msg !== undefined || response.data.message !== undefined)) {
+      return response.data;
+    }
+    return response;
+  };
+  const isSupplementPublishBlockedMessage = message => typeof message === 'string' && message.includes('不允许') && message.includes('问题补充');
+  const getSupplementPublishBlockedReason = (question = questionData) => {
+    if (supplementPublishBlockedMessage) {
+      return supplementPublishBlockedMessage;
+    }
+    if (question?.isResolved || Number(question?.questionStatus ?? question?.status) === 2) {
+      return '当前问题已解决，暂不支持补充问题';
+    }
+    return '';
+  };
+  const openSupplementComposer = () => {
+    const blockedReason = getSupplementPublishBlockedReason();
+    if (blockedReason) {
+      showToast(blockedReason, 'warning');
+      return;
+    }
+    setShowSupplementModal(true);
+  };
+
+  useEffect(() => {
+    setSupplementPublishBlockedMessage('');
+  }, [route?.params?.id]);
 
   // 获取问题详情数据 - 优化版：等待所有数据加载完成后再渲染
   useEffect(() => {
@@ -1111,10 +1140,27 @@ export default function QuestionDetailScreen({
 
             // 步骤3: 准备所有数据
             const supplements = normalizeSupplementCacheList(supplementsResponse?.data || []);
-            const answers = normalizeAnswers(answersResponse?.data?.rows || []);
-            const answersTotal = answersResponse?.data?.total || 0;
+            const answers = normalizeAnswers(extractAnswerRows(answersResponse));
+            const answersTotal = extractAnswerTotal(answersResponse, answers.length);
+            let newestAnswers = [];
+            let newestAnswersTotal = 0;
+            let shouldSwitchAnswersToNewest = false;
+            if (shouldFallbackToNewestAnswers('featured', answers, answersTotal)) {
+              console.log('ℹ️ 精选回答为空但总数大于 0，尝试回退到最新排序');
+              const newestAnswersResponse = await answerApi.getAnswers(questionId, {
+                sortBy: 'newest',
+                pageNum: 1,
+                pageSize: 10
+              });
+              newestAnswers = normalizeAnswers(extractAnswerRows(newestAnswersResponse));
+              newestAnswersTotal = extractAnswerTotal(newestAnswersResponse, newestAnswers.length);
+              shouldSwitchAnswersToNewest = newestAnswers.length > 0;
+            }
             console.log('✅ 补充列表:', supplements.length, '条');
             console.log('✅ 回答列表:', answers.length, '条，总数:', answersTotal);
+            if (shouldSwitchAnswersToNewest) {
+              console.log('✅ 最新回答回退成功，数量:', newestAnswers.length, '条，总数:', newestAnswersTotal);
+            }
 
             // 步骤4: 批量更新所有状态（React 18+ 会自动批处理）
             // 使用 startTransition 确保低优先级更新不会阻塞UI
@@ -1150,9 +1196,22 @@ export default function QuestionDetailScreen({
                 hasMore: answers.length >= 10 && answers.length < answersTotal,
                 loaded: true,
                 lastUpdated: Date.now()
-              }
+              },
+              ...(shouldSwitchAnswersToNewest ? {
+                newest: {
+                  list: newestAnswers,
+                  total: newestAnswersTotal,
+                  pageNum: newestAnswers.length < 10 ? 1 : 2,
+                  hasMore: newestAnswers.length >= 10 && newestAnswers.length < newestAnswersTotal,
+                  loaded: true,
+                  lastUpdated: Date.now()
+                }
+              } : {})
             }));
-            syncAnswerInteractionStates(answers);
+            syncAnswerInteractionStates(shouldSwitchAnswersToNewest ? [...answers, ...newestAnswers] : answers);
+            if (shouldSwitchAnswersToNewest) {
+              setAnswersSortBy('newest');
+            }
 
             // 步骤5: 所有数据都设置完成后，启动淡入动画
             // 使用 setTimeout 确保状态更新已经完成
@@ -1505,6 +1564,9 @@ export default function QuestionDetailScreen({
     };
   };
   const normalizeAnswers = (rows = []) => rows.map(normalizeAnswerItem);
+  const extractAnswerRows = response => response?.data?.rows ?? response?.data?.list ?? response?.data?.records ?? [];
+  const extractAnswerTotal = (response, fallback = 0) => response?.data?.total ?? response?.data?.count ?? response?.data?.recordsTotal ?? fallback;
+  const shouldFallbackToNewestAnswers = (sortBy, items = [], total = 0) => sortBy === 'featured' && Array.isArray(items) && items.length === 0 && Number(total) > 0;
   const buildAnswerFromMutationResponse = (currentAnswer, responseData, fallbackValues = {}) => {
     const payload = responseData && typeof responseData === 'object' && !Array.isArray(responseData) ? responseData : null;
     return normalizeAnswerItem({
@@ -1728,6 +1790,7 @@ export default function QuestionDetailScreen({
   const normalizeComments = (rows = [], defaults = {}) => rows.map(row => normalizeCommentItem(row, defaults));
   const extractCommentRows = response => response?.data?.rows || response?.data?.list || response?.data?.records || [];
   const extractCommentTotal = (response, fallback = 0) => response?.data?.total ?? response?.data?.count ?? response?.data?.recordsTotal ?? fallback;
+  const shouldFallbackToNewestComments = (sortBy, items = [], total = 0) => sortBy === 'likes' && Array.isArray(items) && items.length === 0 && Number(total) > 0;
   const buildCommentReplyTree = (rows = [], rootCommentId = null) => {
     if (!Array.isArray(rows) || !rows.length) {
       return [];
@@ -2801,8 +2864,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         pageSize: 10
       });
       if (response && response.code === 200 && response.data) {
-        const newAnswers = normalizeAnswers(response.data.rows || []);
-        const total = response.data.total || 0;
+        const newAnswers = normalizeAnswers(extractAnswerRows(response));
+        const total = extractAnswerTotal(response, newAnswers.length);
         syncAnswerInteractionStates(newAnswers);
 
         // 检查数据是否有变化
@@ -2906,8 +2969,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       });
       console.log('📥 回答列表响应:', response);
       if (response && response.code === 200 && response.data) {
-        const newAnswers = normalizeAnswers(response.data.rows || []);
-        const total = response.data.total || 0;
+        const newAnswers = normalizeAnswers(extractAnswerRows(response));
+        const total = extractAnswerTotal(response, newAnswers.length);
         const otherSortBy = sortBy === 'featured' ? 'newest' : 'featured';
         logSortPreview({
           scope: 'answers',
@@ -2950,6 +3013,34 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           }
           return updatedCache;
         });
+
+        if (shouldFallbackToNewestAnswers(sortBy, newAnswers, total)) {
+          console.log('ℹ️ 当前精选回答为空但总数大于 0，自动切换到最新回答');
+          const newestResponse = await answerApi.getAnswers(questionId, {
+            sortBy: 'newest',
+            pageNum: 1,
+            pageSize: 10
+          });
+          if (newestResponse && newestResponse.code === 200 && newestResponse.data) {
+            const newestAnswers = normalizeAnswers(extractAnswerRows(newestResponse));
+            const newestTotal = extractAnswerTotal(newestResponse, newestAnswers.length);
+            if (newestAnswers.length > 0) {
+              syncAnswerInteractionStates(newestAnswers);
+              setAnswersCache(prevCache => ({
+                ...prevCache,
+                newest: {
+                  list: newestAnswers,
+                  total: newestTotal,
+                  pageNum: newestAnswers.length < 10 ? 1 : 2,
+                  hasMore: newestAnswers.length >= 10 && newestAnswers.length < newestTotal,
+                  loaded: true,
+                  lastUpdated: Date.now()
+                }
+              }));
+              setAnswersSortBy('newest');
+            }
+          }
+        }
       }
     } catch (error) {
       console.error('❌ 加载回答列表失败:', error);
@@ -2986,13 +3077,13 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       });
       console.log('📥 评论列表响应:', response);
       if (response && response.code === 200 && response.data) {
-        const rawRows = response.data.rows || response.data.list || response.data.records || [];
+        const rawRows = extractCommentRows(response);
         const newComments = mergeInteractionCounts(normalizeComments(rawRows, {
           targetType: 1,
           targetId: Number(questionId),
           parentId: 0
         }), cacheData.list);
-        const total = response.data.total ?? response.data.count ?? response.data.recordsTotal ?? newComments.length;
+        const total = extractCommentTotal(response, newComments.length);
         syncCommentInteractionStates(newComments);
         setCommentsCache(prevCache => {
           const updatedCache = {
@@ -3020,6 +3111,42 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           }
           return updatedCache;
         });
+
+        if (shouldFallbackToNewestComments(sortBy, newComments, total)) {
+          console.log('ℹ️ 当前精选评论为空但总数大于 0，自动切换到最新评论');
+          const newestResponse = await commentApi.getComments({
+            targetType: 1,
+            targetId: Number(questionId),
+            parentId: 0,
+            sortBy: 'newest',
+            pageNum: 1,
+            pageSize: 10
+          });
+          if (newestResponse && newestResponse.code === 200 && newestResponse.data) {
+            const newestRows = extractCommentRows(newestResponse);
+            const newestComments = normalizeComments(newestRows, {
+              targetType: 1,
+              targetId: Number(questionId),
+              parentId: 0
+            });
+            const newestTotal = extractCommentTotal(newestResponse, newestComments.length);
+            if (newestComments.length > 0) {
+              syncCommentInteractionStates(newestComments);
+              setCommentsCache(prevCache => ({
+                ...prevCache,
+                newest: {
+                  list: newestComments,
+                  total: newestTotal,
+                  pageNum: newestComments.length < 10 ? 1 : 2,
+                  hasMore: newestComments.length >= 10 && newestComments.length < newestTotal,
+                  loaded: true,
+                  lastUpdated: Date.now()
+                }
+              }));
+              setCommentsSortBy('newest');
+            }
+          }
+        }
       }
     } catch (error) {
       console.error('❌ 加载评论列表失败:', error);
@@ -3074,13 +3201,13 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       });
       console.log('📥 评论列表更多响应:', response);
       if (response && response.code === 200 && response.data) {
-        const rawRows = response.data.rows || response.data.list || response.data.records || [];
+        const rawRows = extractCommentRows(response);
         const newComments = mergeInteractionCounts(normalizeComments(rawRows, {
           targetType: 1,
           targetId: Number(questionId),
           parentId: 0
         }), currentData.list);
-        const total = response.data.total ?? response.data.count ?? response.data.recordsTotal ?? currentData.total;
+        const total = extractCommentTotal(response, currentData.total);
         syncCommentInteractionStates(newComments);
         setCommentsCache(prevCache => ({
           ...prevCache,
@@ -4714,8 +4841,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           }
         });
 
-        // 重新加载当前排序的回答列表
-        loadAnswersList(questionId, true);
+        // 新发布的回答更可能先出现在“最新”排序里，优先切过去避免数量有但列表空
+        setAnswersSortBy('newest');
+        loadAnswersList(questionId, true, 'newest');
       } else {
         showToast(response?.msg || '发布失败', 'error');
       }
@@ -4727,6 +4855,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
   const handleSubmitSupplement = async () => {
     if (!supplementText.trim()) {
       showToast('请输入补充内容', 'warning');
+      return;
+    }
+    const blockedReason = getSupplementPublishBlockedReason();
+    if (blockedReason) {
+      showToast(blockedReason, 'warning');
       return;
     }
     try {
@@ -4773,8 +4906,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       console.log('📤 提交补充问题:');
       console.log('  questionId:', questionId);
       console.log('  supplementCreateRequest:', supplementCreateRequest);
-      const response = await questionApi.publishSupplement(questionId, supplementCreateRequest);
-      console.log('📥 补充问题发布响应:', response);
+      const rawResponse = await questionApi.publishSupplement(questionId, supplementCreateRequest);
+      const response = extractBusinessResponse(rawResponse);
+      console.log('📥 补充问题发布响应:', rawResponse);
+      console.log('📥 补充问题发布业务响应:', response);
       if (response && response.code === 200) {
         showToast('补充问题发布成功', 'success');
         setSupplementText('');
@@ -4801,14 +4936,23 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           }
         });
 
-        // 重新加载当前排序的补充列表
-        loadSupplementsList(questionId, true);
+        // 新发布的补充优先在“最新”排序下可见
+        setSupplementsSortBy('newest');
+        loadSupplementsList(questionId, true, 'newest');
       } else {
-        showToast(response?.msg || '发布失败', 'error');
+        const responseMessage = response?.msg || response?.message || rawResponse?.msg || rawResponse?.message || '发布失败';
+        if (isSupplementPublishBlockedMessage(responseMessage)) {
+          setSupplementPublishBlockedMessage(responseMessage);
+        }
+        showToast(responseMessage, 'error');
       }
     } catch (error) {
       console.error('发布补充问题失败:', error);
-      showToast('网络错误，请稍后重试', 'error');
+      const errorMessage = error?.data?.msg || error?.response?.data?.msg || error?.message || '网络错误，请稍后重试';
+      if (isSupplementPublishBlockedMessage(errorMessage)) {
+        setSupplementPublishBlockedMessage(errorMessage);
+      }
+      showToast(errorMessage, 'error');
     }
   };
   const handleSubmitSupplementAnswer = () => {
@@ -6401,7 +6545,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           onPress={() => {
             const activeTabType = activeTab?.split(' (')[0]?.trim();
             if (activeTabType === t('screens.questionDetail.tabs.supplements')) {
-              setShowSupplementModal(true);
+              openSupplementComposer();
             } else if (activeTabType === t('screens.questionDetail.tabs.answers')) {
               setShowAnswerModal(true);
             } else if (activeTabType === t('screens.questionDetail.tabs.comments')) {
@@ -7021,10 +7165,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             <View style={styles.answerHeaderCenter}>
               <Text style={styles.answerModalTitle}>补充问题</Text>
             </View>
-            <TouchableOpacity style={[styles.answerPublishBtn, !supplementText.trim() && styles.answerPublishBtnDisabled]} onPress={handleSubmitSupplement} disabled={!supplementText.trim()}>
-              <Text style={[styles.answerPublishText, !supplementText.trim() && styles.answerPublishTextDisabled]}>发布</Text>
+            <TouchableOpacity style={[styles.answerPublishBtn, (!supplementText.trim() || !!getSupplementPublishBlockedReason()) && styles.answerPublishBtnDisabled]} onPress={handleSubmitSupplement} disabled={!supplementText.trim() || !!getSupplementPublishBlockedReason()}>
+              <Text style={[styles.answerPublishText, (!supplementText.trim() || !!getSupplementPublishBlockedReason()) && styles.answerPublishTextDisabled]}>发布</Text>
             </TouchableOpacity>
           </View>
+          {Boolean(getSupplementPublishBlockedReason()) && <View style={styles.supplementBlockedBanner}>
+              <Ionicons name="information-circle-outline" size={16} color="#b45309" />
+              <Text style={styles.supplementBlockedBannerText}>{getSupplementPublishBlockedReason()}</Text>
+            </View>}
 
           <View style={styles.answerQuestionCard}>
             <View style={styles.answerQuestionIcon}>
@@ -9588,6 +9736,20 @@ const styles = StyleSheet.create({
   },
   answerPublishTextDisabled: {
     color: '#fff'
+  },
+  supplementBlockedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#fef3c7'
+  },
+  supplementBlockedBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#92400e',
+    lineHeight: 18
   },
   answerQuestionCard: {
     flexDirection: 'row',
