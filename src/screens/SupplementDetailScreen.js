@@ -11,6 +11,7 @@ import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import { showToast } from '../utils/toast';
 import { formatNumber } from '../utils/numberFormatter';
+import { formatTime } from '../utils/timeFormatter';
 import { normalizeEntityId } from '../utils/jsonLongId';
 import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
 import answerApi from '../services/api/answerApi';
@@ -194,32 +195,8 @@ const resolveDisplayDateValue = timeValue => {
   return parsedDate;
 };
 
-const formatTime = timeValue => {
-  if (!timeValue) return '刚刚';
-  try {
-    const time = resolveDisplayDateValue(timeValue);
-    if (!time || isNaN(time.getTime())) {
-      return typeof timeValue === 'string' ? timeValue : '刚刚';
-    }
-    const now = new Date();
-    const diff = now - time;
-    if (isNaN(time.getTime())) {
-      return typeof timeValue === 'string' ? timeValue : '刚刚';
-    }
-    if (diff < 0) {
-      return '刚刚';
-    }
-    const minutes = Math.floor(diff / (1000 * 60));
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-    if (days >= 1) return `${days}天前`;
-    if (hours >= 1) return `${hours}小时前`;
-    if (minutes >= 1) return `${minutes}分钟前`;
-    return '刚刚';
-  } catch (error) {
-    return typeof timeValue === 'string' ? timeValue : '刚刚';
-  }
-};
+// 时间格式化函数 - 使用工具函数
+// 已从 ../utils/timeFormatter 导入
 
 const normalizeDisplayTime = (...values) => {
   for (const value of values) {

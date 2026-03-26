@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TextInput,
+  Pressable,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
@@ -18,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
+import userApi from '../services/api/userApi';
 
 function FeedbackScreen({ navigation }) {
   const { t } = useTranslation();
@@ -33,6 +35,12 @@ function FeedbackScreen({ navigation }) {
   const contentInputRef = useRef(null);
   const contactInputRef = useRef(null);
   const shakeAnimation = useRef(new Animated.Value(0)).current;
+  const feedbackTypeMap = {
+    '功能建议': 0,
+    'Bug反馈': 1,
+    '内容问题': 2,
+    '其他': 2
+  };
 
   // 验证联系方式格式（宽松验证，支持国际手机号和邮箱）
   const validateContact = (text) => {
@@ -54,7 +62,6 @@ function FeedbackScreen({ navigation }) {
     }
 
     try {
-      // 请求相册权限
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         showAppAlert('权限不足', '需要访问相册权限才能上传图片');
@@ -106,63 +113,71 @@ function FeedbackScreen({ navigation }) {
   };
 
   const handleSubmit = async () => {
-    // 验证
     if (!title.trim()) {
       shakeInput();
-      showAppAlert('提示', '请输入反馈标题');
+      showAppAlert('\u63d0\u793a', '\u8bf7\u8f93\u5165\u53cd\u9988\u6807\u9898');
       titleInputRef.current?.focus();
       return;
     }
 
     if (!content.trim()) {
       shakeInput();
-      showAppAlert('提示', '请输入反馈内容');
+      showAppAlert('\u63d0\u793a', '\u8bf7\u8f93\u5165\u53cd\u9988\u5185\u5bb9');
       contentInputRef.current?.focus();
       return;
     }
 
     if (content.trim().length < 10) {
       shakeInput();
-      showAppAlert('提示', '反馈内容至少需要10个字符');
+      showAppAlert('\u63d0\u793a', '\u53cd\u9988\u5185\u5bb9\u81f3\u5c11\u9700\u898110\u4e2a\u5b57\u7b26');
       return;
     }
 
-    // 验证联系方式格式（如果填写了）
     if (contact.trim() && !validateContact(contact)) {
       shakeInput();
-      showAppAlert('提示', '请输入有效的邮箱或手机号');
+      showAppAlert('\u63d0\u793a', '\u8bf7\u8f93\u5165\u6709\u6548\u7684\u90ae\u7bb1\u6216\u624b\u673a\u53f7');
       contactInputRef.current?.focus();
       return;
+    }
+
+    const trimmedTitle = title.trim();
+    const trimmedContent = content.trim();
+    const trimmedContact = contact.trim();
+    const requestData = {
+      content: trimmedTitle
+        ? `\u6807\u9898\uff1a${trimmedTitle}\n\n${trimmedContent}`
+        : trimmedContent
+    };
+
+    if (selectedType && feedbackTypeMap[selectedType] !== undefined) {
+      requestData.type = feedbackTypeMap[selectedType];
+    }
+
+    if (trimmedContact) {
+      requestData.contact = trimmedContact;
     }
 
     setIsSubmitting(true);
 
     try {
-      // TODO: 调用反馈接口
-      // const formData = {
-      //   title: title.trim(),
-      //   content: content.trim(),
-      //   contact: contact.trim(),
-      //   type: selectedType,
-      //   images: images.map(img => img.uri)
-      // };
-      // await feedbackApi.submit(formData);
-      
-      // 模拟提交
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const response = await userApi.submitFeedback(requestData);
+
+      if (!response || response.code !== 200) {
+        throw new Error(response?.msg || '\u63d0\u4ea4\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5');
+      }
 
       showAppAlert(
-        '提交成功',
-        '感谢您的反馈！我们会认真处理您的意见。',
+        '\u63d0\u4ea4\u6210\u529f',
+        '\u611f\u8c22\u60a8\u7684\u53cd\u9988\uff01\u6211\u4eec\u4f1a\u8ba4\u771f\u5904\u7406\u60a8\u7684\u610f\u89c1\u3002',
         [
           {
-            text: '确定',
+            text: '\u786e\u5b9a',
             onPress: () => navigation.goBack()
           }
         ]
       );
     } catch (error) {
-      showAppAlert('提交失败', '网络错误，请稍后重试');
+      showAppAlert('\u63d0\u4ea4\u5931\u8d25', error?.message || '\u7f51\u7edc\u9519\u8bef\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5');
     } finally {
       setIsSubmitting(false);
     }
@@ -298,7 +313,8 @@ function FeedbackScreen({ navigation }) {
               <Text style={styles.inputLabel}>详细描述</Text>
               <Text style={styles.requiredMark}>*</Text>
             </View>
-            <View
+            <Pressable
+              onPress={() => contentInputRef.current?.focus()}
               style={[
                 styles.inputWrapper,
                 styles.contentInputWrapper,
@@ -318,7 +334,7 @@ function FeedbackScreen({ navigation }) {
                 onFocus={() => setFocusedField('content')}
                 onBlur={() => setFocusedField(null)}
               />
-            </View>
+            </Pressable>
             <Text style={styles.charCount}>{content.length}/500</Text>
           </Animated.View>
 
@@ -343,7 +359,7 @@ function FeedbackScreen({ navigation }) {
               <TextInput
                 ref={contactInputRef}
                 style={styles.titleInput}
-                placeholder="如需回复，请留下邮箱或手机号"
+                placeholder="如需回复，请留下邮箱"
                 placeholderTextColor="#9ca3af"
                 value={contact}
                 onChangeText={setContact}
@@ -368,7 +384,7 @@ function FeedbackScreen({ navigation }) {
           <View style={styles.quickSelectSection}>
             <Text style={styles.quickSelectTitle}>反馈类型</Text>
             <View style={styles.quickSelectButtons}>
-              {['功能建议', 'Bug反馈', '内容问题', '其他'].map((type) => (
+              {['功能建议', 'Bug反馈', '其他'].map((type) => (
                 <TouchableOpacity
                   key={type}
                   style={[
@@ -591,10 +607,11 @@ const styles = StyleSheet.create({
   },
   contentInputWrapper: {
     minHeight: 180,
-    alignItems: 'flex-start'
+    alignItems: 'stretch'
   },
   contentInput: {
     flex: 1,
+    minHeight: 152,
     fontSize: 15,
     color: '#1f2937',
     lineHeight: 22,

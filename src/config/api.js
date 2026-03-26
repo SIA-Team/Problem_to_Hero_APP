@@ -54,6 +54,7 @@ export const API_ENDPOINTS = {
     PROFILE: buildApiPath(SERVICES.USER, '/app/user/profile'),
     PROFILE_ME: buildApiPath(SERVICES.USER, '/app/user/profile/me'),  // 获取当前用户详细信息
     PUBLIC_PROFILE: buildApiPath(SERVICES.USER, '/app/user/profile/public/:userId'),
+    SUBMIT_FEEDBACK: buildApiPath(SERVICES.USER, '/app/user/submitFeedback'),
     QUERY_BLACKLIST: buildApiPath(SERVICES.USER, '/app/user/settings/queryBlacklist'),
     ADD_BLACKLIST: buildApiPath(SERVICES.USER, '/app/user/settings/addBlacklist'),
     REMOVE_BLACKLIST: buildApiPath(SERVICES.USER, '/app/user/settings/removeBlacklist/:blockedUserId'),

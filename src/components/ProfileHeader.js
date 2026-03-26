@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from './Avatar';
 import { useTranslation } from '../i18n/useTranslation';
 import { formatNumber } from '../utils/numberFormatter';
+import { getLastLocationLevel } from '../utils/locationFormatter';
 
 // 获取屏幕宽度
 const {
@@ -209,7 +210,7 @@ function ProfileHeader({
             {/* IP归属地 */}
             {Boolean(location) && <View style={styles.metaItem}>
                 <Ionicons name="location-outline" size={scale(13)} color="#8e8e93" />
-                <Text style={styles.metaText}>IP属地: {location}</Text>
+                <Text style={styles.metaText}>IP属地: {getLastLocationLevel(location)}</Text>
               </View>}
 
             {/* 性别 */}

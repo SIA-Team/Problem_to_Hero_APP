@@ -63,6 +63,10 @@ const userApi = {
     return apiClient.put(API_ENDPOINTS.USER.UPDATE_PROFILE, data);
   },
 
+  submitFeedback: async (data) => {
+    return apiClient.post(API_ENDPOINTS.USER.SUBMIT_FEEDBACK, data);
+  },
+
   /**
    * 修改用户名
    * @param {string} username - 新用户名

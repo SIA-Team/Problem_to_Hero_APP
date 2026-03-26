@@ -11,6 +11,7 @@ import { useTranslation } from '../i18n/useTranslation';
 import { getRegionData } from '../data/regionData';
 import { useOptimizedQuestions } from '../hooks/useOptimizedQuestions';
 import { showToast } from '../utils/toast';
+import { formatTime } from '../utils/timeFormatter';
 import { navigateToPublicProfile, resolvePublicUserId } from '../utils/publicProfileNavigation';
 import questionApi from '../services/api/questionApi';
 import { getBlockedUserIds, subscribeBlockedUsers } from '../services/blacklistState';
@@ -77,11 +78,7 @@ export default function HomeScreen({ navigation }) {
   }, [t, activeTab]);
   
   // Tab 切换监听 - 触发优化加载
-  useEffect(() => {
-    if (activeTab && handleOptimizedTabChange) {
-      handleOptimizedTabChange(activeTab);
-    }
-  }, [activeTab, handleOptimizedTabChange]);
+  
   
   const [likedItems, setLikedItems] = useState({});
   const [dislikedItems, setDislikedItems] = useState({});
@@ -117,6 +114,13 @@ export default function HomeScreen({ navigation }) {
     onTabChange: handleOptimizedTabChange,
     setQuestionList,
   } = useOptimizedQuestions(activeTab, tabs);
+
+  // Run after the hook initializes its callback to avoid web TDZ errors.
+  useEffect(() => {
+    if (activeTab && handleOptimizedTabChange) {
+      handleOptimizedTabChange(activeTab);
+    }
+  }, [activeTab, handleOptimizedTabChange]);
   
   
   // 翻译状态
@@ -131,47 +135,9 @@ export default function HomeScreen({ navigation }) {
   // 记录标题的完整行数
   const [titleLineCount, setTitleLineCount] = useState({});
   
-  // 时间格式化函数 - with translation support
-  const formatTime = (timeStr) => {
-    // 如果已经是格式化的字符串，直接返回
-    if (typeof timeStr === 'string' && (
-      timeStr.includes('前') || 
-      timeStr.includes('ago') || 
-      timeStr === '刚刚' || 
-      timeStr === 'just now'
-    )) {
-      return timeStr;
-    }
-    
-    // 否则进行时间格式化
-    try {
-      const now = new Date();
-      const targetTime = new Date(timeStr);
-      
-      if (isNaN(targetTime.getTime())) {
-        return t('home.justNow');
-      }
-      
-      const diff = now - targetTime;
-      const minutes = Math.floor(diff / (1000 * 60));
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      
-      if (days >= 1) {
-        return t('home.yesterday');
-      } else if (hours >= 1) {
-        return `${hours} ${t('home.hoursAgo')}`;
-      } else if (minutes >= 1) {
-        return `${minutes} ${t('home.minutesAgo')}`;
-      } else {
-        return t('home.justNow');
-      }
-    } catch (error) {
-      console.error('时间格式化错误:', error, '原始时间:', timeStr);
-      return t('home.justNow');
-    }
-  };
-
+  // 时间格式化函数 - 使用工具函数
+  // 已从 ../utils/timeFormatter 导入
+  
   // 根据选择的区域层级显示地区信息
   const getLocationDisplay = (item) => {
     // 始终根据问题本身的地区数据来显示

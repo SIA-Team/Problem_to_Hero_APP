@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Switch, Alert, TextInput, Modal, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Switch, TextInput, Modal, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -13,6 +13,7 @@ import DatePickerModal from '../components/DatePickerModal';
 import Toast from '../components/Toast';
 import ServerSwitcher from '../components/ServerSwitcher';
 import LogoutConfirmModal from '../components/LogoutConfirmModal';
+import OccupationPickerModal from '../components/OccupationPickerModal';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import UserCacheService from '../services/UserCacheService';
@@ -24,7 +25,8 @@ export default function SettingsScreen({
   navigation
 }) {
   const {
-    t
+    t,
+    i18n
   } = useTranslation();
   // Toast 状态
   const [toast, setToast] = useState({
@@ -74,6 +76,7 @@ export default function SettingsScreen({
 
   // 生日选择弹窗状态
   const [showDateModal, setShowDateModal] = useState(false);
+  const [showOccupationModal, setShowOccupationModal] = useState(false);
 
   // 用户名编辑弹窗状态
   const [showUsernameModal, setShowUsernameModal] = useState(false);
@@ -84,6 +87,28 @@ export default function SettingsScreen({
   // 退出登录弹窗状态
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const currentLanguageLabel = i18n?.locale === 'en' ? 'English' : '简体中文';
+
+  const handleLanguageSelect = async locale => {
+    await i18n.setLanguage(locale);
+    showAppAlert(
+      t('screens.settings.alerts.saveSuccess.title'),
+      locale === 'en' ? 'Language switched to English.' : '语言已切换为简体中文。'
+    );
+  };
+
+  const handleLanguagePress = () => {
+    showAppAlert(
+      t('screens.settings.alerts.language.title'),
+      i18n?.locale === 'en' ? `Current language: ${currentLanguageLabel}` : `当前语言：${currentLanguageLabel}`,
+      [
+        { text: i18n?.locale === 'en' ? 'Cancel' : '取消', style: 'cancel' },
+        { text: '简体中文', onPress: () => handleLanguageSelect('zh') },
+        { text: 'English', onPress: () => handleLanguageSelect('en') }
+      ]
+    );
+  };
 
   // 缓存大小状态
   const [cacheSize, setCacheSize] = useState('计算中...');
@@ -391,6 +416,46 @@ export default function SettingsScreen({
   };
 
   // 直接保存文本（用于区域选择等不使用 textModalConfig 的场景）
+  const handleOccupationSelect = async newOccupation => {
+    setShowOccupationModal(false);
+    if (!newOccupation || newOccupation === userProfile.occupation) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const updatedProfile = await UserCacheService.updateUserProfile({
+        nickName: null,
+        signature: null,
+        profession: newOccupation.trim() || null,
+        location: null
+      });
+
+      if (updatedProfile) {
+        setUserProfile({
+          userId: updatedProfile.userId || '',
+          username: updatedProfile.username || '',
+          usernameLastModified: updatedProfile.usernameLastModified || null,
+          name: updatedProfile.nickName || '用户',
+          bio: updatedProfile.signature || '',
+          location: updatedProfile.location || '',
+          occupation: updatedProfile.profession || '',
+          gender: updatedProfile.sex === '0' ? '男' : updatedProfile.sex === '1' ? '女' : '保密',
+          birthday: updatedProfile.birthday || '',
+          avatar: updatedProfile.avatar || null,
+          email: updatedProfile.email || '',
+          phone: updatedProfile.phonenumber || ''
+        });
+        showToast('职业已更新', 'success');
+      }
+    } catch (error) {
+      console.error('❌ 更新职业失败:', error);
+      showToast(error.message || '更新失败，请重试', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSaveTextDirect = async (field, newValue) => {
     console.log('=== handleSaveTextDirect Debug ===');
     console.log('field:', field);
@@ -1058,11 +1123,7 @@ export default function SettingsScreen({
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]} onPress={() => openTextModal('occupation', '修改职业', userProfile.occupation, {
-            minLength: 0,
-            maxLength: 30,
-            hint: '填写您的职业或专业领域'
-          })}>
+            <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]} onPress={() => setShowOccupationModal(true)}>
               <View style={styles.menuLeft}>
                 <Ionicons name="briefcase-outline" size={22} color="#6b7280" />
                 <Text style={styles.menuLabel}>{t('screens.settings.profile.occupation')}</Text>
@@ -1272,13 +1333,13 @@ export default function SettingsScreen({
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]} onPress={() => showAppAlert(t('screens.settings.alerts.language.title'), t('screens.settings.alerts.language.message'))}>
+            <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]} onPress={handleLanguagePress}>
               <View style={styles.menuLeft}>
                 <Ionicons name="language-outline" size={22} color="#6b7280" />
                 <Text style={styles.menuLabel}>{t('screens.settings.general.language')}</Text>
               </View>
               <View style={styles.menuRight}>
-                <Text style={styles.menuValue}>{t('screens.settings.general.languageChinese')}</Text>
+                <Text style={styles.menuValue}>{currentLanguageLabel}</Text>
                 <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
               </View>
             </TouchableOpacity>
@@ -1424,6 +1485,8 @@ export default function SettingsScreen({
 
       {/* 通用文本编辑弹窗 */}
       <EditTextModal visible={showTextModal} onClose={() => setShowTextModal(false)} title={textModalConfig.title} currentValue={textModalConfig.currentValue} onSave={handleSaveText} minLength={textModalConfig.minLength} maxLength={textModalConfig.maxLength} multiline={textModalConfig.multiline} hint={textModalConfig.hint} loading={isLoading} />
+
+      <OccupationPickerModal visible={showOccupationModal} currentValue={userProfile.occupation} onClose={() => setShowOccupationModal(false)} onConfirm={handleOccupationSelect} />
 
       {/* 头像操作弹窗 */}
       <AvatarActionSheet visible={showAvatarSheet} onClose={() => setShowAvatarSheet(false)} onImageSelected={uploadImageToServer} title="更换头像" />

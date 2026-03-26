@@ -1,34 +1,175 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Modal, TextInput } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
 import { showAppAlert } from '../utils/appAlert';
+import notificationApi from '../services/api/notificationApi';
 
 // 顶部快捷入口数据
-const quickEntries = [{
+const BUCKET_EVENT_TYPE_MAP = {
+  COMMENT_SHARE: ['COMMENT_REPLY', 'MENTION'],
+  INVITE_ANSWER: ['INVITE_ANSWER', 'INVITER_GOT_ANSWER'],
+  ARBITRATION: ['ARBITRATION_INVITE'],
+  LIKE_AGREE: [
+    'QUESTION_LIKED',
+    'ANSWER_LIKED',
+    'COMMENT_LIKED',
+    'SUPPLEMENT_LIKED',
+    'ANSWER_SUPPLEMENT_LIKED'
+  ],
+  FAVORITE_ME: [
+    'QUESTION_COLLECTED',
+    'ANSWER_COLLECTED',
+    'COMMENT_COLLECTED',
+    'SUPPLEMENT_COLLECTED',
+    'ANSWER_SUPPLEMENT_COLLECTED'
+  ],
+  FOLLOW: ['NEW_FOLLOWER']
+};
+
+const QUICK_ENTRY_CONFIGS = [{
   key: 'comment',
   icon: 'chatbubbles',
   color: '#3b82f6',
-  count: 12
+  bucketKey: 'COMMENT_SHARE'
 }, {
   key: 'like',
   icon: 'heart',
   color: '#ef4444',
-  count: 28
+  bucketKey: 'LIKE_AGREE'
 }, {
   key: 'bookmark',
   icon: 'bookmark',
   color: '#f59e0b',
-  count: 5
+  bucketKey: 'FAVORITE_ME'
 }, {
   key: 'follow',
   icon: 'person-add',
   color: '#22c55e',
-  count: 8
+  bucketKey: 'FOLLOW'
 }];
+
+const CATEGORY_CONFIGS = [{
+  key: 'INTERACTION',
+  title: '互动',
+  icon: 'chatbubble-ellipses',
+  iconBg: '#dcfce7',
+  iconColor: '#22c55e'
+}, {
+  key: 'SYSTEM',
+  title: '系统',
+  icon: 'settings',
+  iconBg: '#f3f4f6',
+  iconColor: '#6b7280'
+}, {
+  key: 'ACTIVITY',
+  title: '活动',
+  icon: 'megaphone',
+  iconBg: '#dbeafe',
+  iconColor: '#3b82f6'
+}];
+
+const EMPTY_SUMMARY = {
+  totalUnread: 0,
+  byCategory: {
+    INTERACTION: 0,
+    SYSTEM: 0,
+    ACTIVITY: 0
+  },
+  buckets: {
+    COMMENT_SHARE: 0,
+    INVITE_ANSWER: 0,
+    ARBITRATION: 0,
+    LIKE_AGREE: 0,
+    FAVORITE_ME: 0,
+    FOLLOW: 0
+  },
+  privateUnread: 0
+};
+
+const DEFAULT_NOTIFICATION_FILTER = {
+  mode: 'all',
+  title: '全部通知',
+  category: null,
+  bucketKey: null,
+  eventTypes: []
+};
+
+const NOTIFICATION_PAGE_SIZE = 10;
+
+const isSuccessResponse = response => response && (response.code === 200 || response.code === 0);
+
+const toSafeNumber = value => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const safeJsonParse = value => {
+  if (!value) {
+    return null;
+  }
+  if (typeof value === 'object') {
+    return value;
+  }
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    return null;
+  }
+};
+
+const formatRelativeTime = value => {
+  if (!value) {
+    return '';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / 60000);
+  if (diffMinutes < 1) {
+    return '刚刚';
+  }
+  if (diffMinutes < 60) {
+    return `${diffMinutes}分钟前`;
+  }
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours}小时前`;
+  }
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) {
+    return `${diffDays}天前`;
+  }
+  return `${date.getMonth() + 1}-${date.getDate()}`;
+};
+
+const findBucketKeyForEventType = eventType => Object.entries(BUCKET_EVENT_TYPE_MAP).find(([, eventTypes]) => eventTypes.includes(eventType))?.[0] || null;
+
+const buildQuickEntries = summary => QUICK_ENTRY_CONFIGS.map(entry => ({
+  ...entry,
+  count: toSafeNumber(summary?.buckets?.[entry.bucketKey])
+}));
+
+const normalizeSummary = summary => ({
+  ...EMPTY_SUMMARY,
+  ...summary,
+  totalUnread: toSafeNumber(summary?.totalUnread),
+  privateUnread: toSafeNumber(summary?.privateUnread),
+  byCategory: {
+    ...EMPTY_SUMMARY.byCategory,
+    ...(summary?.byCategory || {})
+  },
+  buckets: {
+    ...EMPTY_SUMMARY.buckets,
+    ...(summary?.buckets || {})
+  }
+});
 
 // 邀请回答数据
 const inviteAnswers = [{
@@ -206,6 +347,7 @@ export default function MessagesScreen({
   const {
     t
   } = useTranslation();
+  const isFocused = useIsFocused();
   const [showPrivateModal, setShowPrivateModal] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
@@ -216,28 +358,271 @@ export default function MessagesScreen({
   const [voteReason, setVoteReason] = useState('');
   const [showArbitrationResultModal, setShowArbitrationResultModal] = useState(false);
   const [currentArbitrationResult, setCurrentArbitrationResult] = useState(null);
+  const [notificationSummary, setNotificationSummary] = useState(EMPTY_SUMMARY);
+  const [notificationFilter, setNotificationFilter] = useState(DEFAULT_NOTIFICATION_FILTER);
+  const [notificationItems, setNotificationItems] = useState([]);
+  const [notificationTotal, setNotificationTotal] = useState(0);
+  const [notificationPage, setNotificationPage] = useState(1);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationLoadingMore, setNotificationLoadingMore] = useState(false);
+  const [categoryPreviewMap, setCategoryPreviewMap] = useState({});
+  const [privateConversations, setPrivateConversations] = useState([]);
+  const [privateLoading, setPrivateLoading] = useState(false);
 
-  // Get quick entry labels from translations
   const quickEntryLabels = {
     comment: t('screens.messagesScreen.quickEntries.commentForward'),
     like: t('screens.messagesScreen.quickEntries.likeAgree'),
     bookmark: t('screens.messagesScreen.quickEntries.bookmarked'),
     follow: t('screens.messagesScreen.quickEntries.followSubscribe')
   };
+  const quickEntries = buildQuickEntries(notificationSummary);
+  const notificationGroups = CATEGORY_CONFIGS.map(category => {
+    const preview = categoryPreviewMap[category.key];
+    return {
+      ...category,
+      unread: toSafeNumber(notificationSummary.byCategory?.[category.key]),
+      lastMessage: preview?.summary || preview?.title || '暂无通知',
+      time: formatRelativeTime(preview?.createTime)
+    };
+  });
+  const currentFilterTitle = notificationFilter.title || '全部通知';
+  const canLoadMoreNotifications = notificationFilter.mode !== 'bucket' && notificationItems.length < notificationTotal;
 
-  // Get message group titles from translations
-  const messageGroupTitles = {
-    official: t('screens.messagesScreen.messageGroups.official'),
-    question: t('screens.messagesScreen.messageGroups.questionAnswer'),
-    system: t('screens.messagesScreen.messageGroups.system')
+  const applyNotificationReadLocally = notification => {
+    if (!notification || toSafeNumber(notification.readFlag) === 1) {
+      return;
+    }
+    const bucketKey = findBucketKeyForEventType(notification.eventType);
+    setNotificationItems(prev => prev.map(item => String(item.id) === String(notification.id) ? {
+      ...item,
+      readFlag: 1,
+      readTime: new Date().toISOString()
+    } : item));
+    setNotificationSummary(prev => ({
+      ...prev,
+      totalUnread: Math.max(0, toSafeNumber(prev.totalUnread) - 1),
+      byCategory: {
+        ...prev.byCategory,
+        [notification.category]: Math.max(0, toSafeNumber(prev.byCategory?.[notification.category]) - 1)
+      },
+      buckets: bucketKey ? {
+        ...prev.buckets,
+        [bucketKey]: Math.max(0, toSafeNumber(prev.buckets?.[bucketKey]) - 1)
+      } : prev.buckets
+    }));
   };
+
+  const loadNotificationSummary = async () => {
+    try {
+      const response = await notificationApi.getNotificationSummary({
+        includePrivateUnread: true
+      });
+      if (isSuccessResponse(response) && response.data) {
+        setNotificationSummary(normalizeSummary(response.data));
+      }
+    } catch (error) {
+      console.error('加载通知汇总失败:', error);
+    }
+  };
+
+  const loadCategoryPreviews = async () => {
+    try {
+      const results = await Promise.all(CATEGORY_CONFIGS.map(async category => {
+        const response = await notificationApi.getNotificationList({
+          pageNum: 1,
+          pageSize: 1,
+          category: category.key
+        });
+        return [category.key, response?.data?.rows?.[0] || null];
+      }));
+      setCategoryPreviewMap(Object.fromEntries(results));
+    } catch (error) {
+      console.error('加载通知分类预览失败:', error);
+    }
+  };
+
+  const loadPrivateUnreadBrief = async () => {
+    setPrivateLoading(true);
+    try {
+      const response = await notificationApi.getPrivateUnreadBrief({
+        limit: 20
+      });
+      if (isSuccessResponse(response) && response.data) {
+        setPrivateConversations(response.data.conversations || []);
+      }
+    } catch (error) {
+      console.error('加载私信简表失败:', error);
+    } finally {
+      setPrivateLoading(false);
+    }
+  };
+
+  const loadNotifications = async (filter = notificationFilter, pageNum = 1, append = false) => {
+    if (filter.mode === 'bucket') {
+      setNotificationLoading(pageNum === 1);
+      try {
+        const responses = await Promise.all(filter.eventTypes.map(eventType => notificationApi.getNotificationList({
+          pageNum: 1,
+          pageSize: NOTIFICATION_PAGE_SIZE,
+          eventType
+        })));
+        const total = responses.reduce((sum, response) => sum + toSafeNumber(response?.data?.total), 0);
+        const merged = responses.flatMap(response => response?.data?.rows || []);
+        const deduped = Array.from(new Map(merged.map(item => [String(item.id), item])).values()).sort((left, right) => new Date(right.createTime || 0).getTime() - new Date(left.createTime || 0).getTime());
+        setNotificationItems(deduped.slice(0, NOTIFICATION_PAGE_SIZE * 2));
+        setNotificationTotal(total);
+        setNotificationPage(1);
+      } catch (error) {
+        console.error('加载桶通知失败:', error);
+        showAppAlert('提示', error.message || '加载通知失败，请稍后重试');
+      } finally {
+        setNotificationLoading(false);
+        setNotificationLoadingMore(false);
+      }
+      return;
+    }
+
+    if (pageNum === 1) {
+      setNotificationLoading(true);
+    } else {
+      setNotificationLoadingMore(true);
+    }
+
+    try {
+      const response = await notificationApi.getNotificationList({
+        pageNum,
+        pageSize: NOTIFICATION_PAGE_SIZE,
+        category: filter.category || undefined
+      });
+      if (isSuccessResponse(response) && response.data) {
+        const rows = response.data.rows || [];
+        setNotificationItems(prev => append ? [...prev, ...rows] : rows);
+        setNotificationTotal(toSafeNumber(response.data.total));
+        setNotificationPage(pageNum);
+      }
+    } catch (error) {
+      console.error('加载通知列表失败:', error);
+      if (pageNum === 1) {
+        showAppAlert('提示', error.message || '加载通知失败，请稍后重试');
+      }
+    } finally {
+      setNotificationLoading(false);
+      setNotificationLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isFocused) {
+      return;
+    }
+    loadNotificationSummary();
+    loadCategoryPreviews();
+    loadPrivateUnreadBrief();
+  }, [isFocused]);
+
+  useEffect(() => {
+    if (!isFocused) {
+      return;
+    }
+    loadNotifications(notificationFilter, 1, false);
+  }, [isFocused, notificationFilter]);
+
+  const handleQuickEntryPress = entry => {
+    const nextFilter = notificationFilter.mode === 'bucket' && notificationFilter.bucketKey === entry.bucketKey ? DEFAULT_NOTIFICATION_FILTER : {
+      mode: 'bucket',
+      title: quickEntryLabels[entry.key],
+      category: null,
+      bucketKey: entry.bucketKey,
+      eventTypes: BUCKET_EVENT_TYPE_MAP[entry.bucketKey] || []
+    };
+    setNotificationFilter(nextFilter);
+  };
+
+  const handleCategoryPress = group => {
+    const nextFilter = notificationFilter.mode === 'category' && notificationFilter.category === group.key ? DEFAULT_NOTIFICATION_FILTER : {
+      mode: 'category',
+      title: `${group.title}通知`,
+      category: group.key,
+      bucketKey: null,
+      eventTypes: []
+    };
+    setNotificationFilter(nextFilter);
+  };
+
+  const handleNotificationPress = async notification => {
+    if (toSafeNumber(notification.readFlag) !== 1) {
+      try {
+        const response = await notificationApi.markNotificationRead(notification.id);
+        if (isSuccessResponse(response)) {
+          applyNotificationReadLocally(notification);
+        }
+      } catch (error) {
+        showAppAlert('提示', error.message || '标记已读失败，请稍后重试');
+        return;
+      }
+    }
+
+    const payload = safeJsonParse(notification.payload) || {};
+    const routeName = `${payload.route || ''}`.toUpperCase();
+    const questionId = payload.questionId ?? payload.question_id ?? null;
+    const answerId = payload.answerId ?? payload.answer_id ?? null;
+    const supplementId = payload.supplementId ?? payload.supplement_id ?? null;
+    const activityId = payload.activityId ?? payload.activity_id ?? payload.id ?? null;
+
+    if ((routeName.includes('ACTIVITY') || notification.category === 'ACTIVITY') && activityId) {
+      navigation.navigate('ActivityDetail', {
+        id: activityId
+      });
+      return;
+    }
+    if ((routeName.includes('SUPPLEMENT') || supplementId) && supplementId) {
+      navigation.navigate('SupplementDetail', {
+        id: supplementId,
+        parentQuestionId: questionId || undefined
+      });
+      return;
+    }
+    if ((routeName.includes('ANSWER') || answerId) && answerId) {
+      navigation.navigate('AnswerDetail', {
+        answer: {
+          id: answerId,
+          questionId: questionId || undefined
+        },
+        questionId: questionId || undefined
+      });
+      return;
+    }
+    if (questionId) {
+      navigation.navigate('QuestionDetail', {
+        id: questionId
+      });
+      return;
+    }
+    showAppAlert(notification.title || '通知', notification.summary || '当前通知暂无可跳转的业务数据');
+  };
+
   const handleMarkAllRead = () => {
+    const targetCategory = notificationFilter.mode === 'category' ? notificationFilter.category : undefined;
     showAppAlert(t('screens.messagesScreen.alerts.markAllReadTitle'), t('screens.messagesScreen.alerts.markAllReadMessage'), [{
       text: t('common.cancel'),
       style: 'cancel'
     }, {
       text: t('common.confirm'),
-      onPress: () => showAppAlert(t('screens.messagesScreen.alerts.success'), t('screens.messagesScreen.alerts.markAllReadSuccess'))
+      onPress: async () => {
+        try {
+          const response = await notificationApi.markAllNotificationsRead(targetCategory);
+          if (isSuccessResponse(response)) {
+            await Promise.all([
+              loadNotificationSummary(),
+              loadCategoryPreviews(),
+              loadNotifications(notificationFilter, 1, false)
+            ]);
+            showAppAlert(t('screens.messagesScreen.alerts.success'), t('screens.messagesScreen.alerts.markAllReadSuccess'));
+          }
+        } catch (error) {
+          showAppAlert('提示', error.message || '全部已读失败，请稍后重试');
+        }
+      }
     }]);
   };
   const handleSendMessage = () => {
@@ -273,6 +658,12 @@ export default function MessagesScreen({
     setCurrentArbitration(null);
     setVoteChoice(null);
     setVoteReason('');
+  };
+  const handleLoadMoreNotifications = () => {
+    if (!canLoadMoreNotifications || notificationLoadingMore) {
+      return;
+    }
+    loadNotifications(notificationFilter, notificationPage + 1, true);
   };
   const filteredUsers = allUsers.filter(user => user.name.toLowerCase().includes(searchText.toLowerCase()));
   return <SafeAreaView style={styles.container}>
@@ -310,14 +701,18 @@ export default function MessagesScreen({
         {/* 顶部快捷入口 */}
         <View style={styles.quickSection}>
           <View style={styles.quickGrid}>
-            {quickEntries.map(entry => <TouchableOpacity key={entry.key} style={styles.quickItem}>
+            {quickEntries.map(entry => <TouchableOpacity key={entry.key} style={styles.quickItem} onPress={() => handleQuickEntryPress(entry)}>
                 <View style={[styles.quickIcon, {
               backgroundColor: entry.color + '20'
-            }]}>
-                  <Ionicons name={entry.icon} size={22} color={entry.color} />
-                  {entry.count > 0 && <View style={styles.quickBadge}>
-                      <Text style={styles.quickBadgeText}>{entry.count}</Text>
-                    </View>}
+            }, notificationFilter.mode === 'bucket' && notificationFilter.bucketKey === entry.bucketKey && styles.quickIconActive]}>
+                  <View style={[styles.quickIconInner, {
+                borderColor: notificationFilter.mode === 'bucket' && notificationFilter.bucketKey === entry.bucketKey ? entry.color : 'transparent'
+              }]}>
+                    <Ionicons name={entry.icon} size={22} color={entry.color} />
+                    {entry.count > 0 && <View style={styles.quickBadge}>
+                        <Text style={styles.quickBadgeText}>{entry.count}</Text>
+                      </View>}
+                  </View>
                 </View>
                 <Text style={styles.quickLabel}>{quickEntryLabels[entry.key]}</Text>
               </TouchableOpacity>)}
@@ -495,7 +890,7 @@ export default function MessagesScreen({
 
         {/* 消息分组 */}
         <View style={styles.messageGroupSection}>
-          {messageGroups.map((group, idx) => <TouchableOpacity key={idx} style={styles.messageGroupItem}>
+          {notificationGroups.map(group => <TouchableOpacity key={group.key} style={[styles.messageGroupItem, notificationFilter.mode === 'category' && notificationFilter.category === group.key && styles.messageGroupItemActive]} onPress={() => handleCategoryPress(group)}>
               <View style={[styles.groupIcon, {
             backgroundColor: group.iconBg
           }]}>
@@ -503,7 +898,7 @@ export default function MessagesScreen({
               </View>
               <View style={styles.groupContent}>
                 <View style={styles.groupTitleRow}>
-                  <Text style={styles.groupTitle}>{messageGroupTitles[group.type]}</Text>
+                  <Text style={styles.groupTitle}>{group.title}</Text>
                   <Text style={styles.groupTime}>{group.time}</Text>
                 </View>
                 <Text style={styles.groupMessage} numberOfLines={1}>{group.lastMessage}</Text>
@@ -515,22 +910,61 @@ export default function MessagesScreen({
         </View>
 
         {/* 私信列表 */}
+        <View style={styles.notificationSection}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleRow}>
+              <Ionicons name="notifications-outline" size={18} color="#ef4444" />
+              <Text style={styles.sectionTitle}>{currentFilterTitle}</Text>
+            </View>
+            {notificationFilter.mode !== 'all' && <TouchableOpacity onPress={() => setNotificationFilter(DEFAULT_NOTIFICATION_FILTER)}>
+                <Text style={styles.sectionMore}>查看全部</Text>
+              </TouchableOpacity>}
+          </View>
+          {notificationLoading ? <View style={styles.sectionLoading}>
+              <ActivityIndicator color="#ef4444" />
+            </View> : notificationItems.length === 0 ? <View style={styles.sectionEmpty}>
+              <Text style={styles.sectionEmptyText}>暂无通知</Text>
+            </View> : <>
+              {notificationItems.map(item => <TouchableOpacity key={item.id} style={[styles.notificationItem, toSafeNumber(item.readFlag) !== 1 && styles.notificationItemUnread]} onPress={() => handleNotificationPress(item)}>
+                  <View style={styles.notificationBody}>
+                    <View style={styles.notificationHeader}>
+                      <Text style={styles.notificationTitle} numberOfLines={1}>{item.title || '站内通知'}</Text>
+                      <Text style={styles.notificationTime}>{formatRelativeTime(item.createTime)}</Text>
+                    </View>
+                    <Text style={styles.notificationSummary} numberOfLines={2}>{item.summary || item.eventType || '暂无摘要'}</Text>
+                  </View>
+                  {toSafeNumber(item.readFlag) !== 1 && <View style={styles.notificationUnreadDot} />}
+                </TouchableOpacity>)}
+              {canLoadMoreNotifications && <TouchableOpacity style={styles.loadMoreButton} onPress={handleLoadMoreNotifications} disabled={notificationLoadingMore}>
+                  {notificationLoadingMore ? <ActivityIndicator size="small" color="#ef4444" /> : <Text style={styles.loadMoreText}>加载更多</Text>}
+                </TouchableOpacity>}
+            </>}
+        </View>
+
         <View style={styles.privateSection}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{t('screens.messagesScreen.privateMessages.title')}</Text>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>{t('screens.messagesScreen.privateMessages.title')}</Text>
+              {notificationSummary.privateUnread > 0 && <View style={styles.inlineCountBadge}>
+                  <Text style={styles.inlineCountBadgeText}>{notificationSummary.privateUnread}</Text>
+                </View>}
+            </View>
           </View>
-          {privateMessages.map(item => <TouchableOpacity key={item.id} style={styles.privateItem}>
-              <Avatar uri={item.avatar} name={item.name} size={48} />
+          {privateLoading ? <View style={styles.sectionLoading}>
+              <ActivityIndicator color="#ef4444" />
+            </View> : privateConversations.length === 0 ? <View style={styles.sectionEmpty}>
+              <Text style={styles.sectionEmptyText}>暂无未读私信</Text>
+            </View> : privateConversations.map(item => <TouchableOpacity key={item.conversationId} style={styles.privateItem} onPress={() => showAppAlert('私信', '当前版本暂未接入私信会话详情页')}>
+              <Avatar uri={item.peerAvatar} name={item.peerNickName} size={48} />
               <View style={styles.privateContent}>
                 <View style={styles.privateTitleRow}>
-                  <Text style={styles.privateName}>{item.name}</Text>
-                  {Boolean(item.verified) && <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />}
-                  <Text style={styles.privateTime}>{item.time}</Text>
+                  <Text style={styles.privateName}>{item.peerNickName || `用户${item.peerUserId}`}</Text>
+                  <Text style={styles.privateTime}>{formatRelativeTime(item.lastMessageTime)}</Text>
                 </View>
-                <Text style={styles.privateMessage} numberOfLines={1}>{item.lastMessage}</Text>
+                <Text style={styles.privateMessage} numberOfLines={1}>{item.lastMessagePreview || '暂无消息内容'}</Text>
               </View>
-              {item.unread > 0 && <View style={styles.privateBadge}>
-                  <Text style={styles.privateBadgeText}>{item.unread}</Text>
+              {toSafeNumber(item.unreadCount) > 0 && <View style={styles.privateBadge}>
+                  <Text style={styles.privateBadgeText}>{toSafeNumber(item.unreadCount)}</Text>
                 </View>}
             </TouchableOpacity>)}
         </View>
@@ -751,6 +1185,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative'
+  },
+  quickIconActive: {
+    transform: [{
+      translateY: -1
+    }]
+  },
+  quickIconInner: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5
   },
   quickBadge: {
     position: 'absolute',
@@ -1039,6 +1486,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6'
   },
+  messageGroupItemActive: {
+    backgroundColor: '#fff7f7'
+  },
   groupIcon: {
     width: 48,
     height: 48,
@@ -1082,6 +1532,77 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#fff',
     fontWeight: '600'
+  },
+  notificationSection: {
+    backgroundColor: '#fff',
+    marginTop: 8,
+    padding: 12
+  },
+  sectionLoading: {
+    paddingVertical: 24,
+    alignItems: 'center'
+  },
+  sectionEmpty: {
+    paddingVertical: 24,
+    alignItems: 'center'
+  },
+  sectionEmptyText: {
+    fontSize: 13,
+    color: '#9ca3af'
+  },
+  notificationItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  notificationItemUnread: {
+    backgroundColor: '#fffafa'
+  },
+  notificationBody: {
+    flex: 1
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+    gap: 8
+  },
+  notificationTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937'
+  },
+  notificationTime: {
+    fontSize: 11,
+    color: '#9ca3af'
+  },
+  notificationSummary: {
+    fontSize: 13,
+    color: '#6b7280',
+    lineHeight: 19
+  },
+  notificationUnreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ef4444',
+    marginLeft: 10,
+    marginTop: 6
+  },
+  loadMoreButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 14,
+    paddingBottom: 4
+  },
+  loadMoreText: {
+    fontSize: 13,
+    color: '#ef4444',
+    fontWeight: '500'
   },
   // 私信列表样式
   privateSection: {
@@ -1135,6 +1656,20 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
   // 发送私信弹窗样式
+  inlineCountBadge: {
+    backgroundColor: '#ef4444',
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 5
+  },
+  inlineCountBadgeText: {
+    fontSize: 10,
+    color: '#fff',
+    fontWeight: '600'
+  },
   privateModal: {
     flex: 1,
     backgroundColor: modalTokens.surface

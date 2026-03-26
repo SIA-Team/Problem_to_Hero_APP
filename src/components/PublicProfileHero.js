@@ -3,6 +3,7 @@ import { Dimensions, ImageBackground, StyleSheet, Text, TouchableOpacity, View }
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from './Avatar';
 import { formatNumber } from '../utils/numberFormatter';
+import { getLastLocationLevel } from '../utils/locationFormatter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const scale = size => (SCREEN_WIDTH / 375) * size;
@@ -99,7 +100,7 @@ export default function PublicProfileHero({
             {userData.location ? (
               <View style={styles.metaItem}>
                 <Ionicons name="location-outline" size={scale(13)} color="#8e8e93" />
-                <Text style={styles.metaText}>IP属地: {userData.location}</Text>
+                <Text style={styles.metaText}>IP属地: {getLastLocationLevel(userData.location)}</Text>
               </View>
             ) : null}
           </View>

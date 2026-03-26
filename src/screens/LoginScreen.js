@@ -8,8 +8,7 @@ import {
   KeyboardAvoidingView, 
   Platform, 
   ScrollView,
-  ActivityIndicator,
-  Alert
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import authApi from '../services/api/authApi';
 import DeviceInfo from '../utils/deviceInfo';
 import { showToast } from '../utils/toast';
+import { showAppAlert } from '../utils/appAlert';
 import { SERVERS, getCurrentServer, switchServerAndReload, getCustomServerUrl } from '../utils/serverSwitcher';
 
 /**
@@ -260,7 +260,7 @@ export default function LoginScreen({ navigation, onLogin }) {
       server = SERVERS.SERVER2;
     } else if (serverKey === 'custom') {
       if (!customUrl.trim()) {
-        Alert.alert('提示', '请先输入自定义服务器地址');
+        showAppAlert('提示', '请先输入自定义服务器地址');
         return;
       }
       server = {
@@ -269,7 +269,7 @@ export default function LoginScreen({ navigation, onLogin }) {
       };
     }
     
-    Alert.alert(
+    showAppAlert(
       '切换服务器',
       `确定要切换到 ${server.name} (${server.url}) 吗？\n\n切换后将立即生效，无需重启应用。`,
       [
@@ -289,13 +289,13 @@ export default function LoginScreen({ navigation, onLogin }) {
             
             if (success) {
               setCurrentServer(serverKey);
-              Alert.alert(
+              showAppAlert(
                 '切换成功',
                 '服务器已切换并立即生效，您可以继续使用。',
                 [{ text: '知道了' }]
               );
             } else {
-              Alert.alert('切换失败', '无法切换服务器，请重试');
+              showAppAlert('切换失败', '无法切换服务器，请重试');
             }
           }
         }

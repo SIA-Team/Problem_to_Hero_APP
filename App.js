@@ -21,7 +21,7 @@ import AppAlertContainer from './src/components/AppAlertContainer';
 import { setToastRef, showToast } from './src/utils/toast';
 import { setAppAlertRef } from './src/utils/appAlert';
 import { syncCacheIdentity } from './src/utils/cacheManager';
-// import UpdateChecker from './src/components/UpdateChecker'; // 临时注释：构建APK时不需要热更新功能
+import UpdateChecker from './src/components/UpdateChecker';
 
 import HomeScreen from './src/screens/HomeScreen';
 import SearchScreen from './src/screens/SearchScreen';
@@ -780,7 +780,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      {/* <UpdateChecker /> */} {/* 临时注释：构建APK时不需要热更新功能 */}
+      <UpdateChecker />
       <NavigationContainer>
         <StatusBar style="dark" />
         <Stack.Navigator screenOptions={{ headerShown: false }}>

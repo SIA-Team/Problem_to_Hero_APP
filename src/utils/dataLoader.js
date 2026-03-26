@@ -9,6 +9,7 @@
  */
 
 import { getCache, setCache } from './cacheManager';
+import { formatTime as formatDisplayTime } from './timeFormatter';
 import questionApi from '../services/api/questionApi';
 
 /**
@@ -81,6 +82,12 @@ const transformSupplementDataToFormat = (apiData) => {
       item.ipLocation ||
       item.city ||
       '未知';
+    const normalizedIpLocation =
+      item.ipLocation ||
+      item.ip_location ||
+      item.ipAddress ||
+      item.ip_address ||
+      null;
     const normalizedLikeCount = Number(item.likeCount ?? item.likes ?? item.like_count) || 0;
     const normalizedDislikeCount = Number(item.dislikeCount ?? item.dislikes ?? item.dislike_count) || 0;
     const normalizedCommentCount = Number(
@@ -100,7 +107,7 @@ const transformSupplementDataToFormat = (apiData) => {
     let timeDisplay = '刚刚';
     
     if (item.createTime || item.createdAt || item.updateTime || item.updatedAt) {
-      timeDisplay = formatApiTime(item.createTime || item.createdAt || item.updateTime || item.updatedAt);
+      timeDisplay = formatDisplayTime(item.createTime || item.createdAt || item.updateTime || item.updatedAt);
     }
     
     // 基础数据转换
@@ -124,6 +131,8 @@ const transformSupplementDataToFormat = (apiData) => {
       superLikes: item.superLikeCount || 0,
       author: normalizedAuthor,
       location: normalizedLocation,
+      ipLocation: normalizedIpLocation,
+      ip_location: normalizedIpLocation,
       content: item.content || item.description || item.text || '',
       liked: normalizedLiked,
       disliked: normalizedDisliked,
@@ -189,7 +198,7 @@ const transformApiDataToHomeFormat = (apiData) => {
     let timeDisplay = '刚刚';
     
     if (item.createTime || item.createdAt || item.updateTime || item.updatedAt) {
-      timeDisplay = formatApiTime(item.createTime || item.createdAt || item.updateTime || item.updatedAt);
+      timeDisplay = formatDisplayTime(item.createTime || item.createdAt || item.updateTime || item.updatedAt);
     } else {
       // 如果没有时间字段，根据索引生成一个合理的时间
       const hoursAgo = Math.floor(Math.random() * 24) + 1; // 1-24小时前

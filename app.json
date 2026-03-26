@@ -20,7 +20,7 @@
     },
     "runtimeVersion": "1.0.0",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.problemtohero.app",
       "buildNumber": "1",
       "infoPlist": {

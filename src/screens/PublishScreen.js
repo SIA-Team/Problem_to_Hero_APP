@@ -12,22 +12,23 @@ import uploadApi from '../services/api/uploadApi';
 import expertApi from '../services/api/expertApi';
 import { showToast } from '../utils/toast';
 import { modalTokens } from '../components/modalTokens';
+import { useTranslation } from '../i18n/useTranslation';
 const questionTypes = [{
   id: 0,
-  name: '公开问题',
-  desc: '公开提问',
+  nameKey: 'publish.questionTypes.public',
+  descKey: 'publish.questionTypes.publicDesc',
   icon: 'gift',
   color: '#22c55e'
 }, {
   id: 1,
-  name: '悬赏问题',
-  desc: '付费求答',
+  nameKey: 'publish.questionTypes.reward',
+  descKey: 'publish.questionTypes.rewardDesc',
   icon: 'cash',
   color: '#f97316'
 }, {
   id: 2,
-  name: '定向问题',
-  desc: '指定回答',
+  nameKey: 'publish.questionTypes.targeted',
+  descKey: 'publish.questionTypes.targetedDesc',
   icon: 'locate',
   color: '#3b82f6'
 }];
@@ -36,6 +37,8 @@ export default function PublishScreen({
   navigation,
   route
 }) {
+  const { t } = useTranslation();
+  
   // 获取路由参数中的草稿数据
   const draftData = route?.params?.draftData;
   const [title, setTitle] = useState('');
@@ -441,12 +444,12 @@ export default function PublishScreen({
     } else if (selectedTopics.length < 3) {
       setSelectedTopics([...selectedTopics, topic]);
     } else {
-      showToast('最多选择3个话题', 'warning');
+      showToast(t('publish.toasts.maxTopics'), 'warning');
     }
   };
   const addImage = () => {
     if (images.length >= 9) {
-      showToast('最多只能添加9张图片', 'warning');
+      showToast(t('publish.toasts.maxImages'), 'warning');
       return;
     }
     setShowImagePicker(true);
@@ -466,7 +469,7 @@ export default function PublishScreen({
 
     // 检查话题是否已经存在于可选列表中
     if (allTopics.includes(formattedTopic)) {
-      showToast('该话题已存在', 'info');
+      showToast(t('publish.toasts.topicExists'), 'info');
       setCustomTopic('');
       return;
     }
@@ -479,7 +482,7 @@ export default function PublishScreen({
     if (selectedTopics.length < 3) {
       setSelectedTopics([...selectedTopics, formattedTopic]);
     } else {
-      showToast('最多选择3个话题', 'warning');
+      showToast(t('publish.toasts.maxTopics'), 'warning');
     }
 
     // 清空输入框
@@ -487,7 +490,7 @@ export default function PublishScreen({
   };
   const handleSaveDraft = async () => {
     if (!title && !content) {
-      showToast('请先输入内容', 'warning');
+      showToast(t('publish.toasts.enterContent'), 'warning');
       return;
     }
     try {
@@ -533,17 +536,17 @@ export default function PublishScreen({
       const response = await questionApi.saveDraft(draftData);
       console.log('保存草稿响应:', response);
       if (response.code === 200) {
-        showToast('草稿已保存', 'success');
+        showToast(t('publish.toasts.draftSaved'), 'success');
       } else {
-        showToast(response.msg || '保存草稿失败', 'error');
+        showToast(response.msg || t('publish.toasts.saveDraftFailed'), 'error');
       }
     } catch (error) {
       console.error('保存草稿失败:', error);
-      let errorMessage = '网络错误，请检查网络连接后重试';
+      let errorMessage = t('publish.toasts.networkError');
       if (error.response) {
-        errorMessage = error.response.data?.msg || error.response.data?.message || '服务器错误，请稍后重试';
+        errorMessage = error.response.data?.msg || error.response.data?.message || t('publish.toasts.serverError');
       } else if (error.request) {
-        errorMessage = '网络请求超时，请检查网络连接';
+        errorMessage = t('publish.toasts.requestTimeout');
       } else if (error.message) {
         errorMessage = error.message;
       }
@@ -574,26 +577,26 @@ export default function PublishScreen({
     // 1. 基础验证
     if (!title.trim()) {
       console.log('❌ 标题验证失败: 标题为空');
-      showToast('请输入问题标题', 'warning');
+      showToast(t('publish.toasts.enterTitle'), 'warning');
       return;
     }
     if (title.trim().length < 5) {
       console.log('❌ 标题验证失败: 标题长度不足5个字');
-      showToast('标题至少5个字', 'warning');
+      showToast(t('publish.toasts.titleTooShort'), 'warning');
       return;
     }
     if (title.trim().length > 50) {
       console.log('❌ 标题验证失败: 标题长度超过50个字');
-      showToast('标题最多50个字', 'warning');
+      showToast(t('publish.toasts.titleTooLong'), 'warning');
       return;
     }
     if (!content.trim()) {
-      showToast('请输入问题描述', 'warning');
+      showToast(t('publish.toasts.enterDescription'), 'warning');
       return;
     }
     if (!selectedLevel1 || !selectedLevel2) {
       console.log('❌ 分类验证失败: selectedLevel1=', selectedLevel1, 'selectedLevel2=', selectedLevel2);
-      showToast('请选择问题类别', 'warning');
+      showToast(t('publish.selectCategory'), 'warning');
       return;
     }
 
@@ -602,7 +605,7 @@ export default function PublishScreen({
       // 1 = 悬赏问题
       const amount = parseFloat(reward);
       if (isNaN(amount) || amount < 1) {
-        showToast('悬赏问题金额不能小于$1', 'warning');
+        showToast(t('publish.toasts.rewardTooLow'), 'warning');
         return;
       }
     }
@@ -611,7 +614,7 @@ export default function PublishScreen({
     if (selectedType === 2) {
       // 2 = 定向问题
       if (targetedUsers.length === 0) {
-        showToast('请至少邀请一位专家', 'warning');
+        showToast(t('publish.toasts.inviteAtLeastOne'), 'warning');
         return;
       }
       // 定向问题的悬赏金额可以是$0或任意金额，不需要验证最小值
@@ -619,13 +622,13 @@ export default function PublishScreen({
 
     // 4. 验证付费查看答案
     if (answerPaid && (!answerPrice || parseFloat(answerPrice) < 1)) {
-      showToast('请设置查看答案的价格（最低$1）', 'warning');
+      showToast(t('publish.toasts.setPaidPrice'), 'warning');
       return;
     }
 
     // 5. 验证团队身份
     if (publishIdentity === 'team' && selectedTeams.length === 0) {
-      showToast('请选择要代表的团队', 'warning');
+      showToast(t('publish.toasts.selectTeam'), 'warning');
       return;
     }
     try {
@@ -648,7 +651,7 @@ export default function PublishScreen({
           }
         } catch (uploadError) {
           console.error('图片上传失败:', uploadError);
-          showToast('图片上传失败，请重试', 'error');
+          showToast(t('publish.toasts.imageUploadFailed'), 'error');
           return;
         } finally {
           setIsUploadingImages(false);
@@ -781,7 +784,7 @@ export default function PublishScreen({
       // 10. 处理响应
       if (response.code === 200) {
         // 显示成功提示
-        showToast('问题发布成功', 'success', 2000);
+        showToast(t('publish.toasts.publishSuccess'), 'success', 2000);
 
         // 清空表单
         setTitle('');
@@ -805,13 +808,13 @@ export default function PublishScreen({
           navigation.goBack();
         }, 1500);
       } else {
-        showToast(response.msg || '发布失败，请稍后重试', 'error');
+        showToast(response.msg || t('publish.toasts.publishFailed'), 'error');
       }
     } catch (error) {
       console.error('发布问题失败:', error);
 
       // 处理不同类型的错误
-      let errorMessage = '网络错误，请检查网络连接后重试';
+      let errorMessage = t('publish.toasts.networkError');
       if (error.response) {
         // 服务器返回了错误响应
         console.error('服务器错误响应:', error.response.data);
@@ -822,7 +825,7 @@ export default function PublishScreen({
         } else if (error.response.data?.message) {
           errorMessage = error.response.data.message;
         } else {
-          errorMessage = '服务器错误，请稍后重试';
+          errorMessage = t('publish.toasts.serverError');
         }
 
         // 特别处理验证错误
@@ -834,7 +837,7 @@ export default function PublishScreen({
         }
       } else if (error.request) {
         // 请求已发出但没有收到响应
-        errorMessage = '网络请求超时，请检查网络连接';
+        errorMessage = t('publish.toasts.requestTimeout');
       } else if (error.message) {
         // 其他错误
         errorMessage = error.message;
@@ -860,13 +863,13 @@ export default function PublishScreen({
   const getVisibilityText = value => {
     switch (value) {
       case 0:
-        return '所有人';
+        return t('publish.visibility.everyone');
       case 1:
-        return '仅关注我的人';
+        return t('publish.visibility.followers');
       case 2:
-        return '仅自己';
+        return t('publish.visibility.onlyMe');
       default:
-        return '所有人';
+        return t('publish.visibility.everyone');
     }
   };
   const selectVisibility = value => {
@@ -879,7 +882,7 @@ export default function PublishScreen({
     } else if (targetedUsers.length < 5) {
       setTargetedUsers([...targetedUsers, user]);
     } else {
-      showToast('最多邀请5位专家', 'warning');
+      showToast(t('publish.toasts.maxExperts'), 'warning');
     }
   };
   const removeTargetedUser = userId => {
@@ -936,7 +939,7 @@ export default function PublishScreen({
       }
     } catch (error) {
       console.error('❌ 加载专家列表失败:', error);
-      showToast('加载专家列表失败', 'error');
+      showToast(t('publish.toasts.loadExpertsFailed') || 'Failed to load experts', 'error');
     } finally {
       setExpertLoading(false);
       setExpertLoadingMore(false);
@@ -996,7 +999,7 @@ export default function PublishScreen({
     if (selectedLevel1 && selectedLevel2) {
       return `${selectedLevel1.name} > ${selectedLevel2.name}`;
     }
-    return '请选择问题类别';
+    return t('publish.selectCategory');
   };
   return <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
@@ -1008,14 +1011,14 @@ export default function PublishScreen({
       }} activeOpacity={0.7}>
           <Ionicons name="close" size={28} color="#374151" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>发布问题</Text>
+        <Text style={styles.headerTitle}>{t('publish.title')}</Text>
         <TouchableOpacity onPress={handleSaveDraft} style={styles.saveDraftBtn} hitSlop={{
         top: 10,
         bottom: 10,
         left: 10,
         right: 10
       }} activeOpacity={0.7}>
-          <Text style={styles.saveDraft}>存草稿</Text>
+          <Text style={styles.saveDraft}>{t('publish.saveDraft')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -1024,21 +1027,21 @@ export default function PublishScreen({
         <View style={[styles.section, {
         marginBottom: 16
       }]}>
-          <Text style={styles.sectionTitle}>选择问题类型</Text>
+          <Text style={styles.sectionTitle}>{t('publish.selectQuestionType')}</Text>
           <View style={styles.typeList}>
             {questionTypes.map(type => <TouchableOpacity key={type.id} style={[styles.typeCard, selectedType === type.id && styles.typeCardActive]} onPress={() => setSelectedType(type.id)}>
                 <Ionicons name={type.icon} size={24} color={selectedType === type.id ? type.color : '#9ca3af'} />
                 <Text style={[styles.typeName, selectedType === type.id && {
               color: type.color
-            }]}>{type.name}</Text>
-                <Text style={styles.typeDesc}>{type.desc}</Text>
+            }]}>{t(type.nameKey)}</Text>
+                <Text style={styles.typeDesc}>{t(type.descKey)}</Text>
               </TouchableOpacity>)}
           </View>
         </View>
 
         {/* 问题类别选择 */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>问题类别 <Text style={styles.required}>*</Text></Text>
+          <Text style={styles.sectionTitle}>{t('publish.category')} <Text style={styles.required}>*</Text></Text>
           <TouchableOpacity style={styles.categorySelector} onPress={() => setShowCategoryModal(true)}>
             <View style={styles.categorySelectorLeft}>
               {Boolean(selectedLevel1) && <View style={[styles.categoryIcon, {
@@ -1060,16 +1063,16 @@ export default function PublishScreen({
         {selectedType === 0 &&
       // 0 = 公开问题
       <View style={styles.section}>
-            <Text style={styles.sectionTitle}>设置悬赏金额</Text>
-            <Text style={styles.sectionDesc}>可以设置为 $0（不设悬赏）或任意金额</Text>
+            <Text style={styles.sectionTitle}>{t('publish.setRewardAmount')}</Text>
+            <Text style={styles.sectionDesc}>{t('publish.rewardDesc')}</Text>
             <View style={styles.quickAmounts}>
               {rewardAmounts.map(amount => <TouchableOpacity key={amount} style={[styles.amountBtn, reward === String(amount) && styles.amountBtnActive]} onPress={() => setReward(String(amount))}>
                   <Text style={[styles.amountText, reward === String(amount) && styles.amountTextActive]}>${amount}</Text>
                 </TouchableOpacity>)}
             </View>
             <View style={styles.customAmount}>
-              <Text style={styles.customLabel}>自定义金额：</Text>
-              <TextInput style={styles.customInput} placeholder="输入金额（可以是$0）" keyboardType="numeric" value={reward} onChangeText={text => {
+              <Text style={styles.customLabel}>{t('publish.customAmount')}</Text>
+              <TextInput style={styles.customInput} placeholder={t('publish.enterAmount')} keyboardType="numeric" value={reward} onChangeText={text => {
             // 只允许输入数字和小数点
             const filtered = text.replace(/[^0-9.]/g, '');
             setReward(filtered);
@@ -1082,16 +1085,16 @@ export default function PublishScreen({
         {selectedType === 1 &&
       // 1 = 悬赏问题
       <View style={styles.section}>
-            <Text style={styles.sectionTitle}>设置悬赏金额 <Text style={styles.required}>*</Text></Text>
-            <Text style={styles.sectionDesc}>悬赏金额不能小于 $1</Text>
+            <Text style={styles.sectionTitle}>{t('publish.setRewardAmount')} <Text style={styles.required}>*</Text></Text>
+            <Text style={styles.sectionDesc}>{t('publish.rewardDescRequired')}</Text>
             <View style={styles.quickAmounts}>
               {rewardAmounts.map(amount => <TouchableOpacity key={amount} style={[styles.amountBtn, reward === String(amount) && styles.amountBtnActive]} onPress={() => setReward(String(amount))}>
                   <Text style={[styles.amountText, reward === String(amount) && styles.amountTextActive]}>${amount}</Text>
                 </TouchableOpacity>)}
             </View>
             <View style={styles.customAmount}>
-              <Text style={styles.customLabel}>自定义金额：</Text>
-              <TextInput style={styles.customInput} placeholder="输入金额（最低$1）" keyboardType="numeric" value={reward} onChangeText={text => {
+              <Text style={styles.customLabel}>{t('publish.customAmount')}</Text>
+              <TextInput style={styles.customInput} placeholder={t('publish.enterAmountMin')} keyboardType="numeric" value={reward} onChangeText={text => {
             // 只允许输入数字和小数点
             const filtered = text.replace(/[^0-9.]/g, '');
             setReward(filtered);
@@ -1105,8 +1108,8 @@ export default function PublishScreen({
       // 2 = 定向问题
       <>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>邀请回答专家 <Text style={styles.required}>*</Text></Text>
-              <Text style={styles.sectionDesc}>最多邀请5位专家回答</Text>
+              <Text style={styles.sectionTitle}>{t('publish.inviteExperts')} <Text style={styles.required}>*</Text></Text>
+              <Text style={styles.sectionDesc}>{t('publish.inviteExpertsDesc')}</Text>
               
               {/* 已选择的专家 */}
               {targetedUsers.length > 0 && <View style={styles.selectedUsersContainer}>
@@ -1128,7 +1131,7 @@ export default function PublishScreen({
               {/* 搜索框 */}
               <View style={styles.expertSearchContainer}>
                 <Ionicons name="search" size={20} color="#9ca3af" />
-                <TextInput style={styles.expertSearchInput} placeholder="搜索专家姓名、领域或职称..." value={expertSearchQuery} onChangeText={setExpertSearchQuery} placeholderTextColor="#9ca3af" />
+                <TextInput style={styles.expertSearchInput} placeholder={t('publish.searchExperts')} value={expertSearchQuery} onChangeText={setExpertSearchQuery} placeholderTextColor="#9ca3af" />
                 {expertSearchQuery.length > 0 && <TouchableOpacity onPress={() => setExpertSearchQuery('')}>
                     <Ionicons name="close-circle" size={20} color="#9ca3af" />
                   </TouchableOpacity>}
@@ -1141,13 +1144,13 @@ export default function PublishScreen({
                   <Ionicons name="star" size={18} color="#f59e0b" style={{
                 marginRight: 6
               }} />
-                  <Text style={styles.recommendedHeaderText}>推荐专家 ({expertTotal})</Text>
+                  <Text style={styles.recommendedHeaderText}>{t('publish.recommendedExperts')} ({expertTotal})</Text>
                 </View>
 
                 {/* 专家列表 */}
                 {expertLoading && expertList.length === 0 ? <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#3b82f6" />
-                    <Text style={styles.loadingText}>加载专家列表...</Text>
+                    <Text style={styles.loadingText}>{t('publish.loadingExperts')}</Text>
                   </View> : filteredExperts.length > 0 ? <FlatList data={filteredExperts} keyExtractor={item => item.id.toString()} renderItem={({
               item: user
             }) => {
@@ -1176,22 +1179,22 @@ export default function PublishScreen({
               if (expertLoadingMore) {
                 return <View style={styles.loadingMoreContainer}>
                             <ActivityIndicator size="small" color="#3b82f6" />
-                            <Text style={styles.loadingMoreText}>加载更多...</Text>
+                            <Text style={styles.loadingMoreText}>{t('publish.loadingMore')}</Text>
                           </View>;
               }
               if (!expertHasMore && expertList.length > 0) {
                 return <View style={styles.noMoreContainer}>
-                            <Text style={styles.noMoreText}>没有更多专家了</Text>
+                            <Text style={styles.noMoreText}>{t('publish.noMoreExperts')}</Text>
                           </View>;
               }
               return null;
             }} scrollEnabled={false} nestedScrollEnabled={true} style={styles.expertFlatList} /> : <View style={styles.noResultsContainer}>
                     <Ionicons name="search-outline" size={48} color="#d1d5db" />
                     <Text style={styles.noResultsText}>
-                      {expertSearchQuery ? '未找到匹配的专家' : !selectedLevel2?.id ? '请先选择问题类别' : '该类别暂无专家'}
+                      {expertSearchQuery ? t('publish.noExpertsFound') : !selectedLevel2?.id ? t('publish.selectCategoryFirst') : t('publish.noCategoryExperts')}
                     </Text>
                     <Text style={styles.noResultsHint}>
-                      {expertSearchQuery ? '试试其他关键词' : !selectedLevel2?.id ? '选择类别后可查看该领域的专家' : '可以尝试选择其他类别'}
+                      {expertSearchQuery ? t('publish.noExpertsHint') : !selectedLevel2?.id ? t('publish.selectCategoryFirst') + '后可查看该领域的专家' : t('publish.tryCategoryHint')}
                     </Text>
                   </View>}
               </View>
@@ -1199,16 +1202,16 @@ export default function PublishScreen({
 
             {/* 定向问题悬赏金额 */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>设置悬赏金额</Text>
-              <Text style={styles.sectionDesc}>可以设置为 $0（不设悬赏）或任意金额</Text>
+              <Text style={styles.sectionTitle}>{t('publish.setRewardAmount')}</Text>
+              <Text style={styles.sectionDesc}>{t('publish.rewardDesc')}</Text>
               <View style={styles.quickAmounts}>
                 {rewardAmounts.map(amount => <TouchableOpacity key={amount} style={[styles.amountBtn, targetedReward === String(amount) && styles.amountBtnActive]} onPress={() => setTargetedReward(String(amount))}>
                     <Text style={[styles.amountText, targetedReward === String(amount) && styles.amountTextActive]}>${amount}</Text>
                   </TouchableOpacity>)}
               </View>
               <View style={styles.customAmount}>
-                <Text style={styles.customLabel}>自定义金额：</Text>
-                <TextInput style={styles.customInput} placeholder="输入金额（可以是$0）" keyboardType="numeric" value={targetedReward} onChangeText={text => {
+                <Text style={styles.customLabel}>{t('publish.customAmount')}</Text>
+                <TextInput style={styles.customInput} placeholder={t('publish.enterAmount')} keyboardType="numeric" value={targetedReward} onChangeText={text => {
               // 只允许输入数字和小数点
               const filtered = text.replace(/[^0-9.]/g, '');
               setTargetedReward(filtered);
@@ -1220,17 +1223,17 @@ export default function PublishScreen({
 
         {/* 问题标题 */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>问题标题 <Text style={styles.required}>*</Text></Text>
-          <TextInput style={styles.titleInput} placeholder="请输入问题标题（5-50字）" placeholderTextColor="#9ca3af" value={title} onChangeText={setTitle} maxLength={50} />
+          <Text style={styles.sectionTitle}>{t('publish.questionTitle')} <Text style={styles.required}>*</Text></Text>
+          <TextInput style={styles.titleInput} placeholder={t('publish.titlePlaceholder')} placeholderTextColor="#9ca3af" value={title} onChangeText={setTitle} maxLength={50} />
           <Text style={styles.charCount}>{title.length}/50</Text>
         </View>
 
         {/* 问题描述 */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>问题描述 <Text style={styles.required}>*</Text></Text>
+          <Text style={styles.sectionTitle}>{t('publish.questionDescription')} <Text style={styles.required}>*</Text></Text>
           <TextInput style={[styles.contentInput, {
           height: Math.max(150, contentInputHeight)
-        }]} placeholder="详细描述你的问题，让回答者更好地理解..." placeholderTextColor="#9ca3af" value={content} onChangeText={setContent} multiline textAlignVertical="top" maxLength={2000} onContentSizeChange={event => {
+        }]} placeholder={t('publish.descriptionPlaceholder')} placeholderTextColor="#9ca3af" value={content} onChangeText={setContent} multiline textAlignVertical="top" maxLength={2000} onContentSizeChange={event => {
           setContentInputHeight(event.nativeEvent.contentSize.height);
         }} />
           <Text style={styles.charCount}>{content.length}/2000</Text>
@@ -1238,7 +1241,7 @@ export default function PublishScreen({
 
         {/* 添加图片 */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>添加图片（最多9张）</Text>
+          <Text style={styles.sectionTitle}>{t('publish.addImages')}</Text>
           <View style={styles.imageGrid}>
             {images.map((img, idx) => <View key={idx} style={styles.imageItem}>
                 <View style={styles.imageItemInner}>
@@ -1253,7 +1256,7 @@ export default function PublishScreen({
             {images.length < 9 && <View style={styles.addImageBtn}>
                 <TouchableOpacity style={styles.addImageBtnInner} onPress={addImage}>
                   <Ionicons name="add" size={24} color="#9ca3af" />
-                  <Text style={styles.addImageText}>添加图片</Text>
+                  <Text style={styles.addImageText}>{t('publish.addImage')}</Text>
                 </TouchableOpacity>
               </View>}
           </View>
@@ -1261,31 +1264,31 @@ export default function PublishScreen({
 
         {/* 选择话题 */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>选择话题</Text>
+          <Text style={styles.sectionTitle}>{t('publish.selectTopics')}</Text>
           <View style={styles.topicList}>
             {allTopics.map(topic => <TouchableOpacity key={topic} style={[styles.topicTag, selectedTopics.includes(topic) && styles.topicTagActive]} onPress={() => toggleTopic(topic)}>
                 <Text style={[styles.topicTagText, selectedTopics.includes(topic) && styles.topicTagTextActive]}>{topic}</Text>
               </TouchableOpacity>)}
           </View>
           <View style={styles.customTopic}>
-            <TextInput style={styles.customTopicInput} placeholder="自定义话题" value={customTopic} onChangeText={setCustomTopic} onSubmitEditing={addCustomTopic} returnKeyType="done" />
+            <TextInput style={styles.customTopicInput} placeholder={t('publish.customTopic')} value={customTopic} onChangeText={setCustomTopic} onSubmitEditing={addCustomTopic} returnKeyType="done" />
             <TouchableOpacity style={styles.addTopicBtn} onPress={addCustomTopic}>
-              <Text style={styles.addTopicBtnText}>添加</Text>
+              <Text style={styles.addTopicBtnText}>{t('publish.addTopic')}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* 答案设置 */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>答案设置</Text>
+          <Text style={styles.sectionTitle}>{t('publish.answerSettings')}</Text>
           
           {/* 是否公开答案 */}
           <View style={styles.answerSettingItem}>
             <View style={styles.answerSettingLeft}>
               <Ionicons name="eye-outline" size={22} color="#3b82f6" />
               <View style={styles.answerSettingText}>
-                <Text style={styles.answerSettingTitle}>公开答案</Text>
-                <Text style={styles.answerSettingDesc}>所有人都可以看到问题的答案</Text>
+                <Text style={styles.answerSettingTitle}>{t('publish.publicAnswer')}</Text>
+                <Text style={styles.answerSettingDesc}>{t('publish.publicAnswerDesc')}</Text>
               </View>
             </View>
             <Switch value={answerPublic} onValueChange={setAnswerPublic} trackColor={{
@@ -1299,8 +1302,8 @@ export default function PublishScreen({
               <View style={styles.answerSettingLeft}>
                 <Ionicons name="cash-outline" size={22} color="#f59e0b" />
                 <View style={styles.answerSettingText}>
-                  <Text style={styles.answerSettingTitle}>付费查看</Text>
-                  <Text style={styles.answerSettingDesc}>用户需要付费才能查看答案</Text>
+                  <Text style={styles.answerSettingTitle}>{t('publish.paidView')}</Text>
+                  <Text style={styles.answerSettingDesc}>{t('publish.paidViewDesc')}</Text>
                 </View>
               </View>
               <Switch value={answerPaid} onValueChange={setAnswerPaid} trackColor={{
@@ -1311,12 +1314,12 @@ export default function PublishScreen({
 
           {/* 查看价格设置 */}
           {Boolean(answerPublic && answerPaid) && <View style={styles.answerPriceContainer}>
-              <Text style={styles.answerPriceLabel}>查看价格</Text>
+              <Text style={styles.answerPriceLabel}>{t('publish.viewPrice')}</Text>
               <View style={styles.answerPriceInput}>
                 <Text style={styles.currencySymbol}>$</Text>
-                <TextInput style={styles.priceInput} placeholder="设置查看答案的价格" keyboardType="numeric" value={answerPrice} onChangeText={setAnswerPrice} placeholderTextColor="#9ca3af" />
+                <TextInput style={styles.priceInput} placeholder={t('publish.setPriceDesc')} keyboardType="numeric" value={answerPrice} onChangeText={setAnswerPrice} placeholderTextColor="#9ca3af" />
               </View>
-              <Text style={styles.answerPriceHint}>建议价格：$1 - $10</Text>
+              <Text style={styles.answerPriceHint}>{t('publish.priceSuggestion')}</Text>
             </View>}
 
           {/* 私密答案提示 */}
@@ -1324,7 +1327,7 @@ export default function PublishScreen({
               <Ionicons name="lock-closed" size={16} color="#6b7280" style={{
             marginRight: 8
           }} />
-              <Text style={styles.privateAnswerText}>答案将仅对你可见，其他用户无法查看</Text>
+              <Text style={styles.privateAnswerText}>{t('publish.privateAnswerTip')}</Text>
             </View>}
         </View>
 
@@ -1332,19 +1335,19 @@ export default function PublishScreen({
         <View style={styles.settingsSection}>
           <TouchableOpacity style={styles.settingItem} onPress={handleLocationPress}>
             <Ionicons name="location-outline" size={20} color="#9ca3af" />
-            <Text style={styles.settingLabel}>添加位置</Text>
+            <Text style={styles.settingLabel}>{t('publish.addLocation')}</Text>
             <Text style={styles.settingValue}>{location}</Text>
             <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.settingItem} onPress={handleVisibilityPress}>
             <Ionicons name="eye-outline" size={20} color="#9ca3af" />
-            <Text style={styles.settingLabel}>谁可以看</Text>
+            <Text style={styles.settingLabel}>{t('publish.whoCanSee')}</Text>
             <Text style={styles.settingValue}>{getVisibilityText(visibility)}</Text>
             <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
           </TouchableOpacity>
           <View style={styles.settingItem}>
             <Ionicons name="person-outline" size={20} color="#9ca3af" />
-            <Text style={styles.settingLabel}>匿名提问</Text>
+            <Text style={styles.settingLabel}>{t('publish.anonymous')}</Text>
             <Switch value={isAnonymous} onValueChange={setIsAnonymous} trackColor={{
             false: '#e5e7eb',
             true: '#fecaca'
@@ -1367,7 +1370,7 @@ export default function PublishScreen({
             marginRight: 8
           }} />
               <Text style={styles.publishBtnText}>
-                {isUploadingImages ? '上传图片中...' : '发布中...'}
+                {isUploadingImages ? t('publish.uploadingImages') : t('publish.publishing')}
               </Text>
             </View> : <Text style={styles.publishBtnText}>发布问题</Text>}
         </TouchableOpacity>
@@ -1387,7 +1390,7 @@ export default function PublishScreen({
                   <Ionicons name="close" size={24} color="#374151" />
                 </TouchableOpacity>}
               <Text style={styles.modalTitle}>
-                {categoryModalView === 'level1' ? '选择问题类别' : tempSelectedLevel1?.name}
+                {categoryModalView === 'level1' ? t('publish.selectLevel1') : tempSelectedLevel1?.name}
               </Text>
               <View style={{
               width: 24
@@ -1396,26 +1399,26 @@ export default function PublishScreen({
 
             {categoryLoading ? <View style={styles.categoryLoadingContainer}>
                 <ActivityIndicator size="large" color="#ef4444" />
-                <Text style={styles.categoryLoadingText}>加载分类数据中...</Text>
+                <Text style={styles.categoryLoadingText}>{t('publish.loadingCategories')}</Text>
               </View> : categoryError ? <View style={styles.categoryErrorContainer}>
                 <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
-                <Text style={styles.categoryErrorText}>加载失败</Text>
+                <Text style={styles.categoryErrorText}>{t('publish.loadFailed')}</Text>
                 <Text style={styles.categoryErrorDesc}>{categoryError}</Text>
                 <TouchableOpacity style={styles.retryBtn} onPress={fetchLevel1Categories}>
                   <Ionicons name="refresh" size={20} color="#fff" style={{
                 marginRight: 6
               }} />
-                  <Text style={styles.retryBtnText}>重试</Text>
+                  <Text style={styles.retryBtnText}>{t('publish.retry')}</Text>
                 </TouchableOpacity>
               </View> : <ScrollView style={styles.categoryContent} showsVerticalScrollIndicator={false}>
                 {categoryModalView === 'level1' ? (/* 视图1：一级分类列表 */
             <View style={styles.level1Container}>
-                    <Text style={styles.levelTitle}>请选择一级分类</Text>
+                    <Text style={styles.levelTitle}>{t('publish.selectLevel1')}</Text>
                     
                     {/* 搜索框 */}
                     <View style={styles.level1SearchContainer}>
                       <Ionicons name="search" size={20} color="#9ca3af" />
-                      <TextInput style={styles.level1SearchInput} placeholder="搜索分类名称..." value={level1SearchQuery} onChangeText={setLevel1SearchQuery} placeholderTextColor="#9ca3af" />
+                      <TextInput style={styles.level1SearchInput} placeholder={t('publish.searchCategories')} value={level1SearchQuery} onChangeText={setLevel1SearchQuery} placeholderTextColor="#9ca3af" />
                       {level1SearchQuery.length > 0 && <TouchableOpacity onPress={() => setLevel1SearchQuery('')}>
                           <Ionicons name="close-circle" size={20} color="#9ca3af" />
                         </TouchableOpacity>}
@@ -1436,15 +1439,15 @@ export default function PublishScreen({
                         </TouchableOpacity>) : (/* 无搜索结果 */
               <View style={styles.noSearchResultContainer}>
                         <Ionicons name="search-outline" size={48} color="#d1d5db" />
-                        <Text style={styles.noSearchResultText}>未找到匹配的分类</Text>
-                        <Text style={styles.noSearchResultHint}>试试其他关键词</Text>
+                        <Text style={styles.noSearchResultText}>{t('publish.noSearchResult')}</Text>
+                        <Text style={styles.noSearchResultHint}>{t('publish.tryOtherKeywords')}</Text>
                       </View>)}
                   </View>) : (/* 视图2：二级分类列表 */
             <View style={styles.level2Container}>
-                    <Text style={styles.levelTitle}>请选择二级分类</Text>
+                    <Text style={styles.levelTitle}>{t('publish.selectLevel2')}</Text>
                     {loadingLevel2 ? <View style={styles.level2LoadingContainer}>
                         <ActivityIndicator size="small" color={tempSelectedLevel1?.color || '#ef4444'} />
-                        <Text style={styles.level2LoadingText}>加载中...</Text>
+                        <Text style={styles.level2LoadingText}>{t('publish.loading')}</Text>
                       </View> : <View style={styles.level2Grid}>
                         {(level2CategoriesMap[tempSelectedLevel1?.id] || []).map(cat => <TouchableOpacity key={cat.id} style={styles.level2Item} onPress={() => selectLevel2(cat)} activeOpacity={0.7}>
                             <CategoryIcon icon={cat.icon} size={18} color={tempSelectedLevel1?.color || '#6b7280'} style={{
@@ -1467,8 +1470,8 @@ export default function PublishScreen({
           <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowVisibilityModal(false)} />
           <View style={styles.visibilityModal}>
             <View style={styles.visibilityHeader}>
-              <Text style={styles.visibilityTitle}>谁可以看</Text>
-              <Text style={styles.visibilitySubtitle}>选择问题的可见范围</Text>
+              <Text style={styles.visibilityTitle}>{t('publish.visibilityModalTitle')}</Text>
+              <Text style={styles.visibilitySubtitle}>{t('publish.visibilityModalSubtitle')}</Text>
             </View>
 
             <View style={styles.visibilityOptions}>
@@ -1479,8 +1482,8 @@ export default function PublishScreen({
                   <Ionicons name="globe-outline" size={24} color="#3b82f6" />
                 </View>
                 <View style={styles.visibilityTextContainer}>
-                  <Text style={styles.visibilityOptionTitle}>所有人</Text>
-                  <Text style={styles.visibilityOptionDesc}>所有用户都可以看到这个问题</Text>
+                  <Text style={styles.visibilityOptionTitle}>{t('publish.visibility.everyone')}</Text>
+                  <Text style={styles.visibilityOptionDesc}>{t('publish.visibility.everyoneDesc')}</Text>
                 </View>
                 {visibility === 0 && <Ionicons name="checkmark-circle" size={24} color="#3b82f6" />}
               </TouchableOpacity>
@@ -1492,8 +1495,8 @@ export default function PublishScreen({
                   <Ionicons name="people-outline" size={24} color="#f59e0b" />
                 </View>
                 <View style={styles.visibilityTextContainer}>
-                  <Text style={styles.visibilityOptionTitle}>仅关注我的人</Text>
-                  <Text style={styles.visibilityOptionDesc}>只有关注你的用户可以看到</Text>
+                  <Text style={styles.visibilityOptionTitle}>{t('publish.visibility.followers')}</Text>
+                  <Text style={styles.visibilityOptionDesc}>{t('publish.visibility.followersDesc')}</Text>
                 </View>
                 {visibility === 1 && <Ionicons name="checkmark-circle" size={24} color="#f59e0b" />}
               </TouchableOpacity>
@@ -1505,15 +1508,15 @@ export default function PublishScreen({
                   <Ionicons name="lock-closed-outline" size={24} color="#ec4899" />
                 </View>
                 <View style={styles.visibilityTextContainer}>
-                  <Text style={styles.visibilityOptionTitle}>仅自己</Text>
-                  <Text style={styles.visibilityOptionDesc}>只有你自己可以看到这个问题</Text>
+                  <Text style={styles.visibilityOptionTitle}>{t('publish.visibility.onlyMe')}</Text>
+                  <Text style={styles.visibilityOptionDesc}>{t('publish.visibility.onlyMeDesc')}</Text>
                 </View>
                 {visibility === 2 && <Ionicons name="checkmark-circle" size={24} color="#ec4899" />}
               </TouchableOpacity>
             </View>
 
             <TouchableOpacity style={styles.visibilityCloseBtn} onPress={() => setShowVisibilityModal(false)} activeOpacity={0.7}>
-              <Text style={styles.visibilityCloseBtnText}>取消</Text>
+              <Text style={styles.visibilityCloseBtnText}>{t('publish.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1523,7 +1526,7 @@ export default function PublishScreen({
       <CitySelector visible={showLocationModal} currentCity={location} onSelect={handleLocationSelect} onClose={handleLocationClose} />
 
       {/* 图片选择器 */}
-      <ImagePickerSheet visible={showImagePicker} onClose={() => setShowImagePicker(false)} onImageSelected={handleImageSelected} title="添加图片" />
+      <ImagePickerSheet visible={showImagePicker} onClose={() => setShowImagePicker(false)} onImageSelected={handleImageSelected} title={t('publish.addImage')} />
     </SafeAreaView>;
 }
 const styles = StyleSheet.create({

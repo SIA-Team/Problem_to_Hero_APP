@@ -7,6 +7,7 @@ import IdentitySelector from '../components/IdentitySelector';
 import ImagePickerSheet from '../components/ImagePickerSheet';
 import WriteAnswerModal from '../components/WriteAnswerModal';
 import QuestionDetailSkeleton from '../components/QuestionDetailSkeleton';
+import ShareModal from '../components/ShareModal';
 import superLikeCreditService from '../services/SuperLikeCreditService';
 import { useTranslation } from '../i18n/withTranslation';
 import questionApi from '../services/api/questionApi';
@@ -16,6 +17,7 @@ import uploadApi from '../services/api/uploadApi';
 import { loadQuestionSupplements } from '../utils/dataLoader';
 import { showToast } from '../utils/toast';
 import { formatNumber } from '../utils/numberFormatter';
+import { formatTime } from '../utils/timeFormatter';
 import { normalizeEntityId } from '../utils/jsonLongId';
 import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
 const answers = [{
@@ -547,6 +549,9 @@ export default function QuestionDetailScreen({
 
   // 身份选择
   const [answerIdentity, setAnswerIdentity] = useState('personal'); // 回答身份
+
+  // 转发分享状态
+  const [showShareModal, setShowShareModal] = useState(false);
   const [answerSelectedTeams, setAnswerSelectedTeams] = useState([]); // 回答选中的团队
   const [supplementQuestionIdentity, setSupplementQuestionIdentity] = useState('personal'); // 补充问题身份
   const [supplementQuestionSelectedTeams, setSupplementQuestionSelectedTeams] = useState([]); // 补充问题选中的团队
@@ -1027,32 +1032,52 @@ export default function QuestionDetailScreen({
     });
   };
 
-  // 时间格式化函数
-  const formatTime = timeStr => {
-    if (!timeStr) return '刚刚';
-    try {
-      const time = new Date(timeStr);
-      const now = new Date();
-      const diff = now - time;
-      if (isNaN(time.getTime()) || diff < 0) {
-        return '刚刚';
-      }
-      const seconds = Math.floor(diff / 1000);
-      const minutes = Math.floor(seconds / 60);
-      const hours = Math.floor(minutes / 60);
-      const days = Math.floor(hours / 24);
-      if (days >= 1) {
-        return `${days}天前`;
-      } else if (hours >= 1) {
-        return `${hours}小时前`;
-      } else if (minutes >= 1) {
-        return `${minutes}分钟前`;
-      } else {
-        return '刚刚';
-      }
-    } catch (error) {
-      return '刚刚';
+  // 时间格式化函数 - 使用工具函数
+  // 已从 ../utils/timeFormatter 导入
+  
+  const resolveEntityTimestamp = entity => entity?.createTime ?? entity?.createdAt ?? entity?.publishTime ?? entity?.gmtCreate ?? entity?.updateTime ?? entity?.updatedAt ?? null;
+  const resolveIpLocation = entity => {
+    if (!entity || typeof entity !== 'object') {
+      return null;
     }
+
+    const normalizedIpLocation = entity.ipLocation ??
+      entity.ip_location ??
+      entity.ipAddress ??
+      entity.ip_address ??
+      entity.userIp ??
+      entity.user_ip ??
+      entity.ip ??
+      null;
+
+    if (typeof normalizedIpLocation !== 'string') {
+      return normalizedIpLocation ?? null;
+    }
+
+    const trimmedIpLocation = normalizedIpLocation.trim();
+    return trimmedIpLocation || null;
+  };
+  const resolveDisplayTime = value => {
+    if (!value) {
+      return '';
+    }
+    if (typeof value === 'string') {
+      const trimmedValue = value.trim();
+      if (!trimmedValue) {
+        return '';
+      }
+      if (trimmedValue === '刚刚' || trimmedValue === 'just now' || trimmedValue === 'Yesterday' || trimmedValue === '昨天' || trimmedValue.includes('分钟前') || trimmedValue.includes('小时前') || trimmedValue.includes('天前') || trimmedValue.includes('ago')) {
+        return trimmedValue;
+      }
+      if (/^\d+$/.test(trimmedValue)) {
+        const timestamp = Number(trimmedValue);
+        return formatTime(timestamp > 1000000000000 ? timestamp : timestamp * 1000);
+      }
+    }
+    if (typeof value === 'number') {
+      return formatTime(value > 1000000000000 ? value : value * 1000);
+    }
+    return formatTime(value);
   };
 
   // 获取问题详情数据 - 优化版：等待所有数据加载完成后再渲染
@@ -1433,6 +1458,9 @@ export default function QuestionDetailScreen({
     const normalizedAdopted = answer.adopted ?? (answer.isAccepted === 1 || answer.isAccepted === true);
     const normalizedCollectCount = answer.collectCount ?? answer.bookmarkCount ?? answer.bookmark_count ?? answer.bookmarks ?? 0;
     const normalizedSuperLikeCount = answer.superLikeCount ?? answer.superLikes ?? 0;
+    const normalizedCreateTime = resolveEntityTimestamp(answer);
+    const normalizedTime = resolveDisplayTime(answer.time ?? normalizedCreateTime);
+    const normalizedIpLocation = resolveIpLocation(answer);
     return {
       ...answer,
       id: primaryId,
@@ -1464,6 +1492,11 @@ export default function QuestionDetailScreen({
       bookmarks: normalizedCollectCount,
       superLikeCount: normalizedSuperLikeCount,
       superLikes: normalizedSuperLikeCount,
+      createTime: normalizedCreateTime,
+      createdAt: answer.createdAt ?? normalizedCreateTime,
+      ipLocation: normalizedIpLocation,
+      ip_location: normalizedIpLocation,
+      time: normalizedTime,
       __likeCountResolved: answer.__likeCountResolved ?? hasLikeCountField,
       __dislikeCountResolved: answer.__dislikeCountResolved ?? hasDislikeCountField,
       __collectCountResolved: answer.__collectCountResolved ?? hasCollectCountField,
@@ -1640,6 +1673,7 @@ export default function QuestionDetailScreen({
     const normalizedSuperLikeCount = comment.superLikeCount ?? comment.superLikes ?? 0;
     const normalizedCreateTime = comment.createTime ?? comment.createdAt ?? comment.gmtCreate ?? comment.publishTime ?? null;
     const normalizedTime = comment.time ?? formatTime(normalizedCreateTime);
+    const normalizedIpLocation = resolveIpLocation(comment);
     const normalizedTargetType = Number(comment.targetType ?? comment.target_type ?? defaults.targetType ?? 0) || 0;
     const normalizedTargetId = Number(comment.targetId ?? comment.target_id ?? defaults.targetId ?? 0) || 0;
     const normalizedParentId = Number(comment.parentId ?? comment.parent_id ?? defaults.parentId ?? 0) || 0;
@@ -1683,6 +1717,8 @@ export default function QuestionDetailScreen({
       collected: !!(comment.collected ?? comment.isCollected),
       createTime: normalizedCreateTime,
       createdAt: comment.createdAt ?? normalizedCreateTime,
+      ipLocation: normalizedIpLocation,
+      ip_location: normalizedIpLocation,
       __likeCountResolved: comment.__likeCountResolved ?? hasLikeCountField,
       __dislikeCountResolved: comment.__dislikeCountResolved ?? hasDislikeCountField,
       __collectCountResolved: comment.__collectCountResolved ?? hasCollectCountField,
@@ -2033,10 +2069,18 @@ export default function QuestionDetailScreen({
       supplement.comments ??
       supplement.comment_count
     ) || 0;
+    const normalizedCreateTime = resolveEntityTimestamp(supplement);
+    const normalizedTime = resolveDisplayTime(supplement.time ?? normalizedCreateTime);
+    const normalizedIpLocation = resolveIpLocation(supplement);
     return {
       ...supplement,
       commentCount: normalizedCommentCount,
       comments: normalizedCommentCount,
+      createTime: normalizedCreateTime,
+      createdAt: supplement.createdAt ?? normalizedCreateTime,
+      ipLocation: normalizedIpLocation,
+      ip_location: normalizedIpLocation,
+      time: normalizedTime,
       __likeCountResolved: supplement.__likeCountResolved ?? hasLikeCountField,
       __dislikeCountResolved: supplement.__dislikeCountResolved ?? hasDislikeCountField,
       __collectCountResolved: supplement.__collectCountResolved ?? hasCollectCountField
@@ -2713,7 +2757,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       disliked: !!disliked,
       likeCount,
       collectCount,
-      dislikeCount
+      dislikeCount,
+      __likeCountResolved: fallbackValues.likeCount !== undefined ? true : currentQuestionDetail.__likeCountResolved,
+      __collectCountResolved: fallbackValues.collectCount !== undefined ? true : currentQuestionDetail.__collectCountResolved,
+      __dislikeCountResolved: fallbackValues.dislikeCount !== undefined ? true : currentQuestionDetail.__dislikeCountResolved
     });
   };
   const getErrorMessage = error => {
@@ -4886,6 +4933,54 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       showToast('网络错误，请稍后重试', 'error');
     }
   };
+
+  // 处理分享功能
+  const handleShare = (platform, shareData) => {
+    console.log('分享到:', platform, shareData);
+    
+    switch (platform) {
+      case 'friends':
+        // 分享给好友已在ShareToFriendsModal中处理
+        const userCount = shareData?.users?.length || 0;
+        console.log(`已分享给 ${userCount} 位好友`);
+        // TODO: 调用API发送分享消息
+        break;
+      case 'twitter':
+        showToast('Share to Twitter', 'info');
+        // TODO: 集成Twitter分享SDK
+        break;
+      case 'facebook':
+        showToast('Share to Facebook', 'info');
+        // TODO: 集成Facebook分享SDK
+        break;
+      case 'whatsapp':
+        showToast('Share to WhatsApp', 'info');
+        // TODO: 集成WhatsApp分享
+        break;
+      case 'telegram':
+        showToast('Share to Telegram', 'info');
+        // TODO: 集成Telegram分享
+        break;
+      case 'link':
+        // 复制链接已在ShareModal中处理
+        break;
+      case 'report':
+        // 跳转到举报页面
+        navigation.navigate('Report', {
+          type: 'question',
+          targetType: 1,
+          targetId: Number(route?.params?.id ?? questionData?.id) || 0
+        });
+        break;
+      case 'notInterested':
+        showToast('Marked as not interested', 'success');
+        // TODO: 实现不感兴趣功能
+        break;
+      default:
+        break;
+    }
+  };
+
   const handleQuestionLike = async () => {
     if (!questionData?.id) {
       showToast('问题ID不存在', 'error');
@@ -5149,7 +5244,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('screens.questionDetail.title')}</Text>
         <View style={styles.headerRight}>
-          <TouchableOpacity onPress={() => alert('分享功能')} hitSlop={{
+          <TouchableOpacity onPress={() => setShowShareModal(true)} hitSlop={{
           top: 10,
           bottom: 10,
           left: 10,
@@ -5466,7 +5561,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 </View> :
           // 补充列表
           <>
-                  {supplementsList.map(item => <TouchableOpacity key={item.id} style={styles.suppCard} onPress={() => {
+                  {supplementsList.map(item => {
+              const supplementIpLocation = resolveIpLocation(item);
+              return <TouchableOpacity key={item.id} style={styles.suppCard} onPress={() => {
               console.log('=== 点击补充问题 ===');
               console.log('补充问题ID:', item.id);
               console.log('补充问题作者:', item.author);
@@ -5547,7 +5644,17 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       <Text style={styles.suppAnswerTextTop}>回答 ({Number(item.answerCount ?? 0)})</Text>
                     </TouchableOpacity>
                   </View>
-                  <Text style={styles.suppContent}>{item.content}</Text>
+                  <View style={styles.suppContentContainer}>
+                    <Text style={styles.suppContent}>{item.content}</Text>
+                    <View style={styles.suppMetaBottom}>
+                      {Boolean(supplementIpLocation) && (
+                        <Text style={styles.suppIpBottom}>
+                          {supplementIpLocation}
+                        </Text>
+                      )}
+                      {Boolean(item.time) && <Text style={styles.suppTimeBottom}>{item.time}</Text>}
+                    </View>
+                  </View>
                   
                   <View style={styles.suppFooter}>
                     <View style={styles.suppFooterLeft}>
@@ -5615,7 +5722,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       </TouchableOpacity>
                     </View>
                   </View>
-                </TouchableOpacity>)}
+                </TouchableOpacity>;
+            })}
                   
                   {/* 加载更多指示器 */}
                   {Boolean(supplementsLoadingMore) && <View style={styles.supplementsLoadingMore}>
@@ -5647,6 +5755,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               const commentLikeCount = getCommentLikeDisplayCount(comment, commentLiked[comment.id]);
               const commentCollectCount = getCommentCollectDisplayCount(comment, commentCollected[comment.id]);
               const commentDislikeCount = getCommentDislikeDisplayCount(comment, commentDisliked[comment.id]);
+              const commentIpLocation = resolveIpLocation(comment);
               return <View key={comment.id} style={styles.commentCard}>
                   <TouchableOpacity style={styles.commentHeader} activeOpacity={0.7} onPress={() => openPublicProfile(comment)}>
                     <Avatar uri={comment.userAvatar || comment.avatar} name={comment.userName || comment.userNickname || comment.author} size={24} />
@@ -5689,6 +5798,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     <View style={{
                     flex: 1
                   }} />
+                    {Boolean(commentIpLocation) && <Text style={styles.commentTime}>{commentIpLocation}</Text>}
                     <Text style={styles.commentTime}>{comment.time}</Text>
                   </TouchableOpacity>
                   <View style={styles.commentContent}>
@@ -5897,6 +6007,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               const likeCount = getAnswerLikeDisplayCount(answer, answerLiked[answer.id]);
               const collectCount = getAnswerCollectDisplayCount(answer, answerBookmarked[answer.id]);
               const dislikeCount = getAnswerDislikeDisplayCount(answer, answerDisliked[answer.id]);
+              const answerIpLocation = resolveIpLocation(answer);
               return <TouchableOpacity key={answerStateKey} style={[styles.answerCard, isAdopted && styles.answerCardAdopted]} onPress={() => navigation.navigate('AnswerDetail', {
                 answer,
                 defaultTab: 'supplements'
@@ -5922,7 +6033,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       </Text>
                     </TouchableOpacity>
                   </View>
-                  <Text style={styles.answerAuthorTitle}>{answer.title}</Text>
+                  <View style={styles.answerMetaRow}>
+                    {Boolean(answer.title) && <Text style={styles.answerAuthorTitle}>{answer.title}</Text>}
+                  </View>
                 </View>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.answerSupplementBtnTop} onPress={e => {
@@ -6057,7 +6170,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               </Text>
               
               {/* 回答内容 - 可展开/收起 */}
-              <View>
+              <View style={styles.answerContentContainer}>
                 <Text style={styles.answerContent} numberOfLines={answerExpanded[answer.id] ? undefined : 5}>
                   {answer.content}
                 </Text>
@@ -6073,6 +6186,15 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       {answerExpanded[answer.id] ? t('screens.questionDetail.answer.collapse') : `...${t('screens.questionDetail.answer.expand')}`}
                     </Text>
                   </TouchableOpacity>}
+                
+                <View style={styles.answerMetaBottom}>
+                  {Boolean(answerIpLocation) && (
+                    <Text style={styles.answerIpBottom}>
+                      {answerIpLocation}
+                    </Text>
+                  )}
+                  {Boolean(answer.time) && <Text style={styles.answerTimeBottom}>{answer.time}</Text>}
+                </View>
               </View>
               
               <View style={styles.answerFooter}>
@@ -6266,29 +6388,6 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             {getQuestionCollectDisplayCount(questionData, bookmarked)}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomActionBtn} onPress={() => {
-        console.log('评论按钮被点击');
-        console.log('当前 showCommentModal 状态:', showCommentModal);
-        openCommentModal({
-          targetType: 1,
-          targetId: route?.params?.id,
-          parentId: 0
-        });
-        console.log('设置 showCommentModal 为 true');
-      }}>
-          <Ionicons name="chatbubble-outline" size={20} color="#6b7280" />
-          <Text style={styles.bottomActionText}>评论</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomActionBtn} onPress={() => setShowAnswerModal(true)}>
-          <Ionicons name="create-outline" size={20} color="#ef4444" />
-          <Text style={[styles.bottomActionText, {
-          color: '#ef4444'
-        }]}>回答</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomActionBtn} onPress={() => setShowSupplementModal(true)}>
-          <Ionicons name="add-circle-outline" size={20} color="#6b7280" />
-          <Text style={styles.bottomActionText}>补充</Text>
-        </TouchableOpacity>
         <TouchableOpacity style={styles.bottomActionBtn} onPress={handleQuestionDislike}>
           <Ionicons name={liked.dislike ?? questionData?.disliked ? "thumbs-down" : "thumbs-down-outline"} size={20} color={liked.dislike ?? questionData?.disliked ? "#6b7280" : "#9ca3af"} />
           <Text style={[styles.bottomActionText, (liked.dislike ?? questionData?.disliked) && {
@@ -6296,6 +6395,38 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }]}>
             {getQuestionDislikeDisplayCount(questionData, liked.dislike)}
           </Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.bottomInputBox} 
+          onPress={() => {
+            const activeTabType = activeTab?.split(' (')[0]?.trim();
+            if (activeTabType === t('screens.questionDetail.tabs.supplements')) {
+              setShowSupplementModal(true);
+            } else if (activeTabType === t('screens.questionDetail.tabs.answers')) {
+              setShowAnswerModal(true);
+            } else if (activeTabType === t('screens.questionDetail.tabs.comments')) {
+              openCommentModal({
+                targetType: 1,
+                targetId: route?.params?.id,
+                parentId: 0
+              });
+            }
+          }}
+        >
+          <Text style={styles.bottomInputPlaceholder}>
+            {(() => {
+              const activeTabType = activeTab?.split(' (')[0]?.trim();
+              if (activeTabType === t('screens.questionDetail.tabs.supplements')) {
+                return '补充问题';
+              } else if (activeTabType === t('screens.questionDetail.tabs.answers')) {
+                return '写回答';
+              } else if (activeTabType === t('screens.questionDetail.tabs.comments')) {
+                return '写评论';
+              }
+              return '写评论';
+            })()}
+          </Text>
+          <Ionicons name="create-outline" size={18} color="#9ca3af" />
         </TouchableOpacity>
       </View>
 
@@ -7822,6 +7953,19 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           </View>
         </View>
       </Modal>
+
+      {/* 转发分享弹窗 */}
+      <ShareModal
+        visible={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        shareData={{
+          title: questionData?.title || '',
+          content: questionData?.content || '',
+          type: 'question',
+          id: questionData?.id
+        }}
+        onShare={handleShare}
+      />
     </SafeAreaView>;
 }
 const styles = StyleSheet.create({
@@ -8326,9 +8470,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-around',
     paddingVertical: 12,
+    paddingHorizontal: 16,
     backgroundColor: '#fff',
     borderTopWidth: 1,
-    borderTopColor: '#f3f4f6'
+    borderTopColor: '#f3f4f6',
+    gap: 12
   },
   bottomActionBtn: {
     flexDirection: 'column',
@@ -8339,6 +8485,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#6b7280',
     fontWeight: '500'
+  },
+  bottomInputBox: {
+    flex: 0.95,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f9fafb',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb'
+  },
+  bottomInputPlaceholder: {
+    fontSize: 14,
+    color: '#9ca3af'
   },
   answersSection: {
     marginTop: 0,
@@ -8700,6 +8862,13 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     marginTop: 2
   },
+  answerMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 2
+  },
   answerSupplementBtnTop: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -8718,6 +8887,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#374151',
     lineHeight: 22
+  },
+  answerContentContainer: {
+    position: 'relative'
+  },
+  answerMetaBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 8,
+    gap: 8
+  },
+  answerIpBottom: {
+    fontSize: 12,
+    color: '#9ca3af'
+  },
+  answerTimeBottom: {
+    fontSize: 12,
+    color: '#9ca3af'
   },
   answerExpandBtnInline: {
     alignSelf: 'flex-start',
@@ -8843,6 +9030,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#1f2937'
   },
+  suppTime: {
+    fontSize: 12,
+    color: '#9ca3af'
+  },
   suppLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -8870,6 +9061,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#374151',
     lineHeight: 22
+  },
+  suppContentContainer: {
+    position: 'relative'
+  },
+  suppMetaBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 8,
+    gap: 8
+  },
+  suppIpBottom: {
+    fontSize: 12,
+    color: '#9ca3af'
+  },
+  suppTimeBottom: {
+    fontSize: 12,
+    color: '#9ca3af'
   },
   suppFooter: {
     flexDirection: 'row',
