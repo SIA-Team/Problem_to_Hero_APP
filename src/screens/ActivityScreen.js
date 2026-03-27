@@ -8,137 +8,82 @@ import {
   StyleSheet,
   Modal,
   Dimensions,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
 import { showAppAlert } from '../utils/appAlert';
+import { showToast } from '../utils/toast';
+import activityApi from '../services/api/activityApi';
+import {
+  getActivitiesByTab,
+  getActivityImages,
+  getJoinedActivityState,
+  getQuitActivityState,
+  normalizeActivityItem,
+  normalizeActivityList,
+} from '../utils/activityUtils';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-const initialActivities = [
-  {
-    id: 1,
-    title: '新人答题挑战赛',
-    desc: '连续7天回答问题，赢取100元现金奖励',
-    image: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=400&h=200&fit=crop',
-    images: [
-      'https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&h=600&fit=crop',
-      'https://images.unsplash.com/photo-1531482615713-2afd69097998?w=800&h=600&fit=crop',
-      'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&h=600&fit=crop',
-      'https://images.unsplash.com/photo-1557804506-669a67965ba0?w=800&h=600&fit=crop',
-      'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=800&h=600&fit=crop',
-      'https://images.unsplash.com/photo-1573164713714-d95e436ab8d6?w=800&h=600&fit=crop',
-      'https://images.unsplash.com/photo-1556761175-b413da4baf72?w=800&h=600&fit=crop',
-      'https://images.unsplash.com/photo-1542744173-8e7e53415bb0?w=800&h=600&fit=crop',
-      'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=800&h=600&fit=crop',
-    ],
-    participants: 12580,
-    startTime: '2026-01-10',
-    endTime: '2026-01-20',
-    type: 'online',
-    tag: 'hot',
-    status: 'active',
-    joined: false,
-    organizer: 'platform',
-    organizerType: 'platform',
-  },
-  {
-    id: 2,
-    title: 'Python学习打卡活动',
-    desc: '每日打卡学习Python，坚持21天获得认证徽章',
-    image: 'https://images.unsplash.com/photo-1526379095098-d400fd0bf935?w=400&h=200&fit=crop',
-    images: [
-      'https://images.unsplash.com/photo-1526379095098-d400fd0bf935?w=800&h=600&fit=crop',
-      'https://images.unsplash.com/photo-1515879218367-8466d910aaa4?w=800&h=600&fit=crop',
-      'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&h=600&fit=crop',
-    ],
-    participants: 8956,
-    startTime: '2026-01-05',
-    endTime: '2026-01-26',
-    type: 'online',
-    tag: 'new',
-    status: 'active',
-    joined: true,
-    progress: '12/21天',
-    organizer: 'Python学习互助团队',
-    organizerType: 'team',
-  },
-  {
-    id: 3,
-    title: '程序员线下交流会',
-    desc: '北京站程序员面对面交流，分享技术心得',
-    image: 'https://images.unsplash.com/photo-1515187029135-18ee286d815b?w=400&h=200&fit=crop',
-    participants: 156,
-    startTime: '2026-01-25',
-    endTime: '2026-01-25',
-    type: 'offline',
-    address: '北京市朝阳区望京SOHO',
-    tag: 'hot',
-    status: 'active',
-    joined: false,
-    organizer: '张三',
-    organizerType: 'personal',
-  },
-  {
-    id: 4,
-    title: '优质回答评选',
-    desc: '本周最佳回答评选，获奖者可获得专属勋章',
-    image: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=400&h=200&fit=crop',
-    participants: 5623,
-    startTime: '2026-01-01',
-    endTime: '2026-01-10',
-    type: 'online',
-    tag: 'ended',
-    status: 'ended',
-    joined: true,
-    progress: '已完成',
-    organizer: 'platform',
-    organizerType: 'platform',
-  },
-  {
-    id: 5,
-    title: '邀请好友得红包',
-    desc: '邀请好友注册，双方各得5元红包',
-    image: 'https://images.unsplash.com/photo-1521791136064-7986c2920216?w=400&h=200&fit=crop',
-    participants: 23456,
-    startTime: '2026-01-01',
-    endTime: '2026-12-31',
-    type: 'online',
-    tag: 'hot',
-    status: 'active',
-    joined: false,
-    organizer: 'platform',
-    organizerType: 'platform',
-  },
-];
+const getOrganizerIcon = organizerType => {
+  switch (organizerType) {
+    case 'team':
+      return 'people';
+    case 'personal':
+      return 'person';
+    case 'platform':
+      return 'shield-checkmark';
+    default:
+      return 'person';
+  }
+};
 
-const getJoinedActivityState = activity => ({
-  ...activity,
-  joined: true,
-  participants: activity.participants + 1,
-  progress: activity.progress || '0/7天',
-});
-
-const getQuitActivityState = activity => ({
-  ...activity,
-  joined: false,
-  participants: Math.max(0, activity.participants - 1),
-  progress: undefined,
-});
+const getOrganizerColor = organizerType => {
+  switch (organizerType) {
+    case 'team':
+      return '#8b5cf6';
+    case 'personal':
+      return '#3b82f6';
+    case 'platform':
+      return '#f59e0b';
+    default:
+      return '#6b7280';
+  }
+};
 
 export default function ActivityScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const viewerScrollRef = useRef(null);
-  const isFromProfile = false;
+  const isFromProfile = Boolean(route?.params?.fromProfile);
 
-  const [activeTab, setActiveTab] = useState(t('screens.activity.tabs.all'));
-  const [activities, setActivities] = useState(initialActivities);
+  const [activeTabKey, setActiveTabKey] = useState('all');
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [viewerImages, setViewerImages] = useState([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  const tabs = useMemo(
+    () => [
+      { key: 'all', label: t('screens.activity.tabs.all') },
+      { key: 'hot', label: t('screens.activity.tabs.hot') },
+      { key: 'new', label: t('screens.activity.tabs.new') },
+      { key: 'ended', label: t('screens.activity.tabs.ended') },
+      { key: 'mine', label: t('screens.activity.tabs.mine') },
+    ],
+    [t]
+  );
+
+  useEffect(() => {
+    loadActivities();
+  }, []);
 
   useEffect(() => {
     if (!showImageViewer) {
@@ -155,43 +100,44 @@ export default function ActivityScreen({ navigation, route }) {
     return () => clearTimeout(timer);
   }, [showImageViewer, currentImageIndex]);
 
-  const tabs = useMemo(
-    () => [
-      t('screens.activity.tabs.all'),
-      t('screens.activity.tabs.hot'),
-      t('screens.activity.tabs.new'),
-      t('screens.activity.tabs.ended'),
-      t('screens.activity.tabs.mine'),
-    ],
-    [t]
-  );
+  const loadActivities = async ({ silent = false } = {}) => {
+    try {
+      if (silent) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
 
-  const filteredActivities = useMemo(() => {
-    const currentTabs = {
-      [t('screens.activity.tabs.hot')]: activities.filter(item => item.tag === 'hot' && item.status === 'active'),
-      [t('screens.activity.tabs.new')]: activities.filter(item => item.tag === 'new' && item.status === 'active'),
-      [t('screens.activity.tabs.ended')]: activities.filter(item => item.status === 'ended'),
-      [t('screens.activity.tabs.mine')]: activities.filter(item => item.joined),
-    };
-
-    return currentTabs[activeTab] || activities;
-  }, [activeTab, activities, t]);
-
-  const getActivityImages = activity => {
-    if (Array.isArray(activity.images) && activity.images.length > 0) {
-      return activity.images;
+      setErrorMessage('');
+      const response = await activityApi.getActivityList();
+      const nextActivities = normalizeActivityList(response?.data);
+      setActivities(nextActivities);
+    } catch (error) {
+      const nextErrorMessage = error?.message || t('common.noData');
+      setErrorMessage(nextErrorMessage);
+      showToast(nextErrorMessage, 'error');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-
-    return activity.image ? [activity.image] : [];
   };
 
+  const filteredActivities = useMemo(
+    () => getActivitiesByTab(activities, activeTabKey),
+    [activities, activeTabKey]
+  );
+
   const handleActivityChange = updatedActivity => {
-    if (!updatedActivity?.id) {
+    const normalizedActivity = normalizeActivityItem(updatedActivity);
+
+    if (!normalizedActivity?.id) {
       return;
     }
 
     setActivities(currentActivities =>
-      currentActivities.map(activity => (activity.id === updatedActivity.id ? { ...activity, ...updatedActivity } : activity))
+      currentActivities.map(activity =>
+        activity.id === normalizedActivity.id ? normalizedActivity : activity
+      )
     );
   };
 
@@ -234,7 +180,9 @@ export default function ActivityScreen({ navigation, route }) {
               onPress: () => {
                 setActivities(previousActivities =>
                   previousActivities.map(previousActivity =>
-                    previousActivity.id === id ? getQuitActivityState(previousActivity) : previousActivity
+                    previousActivity.id === id
+                      ? getQuitActivityState(previousActivity)
+                      : previousActivity
                   )
                 );
               },
@@ -249,43 +197,33 @@ export default function ActivityScreen({ navigation, route }) {
     );
   };
 
-  const getTagColor = tag => {
-    switch (tag) {
-      case 'hot':
-        return '#ef4444';
-      case 'new':
-        return '#3b82f6';
-      case 'ended':
-        return '#9ca3af';
-      default:
-        return '#6b7280';
+  const renderEmptyState = () => {
+    if (loading) {
+      return (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color="#ef4444" />
+          <Text style={styles.emptyText}>{t('common.loading')}</Text>
+        </View>
+      );
     }
-  };
 
-  const getOrganizerIcon = organizerType => {
-    switch (organizerType) {
-      case 'team':
-        return 'people';
-      case 'personal':
-        return 'person';
-      case 'platform':
-        return 'shield-checkmark';
-      default:
-        return 'person';
-    }
-  };
-
-  const getOrganizerColor = organizerType => {
-    switch (organizerType) {
-      case 'team':
-        return '#8b5cf6';
-      case 'personal':
-        return '#3b82f6';
-      case 'platform':
-        return '#f59e0b';
-      default:
-        return '#6b7280';
-    }
+    return (
+      <View style={styles.emptyState}>
+        <Ionicons name="calendar-outline" size={64} color="#d1d5db" />
+        <Text style={styles.emptyText}>
+          {errorMessage || t('screens.activity.empty')}
+        </Text>
+        {errorMessage ? (
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => loadActivities()}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.retryBtnText}>{t('common.retry')}</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    );
   };
 
   return (
@@ -293,7 +231,7 @@ export default function ActivityScreen({ navigation, route }) {
       <View style={styles.header}>
         {isFromProfile ? (
           <TouchableOpacity
-            onPress={() => navigation.navigate('Main', { screen: '我的' })}
+            onPress={() => navigation.goBack()}
             style={styles.backBtn}
             hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
             activeOpacity={0.7}
@@ -324,145 +262,200 @@ export default function ActivityScreen({ navigation, route }) {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScroll}>
             {tabs.map(tab => (
               <TouchableOpacity
-                key={tab}
-                style={[styles.tabItem, activeTab === tab && styles.tabItemActive]}
-                onPress={() => setActiveTab(tab)}
+                key={tab.key}
+                style={[styles.tabItem, activeTabKey === tab.key && styles.tabItemActive]}
+                onPress={() => setActiveTabKey(tab.key)}
               >
-                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
+                <Text style={[styles.tabText, activeTabKey === tab.key && styles.tabTextActive]}>
+                  {tab.label}
+                </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
       ) : null}
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={styles.contentContainer}>
-        {filteredActivities.length > 0 ? (
-          filteredActivities.map(item => {
-            const itemImages = getActivityImages(item);
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadActivities({ silent: true })}
+            colors={['#ef4444']}
+            tintColor="#ef4444"
+          />
+        }
+      >
+        {filteredActivities.length > 0
+          ? filteredActivities.map(item => {
+              const itemImages = getActivityImages(item);
+              const tagLabel =
+                item.tags?.[0] ||
+                (item.status === 'ended'
+                  ? item.statusName || t('screens.activity.tag.ended')
+                  : null);
+              const typeLabel =
+                item.typeName ||
+                (item.type ? t(`screens.activity.type.${item.type}`) : '');
 
-            return (
-              <View key={item.id} style={styles.activityCard}>
-                <TouchableOpacity
-                  style={styles.coverImageContainer}
-                  onPress={() => handleImagePress(item)}
-                  activeOpacity={0.92}
-                >
-                  <Image source={{ uri: item.image }} style={styles.activityImage} />
+              return (
+                <View key={item.id} style={styles.activityCard}>
+                  <TouchableOpacity
+                    style={styles.coverImageContainer}
+                    onPress={() => handleImagePress(item)}
+                    activeOpacity={0.92}
+                  >
+                    {item.image ? (
+                      <Image source={{ uri: item.image }} style={styles.activityImage} />
+                    ) : (
+                      <View style={styles.imagePlaceholder}>
+                        <Ionicons name="image-outline" size={28} color="#cbd5e1" />
+                      </View>
+                    )}
 
-                  <View style={styles.previewIconBadge}>
-                    <Ionicons name="expand-outline" size={14} color="#fff" />
-                  </View>
+                    {itemImages.length > 0 ? (
+                      <View style={styles.previewIconBadge}>
+                        <Ionicons name="expand-outline" size={14} color="#fff" />
+                      </View>
+                    ) : null}
 
-                  {itemImages.length > 1 ? (
-                    <View style={styles.imageCountBadge}>
-                      <Ionicons name="images" size={14} color="#fff" />
-                      <Text style={styles.imageCountText}>1/{itemImages.length}</Text>
-                    </View>
-                  ) : null}
+                    {itemImages.length > 1 ? (
+                      <View style={styles.imageCountBadge}>
+                        <Ionicons name="images" size={14} color="#fff" />
+                        <Text style={styles.imageCountText}>1/{itemImages.length}</Text>
+                      </View>
+                    ) : null}
 
-                  <View style={styles.activityBadges}>
-                    <View style={[styles.activityTag, { backgroundColor: getTagColor(item.tag) }]}>
-                      <Text style={styles.activityTagText}>{t(`screens.activity.tag.${item.tag}`)}</Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.typeTag,
-                        { backgroundColor: item.type === 'online' ? '#8b5cf6' : '#f59e0b' },
-                      ]}
+                    {(tagLabel || typeLabel) ? (
+                      <View style={styles.activityBadges}>
+                        {tagLabel ? (
+                          <View
+                            style={[
+                              styles.activityTag,
+                              item.status === 'ended'
+                                ? styles.activityTagEnded
+                                : styles.activityTagDefault,
+                            ]}
+                          >
+                            <Text style={styles.activityTagText}>{tagLabel}</Text>
+                          </View>
+                        ) : null}
+                        {typeLabel ? (
+                          <View
+                            style={[
+                              styles.typeTag,
+                              item.type === 'offline'
+                                ? styles.typeTagOffline
+                                : styles.typeTagOnline,
+                            ]}
+                          >
+                            <Ionicons
+                              name={
+                                item.type === 'offline'
+                                  ? 'location-outline'
+                                  : 'globe-outline'
+                              }
+                              size={10}
+                              color="#fff"
+                            />
+                            <Text style={styles.typeTagText}>{typeLabel}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+
+                  <View style={styles.activityInfo}>
+                    <TouchableOpacity
+                      style={styles.activityInfoTouchable}
+                      activeOpacity={0.86}
+                      onPress={() => handleOpenActivityDetail(item)}
                     >
-                      <Ionicons
-                        name={item.type === 'online' ? 'globe-outline' : 'location-outline'}
-                        size={10}
-                        color="#fff"
-                      />
-                      <Text style={styles.typeTagText}>{t(`screens.activity.type.${item.type}`)}</Text>
-                    </View>
+                      <View style={styles.titleRow}>
+                        <Text style={styles.activityTitle}>{item.title}</Text>
+                        <Ionicons name="chevron-forward" size={18} color="#cbd5e1" />
+                      </View>
+
+                      <Text style={styles.activityDesc} numberOfLines={2}>
+                        {item.desc}
+                      </Text>
+
+                      {item.type === 'offline' && item.address ? (
+                        <View style={styles.addressRow}>
+                          <Ionicons name="location" size={14} color="#ef4444" />
+                          <Text style={styles.addressText} numberOfLines={1}>
+                            {item.address}
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      <View style={styles.activityMeta}>
+                        <View style={styles.metaItem}>
+                          <Ionicons
+                            name={getOrganizerIcon(item.organizerType)}
+                            size={14}
+                            color={getOrganizerColor(item.organizerType)}
+                          />
+                          <Text
+                            style={[
+                              styles.metaText,
+                              { color: getOrganizerColor(item.organizerType) },
+                            ]}
+                          >
+                            {item.organizerType === 'platform'
+                              ? t('screens.activity.organizer.platform')
+                              : item.organizer}
+                          </Text>
+                        </View>
+
+                        <View style={styles.metaItem}>
+                          <Ionicons name="people-outline" size={14} color="#9ca3af" />
+                          <Text style={styles.metaText}>
+                            {item.participants}
+                            {t('screens.activity.participants')}
+                          </Text>
+                        </View>
+
+                        <View style={styles.metaItem}>
+                          <Ionicons name="calendar-outline" size={14} color="#9ca3af" />
+                          <Text style={styles.metaText}>
+                            {item.startTime} ~ {item.endTime}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {item.joined && item.progress ? (
+                        <View style={styles.progressRow}>
+                          <Text style={styles.progressLabel}>{t('screens.activity.progress')}</Text>
+                          <Text style={styles.progressText}>{item.progress}</Text>
+                        </View>
+                      ) : null}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.joinBtn,
+                        item.joined && styles.joinedBtn,
+                        item.status === 'ended' && styles.endedBtn,
+                      ]}
+                      onPress={() => item.status !== 'ended' && handleJoinActivity(item.id)}
+                      disabled={item.status === 'ended'}
+                    >
+                      <Text style={[styles.joinBtnText, item.joined && styles.joinedBtnText]}>
+                        {item.status === 'ended'
+                          ? t('screens.activity.actions.ended')
+                          : item.joined
+                            ? t('screens.activity.actions.joined')
+                            : t('screens.activity.actions.join')}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
-                </TouchableOpacity>
-
-                <View style={styles.activityInfo}>
-                  <TouchableOpacity
-                    style={styles.activityInfoTouchable}
-                    activeOpacity={0.86}
-                    onPress={() => handleOpenActivityDetail(item)}
-                  >
-                    <View style={styles.titleRow}>
-                      <Text style={styles.activityTitle}>{item.title}</Text>
-                      <Ionicons name="chevron-forward" size={18} color="#cbd5e1" />
-                    </View>
-
-                    <Text style={styles.activityDesc} numberOfLines={2}>
-                      {item.desc}
-                    </Text>
-
-                    {item.type === 'offline' && item.address ? (
-                      <View style={styles.addressRow}>
-                        <Ionicons name="location" size={14} color="#ef4444" />
-                        <Text style={styles.addressText} numberOfLines={1}>
-                          {item.address}
-                        </Text>
-                      </View>
-                    ) : null}
-
-                    <View style={styles.activityMeta}>
-                      <View style={styles.metaItem}>
-                        <Ionicons
-                          name={getOrganizerIcon(item.organizerType)}
-                          size={14}
-                          color={getOrganizerColor(item.organizerType)}
-                        />
-                        <Text style={[styles.metaText, { color: getOrganizerColor(item.organizerType) }]}>
-                          {item.organizerType === 'platform' ? t('screens.activity.organizer.platform') : item.organizer}
-                        </Text>
-                      </View>
-
-                      <View style={styles.metaItem}>
-                        <Ionicons name="people-outline" size={14} color="#9ca3af" />
-                        <Text style={styles.metaText}>
-                          {item.participants}
-                          {t('screens.activity.participants')}
-                        </Text>
-                      </View>
-
-                      <View style={styles.metaItem}>
-                        <Ionicons name="calendar-outline" size={14} color="#9ca3af" />
-                        <Text style={styles.metaText}>
-                          {item.startTime} ~ {item.endTime}
-                        </Text>
-                      </View>
-                    </View>
-
-                    {item.joined && item.progress ? (
-                      <View style={styles.progressRow}>
-                        <Text style={styles.progressLabel}>{t('screens.activity.progress')}</Text>
-                        <Text style={styles.progressText}>{item.progress}</Text>
-                      </View>
-                    ) : null}
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.joinBtn, item.joined && styles.joinedBtn, item.status === 'ended' && styles.endedBtn]}
-                    onPress={() => item.status !== 'ended' && handleJoinActivity(item.id)}
-                    disabled={item.status === 'ended'}
-                  >
-                    <Text style={[styles.joinBtnText, item.joined && styles.joinedBtnText]}>
-                      {item.status === 'ended'
-                        ? t('screens.activity.actions.ended')
-                        : item.joined
-                          ? t('screens.activity.actions.joined')
-                          : t('screens.activity.actions.join')}
-                    </Text>
-                  </TouchableOpacity>
                 </View>
-              </View>
-            );
-          })
-        ) : (
-          <View style={styles.emptyState}>
-            <Ionicons name="calendar-outline" size={64} color="#d1d5db" />
-            <Text style={styles.emptyText}>{t('screens.activity.empty')}</Text>
-          </View>
-        )}
+              );
+            })
+          : renderEmptyState()}
       </ScrollView>
 
       <Modal visible={showImageViewer} animationType="fade" transparent={false} statusBarTranslucent>
@@ -472,7 +465,7 @@ export default function ActivityScreen({ navigation, route }) {
               <Ionicons name="close" size={28} color="#fff" />
             </TouchableOpacity>
             <Text style={styles.imageViewerCounter}>
-              {currentImageIndex + 1}/{viewerImages.length}
+              {viewerImages.length > 0 ? `${currentImageIndex + 1}/${viewerImages.length}` : '0/0'}
             </Text>
             <View style={styles.viewerHeaderSpacer} />
           </View>
@@ -483,7 +476,9 @@ export default function ActivityScreen({ navigation, route }) {
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             onMomentumScrollEnd={event => {
-              const index = Math.round(event.nativeEvent.contentOffset.x / event.nativeEvent.layoutMeasurement.width);
+              const index = Math.round(
+                event.nativeEvent.contentOffset.x / event.nativeEvent.layoutMeasurement.width
+              );
               setCurrentImageIndex(index);
             }}
             style={styles.imageViewerScroll}
@@ -497,7 +492,13 @@ export default function ActivityScreen({ navigation, route }) {
 
           <View style={styles.imageViewerFooter}>
             {viewerImages.map((_, index) => (
-              <View key={index} style={[styles.imageIndicator, index === currentImageIndex && styles.imageIndicatorActive]} />
+              <View
+                key={index}
+                style={[
+                  styles.imageIndicator,
+                  index === currentImageIndex && styles.imageIndicatorActive,
+                ]}
+              />
             ))}
           </View>
         </View>
@@ -602,10 +603,18 @@ const styles = StyleSheet.create({
     position: 'relative',
     width: '100%',
     height: 140,
+    backgroundColor: '#eef2f7',
   },
   activityImage: {
     width: '100%',
     height: 140,
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e5e7eb',
   },
   previewIconBadge: {
     position: 'absolute',
@@ -641,11 +650,18 @@ const styles = StyleSheet.create({
     left: 12,
     flexDirection: 'row',
     gap: 6,
+    flexWrap: 'wrap',
   },
   activityTag: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
+  },
+  activityTagDefault: {
+    backgroundColor: '#ef4444',
+  },
+  activityTagEnded: {
+    backgroundColor: '#9ca3af',
   },
   activityTagText: {
     color: '#fff',
@@ -659,6 +675,12 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 4,
     gap: 2,
+  },
+  typeTagOnline: {
+    backgroundColor: '#8b5cf6',
+  },
+  typeTagOffline: {
+    backgroundColor: '#f59e0b',
   },
   typeTagText: {
     color: '#fff',
@@ -758,11 +780,25 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     paddingTop: 80,
+    paddingHorizontal: 24,
   },
   emptyText: {
     fontSize: 15,
     color: '#9ca3af',
     marginTop: 16,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    marginTop: 16,
+    backgroundColor: '#ef4444',
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  retryBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   imageViewerContainer: {
     flex: 1,

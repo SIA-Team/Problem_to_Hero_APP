@@ -174,6 +174,10 @@ const API_SERVER_CONFIG = {
   
   // 上传相关接口
   [buildServicePath(SERVICES.CONTENT, '/app/content/image/upload')]: getCurrentServerSync,
+
+  // 活动相关接口（不使用微服务前缀）
+  '/app/activity/list': getCurrentServerSync,
+  '/app/activity/*': getCurrentServerSync,
   
   // 评论相关接口
   [buildServicePath(SERVICES.CONTENT, '/app/content/comment')]: getCurrentServerSync,

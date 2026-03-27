@@ -5,6 +5,7 @@ import authApi from './authApi';
 import userApi from './userApi';
 import questionApi from './questionApi';
 import answerApi from './answerApi';
+import activityApi from './activityApi';
 import uploadApi from './uploadApi';
 import reportApi from './reportApi';
 import emergencyApi from './emergencyApi';
@@ -14,6 +15,7 @@ export {
   userApi,
   questionApi,
   answerApi,
+  activityApi,
   uploadApi,
   reportApi,
   emergencyApi,
@@ -25,6 +27,7 @@ export default {
   user: userApi,
   question: questionApi,
   answer: answerApi,
+  activity: activityApi,
   upload: uploadApi,
   report: reportApi,
   emergency: emergencyApi,

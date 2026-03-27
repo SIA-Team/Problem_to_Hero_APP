@@ -553,6 +553,7 @@ export default function QuestionDetailScreen({
 
   // 转发分享状态
   const [showShareModal, setShowShareModal] = useState(false);
+  const [currentShareData, setCurrentShareData] = useState(null);
   const [answerSelectedTeams, setAnswerSelectedTeams] = useState([]); // 回答选中的团队
   const [supplementQuestionIdentity, setSupplementQuestionIdentity] = useState('personal'); // 补充问题身份
   const [supplementQuestionSelectedTeams, setSupplementQuestionSelectedTeams] = useState([]); // 补充问题选中的团队
@@ -5083,46 +5084,43 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     console.log('分享到:', platform, shareData);
     
     switch (platform) {
-      case 'friends':
-        // 分享给好友已在ShareToFriendsModal中处理
-        const userCount = shareData?.users?.length || 0;
-        console.log(`已分享给 ${userCount} 位好友`);
-        // TODO: 调用API发送分享消息
-        break;
       case 'twitter':
-        showToast('Share to Twitter', 'info');
-        // TODO: 集成Twitter分享SDK
-        break;
-      case 'facebook':
-        showToast('Share to Facebook', 'info');
-        // TODO: 集成Facebook分享SDK
-        break;
-      case 'whatsapp':
-        showToast('Share to WhatsApp', 'info');
-        // TODO: 集成WhatsApp分享
-        break;
-      case 'telegram':
-        showToast('Share to Telegram', 'info');
-        // TODO: 集成Telegram分享
-        break;
       case 'link':
-        // 复制链接已在ShareModal中处理
-        break;
-      case 'report':
-        // 跳转到举报页面
-        navigation.navigate('Report', {
-          type: 'question',
-          targetType: 1,
-          targetId: Number(route?.params?.id ?? questionData?.id) || 0
-        });
-        break;
-      case 'notInterested':
-        showToast('Marked as not interested', 'success');
-        // TODO: 实现不感兴趣功能
+        console.log('分享链接:', shareData?.url);
         break;
       default:
         break;
     }
+  };
+  const openShareModalWithData = payload => {
+    if (!payload) {
+      return;
+    }
+
+    setCurrentShareData(payload);
+    setShowShareModal(true);
+  };
+  const closeShareModal = () => {
+    setShowShareModal(false);
+    setCurrentShareData(null);
+  };
+  const buildQuestionSharePayload = () => ({
+    title: questionData?.title || '',
+    content: questionData?.content || '',
+    type: 'sharequestion',
+    qid: Number(route?.params?.id ?? questionData?.id) || null
+  });
+  const buildQuestionCommentSharePayload = comment => {
+    const commentId = Number(comment?.id ?? comment?.commentId ?? comment?.comment_id ?? 0) || null;
+    const rootCid = commentId ? Number(getQuestionCommentThreadRootId(commentId) ?? commentId) || commentId : null;
+    return {
+      title: questionData?.title || '',
+      content: comment?.content || questionData?.content || '',
+      type: 'sharecomment',
+      qid: Number(route?.params?.id ?? questionData?.id) || null,
+      cid: commentId,
+      rootCid
+    };
   };
 
   const handleQuestionLike = async () => {
@@ -5388,7 +5386,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('screens.questionDetail.title')}</Text>
         <View style={styles.headerRight}>
-          <TouchableOpacity onPress={() => setShowShareModal(true)} hitSlop={{
+          <TouchableOpacity onPress={() => openShareModalWithData(buildQuestionSharePayload())} hitSlop={{
           top: 10,
           bottom: 10,
           left: 10,
@@ -5963,7 +5961,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                           <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
                           <Text style={styles.commentActionText}>{formatNumber(comment.replyCount || comment.replies || 0)}</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.commentActionBtn}>
+                        <TouchableOpacity style={styles.commentActionBtn} onPress={() => openShareModalWithData(buildQuestionCommentSharePayload(comment))}>
                           <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
                           <Text style={styles.commentActionText}>{formatNumber(comment.shareCount || comment.shares || 0)}</Text>
                         </TouchableOpacity>
@@ -7288,7 +7286,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                             <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
                             <Text style={styles.commentListActionText}>{Number(comment.replyCount ?? comment.replies ?? 0)}</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity style={styles.commentListActionBtn}>
+                          <TouchableOpacity style={styles.commentListActionBtn} onPress={() => openShareModalWithData(buildQuestionCommentSharePayload(comment))}>
                             <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
                             <Text style={styles.commentListActionText}>{Number(comment.shareCount ?? comment.shares ?? 0)}</Text>
                           </TouchableOpacity>
@@ -8105,13 +8103,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       {/* 转发分享弹窗 */}
       <ShareModal
         visible={showShareModal}
-        onClose={() => setShowShareModal(false)}
-        shareData={{
-          title: questionData?.title || '',
-          content: questionData?.content || '',
-          type: 'question',
-          id: questionData?.id
-        }}
+        onClose={closeShareModal}
+        shareData={currentShareData || buildQuestionSharePayload()}
         onShare={handleShare}
       />
     </SafeAreaView>;

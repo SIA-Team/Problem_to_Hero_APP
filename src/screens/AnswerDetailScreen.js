@@ -8,6 +8,7 @@ import IdentitySelector from '../components/IdentitySelector';
 import { modalTokens } from '../components/modalTokens';
 import SupplementAnswerSkeleton from '../components/SupplementAnswerSkeleton';
 import SupplementAnswerModal from '../components/SupplementAnswerModal';
+import ShareModal from '../components/ShareModal';
 import WriteCommentModal from '../components/WriteCommentModal';
 import EmptyState from '../components/EmptyState';
 import { toast } from '../utils/toast';
@@ -221,6 +222,8 @@ export default function AnswerDetailScreen({
   // 琛ュ厖鍥炵瓟鐩稿叧鐘舵€?
   const [showSupplementAnswerModal, setShowSupplementAnswerModal] = useState(false);
   const [showWriteCommentModal, setShowWriteCommentModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [currentShareData, setCurrentShareData] = useState(null);
 
   // 鎻愪氦琛ュ厖鍥炵瓟 - 宸茬Щ鑷?SupplementAnswerModal 缁勪欢
 
@@ -366,7 +369,56 @@ export default function AnswerDetailScreen({
 
   // 获取完整的回答数据（包含统计信息）
   const answer = normalizeAnswerDetail(answerData || route?.params?.updatedAnswer || route?.params?.answer) || DEFAULT_ANSWER_DETAIL;
+  const answerQuestionId = Number(route?.params?.questionId ?? answer?.questionId ?? route?.params?.question?.id ?? 0) || null;
   const openPublicProfile = (target, options = {}) => navigateToPublicProfile(navigation, target, options);
+  const openShareModalWithData = payload => {
+    if (!payload) {
+      return;
+    }
+
+    setCurrentShareData(payload);
+    setShowShareModal(true);
+  };
+  const closeShareModal = () => {
+    setShowShareModal(false);
+    setCurrentShareData(null);
+  };
+  const buildAnswerSharePayload = () => ({
+    title: answer?.title || '',
+    content: answer?.content || '',
+    type: 'shareanswer',
+    qid: answerQuestionId,
+    aid: Number(answer?.id) || null
+  });
+  const buildAnswerCommentSharePayload = comment => {
+    const commentId = Number(comment?.id ?? comment?.commentId ?? comment?.comment_id ?? 0) || null;
+    const rootCid = commentId ? Number(getAnswerCommentThreadRootId(commentId) ?? commentId) || commentId : null;
+    return {
+      title: answer?.title || '',
+      content: comment?.content || answer?.content || '',
+      type: 'sharecomment',
+      qid: answerQuestionId,
+      aid: Number(answer?.id) || null,
+      cid: commentId,
+      rootCid
+    };
+  };
+  const buildSupplementCommentSharePayload = comment => {
+    const commentId = Number(comment?.id ?? comment?.commentId ?? comment?.comment_id ?? 0) || null;
+    const rootCid = commentId ? Number(getSupplementCommentThreadRootId(commentId) ?? commentId) || commentId : null;
+    return {
+      title: answer?.title || '',
+      content: comment?.content || '',
+      type: 'sharecomment',
+      qid: answerQuestionId,
+      sid: Number(currentSupplementCommentTargetId) || null,
+      cid: commentId,
+      rootCid
+    };
+  };
+  const handleShare = (platform, sharePayload) => {
+    console.log('Answer detail shared via:', platform, sharePayload);
+  };
   const normalizeSupplementAnswerItem = item => {
     if (!item || typeof item !== 'object') {
       return item;
@@ -2395,7 +2447,7 @@ export default function AnswerDetailScreen({
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('screens.answerDetail.title')}</Text>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.shareBtn}>
+          <TouchableOpacity style={styles.shareBtn} onPress={() => openShareModalWithData(buildAnswerSharePayload())}>
             <Ionicons name="arrow-redo-outline" size={22} color="#6b7280" />
             <Text style={styles.shareBtnText}>{answer.shareCount || answer.share_count || answer.shares || 0}</Text>
           </TouchableOpacity>
@@ -2647,7 +2699,7 @@ export default function AnswerDetailScreen({
                           <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
                           <Text style={styles.commentActionText}>{Number(comment.replyCount ?? comment.replies ?? 0)}</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.commentActionBtn}>
+                        <TouchableOpacity style={styles.commentActionBtn} onPress={() => openShareModalWithData(buildAnswerCommentSharePayload(comment))}>
                           <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
                           <Text style={styles.commentActionText}>{Number(comment.shareCount ?? comment.shares ?? 0)}</Text>
                         </TouchableOpacity>
@@ -2826,7 +2878,7 @@ export default function AnswerDetailScreen({
                             <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
                             <Text style={styles.commentListActionText}>{Number(comment.replyCount ?? comment.replies ?? 0)}</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity style={styles.commentListActionBtn}>
+                          <TouchableOpacity style={styles.commentListActionBtn} onPress={() => openShareModalWithData(buildSupplementCommentSharePayload(comment))}>
                             <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
                             <Text style={styles.commentListActionText}>{Number(comment.shareCount ?? comment.shares ?? 0)}</Text>
                           </TouchableOpacity>
@@ -2941,6 +2993,7 @@ export default function AnswerDetailScreen({
       // 琛ュ厖鍥炵瓟鍙戝竷鎴愬姛鍚庡埛鏂板垪琛?
       fetchSupplementAnswers(true);
     }} />
+      <ShareModal visible={showShareModal} onClose={closeShareModal} shareData={currentShareData || buildAnswerSharePayload()} onShare={handleShare} />
       <WriteCommentModal visible={showSupplementCommentComposerModal} onClose={() => setShowSupplementCommentComposerModal(false)} onPublish={handleSubmitSupplementComment} originalComment={supplementCommentTarget.originalComment} publishInFooter closeOnRight title={supplementCommentTarget.parentId ? '写回复' : '写评论'} placeholder={supplementCommentTarget.parentId ? '写下你的回复...' : '写下你的评论...'} />
       <WriteCommentModal visible={showWriteCommentModal} onClose={() => {
       setShowWriteCommentModal(false);

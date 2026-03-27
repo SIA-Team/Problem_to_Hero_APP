@@ -19,6 +19,7 @@
     "incomeRanking": "收入榜",
     "rewardRanking": "悬赏榜",
     "questionRanking": "问题榜",
+    "heroRanking": "英雄榜",
     "sameCity": "同城",
     "country": "国家",
     "industry": "行业",
@@ -1821,6 +1822,8 @@
   "channelManage": {
     "title": "频道管理",
     "done": "完成",
+    "edit": "编辑",
+    "dragToSort": "拖拽可以排序",
     "saveSuccess": "频道订阅已更新",
     "myChannels": "我的频道",
     "countryIssues": "国家问题",

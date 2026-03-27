@@ -1,9 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, Dimensions, TextInput, FlatList, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import Avatar from '../components/Avatar';
+import ShareModal from '../components/ShareModal';
 import TranslateButton from '../components/TranslateButton';
 import WriteCommentModal from '../components/WriteCommentModal';
 import { modalTokens } from '../components/modalTokens';
@@ -15,6 +17,7 @@ import { formatTime } from '../utils/timeFormatter';
 import { navigateToPublicProfile, resolvePublicUserId } from '../utils/publicProfileNavigation';
 import questionApi from '../services/api/questionApi';
 import { getBlockedUserIds, subscribeBlockedUsers } from '../services/blacklistState';
+import { loadComboChannels } from '../services/channelSubscriptionService';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -35,7 +38,8 @@ const topicsData = [
 ];
 
 export default function HomeScreen({ navigation }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const locale = i18n?.locale || 'en';
   const insets = useSafeAreaInsets();
   
   // 获取多语言区域数据 - 使用 useMemo 避免重复计算
@@ -51,8 +55,10 @@ export default function HomeScreen({ navigation }) {
     console.log('='.repeat(50));
   }, []);
   
+  const [comboTabs, setComboTabs] = useState([]);
+
   // Tabs array using translation with useMemo
-  const tabs = useMemo(() => [
+  const baseTabs = useMemo(() => [
     t('home.follow'),
     t('home.topics'),
     t('home.recommend'),
@@ -60,22 +66,52 @@ export default function HomeScreen({ navigation }) {
     // t('home.incomeRanking'), // 暂时隐藏收入榜，后期再启用
     t('home.rewardRanking'), // 悬赏榜
     t('home.questionRanking'),
+    t('home.heroRanking'), // 英雄榜
     t('home.sameCity'),
     t('home.country'),
     t('home.industry'),
     t('home.personal'),
     t('home.workplace'),
     t('home.education')
-  ], [t]);
+  ], [locale]);
+
+  const tabs = useMemo(() => [
+    ...baseTabs,
+    ...comboTabs.filter(tab => !baseTabs.includes(tab))
+  ], [baseTabs, comboTabs]);
   
   const [activeTab, setActiveTab] = useState('');
+
+  const syncComboTabs = React.useCallback(async () => {
+    const savedComboTabs = await loadComboChannels();
+    setComboTabs(prevTabs => {
+      if (JSON.stringify(prevTabs) === JSON.stringify(savedComboTabs)) {
+        return prevTabs;
+      }
+      return savedComboTabs;
+    });
+  }, []);
   
   // Initialize activeTab with translated value
   useEffect(() => {
     if (!activeTab) {
       setActiveTab(t('home.recommend'));
     }
-  }, [t, activeTab]);
+  }, [locale, activeTab]);
+
+  useEffect(() => {
+    syncComboTabs();
+  }, [syncComboTabs]);
+
+  useFocusEffect(React.useCallback(() => {
+    syncComboTabs();
+  }, [syncComboTabs]));
+
+  useEffect(() => {
+    if (activeTab && !tabs.includes(activeTab)) {
+      setActiveTab(t('home.recommend'));
+    }
+  }, [activeTab, tabs, locale]);
   
   // Tab 切换监听 - 触发优化加载
   
@@ -85,10 +121,12 @@ export default function HomeScreen({ navigation }) {
   const [bookmarkedItems, setBookmarkedItems] = useState({});
   const [showRegionModal, setShowRegionModal] = useState(false);
   const [showActionModal, setShowActionModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [showSocialModal, setShowSocialModal] = useState(false);
   const [socialPlatform, setSocialPlatform] = useState('');
   const [socialSearchText, setSocialSearchText] = useState('');
   const [selectedQuestion, setSelectedQuestion] = useState(null);
+  const [currentShareData, setCurrentShareData] = useState(null);
   const [showPaidAlertModal, setShowPaidAlertModal] = useState(false);
   const [paidAlertAmount, setPaidAlertAmount] = useState(null);
   const [regionStep, setRegionStep] = useState(0);
@@ -455,6 +493,43 @@ export default function HomeScreen({ navigation }) {
   const formatNumber = (num) => num >= 1000 ? (num / 1000).toFixed(1) + 'k' : num;
 
   const openActionModal = (item) => { setSelectedQuestion(item); setShowActionModal(true); };
+  const closeShareModal = () => {
+    setShowShareModal(false);
+    setCurrentShareData(null);
+  };
+  const buildQuestionSharePayload = (item) => {
+    if (!item) {
+      return null;
+    }
+
+    const content =
+      item.summary ||
+      item.description ||
+      item.content ||
+      item.body ||
+      '';
+
+    return {
+      title: item.title,
+      content,
+      type: 'sharequestion',
+      qid: item.id,
+      image: item.image || item.coverImage || item.images?.[0] || '',
+    };
+  };
+  const openQuestionShareModal = (item) => {
+    const sharePayload = buildQuestionSharePayload(item);
+    if (!sharePayload) {
+      return;
+    }
+
+    setShowActionModal(false);
+    setCurrentShareData(sharePayload);
+    setShowShareModal(true);
+  };
+  const handleShare = (platform, payload) => {
+    console.log('Home question shared:', platform, payload);
+  };
   const openPaidAlertModal = (amount) => {
     setPaidAlertAmount(amount);
     setShowPaidAlertModal(true);
@@ -563,6 +638,8 @@ export default function HomeScreen({ navigation }) {
                   navigation.navigate('RewardRanking');
                 } else if (tab === t('home.questionRanking')) {
                   navigation.navigate('QuestionRanking');
+                } else if (tab === t('home.heroRanking')) {
+                  navigation.navigate('HeroRanking');
                 } else {
                   setActiveTab(tab);
                 }
@@ -1065,7 +1142,10 @@ export default function HomeScreen({ navigation }) {
                 {selectedQuestion && dislikedItems[selectedQuestion.id] ? '已踩' : '踩一下'}
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionItem}>
+            <TouchableOpacity
+              style={styles.actionItem}
+              onPress={() => openQuestionShareModal(selectedQuestion)}
+            >
               <Ionicons name="arrow-redo-outline" size={22} color="#1f2937" />
               <Text style={styles.actionItemText}>分享 ({formatNumber(selectedQuestion?.shareCount || 0)})</Text>
             </TouchableOpacity>
@@ -1203,6 +1283,13 @@ export default function HomeScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      <ShareModal
+        visible={showShareModal}
+        onClose={closeShareModal}
+        shareData={currentShareData || buildQuestionSharePayload(selectedQuestion)}
+        onShare={handleShare}
+      />
 
       {/* 评论弹窗 */}
       <WriteCommentModal

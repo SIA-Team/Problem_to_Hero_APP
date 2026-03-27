@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import {
   Modal,
   View,
@@ -15,8 +15,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { modalTokens } from './modalTokens';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import { showToast } from '../utils/toast';
+import { buildShareUrl, openTwitterShare } from '../utils/shareService';
 
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 let clipboardModule;
 let clipboardResolved = false;
@@ -76,6 +77,7 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
   const bottomSafeInset = useBottomSafeInset(20);
   const [slideAnim] = React.useState(new Animated.Value(SCREEN_HEIGHT));
   const [backdropOpacity] = React.useState(new Animated.Value(0));
+  const [pendingPlatform, setPendingPlatform] = React.useState(null);
 
   React.useEffect(() => {
     if (visible) {
@@ -124,42 +126,52 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
   };
 
   const handleShare = async (platform) => {
-    if (platform === 'link') {
-      const shareUrl = shareData?.url || 'Question ID: ' + shareData?.id;
-      const result = await copyLinkSafely(shareUrl);
-
-      if (result === 'copied') {
-        showToast('Link copied', 'success');
-      } else if (result === 'shared') {
-        showToast('Clipboard unavailable, opened share sheet', 'info');
-      } else {
-        showToast('Clipboard unavailable in current build', 'warning');
-      }
-
-      handleClose();
+    if (pendingPlatform) {
       return;
     }
 
-    handleClose();
-    if (onShare) {
-      onShare(platform, shareData);
+    setPendingPlatform(platform);
+
+    try {
+      if (platform === 'link') {
+        const shareUrl = buildShareUrl(shareData);
+        const result = await copyLinkSafely(shareUrl);
+
+        if (result === 'copied') {
+          showToast('Link copied', 'success');
+        } else if (result === 'shared') {
+          showToast('Clipboard unavailable, opened share sheet', 'info');
+        } else {
+          showToast('Clipboard unavailable in current build', 'warning');
+        }
+
+        if (onShare) {
+          onShare(platform, { ...shareData, url: shareUrl });
+        }
+        handleClose();
+        return;
+      }
+
+      if (platform === 'twitter') {
+        const result = await openTwitterShare(shareData);
+        if (onShare) {
+          onShare(platform, { ...shareData, url: result.shareUrl });
+        }
+        handleClose();
+        return;
+      }
+
+      if (onShare) {
+        onShare(platform, shareData);
+      }
+      handleClose();
+    } catch (error) {
+      console.error(`Failed to share via ${platform}:`, error);
+      showToast(platform === 'twitter' ? 'Unable to open Twitter' : 'Share failed', 'error');
+    } finally {
+      setPendingPlatform(null);
     }
   };
-
-  const moreOptions = [
-    {
-      id: 'report',
-      name: 'Report',
-      icon: 'flag-outline',
-      color: '#EF4444',
-    },
-    {
-      id: 'notInterested',
-      name: 'Not Interested',
-      icon: 'eye-off-outline',
-      color: '#6B7280',
-    },
-  ];
 
   return (
     <Modal
@@ -207,35 +219,21 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
                         style={styles.optionItem}
                         onPress={() => handleShare(option.id)}
                         activeOpacity={0.7}
+                        disabled={pendingPlatform !== null}
                       >
-                        <View style={[styles.optionIcon, { backgroundColor: option.color + '15' }]}>
+                        <View
+                          style={[
+                            styles.optionIcon,
+                            { backgroundColor: option.color + '15' },
+                            pendingPlatform === option.id && styles.optionIconPending,
+                          ]}
+                        >
                           <Ionicons name={option.icon} size={28} color={option.color} />
                         </View>
                         <Text style={styles.optionText}>{option.name}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
-                </View>
-
-                <View style={styles.divider} />
-
-                <View style={styles.section}>
-                  {moreOptions.map((option) => (
-                    <TouchableOpacity
-                      key={option.id}
-                      style={styles.moreOption}
-                      onPress={() => handleShare(option.id)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.moreOptionLeft}>
-                        <Ionicons name={option.icon} size={22} color={option.color} />
-                        <Text style={[styles.moreOptionText, { color: option.color }]}>
-                          {option.name}
-                        </Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
-                    </TouchableOpacity>
-                  ))}
                 </View>
               </ScrollView>
             </Animated.View>
@@ -254,72 +252,69 @@ const styles = StyleSheet.create({
   },
   container: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: SCREEN_HEIGHT * 0.7,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    minHeight: 200,
+    maxHeight: SCREEN_HEIGHT * 0.72,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    paddingTop: 20,
+    paddingBottom: 16,
+    paddingHorizontal: 24,
   },
   headerTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#1F2937',
   },
   closeButton: {
     position: 'absolute',
-    right: 16,
-    top: 16,
+    right: 24,
+    top: 18,
   },
   section: {
-    paddingVertical: 16,
+    paddingTop: 20,
+    paddingBottom: 30,
   },
   optionsGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
   },
   optionItem: {
-    width: SCREEN_WIDTH / 4,
+    width: 112,
     alignItems: 'center',
-    marginBottom: 20,
+    marginRight: -6,
   },
   optionIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 9,
+  },
+  optionIconPending: {
+    opacity: 0.6,
   },
   optionText: {
-    fontSize: 12,
+    fontSize: 14,
+    lineHeight: 20,
     color: '#6B7280',
     textAlign: 'center',
   },
-  divider: {
-    height: 8,
-    backgroundColor: '#F9FAFB',
-  },
-  moreOption: {
-    flexDirection: 'row',
+  bottomHandleWrapper: {
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 0,
   },
-  moreOptionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  moreOptionText: {
-    fontSize: 15,
-    marginLeft: 12,
+  bottomHandle: {
+    width: 136,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: '#3F3F46',
+    opacity: 0.35,
   },
 });

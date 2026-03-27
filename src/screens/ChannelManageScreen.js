@@ -1,13 +1,82 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { getRegionData } from '../data/regionData';
+import { loadComboChannels, mergeUniqueChannels, saveComboChannels } from '../services/channelSubscriptionService';
 import { showAppAlert } from '../utils/appAlert';
 
 // 地区数据（使用多语言数据）
 // 已移除硬编码数据，改用 getRegionData()
+
+// 抖动动画组件
+const ShakingChannelTag = ({ channel, index, onPress, isEditMode }) => {
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  
+  useEffect(() => {
+    if (isEditMode) {
+      // 为每个标签添加不同的延迟，让抖动效果更自然
+      const delay = index * 50;
+      
+      const shakeAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(shakeAnim, {
+            toValue: 1,
+            duration: 100,
+            useNativeDriver: true,
+            delay: delay
+          }),
+          Animated.timing(shakeAnim, {
+            toValue: -1,
+            duration: 100,
+            useNativeDriver: true
+          }),
+          Animated.timing(shakeAnim, {
+            toValue: 1,
+            duration: 100,
+            useNativeDriver: true
+          }),
+          Animated.timing(shakeAnim, {
+            toValue: 0,
+            duration: 100,
+            useNativeDriver: true
+          })
+        ])
+      );
+      
+      shakeAnimation.start();
+      
+      return () => shakeAnimation.stop();
+    } else {
+      shakeAnim.setValue(0);
+    }
+  }, [isEditMode, index]);
+  
+  const rotate = shakeAnim.interpolate({
+    inputRange: [-1, 1],
+    outputRange: ['-2deg', '2deg']
+  });
+  
+  return (
+    <Animated.View style={{ transform: [{ rotate }] }}>
+      <View style={styles.myChannelTagWrapper}>
+        <View style={styles.myChannelTag}>
+          <Text style={styles.myChannelText}>{channel}</Text>
+          {isEditMode && (
+            <TouchableOpacity 
+              onPress={onPress}
+              hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
+              style={styles.deleteIconContainer}
+            >
+              <Ionicons name="close" size={14} color="#374151" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </Animated.View>
+  );
+};
 
 // 频道数据 - 使用翻译键
 const getChannelData = t => ({
@@ -16,12 +85,15 @@ const getChannelData = t => ({
   enterprise: [t('channelManage.enterpriseCategories.management'), t('channelManage.enterpriseCategories.hr'), t('channelManage.enterpriseCategories.marketing'), t('channelManage.enterpriseCategories.finance'), t('channelManage.enterpriseCategories.operations'), t('channelManage.enterpriseCategories.legal')],
   personal: [t('channelManage.personalCategories.workplace'), t('channelManage.personalCategories.tech'), t('channelManage.personalCategories.health'), t('channelManage.personalCategories.education'), t('channelManage.personalCategories.food'), t('channelManage.personalCategories.emotion'), t('channelManage.personalCategories.travel'), t('channelManage.personalCategories.entertainment')]
 });
+const getDefaultMyChannels = t => [t('channelManage.countryCategories.policy'), t('channelManage.industryCategories.internet'), t('channelManage.personalCategories.workplace'), t('channelManage.personalCategories.tech')];
 export default function ChannelManageScreen({
   navigation
 }) {
   const {
-    t
+    t,
+    i18n
   } = useTranslation();
+  const locale = i18n?.locale || 'en';
 
   // 获取多语言区域数据和频道数据
   const regionData = getRegionData();
@@ -37,11 +109,15 @@ export default function ChannelManageScreen({
     console.log('='.repeat(50));
   }, []);
   // 我的频道 - 使用翻译后的默认值
-  const [myChannels, setMyChannels] = useState([t('channelManage.countryCategories.policy'), t('channelManage.industryCategories.internet'), t('channelManage.personalCategories.workplace'), t('channelManage.personalCategories.tech')]);
+  const defaultMyChannels = React.useMemo(() => getDefaultMyChannels(t), [locale]);
+  const [myChannels, setMyChannels] = useState(defaultMyChannels);
+  const [comboChannels, setComboChannels] = useState([]);
+  
+  // 编辑模式状态
+  const [isEditMode, setIsEditMode] = useState(false);
 
   // 组合频道创建
   const [showComboCreator, setShowComboCreator] = useState(true);
-  const [comboName, setComboName] = useState('');
   const [comboStep, setComboStep] = useState('region'); // 'region' 或 'category'
   const [regionStep, setRegionStep] = useState(0); // 0:国家 1:省份 2:城市 3:区域
   const [comboSelection, setComboSelection] = useState({
@@ -53,19 +129,50 @@ export default function ChannelManageScreen({
     // 'country', 'industry', 'personal'
     category: null
   });
-  const [myComboChannels, setMyComboChannels] = useState([{
-    id: 1,
-    name: '纽约互联网',
-    path: '美国>纽约州>纽约市>曼哈顿>行业问题>互联网'
-  }]);
+  const [myComboChannels, setMyComboChannels] = useState([]);
 
   // 区域搜索
   const [regionSearchText, setRegionSearchText] = useState('');
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const syncComboChannels = async () => {
+      const savedComboChannels = await loadComboChannels();
+
+      if (!isMounted) {
+        return;
+      }
+
+      setComboChannels(prevChannels => {
+        if (JSON.stringify(prevChannels) === JSON.stringify(savedComboChannels)) {
+          return prevChannels;
+        }
+        return savedComboChannels;
+      });
+      setMyChannels(mergeUniqueChannels(defaultMyChannels, savedComboChannels));
+    };
+
+    syncComboChannels();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [defaultMyChannels, locale]);
+
   // 切换频道订阅
   const toggleChannel = channel => {
     if (myChannels.includes(channel)) {
-      setMyChannels(myChannels.filter(c => c !== channel));
+      // 只有在编辑模式下才能删除
+      if (isEditMode) {
+        const updatedChannels = myChannels.filter(c => c !== channel);
+        const updatedComboChannels = comboChannels.filter(c => c !== channel);
+        setMyChannels(updatedChannels);
+        if (updatedComboChannels.length !== comboChannels.length) {
+          setComboChannels(updatedComboChannels);
+          saveComboChannels(updatedComboChannels);
+        }
+      }
     } else {
       setMyChannels([...myChannels, channel]);
     }
@@ -240,7 +347,6 @@ export default function ChannelManageScreen({
       showAppAlert(t('common.ok'), t('channelManage.selectCategoryPrompt'));
       return;
     }
-    const pathParts = [];
     const {
       country,
       province,
@@ -249,34 +355,20 @@ export default function ChannelManageScreen({
     } = comboSelection;
 
     // 添加区域路径（如果有选择）
-    if (country) pathParts.push(country.name);
-    if (province) pathParts.push(province.name);
-    if (city) pathParts.push(city.name);
-    if (district) pathParts.push(district);
 
     // 添加分类路径
-    const typeNames = {
-      country: t('channelManage.categoryTypes.country'),
-      industry: t('channelManage.categoryTypes.industry'),
-      enterprise: t('channelManage.categoryTypes.enterprise'),
-      personal: t('channelManage.categoryTypes.personal')
-    };
-    pathParts.push(typeNames[categoryType]);
-    pathParts.push(category.name);
 
     // 自动生成频道名称：使用最后一级区域 + 分类名称
     const regionName = district || city?.name || province?.name || country?.name || '';
     const categoryName = category.name || '';
-    const autoGeneratedName = `${regionName} ${categoryName}`.trim();
-    const newCombo = {
-      id: Date.now(),
-      name: autoGeneratedName,
-      path: pathParts.join('>')
-    };
-    setMyComboChannels([...myComboChannels, newCombo]);
+    const autoGeneratedName = `${regionName}${categoryName}`.trim();
+    const updatedMyChannels = mergeUniqueChannels(myChannels, [autoGeneratedName]);
+    const updatedComboChannels = mergeUniqueChannels(comboChannels, [autoGeneratedName]);
+    setMyChannels(updatedMyChannels);
+    setComboChannels(updatedComboChannels);
+    saveComboChannels(updatedComboChannels);
 
     // 重置
-    setComboName('');
     setComboStep('region');
     setRegionStep(0);
     setComboSelection({
@@ -344,72 +436,100 @@ export default function ChannelManageScreen({
         {/* 我的频道 */}
         <View style={styles.section}>
           <View style={styles.sectionTitleRow}>
-            <Ionicons name="star" size={18} color="#f59e0b" />
-            <Text style={styles.sectionTitle}>{t('channelManage.myChannels')}</Text>
+            <View style={styles.sectionTitleLeft}>
+              <Ionicons name="star" size={18} color="#f59e0b" />
+              <Text style={styles.sectionTitle}>{t('channelManage.myChannels')}</Text>
+            </View>
+            <TouchableOpacity 
+              onPress={() => setIsEditMode(!isEditMode)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.editBtn}>
+                {isEditMode ? t('channelManage.done') : t('channelManage.edit')}
+              </Text>
+            </TouchableOpacity>
           </View>
           <View style={styles.myChannelsContainer}>
-            {myChannels.map((channel, index) => <View key={index} style={styles.myChannelTag}>
-                <Text style={styles.myChannelText}>{channel}</Text>
-                <TouchableOpacity onPress={() => toggleChannel(channel)} hitSlop={{
-              top: 5,
-              bottom: 5,
-              left: 5,
-              right: 5
-            }}>
-                  <Ionicons name="close-circle" size={18} color="#ef4444" />
-                </TouchableOpacity>
-              </View>)}
+            {myChannels.map((channel, index) => (
+              <ShakingChannelTag
+                key={index}
+                channel={channel}
+                index={index}
+                isEditMode={isEditMode}
+                onPress={() => toggleChannel(channel)}
+              />
+            ))}
           </View>
         </View>
 
         {/* 国家问题 */}
         <View style={styles.section}>
-          <View style={styles.sectionTitleRow}>
+          <View style={styles.sectionTitleLeft}>
             <Ionicons name="flag" size={18} color="#3b82f6" />
             <Text style={styles.sectionTitle}>{t('channelManage.countryIssues')}</Text>
           </View>
           <View style={styles.channelsGrid}>
-            {channelData.country.filter(channel => !myChannels.includes(channel)).map((channel, idx) => <TouchableOpacity key={idx} style={styles.channelTag} onPress={() => toggleChannel(channel)}>
-                <Text style={styles.channelText}>{channel}</Text>
+            {channelData.country.filter(channel => !myChannels.includes(channel)).map((channel, idx) => <TouchableOpacity key={idx} style={styles.channelTagWrapper} onPress={() => toggleChannel(channel)}>
+                <View style={styles.channelTag}>
+                  <Text style={styles.channelText}>{channel}</Text>
+                  <View style={styles.plusIconContainer}>
+                    <Text style={styles.channelPlusIcon}>+</Text>
+                  </View>
+                </View>
               </TouchableOpacity>)}
           </View>
         </View>
 
         {/* 行业问题 */}
         <View style={styles.section}>
-          <View style={styles.sectionTitleRow}>
+          <View style={styles.sectionTitleLeft}>
             <Ionicons name="briefcase" size={18} color="#22c55e" />
             <Text style={styles.sectionTitle}>{t('channelManage.industryIssues')}</Text>
           </View>
           <View style={styles.channelsGrid}>
-            {channelData.industry.filter(channel => !myChannels.includes(channel)).map((channel, idx) => <TouchableOpacity key={idx} style={styles.channelTag} onPress={() => toggleChannel(channel)}>
-                <Text style={styles.channelText}>{channel}</Text>
+            {channelData.industry.filter(channel => !myChannels.includes(channel)).map((channel, idx) => <TouchableOpacity key={idx} style={styles.channelTagWrapper} onPress={() => toggleChannel(channel)}>
+                <View style={styles.channelTag}>
+                  <Text style={styles.channelText}>{channel}</Text>
+                  <View style={styles.plusIconContainer}>
+                    <Text style={styles.channelPlusIcon}>+</Text>
+                  </View>
+                </View>
               </TouchableOpacity>)}
           </View>
         </View>
 
         {/* 企业问题 */}
         <View style={styles.section}>
-          <View style={styles.sectionTitleRow}>
+          <View style={styles.sectionTitleLeft}>
             <Ionicons name="business" size={18} color="#f59e0b" />
             <Text style={styles.sectionTitle}>{t('channelManage.enterpriseIssues')}</Text>
           </View>
           <View style={styles.channelsGrid}>
-            {channelData.enterprise.filter(channel => !myChannels.includes(channel)).map((channel, idx) => <TouchableOpacity key={idx} style={styles.channelTag} onPress={() => toggleChannel(channel)}>
-                <Text style={styles.channelText}>{channel}</Text>
+            {channelData.enterprise.filter(channel => !myChannels.includes(channel)).map((channel, idx) => <TouchableOpacity key={idx} style={styles.channelTagWrapper} onPress={() => toggleChannel(channel)}>
+                <View style={styles.channelTag}>
+                  <Text style={styles.channelText}>{channel}</Text>
+                  <View style={styles.plusIconContainer}>
+                    <Text style={styles.channelPlusIcon}>+</Text>
+                  </View>
+                </View>
               </TouchableOpacity>)}
           </View>
         </View>
 
         {/* 个人问题 */}
         <View style={styles.section}>
-          <View style={styles.sectionTitleRow}>
+          <View style={styles.sectionTitleLeft}>
             <Ionicons name="person" size={18} color="#8b5cf6" />
             <Text style={styles.sectionTitle}>{t('channelManage.personalIssues')}</Text>
           </View>
           <View style={styles.channelsGrid}>
-            {channelData.personal.filter(channel => !myChannels.includes(channel)).map((channel, idx) => <TouchableOpacity key={idx} style={styles.channelTag} onPress={() => toggleChannel(channel)}>
-                <Text style={styles.channelText}>{channel}</Text>
+            {channelData.personal.filter(channel => !myChannels.includes(channel)).map((channel, idx) => <TouchableOpacity key={idx} style={styles.channelTagWrapper} onPress={() => toggleChannel(channel)}>
+                <View style={styles.channelTag}>
+                  <Text style={styles.channelText}>{channel}</Text>
+                  <View style={styles.plusIconContainer}>
+                    <Text style={styles.channelPlusIcon}>+</Text>
+                  </View>
+                </View>
               </TouchableOpacity>)}
           </View>
         </View>
@@ -530,7 +650,7 @@ export default function ChannelManageScreen({
 
           {/* 已创建的组合频道 */}
           <View style={styles.comboList}>
-            {myComboChannels.map(combo => <View key={combo.id} style={styles.comboItem}>
+            {false && myComboChannels.map(combo => <View key={combo.id} style={styles.comboItem}>
                 <View style={styles.comboItemContent}>
                   <Text style={styles.comboItemName}>{combo.name}</Text>
                   <Text style={styles.comboItemPath}>{combo.path}</Text>
@@ -590,13 +710,23 @@ const styles = StyleSheet.create({
   sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'space-between',
     marginBottom: 10
+  },
+  sectionTitleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1f2937'
+  },
+  editBtn: {
+    fontSize: 14,
+    color: '#ef4444',
+    fontWeight: '500'
   },
   // 我的频道样式
   myChannelsContainer: {
@@ -605,20 +735,27 @@ const styles = StyleSheet.create({
     marginRight: -4,
     marginBottom: -4
   },
-  myChannelTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 6,
+  myChannelTagWrapper: {
     marginRight: 4,
     marginBottom: 4
+  },
+  myChannelTag: {
+    position: 'relative',
+    paddingHorizontal: 18,
+    paddingVertical: 6,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 6
   },
   myChannelText: {
     fontSize: 15,
     color: '#374151',
-    marginRight: 4
+    fontWeight: '400'
+  },
+  deleteIconContainer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    padding: 2
   },
   // 频道网格样式
   channelsGrid: {
@@ -627,18 +764,34 @@ const styles = StyleSheet.create({
     marginRight: -4,
     marginBottom: -4
   },
-  channelTag: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 6,
+  channelTagWrapper: {
     marginRight: 4,
     marginBottom: 4
   },
+  channelTag: {
+    position: 'relative',
+    paddingHorizontal: 18,
+    paddingVertical: 6,
+    backgroundColor: 'transparent',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#d1d5db'
+  },
   channelText: {
     fontSize: 15,
-    color: '#6b7280',
+    color: '#374151',
     fontWeight: '400'
+  },
+  plusIconContainer: {
+    position: 'absolute',
+    top: -2,
+    right: 0,
+    padding: 2
+  },
+  channelPlusIcon: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '600'
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -848,8 +1001,7 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
   comboList: {
-    marginTop: 12,
-    gap: 8
+    display: 'none'
   },
   comboItem: {
     flexDirection: 'row',

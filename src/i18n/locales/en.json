@@ -19,6 +19,7 @@
     "incomeRanking": "Income Ranking",
     "rewardRanking": "Reward Ranking",
     "questionRanking": "Question Ranking",
+    "heroRanking": "Hero Ranking",
     "sameCity": "Same City",
     "country": "Country",
     "industry": "Industry",
@@ -1515,6 +1516,8 @@
   "channelManage": {
     "title": "Channel Management",
     "done": "Done",
+    "edit": "Edit",
+    "dragToSort": "Drag to sort",
     "saveSuccess": "Channel subscription updated",
     "myChannels": "My Channels",
     "countryIssues": "Country Problem",

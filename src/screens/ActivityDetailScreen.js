@@ -13,52 +13,30 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
+import { getActivityImages, getJoinedActivityState, getQuitActivityState, normalizeActivityItem } from '../utils/activityUtils';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const horizontalPadding = 20;
 const coverWidth = screenWidth - horizontalPadding * 2;
-
-const getJoinedActivityState = activity => ({
-  ...activity,
-  joined: true,
-  participants: activity.participants + 1,
-  progress: activity.progress || '0/7天',
-});
-
-const getQuitActivityState = activity => ({
-  ...activity,
-  joined: false,
-  participants: Math.max(0, activity.participants - 1),
-  progress: undefined,
-});
 
 export default function ActivityDetailScreen({ navigation, route }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const heroScrollRef = useRef(null);
   const viewerScrollRef = useRef(null);
-  const initialActivity = route?.params?.activity || null;
+  const initialRouteActivity = route?.params?.activity || null;
   const onActivityChange = route?.params?.onActivityChange;
-  const [activity, setActivity] = useState(initialActivity);
+  const [activity, setActivity] = useState(() => normalizeActivityItem(initialRouteActivity));
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [viewerStartIndex, setViewerStartIndex] = useState(0);
 
   useEffect(() => {
-    setActivity(initialActivity);
-  }, [initialActivity]);
+    setActivity(normalizeActivityItem(initialRouteActivity));
+    setCurrentImageIndex(0);
+  }, [initialRouteActivity]);
 
-  const images = useMemo(() => {
-    if (!activity) {
-      return [];
-    }
-
-    if (Array.isArray(activity.images) && activity.images.length > 0) {
-      return activity.images;
-    }
-
-    return activity.image ? [activity.image] : [];
-  }, [activity]);
+  const images = useMemo(() => getActivityImages(activity), [activity]);
 
   useEffect(() => {
     if (!showImageViewer) {
@@ -95,19 +73,25 @@ export default function ActivityDetailScreen({ navigation, route }) {
 
   const isEnded = activity.status === 'ended';
   const isJoined = Boolean(activity.joined);
+  const organizerLabel =
+    activity.organizerType === 'platform'
+      ? t('screens.activity.organizer.platform')
+      : activity.organizer;
+  const typeLabel =
+    activity.typeName ||
+    (activity.type ? t(`screens.activity.type.${activity.type}`) : '');
   const statusLabel = isEnded
-    ? t('screens.activity.actions.ended')
+    ? activity.statusName || t('screens.activity.actions.ended')
     : isJoined
       ? t('screens.activity.actions.joined')
-      : t('screens.activity.actions.join');
-  const organizerLabel =
-    activity.organizerType === 'platform' ? t('screens.activity.organizer.platform') : activity.organizer;
+      : activity.statusName || t('screens.activity.actions.join');
 
   const syncActivity = nextActivity => {
-    setActivity(nextActivity);
+    const normalizedActivity = normalizeActivityItem(nextActivity);
+    setActivity(normalizedActivity);
 
-    if (typeof onActivityChange === 'function') {
-      onActivityChange(nextActivity);
+    if (typeof onActivityChange === 'function' && normalizedActivity) {
+      onActivityChange(normalizedActivity);
     }
   };
 
@@ -149,6 +133,10 @@ export default function ActivityDetailScreen({ navigation, route }) {
   };
 
   const openImageViewer = index => {
+    if (images.length === 0) {
+      return;
+    }
+
     setViewerStartIndex(index);
     setCurrentImageIndex(index);
     setShowImageViewer(true);
@@ -167,47 +155,59 @@ export default function ActivityDetailScreen({ navigation, route }) {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         <View style={styles.heroSection}>
           <View style={styles.heroCard}>
-            <ScrollView
-              ref={heroScrollRef}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.imageTrack}
-              onMomentumScrollEnd={handleHeroScrollEnd}
-            >
-              {images.map((image, index) => (
-                <TouchableOpacity
-                  key={`${image}-${index}`}
-                  activeOpacity={0.96}
-                  onPress={() => openImageViewer(index)}
-                >
-                  <Image source={{ uri: image }} style={styles.heroImage} resizeMode="cover" />
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            {images.length > 0 ? (
+              <ScrollView
+                ref={heroScrollRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={handleHeroScrollEnd}
+              >
+                {images.map((image, index) => (
+                  <TouchableOpacity
+                    key={`${image}-${index}`}
+                    activeOpacity={0.96}
+                    onPress={() => openImageViewer(index)}
+                  >
+                    <Image source={{ uri: image }} style={styles.heroImage} resizeMode="cover" />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.heroPlaceholder}>
+                <Ionicons name="image-outline" size={32} color="#cbd5e1" />
+              </View>
+            )}
 
-            <TouchableOpacity
-              style={styles.previewBadge}
-              activeOpacity={0.88}
-              onPress={() => openImageViewer(currentImageIndex)}
-            >
-              <Ionicons name="expand-outline" size={14} color="#fff" />
-              <Text style={styles.previewBadgeText}>
-                {currentImageIndex + 1}/{images.length}
-              </Text>
-            </TouchableOpacity>
+            {images.length > 0 ? (
+              <TouchableOpacity
+                style={styles.previewBadge}
+                activeOpacity={0.88}
+                onPress={() => openImageViewer(currentImageIndex)}
+              >
+                <Ionicons name="expand-outline" size={14} color="#fff" />
+                <Text style={styles.previewBadgeText}>
+                  {currentImageIndex + 1}/{images.length}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
 
             <View style={styles.badgeRow}>
-              <View style={styles.typeBadge}>
-                <Ionicons
-                  name={activity.type === 'online' ? 'globe-outline' : 'location-outline'}
-                  size={12}
-                  color="#fff"
-                />
-                <Text style={styles.badgeText}>
-                  {t(`screens.activity.type.${activity.type === 'online' ? 'online' : 'offline'}`)}
-                </Text>
-              </View>
+              {typeLabel ? (
+                <View
+                  style={[
+                    styles.typeBadge,
+                    activity.type === 'offline' ? styles.typeBadgeOffline : styles.typeBadgeOnline,
+                  ]}
+                >
+                  <Ionicons
+                    name={activity.type === 'offline' ? 'location-outline' : 'globe-outline'}
+                    size={12}
+                    color="#fff"
+                  />
+                  <Text style={styles.badgeText}>{typeLabel}</Text>
+                </View>
+              ) : null}
               <TouchableOpacity
                 activeOpacity={isEnded ? 1 : 0.88}
                 disabled={isEnded}
@@ -295,7 +295,7 @@ export default function ActivityDetailScreen({ navigation, route }) {
               <Ionicons name="close" size={28} color="#fff" />
             </TouchableOpacity>
             <Text style={styles.imageViewerCounter}>
-              {currentImageIndex + 1}/{images.length}
+              {images.length > 0 ? `${currentImageIndex + 1}/${images.length}` : '0/0'}
             </Text>
             <View style={styles.viewerHeaderSpacer} />
           </View>
@@ -306,7 +306,9 @@ export default function ActivityDetailScreen({ navigation, route }) {
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             onMomentumScrollEnd={event => {
-              const index = Math.round(event.nativeEvent.contentOffset.x / event.nativeEvent.layoutMeasurement.width);
+              const index = Math.round(
+                event.nativeEvent.contentOffset.x / event.nativeEvent.layoutMeasurement.width
+              );
               setCurrentImageIndex(index);
             }}
             style={styles.imageViewerScroll}
@@ -320,7 +322,10 @@ export default function ActivityDetailScreen({ navigation, route }) {
 
           <View style={styles.imageViewerFooter}>
             {images.map((_, index) => (
-              <View key={index} style={[styles.imageIndicator, index === currentImageIndex && styles.imageIndicatorActive]} />
+              <View
+                key={index}
+                style={[styles.imageIndicator, index === currentImageIndex && styles.imageIndicatorActive]}
+              />
             ))}
           </View>
         </View>
@@ -363,30 +368,50 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     gap: 16,
   },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    color: '#6b7280',
+    marginTop: 12,
+    textAlign: 'center',
+  },
   heroSection: {
     gap: 12,
   },
   heroCard: {
+    backgroundColor: '#fff',
     borderRadius: 24,
     overflow: 'hidden',
-    backgroundColor: '#111827',
-    position: 'relative',
-  },
-  imageTrack: {
-    flexDirection: 'row',
+    shadowColor: '#111827',
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
   },
   heroImage: {
     width: coverWidth,
     height: 240,
   },
+  heroPlaceholder: {
+    width: coverWidth,
+    height: 240,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e5e7eb',
+  },
   previewBadge: {
     position: 'absolute',
-    right: 14,
-    bottom: 14,
+    right: 16,
+    bottom: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(17, 24, 39, 0.72)',
+    backgroundColor: 'rgba(17, 24, 39, 0.68)',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
@@ -398,54 +423,59 @@ const styles = StyleSheet.create({
   },
   badgeRow: {
     position: 'absolute',
-    left: 14,
-    top: 14,
+    top: 16,
+    left: 16,
+    right: 16,
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     gap: 8,
   },
   typeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(139, 92, 246, 0.92)',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
+  },
+  typeBadgeOnline: {
+    backgroundColor: '#8b5cf6',
+  },
+  typeBadgeOffline: {
+    backgroundColor: '#f59e0b',
   },
   statusBadge: {
-    backgroundColor: 'rgba(239, 68, 68, 0.92)',
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
-  },
-  statusBadgeEnded: {
-    backgroundColor: 'rgba(107, 114, 128, 0.92)',
+    backgroundColor: '#ef4444',
   },
   statusBadgeJoined: {
-    backgroundColor: 'rgba(16, 185, 129, 0.92)',
+    backgroundColor: '#10b981',
+  },
+  statusBadgeEnded: {
+    backgroundColor: '#9ca3af',
   },
   badgeText: {
     color: '#fff',
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   thumbnailRow: {
     gap: 10,
-    paddingHorizontal: 2,
+    paddingHorizontal: 4,
   },
   thumbnailButton: {
-    width: 72,
-    height: 72,
+    width: 76,
+    height: 76,
     borderRadius: 18,
     overflow: 'hidden',
     borderWidth: 2,
     borderColor: 'transparent',
-    opacity: 0.72,
   },
   thumbnailButtonActive: {
     borderColor: '#ef4444',
-    opacity: 1,
-    transform: [{ scale: 1.02 }],
   },
   thumbnailImage: {
     width: '100%',
@@ -453,15 +483,19 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     backgroundColor: '#fff',
-    borderRadius: 20,
+    borderRadius: 22,
     padding: 18,
+    shadowColor: '#111827',
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
   title: {
     fontSize: 24,
-    lineHeight: 32,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#111827',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   description: {
     fontSize: 15,
@@ -473,49 +507,46 @@ const styles = StyleSheet.create({
   },
   infoCard: {
     backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    borderRadius: 20,
+    padding: 18,
+    shadowColor: '#111827',
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
   },
   infoCardWide: {
     backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 16,
-    gap: 8,
+    borderRadius: 20,
+    padding: 18,
+    shadowColor: '#111827',
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
   },
   infoLabel: {
-    fontSize: 13,
-    color: '#6b7280',
-    fontWeight: '600',
+    marginTop: 10,
+    fontSize: 12,
+    color: '#9ca3af',
   },
   infoValue: {
-    fontSize: 15,
-    color: '#111827',
+    marginTop: 6,
+    fontSize: 16,
     fontWeight: '600',
+    color: '#111827',
+    lineHeight: 22,
   },
   sectionTitle: {
-    fontSize: 16,
-    color: '#111827',
+    fontSize: 17,
     fontWeight: '700',
+    color: '#111827',
     marginBottom: 8,
   },
   sectionBody: {
     fontSize: 14,
     lineHeight: 22,
-    color: '#4b5563',
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  emptyTitle: {
-    fontSize: 16,
     color: '#6b7280',
-    fontWeight: '600',
   },
   imageViewerContainer: {
     flex: 1,
@@ -532,7 +563,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    backgroundColor: 'rgba(17, 24, 39, 0.65)',
   },
   imageViewerCounter: {
     color: '#fff',

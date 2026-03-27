@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import IdentitySelector from '../components/IdentitySelector';
+import ShareModal from '../components/ShareModal';
 import WriteCommentModal from '../components/WriteCommentModal';
 import WriteAnswerModal from '../components/WriteAnswerModal';
 import { modalTokens } from '../components/modalTokens';
@@ -827,6 +828,8 @@ export default function SupplementDetailScreen({
   const [answerIdentity, setAnswerIdentity] = useState('personal');
   const [answerSelectedTeams, setAnswerSelectedTeams] = useState([]);
   const [showCommentModal, setShowCommentModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [currentShareData, setCurrentShareData] = useState(null);
   const [commentComposerTarget, setCommentComposerTarget] = useState(INITIAL_COMMENT_COMPOSER_TARGET);
   const [showCommentReplyModal, setShowCommentReplyModal] = useState(false);
   const [currentCommentId, setCurrentCommentId] = useState(null);
@@ -1564,6 +1567,42 @@ export default function SupplementDetailScreen({
 
   const resolvedSupplementQuestion = supplementDetail || routeSupplement || supplementQuestion;
   const resolvedOriginalQuestion = originalQuestionDetail || routeOriginalQuestion || originalQuestion;
+  const parentQuestionId = Number(route?.params?.parentQuestionId ?? resolvedOriginalQuestion?.id ?? supplementQuestion?.questionId ?? 0) || null;
+  const openShareModalWithData = payload => {
+    if (!payload) {
+      return;
+    }
+
+    setCurrentShareData(payload);
+    setShowShareModal(true);
+  };
+  const closeShareModal = () => {
+    setShowShareModal(false);
+    setCurrentShareData(null);
+  };
+  const buildSupplementSharePayload = () => ({
+    title: resolvedSupplementQuestion?.title || resolvedOriginalQuestion?.title || '',
+    content: resolvedSupplementQuestion?.content || '',
+    type: 'sharesupplement',
+    qid: parentQuestionId,
+    sid: Number(supplementId) || null
+  });
+  const buildCommentSharePayload = comment => {
+    const commentId = Number(comment?.id ?? comment?.commentId ?? comment?.comment_id ?? 0) || null;
+    const rootCid = commentId ? Number(getCommentThreadRootId(commentId) ?? commentId) || commentId : null;
+    return {
+      title: resolvedSupplementQuestion?.title || resolvedOriginalQuestion?.title || '',
+      content: comment?.content || resolvedSupplementQuestion?.content || '',
+      type: 'sharecomment',
+      qid: parentQuestionId,
+      sid: Number(supplementId) || null,
+      cid: commentId,
+      rootCid
+    };
+  };
+  const handleShare = (platform, sharePayload) => {
+    console.log('Supplement detail shared via:', platform, sharePayload);
+  };
   const supplementAnswerQuestionId =
     resolvedSupplementQuestion?.id ??
     route?.params?.supplement?.id ??
@@ -2264,7 +2303,7 @@ export default function SupplementDetailScreen({
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('screens.supplementDetail.title')}</Text>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.shareBtn} onPress={() => showToast(t('screens.supplementDetail.alerts.shareFunction'), 'info')} hitSlop={{
+          <TouchableOpacity style={styles.shareBtn} onPress={() => openShareModalWithData(buildSupplementSharePayload())} hitSlop={{
           top: 10,
           bottom: 10,
           left: 10,
@@ -2621,7 +2660,7 @@ export default function SupplementDetailScreen({
                             <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
                             <Text style={styles.commentActionText}>{getCommentReplyDisplayCount(comment)}</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity style={styles.commentActionBtn} onPress={() => showToast(t('screens.supplementDetail.alerts.forwardFunction'), 'info')}>
+                          <TouchableOpacity style={styles.commentActionBtn} onPress={() => openShareModalWithData(buildCommentSharePayload(comment))}>
                             <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
                             <Text style={styles.commentActionText}>{comment.shareCount ?? comment.shares ?? 0}</Text>
                           </TouchableOpacity>
@@ -2874,6 +2913,12 @@ export default function SupplementDetailScreen({
         placeholder={commentComposerTarget.parentId ? '写下你的回复...' : '写下你的评论...'}
         title={commentComposerTarget.parentId ? '写回复' : '写评论'}
         publishInFooter={true}
+      />
+      <ShareModal
+        visible={showShareModal}
+        onClose={closeShareModal}
+        shareData={currentShareData || buildSupplementSharePayload()}
+        onShare={handleShare}
       />
     </SafeAreaView>;
 }

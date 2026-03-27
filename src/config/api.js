@@ -132,7 +132,7 @@ export const API_ENDPOINTS = {
   
   // 活动相关
   ACTIVITY: {
-    LIST: '/activities',
+    LIST: '/app/activity/list',  // 活动列表接口（不使用微服务前缀）
     DETAIL: '/activities/:id',
     CREATE: '/activities',
     JOIN: '/activities/:id/join',
