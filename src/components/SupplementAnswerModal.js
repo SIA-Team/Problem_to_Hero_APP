@@ -11,6 +11,7 @@ import answerApi from '../services/api/answerApi';
 import uploadApi from '../services/api/uploadApi';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 
+import { scaleFont } from '../utils/responsive';
 /**
  * 补充回答弹窗组件
  * @param {boolean} visible - 是否显示弹窗
@@ -271,7 +272,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   title: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: modalTokens.textPrimary
   },
@@ -286,7 +287,7 @@ const styles = StyleSheet.create({
     backgroundColor: modalTokens.dangerSoft
   },
   publishText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#fff',
     fontWeight: '600'
   },
@@ -307,7 +308,7 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   originalAnswerLabel: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#3b82f6',
     fontWeight: '600'
   },
@@ -318,14 +319,14 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   originalAnswerAuthorName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937'
   },
   originalAnswerContent: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
-    lineHeight: 20
+    lineHeight: scaleFont(20)
   },
   contentArea: {
     flex: 1,
@@ -333,9 +334,9 @@ const styles = StyleSheet.create({
   },
   textInput: {
     padding: 16,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: modalTokens.textPrimary,
-    lineHeight: 26,
+    lineHeight: scaleFont(26),
     minHeight: 300
   },
   identitySection: {
@@ -360,7 +361,7 @@ const styles = StyleSheet.create({
     padding: 10
   },
   wordCount: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: modalTokens.textMuted
   },
   // 图片相关样式
@@ -391,7 +392,7 @@ const styles = StyleSheet.create({
   },
   uploadingText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '600'
   },
   removeImageBtn: {
@@ -415,7 +416,7 @@ const styles = StyleSheet.create({
   },
   imageBadgeText: {
     color: '#fff',
-    fontSize: 11,
+    fontSize: scaleFont(11),
     fontWeight: '600'
   }
 });

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 
+import { scaleFont } from '../utils/responsive';
 // 模拟考核历史数据
 const examHistory = [
   { 
@@ -171,13 +172,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   backBtn: { padding: 4 },
-  headerTitle: { fontSize: 18, fontWeight: '600', color: '#1f2937' },
+  headerTitle: { fontSize: scaleFont(18), fontWeight: '600', color: '#1f2937' },
 
   // 统计卡片
   statsCard: { flexDirection: 'row', backgroundColor: '#fff', marginHorizontal: 16, marginTop: 16, borderRadius: 16, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   statItem: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 28, fontWeight: 'bold', color: '#1f2937', marginBottom: 4 },
-  statLabel: { fontSize: 12, color: '#9ca3af' },
+  statValue: { fontSize: scaleFont(28), fontWeight: 'bold', color: '#1f2937', marginBottom: 4 },
+  statLabel: { fontSize: scaleFont(12), color: '#9ca3af' },
   statDivider: { width: 1, backgroundColor: '#e5e7eb', marginHorizontal: 16 },
 
   // 考核卡片
@@ -185,15 +186,15 @@ const styles = StyleSheet.create({
   examCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
   examHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   examBankName: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
-  examBankNameText: { fontSize: 15, fontWeight: '600', color: '#1f2937', flex: 1 },
+  examBankNameText: { fontSize: scaleFont(15), fontWeight: '600', color: '#1f2937', flex: 1 },
   examRankBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  examRankText: { fontSize: 12, fontWeight: '600' },
+  examRankText: { fontSize: scaleFont(12), fontWeight: '600' },
   examScoreRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 12, gap: 12 },
-  examScore: { fontSize: 32, fontWeight: 'bold' },
-  examCorrect: { fontSize: 14, color: '#6b7280' },
+  examScore: { fontSize: scaleFont(32), fontWeight: 'bold' },
+  examCorrect: { fontSize: scaleFont(14), color: '#6b7280' },
   examMeta: { flexDirection: 'row', gap: 16, marginBottom: 12 },
   examMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  examMetaText: { fontSize: 12, color: '#9ca3af' },
+  examMetaText: { fontSize: scaleFont(12), color: '#9ca3af' },
   examFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  examDetailLink: { fontSize: 13, color: '#f59e0b', fontWeight: '500' },
+  examDetailLink: { fontSize: scaleFont(13), color: '#f59e0b', fontWeight: '500' },
 });

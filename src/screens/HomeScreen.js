@@ -19,6 +19,7 @@ import questionApi from '../services/api/questionApi';
 import { getBlockedUserIds, subscribeBlockedUsers } from '../services/blacklistState';
 import { loadComboChannels } from '../services/channelSubscriptionService';
 
+import { scaleFont } from '../utils/responsive';
 const { width: screenWidth } = Dimensions.get('window');
 
 // tabs array will be moved inside component to use translation
@@ -757,11 +758,7 @@ export default function HomeScreen({ navigation }) {
               <TouchableOpacity 
                 style={[styles.questionCard, isFirstItem && styles.firstQuestionCard]} 
                 onPress={() => {
-                  // 检查是否为付费问题，如果是则阻止跳转
-                  if (item.type === 'paid') {
-                    return; // 直接返回，不跳转
-                  }
-                  // 其他类型问题正常跳转
+                  // 所有问题都可以跳转
                   navigation.navigate('QuestionDetail', { id: item.id });
                 }}
               >
@@ -794,12 +791,15 @@ export default function HomeScreen({ navigation }) {
                             </>
                           )}
                           {item.type === 'paid' && (
-                            <Text style={styles.paidTagInline}> {t('home.paid')} </Text>
+                            <Text style={styles.paidTagInline}> </Text>
                           )}
                           {'  '}
                         </>
                       ) : null}
                       {translatedContent[item.id]?.title || item.title}
+                      {item.status === 2 && (
+                        <Text style={styles.solvedTagInline}> {t('home.solved')}</Text>
+                      )}
                     </Text>
                     
                     {/* 实际显示的文本 */}
@@ -820,12 +820,15 @@ export default function HomeScreen({ navigation }) {
                               </>
                             )}
                             {item.type === 'paid' && (
-                              <Text style={styles.paidTagInline}> {t('home.paid')} </Text>
+                              <Text style={styles.paidTagInline}> </Text>
                             )}
                             {'  '}
                           </>
                         ) : null}
                         {translatedContent[item.id]?.title || item.title}
+                        {item.status === 2 && (
+                          <Text style={styles.solvedTagInline}> {t('home.solved')}</Text>
+                        )}
                       </Text>
                     </View>
                     
@@ -1163,11 +1166,7 @@ export default function HomeScreen({ navigation }) {
               style={styles.actionItem} 
               onPress={() => { 
                 setShowActionModal(false); 
-                // 检查是否为付费问题，如果是则阻止跳转
-                if (selectedQuestion?.type === 'paid') {
-                  return; // 直接返回，不跳转
-                }
-                // 其他类型问题正常跳转
+                // 所有问题都可以跳转
                 navigation.navigate('QuestionDetail', { id: selectedQuestion?.id, openAnswerModal: true });
               }}
             >
@@ -1313,28 +1312,28 @@ const styles = StyleSheet.create({
   
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#ffffff' },
   regionBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 6, backgroundColor: '#fef2f2', borderRadius: 16, marginRight: 8, maxWidth: 80 },
-  regionText: { fontSize: 12, color: '#ef4444', marginLeft: 4, fontWeight: '500', lineHeight: 16, includeFontPadding: false, maxWidth: 56 },
+  regionText: { fontSize: scaleFont(12), color: '#ef4444', marginLeft: 4, fontWeight: '500', lineHeight: scaleFont(16), includeFontPadding: false, maxWidth: 56 },
   searchBar: { flex: 1, height: 36, backgroundColor: '#f5f5f5', borderRadius: 18, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, marginHorizontal: 8 },
-  searchPlaceholder: { fontSize: 13, color: '#999999', marginLeft: 6, flexShrink: 1 },
+  searchPlaceholder: { fontSize: scaleFont(13), color: '#999999', marginLeft: 6, flexShrink: 1 },
   teamBtn: { flexDirection: 'row', alignItems: 'center', padding: 6, marginLeft: 4 },
   notifyBtn: { flexDirection: 'row', alignItems: 'center', padding: 6, marginLeft: 4, position: 'relative' },
   badge: { position: 'absolute', top: 6, right: 6, width: 8, height: 8, backgroundColor: '#ef4444', borderRadius: 4 },
   tabBarContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', height: 44, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#ebebeb' },
   tabBar: { flex: 1 },
   tabItem: { paddingHorizontal: 12, height: '100%', justifyContent: 'center', alignItems: 'center', position: 'relative' },
-  tabText: { fontSize: 16, color: '#505050', fontWeight: '400', paddingBottom: 4 },
+  tabText: { fontSize: scaleFont(16), color: '#505050', fontWeight: '400', paddingBottom: 4 },
   tabTextActive: { color: '#ef4444', fontWeight: '600' },
   tabIndicator: { position: 'absolute', bottom: 0, width: 16, height: 2.5, borderRadius: 2, backgroundColor: '#f04444' },
   tabMenuBtn: { flexDirection: 'row', alignItems: 'center', height: '100%', backgroundColor: '#ffffff', paddingHorizontal: 12 },
   socialButtonsBar: { flexDirection: 'row', backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 10, gap: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   socialButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, gap: 6, borderWidth: 1, borderColor: '#e5e7eb' },
-  socialButtonText: { fontSize: 13, color: '#4b5563', fontWeight: '500' },
+  socialButtonText: { fontSize: scaleFont(13), color: '#4b5563', fontWeight: '500' },
   listContainer: { flex: 1, backgroundColor: '#ffffff' },
   list: { flex: 1, paddingTop: 0, paddingHorizontal: 0 },
   footerLoading: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 20 },
-  footerText: { marginLeft: 8, fontSize: 14, color: '#9ca3af' },
+  footerText: { marginLeft: 8, fontSize: scaleFont(14), color: '#9ca3af' },
   footerEnd: { paddingVertical: 20, alignItems: 'center' },
-  footerEndText: { fontSize: 14, color: '#9ca3af' },
+  footerEndText: { fontSize: scaleFont(14), color: '#9ca3af' },
   questionCard: {
     backgroundColor: '#ffffff',
     paddingHorizontal: 16,
@@ -1367,55 +1366,66 @@ const styles = StyleSheet.create({
   cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   cardHeaderRight: { flexDirection: 'row', alignItems: 'center' },
   avatar: { width: 16, height: 16, borderRadius: 8 },
-  authorName: { fontSize: 12, color: '#999999', marginLeft: 4, fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
-  metaSeparator: { fontSize: 12, color: '#999999', marginHorizontal: 3, fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
-  postTime: { fontSize: 12, color: '#999999', fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
-  locationText: { fontSize: 12, color: '#999999', marginLeft: 1, fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
+  authorName: { fontSize: scaleFont(12), color: '#999999', marginLeft: 4, fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
+  metaSeparator: { fontSize: scaleFont(12), color: '#999999', marginHorizontal: 3, fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
+  postTime: { fontSize: scaleFont(12), color: '#999999', fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
+  locationText: { fontSize: scaleFont(12), color: '#999999', marginLeft: 1, fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
   headerActionBtn: { flexDirection: 'row', alignItems: 'center', marginLeft: 16 },
-  headerActionText: { fontSize: 12, color: '#666666', marginLeft: 4 },
+  headerActionText: { fontSize: scaleFont(12), color: '#666666', marginLeft: 4 },
   headerMoreBtn: { padding: 2, marginLeft: 16 },
   rewardTagInline: { 
     backgroundColor: 'transparent', 
     paddingHorizontal: 0, 
     paddingVertical: 0, 
     borderRadius: 0,
-    fontSize: 19, 
+    fontSize: scaleFont(19), 
     color: '#ef4444', 
     fontWeight: '600',
     includeFontPadding: false,
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
   },
   targetedTagInline: { 
     backgroundColor: 'transparent', 
     paddingHorizontal: 0, 
     paddingVertical: 0, 
     borderRadius: 0,
-    fontSize: 19, 
+    fontSize: scaleFont(19), 
     color: '#8b5cf6', 
     fontWeight: '600',
     includeFontPadding: false,
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
   },
   paidTagInline: { 
     backgroundColor: 'transparent', 
     paddingHorizontal: 0, 
     paddingVertical: 0, 
     borderRadius: 0,
-    fontSize: 18, 
+    fontSize: scaleFont(18), 
     color: '#f59e0b', 
     fontWeight: '600',
     includeFontPadding: false,
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
   },
-  paidTagText: { fontSize: 10, color: '#fff', fontWeight: '700', textTransform: 'uppercase', includeFontPadding: false },
+  solvedTagInline: { 
+    backgroundColor: 'transparent', 
+    paddingHorizontal: 0, 
+    paddingVertical: 0, 
+    borderRadius: 0,
+    fontSize: scaleFont(16), 
+    color: '#22c55e', 
+    fontWeight: '600',
+    includeFontPadding: false,
+    lineHeight: scaleFont(22),
+  },
+  paidTagText: { fontSize: scaleFont(10), color: '#fff', fontWeight: '700', textTransform: 'uppercase', includeFontPadding: false },
   paidViewButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fef3c7', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 6, borderStyle: 'dashed' },
   paidViewContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  paidViewText: { fontSize: 14, color: '#92400e', fontWeight: '500' },
+  paidViewText: { fontSize: scaleFont(14), color: '#92400e', fontWeight: '500' },
   paidViewPrice: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  paidViewPriceText: { fontSize: 16, color: '#f59e0b', fontWeight: '700' },
+  paidViewPriceText: { fontSize: scaleFont(16), color: '#f59e0b', fontWeight: '700' },
   questionTitle: {
-    fontSize: 17,
-    lineHeight: 22,
+    fontSize: scaleFont(17),
+    lineHeight: scaleFont(22),
     fontWeight: '600',
     color: '#1a1a1a',
     letterSpacing: -0.2,
@@ -1426,10 +1436,10 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   expandHintHome: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 4 },
-  expandHintTextHome: { fontSize: 13, color: '#3b82f6', fontWeight: '500' },
-  expandHintInline: { fontSize: 13, color: '#3b82f6', fontWeight: '500' },
+  expandHintTextHome: { fontSize: scaleFont(13), color: '#3b82f6', fontWeight: '500' },
+  expandHintInline: { fontSize: scaleFont(13), color: '#3b82f6', fontWeight: '500' },
   fullTextInline: { 
-    fontSize: 17,
+    fontSize: scaleFont(17),
     color: '#1a1a1a',
   },
   translateFullTextRow: {
@@ -1445,7 +1455,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginTop: 4,
   },
-  fullTextBtnText: { fontSize: 14, color: '#3b82f6', fontWeight: '500' },
+  fullTextBtnText: { fontSize: scaleFont(14), color: '#3b82f6', fontWeight: '500' },
   imagesContainer: {
     marginBottom: 6,
   },
@@ -1521,7 +1531,7 @@ const styles = StyleSheet.create({
   },
   moreImagesText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
   },
   imageGrid: { flexDirection: 'row', paddingHorizontal: 12, paddingBottom: 10, gap: 6 },
@@ -1530,8 +1540,8 @@ const styles = StyleSheet.create({
   modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: modalTokens.overlay },
   regionModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '70%' },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
-  modalTitle: { fontSize: 16, fontWeight: '600', color: modalTokens.textPrimary },
-  confirmText: { fontSize: 14, color: '#ef4444', fontWeight: '600' },
+  modalTitle: { fontSize: scaleFont(16), fontWeight: '600', color: modalTokens.textPrimary },
+  confirmText: { fontSize: scaleFont(14), color: '#ef4444', fontWeight: '600' },
   // 面包屑导航样式
   breadcrumbContainer: { 
     paddingHorizontal: 16, 
@@ -1553,10 +1563,10 @@ const styles = StyleSheet.create({
     // 不需要了，保留以防万一
   },
   breadcrumbText: { 
-    fontSize: 15, 
+    fontSize: scaleFont(15), 
     color: '#6b7280',
     fontWeight: '400',
-    lineHeight: 20
+    lineHeight: scaleFont(20)
   },
   breadcrumbTextActive: { 
     color: '#ef4444',
@@ -1576,70 +1586,70 @@ const styles = StyleSheet.create({
   },
   regionList: { padding: 8 },
   regionOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
-  regionOptionText: { fontSize: 15, color: modalTokens.textPrimary },
+  regionOptionText: { fontSize: scaleFont(15), color: modalTokens.textPrimary },
   actionModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, paddingBottom: 30 },
   actionModalHandle: { width: 40, height: 4, backgroundColor: modalTokens.border, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
   actionItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
-  actionItemText: { fontSize: 15, color: modalTokens.textPrimary, marginLeft: 14 },
+  actionItemText: { fontSize: scaleFont(15), color: modalTokens.textPrimary, marginLeft: 14 },
   reportItem: { borderBottomWidth: 0 },
   cancelBtn: { marginTop: 8, marginHorizontal: 16, backgroundColor: modalTokens.surfaceMuted, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  cancelBtnText: { fontSize: 15, color: modalTokens.textSecondary, fontWeight: '500' },
+  cancelBtnText: { fontSize: scaleFont(15), color: modalTokens.textSecondary, fontWeight: '500' },
   channelModalOverlay: { flex: 1, backgroundColor: modalTokens.overlay },
   channelModal: { flex: 1, backgroundColor: modalTokens.surface, marginTop: 60, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border },
   channelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   channelScrollView: { flex: 1, padding: 16 },
-  channelTitle: { fontSize: 18, fontWeight: '600', color: modalTokens.textPrimary },
+  channelTitle: { fontSize: scaleFont(18), fontWeight: '600', color: modalTokens.textPrimary },
   closeBtn: { padding: 4 },
   channelTabs: { flexDirection: 'row', backgroundColor: modalTokens.surface, borderBottomWidth: 1, borderBottomColor: modalTokens.border, paddingHorizontal: 8 },
   channelTabItem: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
   channelTabItemActive: { borderBottomColor: '#ef4444' },
-  channelTabText: { fontSize: 14, color: modalTokens.textSecondary },
+  channelTabText: { fontSize: scaleFont(14), color: modalTokens.textSecondary },
   channelTabTextActive: { color: '#ef4444', fontWeight: '600' },
   channelSection: { marginBottom: 0 },
-  channelCategoryTitle: { fontSize: 16, fontWeight: '600', color: modalTokens.textPrimary, marginBottom: 8, marginTop: 4 },
-  channelSectionTitle: { fontSize: 13, fontWeight: '600', color: modalTokens.textSecondary, marginBottom: 8, marginTop: 4 },
+  channelCategoryTitle: { fontSize: scaleFont(16), fontWeight: '600', color: modalTokens.textPrimary, marginBottom: 8, marginTop: 4 },
+  channelSectionTitle: { fontSize: scaleFont(13), fontWeight: '600', color: modalTokens.textSecondary, marginBottom: 8, marginTop: 4 },
   channelDivider: { height: 8, backgroundColor: modalTokens.surfaceMuted, marginVertical: 12 },
-  channelSectionDesc: { fontSize: 13, color: modalTokens.textMuted, marginBottom: 12, lineHeight: 18 },
+  channelSectionDesc: { fontSize: scaleFont(13), color: modalTokens.textMuted, marginBottom: 12, lineHeight: scaleFont(18) },
   channelGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
   myChannelItem: { position: 'relative' },
   channelTag: { flexDirection: 'row', alignItems: 'center', backgroundColor: modalTokens.surfaceMuted, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 6 },
   channelTagAdded: { backgroundColor: '#dcfce7', borderWidth: 1, borderColor: '#22c55e' },
-  channelTagText: { fontSize: 14, color: modalTokens.textPrimary },
+  channelTagText: { fontSize: scaleFont(14), color: modalTokens.textPrimary },
   channelTagTextAdded: { color: '#16a34a', fontWeight: '500' },
   removeChannelBtn: { position: 'absolute', top: -6, right: -6, backgroundColor: modalTokens.surface, borderRadius: 10 },
   categoryMainBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: modalTokens.surfaceSoft, padding: 14, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: modalTokens.border },
   categoryIcon: { width: 40, height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  categoryMainText: { flex: 1, fontSize: 15, fontWeight: '500', color: modalTokens.textPrimary },
+  categoryMainText: { flex: 1, fontSize: scaleFont(15), fontWeight: '500', color: modalTokens.textPrimary },
   createComboBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fef2f2', padding: 16, borderRadius: 12, borderWidth: 2, borderStyle: 'dashed', borderColor: '#fecaca' },
-  createComboBtnText: { fontSize: 15, fontWeight: '500', color: '#ef4444', marginLeft: 8 },
+  createComboBtnText: { fontSize: scaleFont(15), fontWeight: '500', color: '#ef4444', marginLeft: 8 },
   comboCreatorModal: { flex: 1, backgroundColor: modalTokens.surface, marginTop: 100, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border },
   comboCreatorContent: { flex: 1, padding: 16 },
   comboSummary: { backgroundColor: modalTokens.surfaceSoft, padding: 12, borderRadius: 8, marginBottom: 16 },
-  comboSummaryLabel: { fontSize: 12, color: modalTokens.textSecondary, marginBottom: 4 },
-  comboSummaryValue: { fontSize: 14, fontWeight: '500', color: modalTokens.textPrimary },
+  comboSummaryLabel: { fontSize: scaleFont(12), color: modalTokens.textSecondary, marginBottom: 4 },
+  comboSummaryValue: { fontSize: scaleFont(14), fontWeight: '500', color: modalTokens.textPrimary },
   categorySelectItem: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: modalTokens.surfaceSoft, borderRadius: 10, marginBottom: 8, borderWidth: 1, borderColor: modalTokens.border },
   categorySelectItemActive: { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
-  categorySelectText: { flex: 1, fontSize: 14, color: modalTokens.textPrimary, marginLeft: 12 },
+  categorySelectText: { flex: 1, fontSize: scaleFont(14), color: modalTokens.textPrimary, marginLeft: 12 },
   comboCreateBtn: { backgroundColor: '#ef4444', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 24 },
   comboCreateBtnDisabled: { backgroundColor: '#fca5a5' },
-  comboCreateBtnText: { fontSize: 15, fontWeight: '600', color: '#fff' },
+  comboCreateBtnText: { fontSize: scaleFont(15), fontWeight: '600', color: '#fff' },
   socialModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '80%', paddingBottom: 30 },
   socialHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   socialTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  socialTitle: { fontSize: 16, fontWeight: '600', color: modalTokens.textPrimary },
+  socialTitle: { fontSize: scaleFont(16), fontWeight: '600', color: modalTokens.textPrimary },
   socialSearchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: modalTokens.surfaceSoft, marginHorizontal: 16, marginVertical: 12, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 20, borderWidth: 1, borderColor: modalTokens.border },
-  socialSearchInput: { flex: 1, marginLeft: 8, fontSize: 14 },
-  socialRecommendTitle: { fontSize: 14, fontWeight: '500', color: modalTokens.textSecondary, marginHorizontal: 16, marginBottom: 8 },
+  socialSearchInput: { flex: 1, marginLeft: 8, fontSize: scaleFont(14) },
+  socialRecommendTitle: { fontSize: scaleFont(14), fontWeight: '500', color: modalTokens.textSecondary, marginHorizontal: 16, marginBottom: 8 },
   socialUserList: { maxHeight: 400 },
   socialUserItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f9fafb' },
   socialUserAvatar: { width: 48, height: 48, borderRadius: 24 },
   socialUserInfo: { flex: 1, marginLeft: 12 },
-  socialUserName: { fontSize: 15, fontWeight: '500', color: '#1f2937' },
-  socialUserHandle: { fontSize: 13, color: '#9ca3af', marginTop: 2 },
+  socialUserName: { fontSize: scaleFont(15), fontWeight: '500', color: '#1f2937' },
+  socialUserHandle: { fontSize: scaleFont(13), color: '#9ca3af', marginTop: 2 },
   socialUserMeta: { alignItems: 'flex-end' },
-  socialUserFollowers: { fontSize: 12, color: '#9ca3af', marginBottom: 6 },
+  socialUserFollowers: { fontSize: scaleFont(12), color: '#9ca3af', marginBottom: 6 },
   inviteBtn: { backgroundColor: '#ef4444', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14 },
-  inviteBtnText: { fontSize: 12, color: '#fff', fontWeight: '500' },
+  inviteBtnText: { fontSize: scaleFont(12), color: '#fff', fontWeight: '500' },
   paidAlertOverlay: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
   paidAlertModal: {
     backgroundColor: modalTokens.surface,
@@ -1654,8 +1664,8 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   paidAlertHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  paidAlertTitle: { fontSize: 20, fontWeight: '700', color: modalTokens.textPrimary },
-  paidAlertDesc: { fontSize: 17, color: modalTokens.textSecondary, lineHeight: 26, marginBottom: 20 },
+  paidAlertTitle: { fontSize: scaleFont(20), fontWeight: '700', color: modalTokens.textPrimary },
+  paidAlertDesc: { fontSize: scaleFont(17), color: modalTokens.textSecondary, lineHeight: scaleFont(26), marginBottom: 20 },
   paidAlertConfirmBtn: {
     alignSelf: 'flex-end',
     backgroundColor: modalTokens.danger,
@@ -1663,12 +1673,12 @@ const styles = StyleSheet.create({
     paddingVertical: modalTokens.actionPaddingY,
     borderRadius: modalTokens.actionRadius,
   },
-  paidAlertConfirmText: { fontSize: 15, color: '#fff', fontWeight: '600' },
+  paidAlertConfirmText: { fontSize: scaleFont(15), color: '#fff', fontWeight: '600' },
   localFilterBar: { backgroundColor: '#fff', marginBottom: 12, borderRadius: 12, paddingVertical: 16, paddingHorizontal: 8 },
   localFilterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
   localFilterItem: { alignItems: 'center', flex: 1 },
   localFilterIcon: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
-  localFilterLabel: { fontSize: 12, color: '#4b5563' },
+  localFilterLabel: { fontSize: scaleFont(12), color: '#4b5563' },
   localFilterLabelActive: { color: '#ef4444', fontWeight: '500' },
   
   // 话题列表样式
@@ -1677,11 +1687,11 @@ const styles = StyleSheet.create({
   topicCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   topicIcon: { width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   topicInfo: { flex: 1, marginLeft: 12 },
-  topicName: { fontSize: 15, fontWeight: '500', color: '#1f2937' },
-  topicDesc: { fontSize: 12, color: '#6b7280', marginTop: 2 },
-  topicStats: { fontSize: 11, color: '#9ca3af', marginTop: 4 },
+  topicName: { fontSize: scaleFont(15), fontWeight: '500', color: '#1f2937' },
+  topicDesc: { fontSize: scaleFont(12), color: '#6b7280', marginTop: 2 },
+  topicStats: { fontSize: scaleFont(11), color: '#9ca3af', marginTop: 4 },
   topicFollowBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: '#f3f4f6' },
-  topicFollowBtnText: { fontSize: 12, color: '#6b7280', fontWeight: '500' },
+  topicFollowBtnText: { fontSize: scaleFont(12), color: '#6b7280', fontWeight: '500' },
   topicFollowBtnActive: { backgroundColor: '#fef2f2' },
   topicFollowBtnTextActive: { color: '#ef4444' },
   
@@ -1705,7 +1715,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   newContentText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#ef4444',
     fontWeight: '500',
   },

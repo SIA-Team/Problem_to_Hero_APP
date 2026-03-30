@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { showToast } from '../utils/toast';
 
+import { scaleFont } from '../utils/responsive';
 export default function InviteAnswerScreen({ navigation, route }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -136,7 +137,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center' 
   },
   headerTitle: { 
-    fontSize: 18, 
+    fontSize: scaleFont(18), 
     fontWeight: '600', 
     color: '#1f2937', 
     flex: 1, 
@@ -165,7 +166,7 @@ const styles = StyleSheet.create({
     borderColor: '#3b82f6' 
   },
   platformTabText: { 
-    fontSize: 14, 
+    fontSize: scaleFont(14), 
     color: '#6b7280', 
     fontWeight: '500' 
   },
@@ -190,7 +191,7 @@ const styles = StyleSheet.create({
   },
   searchInput: { 
     flex: 1, 
-    fontSize: 14, 
+    fontSize: scaleFont(14), 
     color: '#1f2937', 
     padding: 0 
   },
@@ -215,13 +216,13 @@ const styles = StyleSheet.create({
     marginLeft: 12 
   },
   userName: { 
-    fontSize: 14, 
+    fontSize: scaleFont(14), 
     fontWeight: '500', 
     color: '#1f2937', 
     marginBottom: 4 
   },
   userDesc: { 
-    fontSize: 12, 
+    fontSize: scaleFont(12), 
     color: '#9ca3af' 
   },
   inviteBtn: { 
@@ -234,7 +235,7 @@ const styles = StyleSheet.create({
     gap: 4 
   },
   inviteBtnText: { 
-    fontSize: 12, 
+    fontSize: scaleFont(12), 
     color: '#fff', 
     fontWeight: '600' 
   },

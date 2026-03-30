@@ -18,6 +18,7 @@ import { modalTokens } from '../components/modalTokens';
 import { showAppAlert } from '../utils/appAlert';
 import { showToast } from '../utils/toast';
 import activityApi from '../services/api/activityApi';
+import { scaleFont } from '../utils/responsive';
 import {
   getActivitiesByTab,
   getActivityImages,
@@ -534,7 +535,7 @@ const styles = StyleSheet.create({
     width: 32,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: 'bold',
     color: '#1f2937',
     flex: 1,
@@ -554,7 +555,7 @@ const styles = StyleSheet.create({
   },
   createBtnText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
   },
   tabBar: {
@@ -574,7 +575,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#ef4444',
   },
   tabText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
   },
   tabTextActive: {
@@ -641,7 +642,7 @@ const styles = StyleSheet.create({
   },
   imageCountText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
   },
   activityBadges: {
@@ -665,7 +666,7 @@ const styles = StyleSheet.create({
   },
   activityTagText: {
     color: '#fff',
-    fontSize: 11,
+    fontSize: scaleFont(11),
     fontWeight: '600',
   },
   typeTag: {
@@ -684,7 +685,7 @@ const styles = StyleSheet.create({
   },
   typeTagText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: scaleFont(10),
     fontWeight: '500',
   },
   activityInfo: {
@@ -701,15 +702,15 @@ const styles = StyleSheet.create({
   },
   activityTitle: {
     flex: 1,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 6,
   },
   activityDesc: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
-    lineHeight: 18,
+    lineHeight: scaleFont(18),
     marginBottom: 8,
   },
   addressRow: {
@@ -720,7 +721,7 @@ const styles = StyleSheet.create({
   },
   addressText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#ef4444',
   },
   activityMeta: {
@@ -735,7 +736,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   metaText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
   },
   progressRow: {
@@ -747,11 +748,11 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   progressLabel: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
   },
   progressText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#ef4444',
     fontWeight: '600',
   },
@@ -771,7 +772,7 @@ const styles = StyleSheet.create({
   },
   joinBtnText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
   },
   joinedBtnText: {
@@ -783,7 +784,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   emptyText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#9ca3af',
     marginTop: 16,
     textAlign: 'center',
@@ -797,7 +798,7 @@ const styles = StyleSheet.create({
   },
   retryBtnText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
   },
   imageViewerContainer: {
@@ -819,7 +820,7 @@ const styles = StyleSheet.create({
   },
   imageViewerCounter: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '500',
   },
   viewerHeaderSpacer: {

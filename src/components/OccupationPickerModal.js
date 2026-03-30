@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  FlatList,
   Modal,
   ScrollView,
   StyleSheet,
@@ -12,6 +13,12 @@ import { Ionicons } from '@expo/vector-icons';
 import occupationApi from '../services/api/occupationApi';
 import { modalTokens } from './modalTokens';
 
+const OCCUPATION_TREE_CACHE_TTL = 30 * 60 * 1000;
+
+let occupationPickerCache = null;
+let occupationPickerCacheTime = 0;
+let occupationPickerRequest = null;
+
 const getNodeLabel = (node) => {
   if (!node) {
     return '';
@@ -19,6 +26,11 @@ const getNodeLabel = (node) => {
 
   return (node.nameCn || node.name || '').trim();
 };
+
+const getNodeCacheKey = (node, index = 0) =>
+  `${node?.id || node?.code || node?.label || 'occupation-node'}-${index}`;
+
+const normalizeLookupValue = (value) => (value || '').trim();
 
 const normalizeNodes = (nodes = []) =>
   nodes
@@ -62,39 +74,119 @@ const analyzePickerMode = (nodes) => {
   return hasChildren || maxDepth > 1 ? 'cascade' : 'single';
 };
 
-const findNodeByValue = (nodes, currentValue, ancestors = []) => {
-  const normalizedValue = (currentValue || '').trim();
+const buildSelectionIndex = (nodes) => {
+  const selectionIndex = new Map();
 
-  if (!normalizedValue) {
+  const walk = (items, ancestors = []) => {
+    items.forEach((node) => {
+      const pathNames = Array.isArray(node.pathNamesCn)
+        ? node.pathNamesCn.filter(Boolean)
+        : [];
+      const lookupValues = [node.label, pathNames[pathNames.length - 1]];
+
+      lookupValues.forEach((value) => {
+        const key = normalizeLookupValue(value);
+
+        if (key && !selectionIndex.has(key)) {
+          selectionIndex.set(key, {
+            node,
+            ancestors,
+          });
+        }
+      });
+
+      if (node.children.length > 0) {
+        walk(node.children, [...ancestors, node]);
+      }
+    });
+  };
+
+  walk(nodes);
+  return selectionIndex;
+};
+
+const buildPickerDataset = (rawNodes = []) => {
+  const normalizedNodes = normalizeNodes(rawNodes);
+
+  return {
+    nodes: normalizedNodes,
+    pickerMode: analyzePickerMode(normalizedNodes),
+    selectionIndex: buildSelectionIndex(normalizedNodes),
+  };
+};
+
+const hasFreshOccupationPickerCache = () =>
+  Boolean(
+    occupationPickerCache &&
+      Date.now() - occupationPickerCacheTime < OCCUPATION_TREE_CACHE_TTL
+  );
+
+const getCachedOccupationPickerData = ({ includeStale = false } = {}) => {
+  if (!occupationPickerCache) {
     return null;
   }
 
-  for (const node of nodes) {
-    const pathNames = Array.isArray(node.pathNamesCn)
-      ? node.pathNamesCn.filter(Boolean)
-      : [];
-
-    if (
-      node.label === normalizedValue ||
-      pathNames[pathNames.length - 1] === normalizedValue
-    ) {
-      return {
-        node,
-        ancestors,
-      };
-    }
-
-    const found = findNodeByValue(node.children, normalizedValue, [
-      ...ancestors,
-      node,
-    ]);
-
-    if (found) {
-      return found;
-    }
+  if (includeStale || hasFreshOccupationPickerCache()) {
+    return occupationPickerCache;
   }
 
   return null;
+};
+
+const setOccupationPickerCache = (dataset) => {
+  occupationPickerCache = dataset;
+  occupationPickerCacheTime = Date.now();
+  return dataset;
+};
+
+const fetchOccupationPickerData = async ({ forceRefresh = false } = {}) => {
+  if (!forceRefresh) {
+    const cachedDataset = getCachedOccupationPickerData();
+
+    if (cachedDataset) {
+      return cachedDataset;
+    }
+  }
+
+  if (occupationPickerRequest) {
+    return occupationPickerRequest;
+  }
+
+  occupationPickerRequest = occupationApi
+    .getOccupationTree()
+    .then((response) => {
+      if (response?.code !== 200) {
+        throw new Error(response?.msg || '获取职业数据失败');
+      }
+
+      return setOccupationPickerCache(
+        buildPickerDataset(response?.data?.nodes || [])
+      );
+    })
+    .finally(() => {
+      occupationPickerRequest = null;
+    });
+
+  return occupationPickerRequest;
+};
+
+const findSelectionByValue = (dataset, currentValue) =>
+  dataset?.selectionIndex.get(normalizeLookupValue(currentValue)) || null;
+
+const isSameNode = (leftNode, rightNode) => {
+  if (!leftNode || !rightNode) {
+    return false;
+  }
+
+  if (leftNode.id != null && rightNode.id != null) {
+    return leftNode.id === rightNode.id;
+  }
+
+  if (leftNode.code && rightNode.code) {
+    return leftNode.code === rightNode.code;
+  }
+
+  return leftNode.label === rightNode.label;
 };
 
 const getFriendlyErrorMessage = (message) => {
@@ -113,6 +205,60 @@ const getFriendlyErrorMessage = (message) => {
   return message;
 };
 
+const OccupationOptionItem = React.memo(
+  function OccupationOptionItem({
+    node,
+    isSelected,
+    pickerMode,
+    onPress,
+  }) {
+    return (
+      <TouchableOpacity
+        style={[styles.optionItem, isSelected && styles.optionItemSelected]}
+        activeOpacity={0.7}
+        onPress={() => onPress(node)}
+      >
+        <View style={styles.optionMain}>
+          <Text
+            style={[styles.optionTitle, isSelected && styles.optionTitleSelected]}
+          >
+            {node.label}
+          </Text>
+          {node.description ? (
+            <Text style={styles.optionDescription} numberOfLines={2}>
+              {node.description}
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={styles.optionRight}>
+          {isSelected ? (
+            <Ionicons
+              name="checkmark-circle"
+              size={20}
+              color={modalTokens.danger}
+            />
+          ) : null}
+          {pickerMode === 'cascade' && node.children.length > 0 ? (
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={modalTokens.textMuted}
+            />
+          ) : null}
+        </View>
+      </TouchableOpacity>
+    );
+  },
+  (prevProps, nextProps) =>
+    prevProps.node === nextProps.node &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.pickerMode === nextProps.pickerMode
+);
+
+export const warmOccupationPickerData = () =>
+  fetchOccupationPickerData().catch(() => null);
+
 export default function OccupationPickerModal({
   visible,
   currentValue = '',
@@ -127,33 +273,49 @@ export default function OccupationPickerModal({
   const [browsePath, setBrowsePath] = useState([]);
   const [selectedNode, setSelectedNode] = useState(null);
 
+  const applyPickerDataset = (dataset, value) => {
+    const matchedSelection = findSelectionByValue(dataset, value);
+
+    setNodes(dataset.nodes);
+    setPickerMode(dataset.pickerMode);
+    setBrowsePath(matchedSelection?.ancestors || []);
+    setSelectedNode(matchedSelection?.node || null);
+    setIsEmptyResult(dataset.nodes.length === 0);
+  };
+
   const loadOccupationTree = async (active = true) => {
-    setLoading(true);
     setError('');
-    setIsEmptyResult(false);
+
+    const cachedDataset = getCachedOccupationPickerData({ includeStale: true });
+
+    if (cachedDataset) {
+      applyPickerDataset(cachedDataset, currentValue);
+      setLoading(false);
+
+      if (hasFreshOccupationPickerCache()) {
+        return;
+      }
+    } else {
+      setLoading(true);
+      setIsEmptyResult(false);
+    }
 
     try {
-      const response = await occupationApi.getOccupationTree();
+      const dataset = await fetchOccupationPickerData({
+        forceRefresh: Boolean(cachedDataset),
+      });
 
       if (!active) {
         return;
       }
 
-      if (response?.code !== 200) {
-        throw new Error(response?.msg || '获取职业数据失败');
-      }
-
-      const normalizedNodes = normalizeNodes(response?.data?.nodes || []);
-      const mode = analyzePickerMode(normalizedNodes);
-      const matched = findNodeByValue(normalizedNodes, currentValue);
-
-      setNodes(normalizedNodes);
-      setPickerMode(mode);
-      setBrowsePath(matched?.ancestors || []);
-      setSelectedNode(matched?.node || null);
-      setIsEmptyResult(normalizedNodes.length === 0);
+      applyPickerDataset(dataset, currentValue);
     } catch (loadError) {
       if (!active) {
+        return;
+      }
+
+      if (cachedDataset) {
         return;
       }
 
@@ -260,7 +422,7 @@ export default function OccupationPickerModal({
           </TouchableOpacity>
 
           {browsePath.map((item, index) => (
-            <React.Fragment key={`${item.id || item.code || item.label}-${index}`}>
+            <React.Fragment key={getNodeCacheKey(item, index)}>
               <View style={styles.breadcrumbSeparator}>
                 <Ionicons name="chevron-forward" size={14} color="#cbd5e1" />
               </View>
@@ -271,7 +433,8 @@ export default function OccupationPickerModal({
                 <Text
                   style={[
                     styles.breadcrumbText,
-                    index === browsePath.length - 1 && styles.breadcrumbTextActive,
+                    index === browsePath.length - 1 &&
+                      styles.breadcrumbTextActive,
                   ]}
                 >
                   {item.label}
@@ -330,59 +493,27 @@ export default function OccupationPickerModal({
     }
 
     return (
-      <ScrollView style={styles.optionList} showsVerticalScrollIndicator={false}>
-        {currentNodes.map((node, index) => {
-          const isSelected =
-            selectedNode?.id === node.id && selectedNode?.code === node.code
-              ? true
-              : selectedNode?.id === node.id || selectedNode?.label === node.label;
-
-          return (
-            <TouchableOpacity
-              key={`${node.id || node.code || node.label}-${index}`}
-              style={[
-                styles.optionItem,
-                isSelected && styles.optionItemSelected,
-              ]}
-              activeOpacity={0.7}
-              onPress={() => handleSelectNode(node)}
-            >
-              <View style={styles.optionMain}>
-                <Text
-                  style={[
-                    styles.optionTitle,
-                    isSelected && styles.optionTitleSelected,
-                  ]}
-                >
-                  {node.label}
-                </Text>
-                {node.description ? (
-                  <Text style={styles.optionDescription} numberOfLines={2}>
-                    {node.description}
-                  </Text>
-                ) : null}
-              </View>
-
-              <View style={styles.optionRight}>
-                {isSelected ? (
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={20}
-                    color={modalTokens.danger}
-                  />
-                ) : null}
-                {pickerMode === 'cascade' && node.children.length > 0 ? (
-                  <Ionicons
-                    name="chevron-forward"
-                    size={18}
-                    color={modalTokens.textMuted}
-                  />
-                ) : null}
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <FlatList
+        data={currentNodes}
+        extraData={selectedNode}
+        keyExtractor={(item, index) => getNodeCacheKey(item, index)}
+        renderItem={({ item }) => (
+          <OccupationOptionItem
+            node={item}
+            isSelected={isSameNode(selectedNode, item)}
+            pickerMode={pickerMode}
+            onPress={handleSelectNode}
+          />
+        )}
+        style={styles.optionList}
+        contentContainerStyle={styles.optionListContent}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={18}
+        maxToRenderPerBatch={24}
+        updateCellsBatchingPeriod={32}
+        windowSize={8}
+        removeClippedSubviews={currentNodes.length > 20}
+      />
     );
   };
 
@@ -424,7 +555,7 @@ export default function OccupationPickerModal({
 
           {selectedPathText ? (
             <View style={styles.selectionBar}>
-              <Text style={styles.selectionLabel}>已选</Text>
+              <Text style={styles.selectionLabel}>已选择</Text>
               <Text style={styles.selectionValue} numberOfLines={2}>
                 {selectedPathText}
               </Text>
@@ -527,6 +658,9 @@ const styles = StyleSheet.create({
   },
   optionList: {
     flex: 1,
+  },
+  optionListContent: {
+    paddingBottom: 8,
   },
   optionItem: {
     flexDirection: 'row',

@@ -7,6 +7,7 @@ import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 
+import { scaleFont } from '../utils/responsive';
 const WriteCommentModal = ({
   visible,
   onClose,
@@ -240,7 +241,7 @@ const styles = StyleSheet.create({
   title: {
     flex: 1,
     textAlign: 'center',
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -264,7 +265,7 @@ const styles = StyleSheet.create({
   },
   publishBtnText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600'
   },
   publishBtnTextDisabled: {
@@ -295,22 +296,22 @@ const styles = StyleSheet.create({
     flex: 1
   },
   originalCommentAuthor: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937'
   },
   originalCommentTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   originalCommentText: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: scaleFont(14),
+    lineHeight: scaleFont(20),
     color: '#374151'
   },
   textInput: {
     minHeight: 120,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#1f2937',
     marginBottom: 16
   },
@@ -334,7 +335,7 @@ const styles = StyleSheet.create({
     padding: 4
   },
   charCount: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280'
   },
   imageGrid: {

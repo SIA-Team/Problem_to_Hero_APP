@@ -743,6 +743,7 @@
         "searchPlaceholder": "Search users...",
         "sendTo": "Send to:",
         "selectUser": "Select User",
+        "emptyUsers": "No followed users available for private messaging yet",
         "messageContent": "Message Content",
         "messagePlaceholder": "Enter message content..."
       },
@@ -775,6 +776,14 @@
         "hint": "Hint"
       },
       "empty": "No messages yet"
+    },
+    "privateConversation": {
+      "title": "Private Conversation",
+      "empty": "No private messages yet",
+      "inputPlaceholder": "Type a message...",
+      "loadFailed": "Failed to load private messages",
+      "sendFailed": "Failed to send private message",
+      "sendUnavailable": "This conversation is missing recipient info, so sending is unavailable right now"
     },
     "groupChat": {
       "title": "Question Group",
@@ -1072,6 +1081,12 @@
         "subtitle": "Related content based on current question",
         "hot": "Hot"
       }
+    },
+    "paidUsersList": {
+      "title": "Paid Details",
+      "totalIncome": "Total Income",
+      "paidCount": "Paid Users",
+      "empty": "No paid users yet"
     },
     "questionRanking": {
       "title": "Question Ranking",

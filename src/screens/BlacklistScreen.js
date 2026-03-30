@@ -19,6 +19,7 @@ import { invalidateBlacklistRelatedCaches } from '../utils/blacklistContent';
 import { normalizeEntityId } from '../utils/jsonLongId';
 import { showAppAlert } from '../utils/appAlert';
 
+import { scaleFont } from '../utils/responsive';
 const normalizeText = (value) => {
   if (value === undefined || value === null) {
     return '';
@@ -370,7 +371,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937',
   },
@@ -385,7 +386,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   statsText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
   },
   loadingContainer: {
@@ -395,7 +396,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af',
   },
   listContent: {
@@ -431,12 +432,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   userIdText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '700',
     color: '#1f2937',
   },
   blockedTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginTop: 4,
   },
@@ -454,7 +455,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   removeBtnText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#ef4444',
   },
@@ -474,15 +475,15 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 8,
   },
   emptyDesc: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: scaleFont(20),
   },
 });

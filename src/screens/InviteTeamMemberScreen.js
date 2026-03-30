@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
+import { scaleFont } from '../utils/responsive';
 export default function InviteTeamMemberScreen({
   navigation,
   route
@@ -228,12 +229,12 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937'
   },
   headerSubtitle: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginTop: 2
   },
@@ -260,7 +261,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fef3c7'
   },
   tabText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -281,7 +282,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937',
     padding: 0
   },
@@ -294,7 +295,7 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   selectedCountText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#f59e0b',
     fontWeight: '500',
     textAlign: 'center'
@@ -334,12 +335,12 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   userName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937'
   },
   userMeta: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   checkbox: {
@@ -373,7 +374,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   cancelBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -392,7 +393,7 @@ const styles = StyleSheet.create({
     opacity: 0.5
   },
   sendBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600'
   }

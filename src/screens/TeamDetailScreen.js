@@ -6,6 +6,7 @@ import Avatar from '../components/Avatar';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
+import { scaleFont } from '../utils/responsive';
 const initialMessages = [{
   id: 1,
   author: '张三',
@@ -1007,7 +1008,7 @@ const styles = StyleSheet.create({
     zIndex: 1
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -1049,7 +1050,7 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   teamName: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937',
     flex: 1,
@@ -1084,7 +1085,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb'
   },
   compactActionBtnText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#3b82f6',
     fontWeight: '600'
   },
@@ -1109,14 +1110,14 @@ const styles = StyleSheet.create({
     borderColor: '#fecaca'
   },
   compactDismissBtnText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#ef4444',
     fontWeight: '600'
   },
   teamDesc: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
-    lineHeight: 18,
+    lineHeight: scaleFont(18),
     marginBottom: 8
   },
   teamStats: {
@@ -1129,7 +1130,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   teamStatText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   // 团队成员区域 - 支持两种显示模式
@@ -1147,12 +1148,12 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   teamMembersTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#6b7280'
   },
   viewAllText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#f59e0b',
     fontWeight: '500'
   },
@@ -1202,7 +1203,7 @@ const styles = StyleSheet.create({
     borderColor: '#fff'
   },
   teamMemberName: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#1f2937',
     fontWeight: '500',
     marginBottom: 2,
@@ -1211,7 +1212,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2
   },
   teamMemberRole: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#f59e0b',
     fontWeight: '600'
   },
@@ -1231,7 +1232,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   tabText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280'
   },
   tabTextActive: {
@@ -1259,7 +1260,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4
   },
   tabBadgeText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#fff',
     fontWeight: '600'
   },
@@ -1290,19 +1291,19 @@ const styles = StyleSheet.create({
     borderRadius: 16
   },
   teamChatUser: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '600',
     color: '#1f2937',
     flex: 1
   },
   teamChatTime: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af'
   },
   teamChatText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#374151',
-    lineHeight: 18,
+    lineHeight: scaleFont(18),
     marginBottom: 8,
     paddingLeft: 40
   },
@@ -1327,7 +1328,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   messageActionText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   // 团队聊天输入栏 - 参照团队弹窗样式
@@ -1349,7 +1350,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937',
     maxHeight: 100
   },
@@ -1379,7 +1380,7 @@ const styles = StyleSheet.create({
     gap: 8
   },
   teamJoinBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600'
   },
@@ -1395,7 +1396,7 @@ const styles = StyleSheet.create({
     borderColor: '#fecaca'
   },
   teamLeaveBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#ef4444',
     fontWeight: '600'
   },
@@ -1412,7 +1413,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#fde68a'
   },
   restrictedNoticeText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#92400e',
     fontWeight: '500',
     flex: 1
@@ -1427,7 +1428,7 @@ const styles = StyleSheet.create({
     gap: 8
   },
   pendingNoticeText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#92400e',
     fontWeight: '500'
   },
@@ -1458,21 +1459,21 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   pinnedText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#ef4444',
     fontWeight: '600'
   },
   announcementTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 8,
-    lineHeight: 22
+    lineHeight: scaleFont(22)
   },
   announcementContent: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#374151',
-    lineHeight: 20,
+    lineHeight: scaleFont(20),
     marginBottom: 12
   },
   announcementFooter: {
@@ -1486,11 +1487,11 @@ const styles = StyleSheet.create({
     gap: 4
   },
   announcementAuthorText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   announcementTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   // 审批消息列表
@@ -1503,7 +1504,7 @@ const styles = StyleSheet.create({
     paddingTop: 16
   },
   approvalSectionTitle: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#374151',
     marginBottom: 12
@@ -1538,12 +1539,12 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   approvalUserName: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#1f2937'
   },
   approvalTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   adminApplyBadge: {
@@ -1556,7 +1557,7 @@ const styles = StyleSheet.create({
     borderRadius: 10
   },
   adminApplyBadgeText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#8b5cf6',
     fontWeight: '500'
   },
@@ -1567,15 +1568,15 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   approvalReasonLabel: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     fontWeight: '500',
     marginBottom: 4
   },
   approvalReasonText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#374151',
-    lineHeight: 20
+    lineHeight: scaleFont(20)
   },
   approvalActions: {
     flexDirection: 'row',
@@ -1594,7 +1595,7 @@ const styles = StyleSheet.create({
     borderColor: '#fecaca'
   },
   approvalRejectText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#ef4444',
     fontWeight: '600'
   },
@@ -1609,7 +1610,7 @@ const styles = StyleSheet.create({
     borderRadius: 8
   },
   approvalApproveText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#fff',
     fontWeight: '600'
   },
@@ -1619,13 +1620,13 @@ const styles = StyleSheet.create({
     paddingVertical: 80
   },
   approvalEmptyText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '500',
     color: '#6b7280',
     marginTop: 16
   },
   approvalEmptyHint: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
     marginTop: 8
   },
@@ -1651,7 +1652,7 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   replyModalTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: modalTokens.textPrimary
   },
@@ -1661,7 +1662,7 @@ const styles = StyleSheet.create({
     borderColor: modalTokens.border,
     borderRadius: 12,
     padding: 12,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textPrimary,
     minHeight: 100,
     textAlignVertical: 'top',
@@ -1677,7 +1678,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fcd34d'
   },
   replySubmitText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600'
   },
@@ -1701,7 +1702,7 @@ const styles = StyleSheet.create({
     borderBottomColor: modalTokens.border
   },
   membersModalTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: modalTokens.textPrimary
   },
@@ -1732,12 +1733,12 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   memberModalName: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '500',
     color: modalTokens.textPrimary
   },
   memberModalRole: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: modalTokens.textMuted
   },
   leaderBadgeLarge: {
@@ -1750,7 +1751,7 @@ const styles = StyleSheet.create({
     borderRadius: 10
   },
   leaderBadgeText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#f59e0b',
     fontWeight: '600'
   },
@@ -1774,7 +1775,7 @@ const styles = StyleSheet.create({
     borderBottomColor: modalTokens.border
   },
   publishAnnouncementTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: modalTokens.textPrimary
   },
@@ -1782,7 +1783,7 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   formLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#374151',
     marginBottom: 8
@@ -1794,7 +1795,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textPrimary,
     marginBottom: 16
   },
@@ -1808,7 +1809,7 @@ const styles = StyleSheet.create({
     gap: 8
   },
   pinnedCheckboxText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#374151'
   },
   publishAnnouncementSubmitBtn: {
@@ -1818,7 +1819,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   publishAnnouncementSubmitText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600'
   },
@@ -1842,15 +1843,15 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   pendingModalTitle: {
-    fontSize: 20,
+    fontSize: scaleFont(20),
     fontWeight: '600',
     color: modalTokens.textPrimary,
     marginBottom: 12
   },
   pendingModalDesc: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textSecondary,
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     textAlign: 'center',
     marginBottom: 24
   },
@@ -1863,7 +1864,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   pendingModalBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600'
   },
@@ -1881,7 +1882,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6'
   },
   applyAdminBtnText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#8b5cf6',
     fontWeight: '500'
   },
@@ -1912,13 +1913,13 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   inviteModalTitle: {
-    fontSize: 20,
+    fontSize: scaleFont(20),
     fontWeight: 'bold',
     color: modalTokens.textPrimary,
     marginBottom: 4
   },
   inviteModalSubtitle: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: modalTokens.textSecondary
   },
   inviteTabBar: {
@@ -1944,7 +1945,7 @@ const styles = StyleSheet.create({
     borderColor: '#f59e0b'
   },
   inviteTabText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: modalTokens.textMuted,
     fontWeight: '500'
   },
@@ -1967,7 +1968,7 @@ const styles = StyleSheet.create({
   },
   inviteSearchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textPrimary
   },
   selectedCountBadge: {
@@ -1980,7 +1981,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start'
   },
   selectedCountText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#3b82f6',
     fontWeight: '600'
   },
@@ -2021,12 +2022,12 @@ const styles = StyleSheet.create({
     marginBottom: 2
   },
   inviteUserName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: modalTokens.textPrimary
   },
   inviteUserMeta: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: modalTokens.textMuted
   },
   inviteCheckbox: {
@@ -2059,7 +2060,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   cancelInviteBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: modalTokens.textSecondary,
     fontWeight: '500'
   },
@@ -2077,7 +2078,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#d1d5db'
   },
   sendInviteBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600'
   },
@@ -2105,13 +2106,13 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   applyAdminModalTitle: {
-    fontSize: 20,
+    fontSize: scaleFont(20),
     fontWeight: 'bold',
     color: modalTokens.textPrimary,
     marginBottom: 4
   },
   applyAdminModalSubtitle: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: modalTokens.textSecondary
   },
   applyAdminModalContent: {
@@ -2122,7 +2123,7 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   applyAdminLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#374151',
     marginBottom: 8
@@ -2134,7 +2135,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textPrimary,
     minHeight: 120,
     textAlignVertical: 'top'
@@ -2146,15 +2147,15 @@ const styles = StyleSheet.create({
     marginTop: 8
   },
   applyAdminTipsTitle: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '500',
     color: '#166534',
     marginBottom: 8
   },
   applyAdminTipsText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#15803d',
-    lineHeight: 20
+    lineHeight: scaleFont(20)
   },
   applyAdminModalFooter: {
     flexDirection: 'row',
@@ -2173,7 +2174,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   cancelApplyBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: modalTokens.textSecondary,
     fontWeight: '500'
   },
@@ -2188,7 +2189,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#d1d5db'
   },
   submitApplyBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600'
   },
@@ -2226,13 +2227,13 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   dismissModalTitle: {
-    fontSize: 22,
+    fontSize: scaleFont(22),
     fontWeight: 'bold',
     color: modalTokens.textPrimary,
     marginBottom: 8
   },
   dismissModalSubtitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textSecondary,
     textAlign: 'center'
   },
@@ -2249,25 +2250,25 @@ const styles = StyleSheet.create({
     borderColor: '#fecaca'
   },
   dismissWarningTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#991b1b',
     marginBottom: 12
   },
   dismissWarningText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#dc2626',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     marginBottom: 4
   },
   dismissConfirmSection: {
     marginTop: 8
   },
   dismissConfirmLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#374151',
     marginBottom: 12,
-    lineHeight: 20
+    lineHeight: scaleFont(20)
   },
   dismissTeamNameHighlight: {
     fontWeight: '600',
@@ -2280,7 +2281,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: modalTokens.textPrimary
   },
   dismissModalFooter: {
@@ -2300,7 +2301,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   cancelDismissBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: modalTokens.textSecondary,
     fontWeight: '500'
   },
@@ -2318,7 +2319,7 @@ const styles = StyleSheet.create({
     backgroundColor: modalTokens.dangerSoft
   },
   confirmDismissBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600'
   }

@@ -20,6 +20,7 @@ import { formatNumber } from '../utils/numberFormatter';
 import { formatTime } from '../utils/timeFormatter';
 import { normalizeEntityId } from '../utils/jsonLongId';
 import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
+import { scaleFont } from '../utils/responsive';
 const answers = [{
   id: 1,
   author: 'Python老司机',
@@ -5435,6 +5436,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           <Text style={styles.questionTitle}>
             {(currentQuestion.displayType === 'reward' || currentQuestion.displayType === 'targeted') && currentQuestion.reward > 0 && <Text style={styles.rewardTagInline}>${currentQuestion.reward} </Text>}
             {currentQuestion.title}
+            {currentQuestion.status === 2 && (
+              <Text style={styles.solvedTagInline}> {t('questionDetail.solved')}</Text>
+            )}
           </Text>
           
           {/* 作者信息和操作按钮行 - 紧跟标题 */}
@@ -5540,6 +5544,27 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <Ionicons name="chevron-forward" size={12} color="#9ca3af" />
             </TouchableOpacity>
           </View>}
+          
+          {/* 付费明细入口 - 只在付费问题中显示 */}
+          {questionData.payViewAmount > 0 && (
+            <TouchableOpacity 
+              style={styles.paidDetailsCard}
+              onPress={() => navigation.navigate('PaidUsersList', {
+                questionId: questionData.id,
+                totalAmount: Math.floor(questionData.payViewAmount / 100) * 3, // 示例：单价 * 人数
+                paidCount: 3 // 示例数据
+              })}
+            >
+              <View style={styles.paidDetailsLeft}>
+                <Ionicons name="wallet-outline" size={20} color="#22c55e" />
+                <Text style={styles.paidDetailsTitle}>查看付费明细</Text>
+              </View>
+              <View style={styles.paidDetailsRight}>
+                <Text style={styles.paidDetailsCount}>3人已付费</Text>
+                <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
+              </View>
+            </TouchableOpacity>
+          )}
           
           <View style={styles.viewsAndTags}>
             <View style={styles.viewsRow}>
@@ -8126,7 +8151,7 @@ const styles = StyleSheet.create({
     padding: 4
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -8141,7 +8166,7 @@ const styles = StyleSheet.create({
     gap: 3
   },
   shareBtnText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -8153,10 +8178,10 @@ const styles = StyleSheet.create({
     padding: 16
   },
   questionTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: 'bold',
     color: '#1f2937',
-    lineHeight: 26,
+    lineHeight: scaleFont(26),
     marginBottom: 8
   },
   expandHint: {
@@ -8166,12 +8191,12 @@ const styles = StyleSheet.create({
     marginTop: 4
   },
   expandHintText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#3b82f6',
     fontWeight: '500'
   },
   expandHintInline: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#3b82f6',
     fontWeight: '500'
   },
@@ -8180,22 +8205,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingVertical: 0,
     borderRadius: 0,
-    fontSize: 19,
+    fontSize: scaleFont(19),
     color: '#ef4444',
     fontWeight: '600',
     includeFontPadding: false,
-    lineHeight: 26
+    lineHeight: scaleFont(26)
   },
   paidTagInline: {
     backgroundColor: 'transparent',
     paddingHorizontal: 0,
     paddingVertical: 0,
     borderRadius: 0,
-    fontSize: 19,
+    fontSize: scaleFont(19),
     color: '#f59e0b',
     fontWeight: '600',
     includeFontPadding: false,
-    lineHeight: 26
+    lineHeight: scaleFont(26)
+  },
+  solvedTagInline: {
+    backgroundColor: 'transparent',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    borderRadius: 0,
+    fontSize: scaleFont(17),
+    color: '#22c55e',
+    fontWeight: '600',
+    includeFontPadding: false,
+    lineHeight: scaleFont(26)
   },
   // 加载和错误状态样式
   loadingContainer: {
@@ -8205,7 +8241,7 @@ const styles = StyleSheet.create({
     paddingVertical: 50
   },
   loadingText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#9ca3af'
   },
   errorContainer: {
@@ -8216,7 +8252,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20
   },
   errorText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#6b7280',
     textAlign: 'center',
     marginTop: 16,
@@ -8238,7 +8274,7 @@ const styles = StyleSheet.create({
   },
   retryBtnText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600'
   },
   // 问题图片容器样式
@@ -8264,7 +8300,7 @@ const styles = StyleSheet.create({
     gap: 10
   },
   rewardAmountText: {
-    fontSize: 24,
+    fontSize: scaleFont(24),
     fontWeight: '800',
     color: '#ef4444',
     letterSpacing: 0.5
@@ -8289,7 +8325,7 @@ const styles = StyleSheet.create({
     elevation: 3
   },
   addRewardBtnText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#fff',
     fontWeight: '700',
     letterSpacing: 0.3
@@ -8300,7 +8336,7 @@ const styles = StyleSheet.create({
     gap: 3
   },
   adoptionProgressText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#10b981',
     fontWeight: '600'
   },
@@ -8311,13 +8347,46 @@ const styles = StyleSheet.create({
     paddingVertical: 2
   },
   rewardContributorsText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af'
   },
+  // 付费明细卡片样式
+  paidDetailsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12
+  },
+  paidDetailsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  paidDetailsTitle: {
+    fontSize: scaleFont(15),
+    fontWeight: '600',
+    color: '#166534'
+  },
+  paidDetailsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  paidDetailsCount: {
+    fontSize: scaleFont(13),
+    color: '#22c55e',
+    fontWeight: '500'
+  },
   questionContent: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#4b5563',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     marginTop: -3,
     marginBottom: 12
   },
@@ -8339,7 +8408,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   viewsText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   topicTags: {
@@ -8348,13 +8417,13 @@ const styles = StyleSheet.create({
     gap: 8
   },
   topicTag: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     backgroundColor: '#f3f4f6',
     paddingHorizontal: 8,
     paddingVertical: 0,
     borderRadius: 12,
-    lineHeight: 16,
+    lineHeight: scaleFont(16),
     textAlignVertical: 'center',
     height: 20
   },
@@ -8388,7 +8457,7 @@ const styles = StyleSheet.create({
     gap: 6
   },
   smallAuthorName: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '500',
     color: '#1f2937'
   },
@@ -8402,18 +8471,18 @@ const styles = StyleSheet.create({
     gap: 2
   },
   followBtnSmallText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#ef4444',
     fontWeight: '500'
   },
   followCountText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#ef4444',
     fontWeight: '400',
     marginLeft: 2
   },
   smallPostTime: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af',
     marginTop: 2
   },
@@ -8469,12 +8538,12 @@ const styles = StyleSheet.create({
     paddingLeft: 15
   },
   pkSolvedText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#fff',
     fontWeight: '600'
   },
   pkUnsolvedText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#fff',
     fontWeight: '600'
   },
@@ -8496,7 +8565,7 @@ const styles = StyleSheet.create({
     elevation: 2
   },
   pkCenterText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#ef4444',
     fontWeight: '700'
   },
@@ -8523,7 +8592,7 @@ const styles = StyleSheet.create({
     borderColor: '#fecaca'
   },
   progressLabelText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#6b7280',
     fontWeight: '600'
   },
@@ -8554,7 +8623,7 @@ const styles = StyleSheet.create({
     }]
   },
   progressPercentText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#6b7280',
     fontWeight: '600'
   },
@@ -8567,7 +8636,7 @@ const styles = StyleSheet.create({
     paddingVertical: 40
   },
   supplementsLoadingText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
     marginTop: 12
   },
@@ -8576,13 +8645,13 @@ const styles = StyleSheet.create({
     paddingVertical: 60
   },
   supplementsEmptyText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#6b7280',
     marginTop: 16
   },
   supplementsEmptyDesc: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af',
     marginTop: 8
   },
@@ -8594,7 +8663,7 @@ const styles = StyleSheet.create({
     gap: 8
   },
   supplementsLoadingMoreText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280'
   },
   supplementsNoMore: {
@@ -8602,7 +8671,7 @@ const styles = StyleSheet.create({
     paddingVertical: 20
   },
   supplementsNoMoreText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af'
   },
   // 底部固定栏样式
@@ -8623,7 +8692,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   bottomActionText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -8640,7 +8709,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb'
   },
   bottomInputPlaceholder: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af'
   },
   answersSection: {
@@ -8661,7 +8730,7 @@ const styles = StyleSheet.create({
     minWidth: 0, // 允许内容收缩
   },
   answerTabText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
     textAlign: 'center',
     flexShrink: 1, // 允许文本收缩
@@ -8708,7 +8777,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fef2f2'
   },
   sortFilterText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af'
   },
   sortFilterTextActive: {
@@ -8716,7 +8785,7 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   },
   sortFilterCount: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   // 超级赞购买横幅样式
@@ -8736,7 +8805,7 @@ const styles = StyleSheet.create({
     gap: 8
   },
   superLikePurchaseBannerText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#f59e0b',
     fontWeight: '600'
   },
@@ -8776,7 +8845,7 @@ const styles = StyleSheet.create({
     borderColor: '#bbf7d0'
   },
   adoptedBadgeCompactText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#22c55e',
     fontWeight: '600'
   },
@@ -8793,7 +8862,7 @@ const styles = StyleSheet.create({
     borderColor: '#bbf7d0'
   },
   authorAdoptedBadgeText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#22c55e',
     fontWeight: '600'
   },
@@ -8810,7 +8879,7 @@ const styles = StyleSheet.create({
     borderColor: '#bfdbfe'
   },
   adoptedCountBadgeText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#3b82f6',
     fontWeight: '600'
   },
@@ -8826,7 +8895,7 @@ const styles = StyleSheet.create({
     borderColor: '#bfdbfe'
   },
   inviterTextCompact: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#3b82f6',
     fontWeight: '500'
   },
@@ -8842,7 +8911,7 @@ const styles = StyleSheet.create({
     borderColor: '#fde68a'
   },
   arbitrationPendingTextCompact: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#f59e0b',
     fontWeight: '600'
   },
@@ -8858,7 +8927,7 @@ const styles = StyleSheet.create({
     borderColor: '#fecaca'
   },
   arbitrationApprovedTextCompact: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#ef4444',
     fontWeight: '600'
   },
@@ -8880,7 +8949,7 @@ const styles = StyleSheet.create({
     borderColor: '#bbf7d0'
   },
   arbitrationResultText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     fontWeight: '600'
   },
   arbitrationResultTextApproved: {
@@ -8901,7 +8970,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb'
   },
   viewArbitrationResultBtnText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -8917,7 +8986,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb'
   },
   arbitrationBtnTextCompact: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -8929,7 +8998,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2
   },
   viewArbitrationBtnTextCompact: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#6b7280'
   },
   answerHeader: {
@@ -8958,7 +9027,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap'
   },
   answerAuthor: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#1f2937'
   },
@@ -8979,7 +9048,7 @@ const styles = StyleSheet.create({
     opacity: 0.6
   },
   adoptAnswerBtnText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#22c55e',
     fontWeight: '700',
     letterSpacing: 0.2
@@ -8994,12 +9063,12 @@ const styles = StyleSheet.create({
     borderRadius: 4
   },
   adoptedTagText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#fff',
     fontWeight: '500'
   },
   answerAuthorTitle: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginTop: 2
   },
@@ -9020,14 +9089,14 @@ const styles = StyleSheet.create({
     borderRadius: 14
   },
   answerSupplementTextTop: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#fff',
     fontWeight: '600'
   },
   answerContent: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#374151',
-    lineHeight: 22
+    lineHeight: scaleFont(22)
   },
   answerContentContainer: {
     position: 'relative'
@@ -9040,11 +9109,11 @@ const styles = StyleSheet.create({
     gap: 8
   },
   answerIpBottom: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   answerTimeBottom: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   answerExpandBtnInline: {
@@ -9087,7 +9156,7 @@ const styles = StyleSheet.create({
     marginLeft: 4
   },
   answerActionText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   answerSupplementBtn: {
@@ -9100,7 +9169,7 @@ const styles = StyleSheet.create({
     borderRadius: 12
   },
   answerSupplementText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#fff',
     fontWeight: '500'
   },
@@ -9114,7 +9183,7 @@ const styles = StyleSheet.create({
     borderRadius: 12
   },
   answerCommentText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -9122,7 +9191,7 @@ const styles = StyleSheet.create({
     padding: 6
   },
   answerTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   loadMoreBtn: {
@@ -9133,7 +9202,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   loadMoreText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#ef4444'
   },
   // 补充问题样式
@@ -9167,12 +9236,12 @@ const styles = StyleSheet.create({
     gap: 8
   },
   suppAuthor: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#1f2937'
   },
   suppTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   suppLocationRow: {
@@ -9181,7 +9250,7 @@ const styles = StyleSheet.create({
     gap: 2
   },
   suppLocation: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   suppAnswerBtnTop: {
@@ -9194,14 +9263,14 @@ const styles = StyleSheet.create({
     borderRadius: 10
   },
   suppAnswerTextTop: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#fff',
     fontWeight: '500'
   },
   suppContent: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#374151',
-    lineHeight: 22
+    lineHeight: scaleFont(22)
   },
   suppContentContainer: {
     position: 'relative'
@@ -9214,11 +9283,11 @@ const styles = StyleSheet.create({
     gap: 8
   },
   suppIpBottom: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   suppTimeBottom: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   suppFooter: {
@@ -9247,7 +9316,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   suppActionText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   suppAnswerBtn: {
@@ -9260,7 +9329,7 @@ const styles = StyleSheet.create({
     borderRadius: 14
   },
   suppAnswerText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#fff',
     fontWeight: '500'
   },
@@ -9274,7 +9343,7 @@ const styles = StyleSheet.create({
     borderRadius: 14
   },
   suppCommentText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -9308,7 +9377,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f9fafb'
   },
   suppMoreActionText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
     marginLeft: 14
   },
@@ -9321,7 +9390,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   suppMoreCancelText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -9364,7 +9433,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f9fafb'
   },
   moreActionItemText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
     marginLeft: 14
   },
@@ -9377,7 +9446,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   moreActionCancelText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -9404,7 +9473,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   commentModalTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: '#222'
   },
@@ -9419,7 +9488,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffcdd2'
   },
   commentPublishText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#fff',
     fontWeight: '600'
   },
@@ -9432,9 +9501,9 @@ const styles = StyleSheet.create({
   },
   commentTextInput: {
     padding: 16,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#333',
-    lineHeight: 26,
+    lineHeight: scaleFont(26),
     minHeight: 200
   },
   commentIdentitySection: {
@@ -9474,14 +9543,14 @@ const styles = StyleSheet.create({
   },
   successModalTitle: {
     flex: 1,
-    fontSize: 20,
+    fontSize: scaleFont(20),
     fontWeight: '700',
     color: '#1f2937'
   },
   successModalDesc: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#64748b',
-    lineHeight: 24,
+    lineHeight: scaleFont(24),
     marginBottom: 24
   },
   successModalFooter: {
@@ -9497,7 +9566,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   successModalConfirmText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '700',
     color: '#fff'
   },
@@ -9519,7 +9588,7 @@ const styles = StyleSheet.create({
     padding: 10
   },
   commentWordCount: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#999'
   },
   // 评论列表弹窗样式 - 今日头条风格
@@ -9557,7 +9626,7 @@ const styles = StyleSheet.create({
     zIndex: 10
   },
   commentListModalTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -9576,18 +9645,18 @@ const styles = StyleSheet.create({
     gap: 10
   },
   originalCommentAuthor: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '500',
     color: '#9ca3af'
   },
   originalCommentTime: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af'
   },
   originalCommentText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#1f2937',
-    lineHeight: 24,
+    lineHeight: scaleFont(24),
     marginBottom: 0
   },
   originalCommentActions: {
@@ -9601,7 +9670,7 @@ const styles = StyleSheet.create({
     gap: 6
   },
   originalCommentActionText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af'
   },
   // 回复区域标题
@@ -9611,7 +9680,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa'
   },
   repliesSectionTitle: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
     fontWeight: '500'
   },
@@ -9631,21 +9700,21 @@ const styles = StyleSheet.create({
     gap: 8
   },
   commentListAuthor: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#9ca3af'
   },
   commentListTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   commentListContent: {
     flex: 1
   },
   commentListText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     marginBottom: 10
   },
   commentListActions: {
@@ -9659,11 +9728,11 @@ const styles = StyleSheet.create({
     gap: 4
   },
   commentListActionText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   commentListReplyBtn: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#ef4444'
   },
   commentListBottomBar: {
@@ -9682,7 +9751,7 @@ const styles = StyleSheet.create({
     borderRadius: 20
   },
   commentListWriteText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af'
   },
   // 今日头条风格回答弹窗
@@ -9708,7 +9777,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   answerModalTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: '#222'
   },
@@ -9723,7 +9792,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffcdd2'
   },
   answerPublishText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#fff',
     fontWeight: '600'
   },
@@ -9740,9 +9809,9 @@ const styles = StyleSheet.create({
   },
   supplementBlockedBannerText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#92400e',
-    lineHeight: 18
+    lineHeight: scaleFont(18)
   },
   answerQuestionCard: {
     flexDirection: 'row',
@@ -9760,16 +9829,16 @@ const styles = StyleSheet.create({
     flex: 1
   },
   answerQuestionLabel: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#f59e0b',
     fontWeight: '600',
     marginBottom: 6
   },
   answerQuestionText: {
     flex: 1,
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#333',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     fontWeight: '500'
   },
   answerSupplementInfo: {
@@ -9782,15 +9851,15 @@ const styles = StyleSheet.create({
     gap: 4
   },
   answerSupplementLabel: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#f59e0b',
     fontWeight: '600'
   },
   answerSupplementText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
-    lineHeight: 18
+    lineHeight: scaleFont(18)
   },
   answerQuestionAuthor: {
     flexDirection: 'row',
@@ -9799,7 +9868,7 @@ const styles = StyleSheet.create({
     gap: 6
   },
   answerQuestionAuthorText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   answerContentArea: {
@@ -9808,9 +9877,9 @@ const styles = StyleSheet.create({
   },
   answerTextInput: {
     padding: 16,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#333',
-    lineHeight: 26,
+    lineHeight: scaleFont(26),
     minHeight: 300
   },
   answerIdentitySection: {
@@ -9860,7 +9929,7 @@ const styles = StyleSheet.create({
     padding: 10
   },
   answerWordCount: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#999'
   },
   // 补充回答弹窗样式
@@ -9877,7 +9946,7 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   supplementAnswerLabel: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#3b82f6',
     fontWeight: '600'
   },
@@ -9888,14 +9957,14 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   supplementAnswerAuthorName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937'
   },
   supplementAnswerContent: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
-    lineHeight: 20
+    lineHeight: scaleFont(20)
   },
   // 发起活动弹窗样式
   activityModal: {
@@ -9920,7 +9989,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   activityModalTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: '#222'
   },
@@ -9935,7 +10004,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fecaca'
   },
   activityPublishText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#fff',
     fontWeight: '600'
   },
@@ -9957,15 +10026,15 @@ const styles = StyleSheet.create({
     marginBottom: 6
   },
   boundQuestionLabel: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#22c55e',
     fontWeight: '500',
     marginLeft: 6
   },
   boundQuestionText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#166534',
-    lineHeight: 20
+    lineHeight: scaleFont(20)
   },
   activityFormArea: {
     flex: 1,
@@ -9975,7 +10044,7 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   formLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#374151',
     marginBottom: 8
@@ -9987,7 +10056,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937'
   },
   formTextarea: {
@@ -10009,7 +10078,7 @@ const styles = StyleSheet.create({
     gap: 8
   },
   formSelectText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6b7280'
   },
   formInputWithIcon: {
@@ -10025,7 +10094,7 @@ const styles = StyleSheet.create({
   formInputInner: {
     flex: 1,
     paddingVertical: 12,
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937'
   },
   // 评论样式 - 横向布局
@@ -10041,21 +10110,21 @@ const styles = StyleSheet.create({
     gap: 8
   },
   commentAuthor: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#9ca3af'
   },
   commentTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   commentContent: {
     flex: 1
   },
   commentText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     marginBottom: 10
   },
   commentFooter: {
@@ -10087,11 +10156,11 @@ const styles = StyleSheet.create({
     gap: 4
   },
   commentActionText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   commentReplyBtn: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#ef4444'
   },
   // 活动卡片样式
@@ -10121,7 +10190,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#22c55e'
   },
   activityTypeText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#fff',
     fontWeight: '500'
   },
@@ -10137,12 +10206,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#dbeafe'
   },
   activityStatusText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#92400e',
     fontWeight: '500'
   },
   activityTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 10
@@ -10156,7 +10225,7 @@ const styles = StyleSheet.create({
     gap: 6
   },
   activityInfoText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     flex: 1
   },
@@ -10180,7 +10249,7 @@ const styles = StyleSheet.create({
     borderRadius: 14
   },
   activityOrganizerName: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   activityJoinBtn: {
@@ -10190,7 +10259,7 @@ const styles = StyleSheet.create({
     borderRadius: 16
   },
   activityJoinText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#fff',
     fontWeight: '500'
   },
@@ -10216,7 +10285,7 @@ const styles = StyleSheet.create({
     borderColor: '#ef4444'
   },
   activityTypeSelectorText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -10246,7 +10315,7 @@ const styles = StyleSheet.create({
     borderColor: '#3b82f6'
   },
   organizerOptionText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#666'
   },
   organizerOptionTextActive: {
@@ -10265,7 +10334,7 @@ const styles = StyleSheet.create({
     flex: 1
   },
   timeInputLabel: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     marginBottom: 6
   },
@@ -10273,7 +10342,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb',
     borderRadius: 8,
     padding: 12,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     borderWidth: 1,
     borderColor: '#e5e7eb',
     color: '#1f2937'
@@ -10282,7 +10351,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12
   },
   timeSeparator: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -10320,7 +10389,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   addImageText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#9ca3af',
     marginTop: 4
   },
@@ -10340,7 +10409,7 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   reportModalTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937',
     textAlign: 'center',
@@ -10355,7 +10424,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f9fafb'
   },
   reportItemText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
     textAlign: 'center'
   },
@@ -10368,7 +10437,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   reportCancelText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -10396,7 +10465,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#ef4444'
   },
   inviteSubTabText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
     fontWeight: '500'
   },
@@ -10424,7 +10493,7 @@ const styles = StyleSheet.create({
   },
   inviteSearchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#1f2937',
     padding: 0
   },
@@ -10457,13 +10526,13 @@ const styles = StyleSheet.create({
     flex: 1
   },
   recommendUserName: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#1f2937',
     marginBottom: 2
   },
   recommendUserDesc: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#9ca3af'
   },
   recommendInviteBtn: {
@@ -10475,7 +10544,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   recommendInviteBtnText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#fff',
     fontWeight: '500'
   },
@@ -10487,7 +10556,7 @@ const styles = StyleSheet.create({
   },
   // 已邀请列表
   invitedListTitle: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '600',
     color: '#6b7280',
     marginBottom: 8,
@@ -10510,13 +10579,13 @@ const styles = StyleSheet.create({
     marginLeft: 12
   },
   inviteUserName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937',
     marginBottom: 4
   },
   inviteUserDesc: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   invitedTag: {
@@ -10529,7 +10598,7 @@ const styles = StyleSheet.create({
     borderRadius: 12
   },
   invitedTagText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#22c55e',
     fontWeight: '500'
   },
@@ -10542,7 +10611,7 @@ const styles = StyleSheet.create({
     marginTop: 8
   },
   loadMoreInvitedText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#ef4444',
     fontWeight: '500'
   },
@@ -10556,7 +10625,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   inviteBtnText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#fff',
     fontWeight: '500'
   },
@@ -10583,7 +10652,7 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   inviteModalTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937',
     textAlign: 'center',
@@ -10612,7 +10681,7 @@ const styles = StyleSheet.create({
     borderColor: '#3b82f6'
   },
   invitePlatformTabText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -10637,7 +10706,7 @@ const styles = StyleSheet.create({
   },
   inviteSearchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937',
     padding: 0
   },
@@ -10662,13 +10731,13 @@ const styles = StyleSheet.create({
     marginLeft: 12
   },
   inviteUserName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937',
     marginBottom: 4
   },
   inviteUserDesc: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   inviteUserBtn: {
@@ -10681,7 +10750,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   inviteUserBtnText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#fff',
     fontWeight: '600'
   },
@@ -10717,7 +10786,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f3f4f6'
   },
   teamTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -10728,7 +10797,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f3f4f6'
   },
   teamMembersTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#6b7280',
     paddingHorizontal: 16,
@@ -10766,13 +10835,13 @@ const styles = StyleSheet.create({
     borderColor: '#fff'
   },
   teamMemberName: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#1f2937',
     fontWeight: '500',
     marginBottom: 2
   },
   teamMemberRole: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#f59e0b',
     fontWeight: '600'
   },
@@ -10782,7 +10851,7 @@ const styles = StyleSheet.create({
     paddingTop: 16
   },
   teamChatTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#6b7280',
     paddingHorizontal: 16,
@@ -10816,18 +10885,18 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   teamChatUser: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '600',
     color: '#1f2937'
   },
   teamChatTime: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af'
   },
   teamChatText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#374151',
-    lineHeight: 18
+    lineHeight: scaleFont(18)
   },
   teamChatInputContainer: {
     flexDirection: 'row',
@@ -10844,7 +10913,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937'
   },
   teamChatSendBtn: {
@@ -10870,7 +10939,7 @@ const styles = StyleSheet.create({
     gap: 8
   },
   teamJoinBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600'
   },
@@ -10886,7 +10955,7 @@ const styles = StyleSheet.create({
     borderColor: '#fecaca'
   },
   teamLeaveBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#ef4444',
     fontWeight: '600'
   },
@@ -10918,27 +10987,27 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap'
   },
   replyAuthor: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#9ca3af'
   },
   replyAuthorRelation: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   replyReplyTarget: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#6b7280'
   },
   replyTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   replyText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     marginBottom: 10
   },
   replyActions: {
@@ -10964,7 +11033,7 @@ const styles = StyleSheet.create({
     paddingBottom: 6
   },
   replyChildrenToggleText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -10972,8 +11041,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4
   },
   replyChildText: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: scaleFont(14),
+    lineHeight: scaleFont(20),
     color: '#374151'
   },
   replyChildAuthor: {
@@ -10987,11 +11056,11 @@ const styles = StyleSheet.create({
     color: '#6b7280'
   },
   replyActionText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af'
   },
   replyReplyBtn: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#ef4444'
   },
   // 推荐问题样式
@@ -11010,12 +11079,12 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   recommendedTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937'
   },
   recommendedSubtitle: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginLeft: 28
   },
@@ -11036,21 +11105,21 @@ const styles = StyleSheet.create({
     borderRadius: 4
   },
   recommendedHotTextInline: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#ef4444',
     fontWeight: '600'
   },
   recommendedQuestionTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: '#1f2937',
-    lineHeight: 26,
+    lineHeight: scaleFont(26),
     marginBottom: 12
   },
   recommendedQuestionContent: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     marginBottom: 12
   },
   recommendedQuestionMeta: {
@@ -11070,12 +11139,12 @@ const styles = StyleSheet.create({
     borderRadius: 12
   },
   recommendedAuthorName: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '500',
     color: '#374151'
   },
   recommendedQuestionTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   recommendedQuestionStats: {
@@ -11089,7 +11158,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   recommendedStatText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   recommendedTopicTags: {
@@ -11099,7 +11168,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   recommendedTopicTag: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#3b82f6',
     backgroundColor: '#eff6ff',
     paddingHorizontal: 10,
@@ -11113,7 +11182,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   loadingText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af'
   },
   // 收起按钮样式（在列表内部）
@@ -11131,7 +11200,7 @@ const styles = StyleSheet.create({
     borderColor: '#fecaca'
   },
   collapseBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#ef4444',
     fontWeight: '600',
     marginRight: 4
@@ -11157,7 +11226,7 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   addRewardModalTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937',
     textAlign: 'center',
@@ -11179,20 +11248,20 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   currentRewardLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280'
   },
   currentRewardAmount: {
-    fontSize: 28,
+    fontSize: scaleFont(28),
     fontWeight: '700',
     color: '#ef4444'
   },
   currentRewardDesc: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   addRewardSectionTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#374151',
     marginBottom: 12
@@ -11219,7 +11288,7 @@ const styles = StyleSheet.create({
     borderWidth: 2
   },
   quickAmountText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#6b7280'
   },
@@ -11238,14 +11307,14 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   currencySymbol: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#6b7280',
     marginRight: 8
   },
   customAmountField: {
     flex: 1,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#1f2937',
     padding: 0
   },
@@ -11260,9 +11329,9 @@ const styles = StyleSheet.create({
   },
   addRewardTipsText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
-    lineHeight: 18
+    lineHeight: scaleFont(18)
   },
   confirmAddRewardBtn: {
     backgroundColor: '#ef4444',
@@ -11275,7 +11344,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fca5a5'
   },
   confirmAddRewardBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600'
   },
@@ -11286,7 +11355,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   cancelAddRewardBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -11316,7 +11385,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f3f4f6'
   },
   contributorsModalTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -11337,16 +11406,16 @@ const styles = StyleSheet.create({
     marginBottom: 6
   },
   contributorsTotalLabel: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   contributorsTotalAmount: {
-    fontSize: 24,
+    fontSize: scaleFont(24),
     fontWeight: '700',
     color: '#ef4444'
   },
   contributorsTotalDesc: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   contributorsList: {
@@ -11370,7 +11439,7 @@ const styles = StyleSheet.create({
     marginRight: 10
   },
   contributorRankText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '600',
     color: '#9ca3af'
   },
@@ -11379,13 +11448,13 @@ const styles = StyleSheet.create({
     marginLeft: 10
   },
   contributorName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937',
     marginBottom: 2
   },
   contributorTime: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af'
   },
   contributorAmountBadge: {
@@ -11400,7 +11469,7 @@ const styles = StyleSheet.create({
     borderColor: '#fee2e2'
   },
   contributorAmountText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '600',
     color: '#ef4444'
   },
@@ -11413,7 +11482,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   contributorsCloseBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -11435,7 +11504,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb'
   },
   superLikeBadgeText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#f59e0b',
     fontWeight: '600',
     flexShrink: 0,
@@ -11468,7 +11537,7 @@ const styles = StyleSheet.create({
     marginBottom: 20
   },
   superLikeModalTitle: {
-    fontSize: 20,
+    fontSize: scaleFont(20),
     fontWeight: '700',
     color: '#1f2937'
   },
@@ -11499,7 +11568,7 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   superLikeInfoLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#92400e',
     fontWeight: '500'
   },
@@ -11513,17 +11582,17 @@ const styles = StyleSheet.create({
     borderRadius: 20
   },
   superLikeCountText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '700',
     color: '#f59e0b'
   },
   superLikeInfoDesc: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#92400e',
-    lineHeight: 18
+    lineHeight: scaleFont(18)
   },
   superLikeSectionTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#374151',
     marginBottom: 12
@@ -11551,7 +11620,7 @@ const styles = StyleSheet.create({
     borderWidth: 2
   },
   quickSuperLikeText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#f59e0b'
   },
@@ -11559,7 +11628,7 @@ const styles = StyleSheet.create({
     color: '#fff'
   },
   quickSuperLikePrice: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#92400e'
   },
   quickSuperLikePriceActive: {
@@ -11579,12 +11648,12 @@ const styles = StyleSheet.create({
   },
   customSuperLikeField: {
     flex: 1,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#1f2937',
     padding: 0
   },
   superLikePriceHint: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#f59e0b'
   },
@@ -11601,11 +11670,11 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   priceInfoLabel: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   priceInfoValue: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#1f2937',
     fontWeight: '500'
   },
@@ -11616,12 +11685,12 @@ const styles = StyleSheet.create({
     marginTop: 4
   },
   priceInfoTotalLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937'
   },
   priceInfoTotalValue: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '700',
     color: '#f59e0b'
   },
@@ -11636,9 +11705,9 @@ const styles = StyleSheet.create({
   },
   superLikeTipsText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
-    lineHeight: 18
+    lineHeight: scaleFont(18)
   },
   superLikeFooter: {
     paddingHorizontal: 20,
@@ -11661,7 +11730,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fcd34d'
   },
   confirmSuperLikeBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600'
   },
@@ -11672,7 +11741,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   cancelSuperLikeBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -11702,7 +11771,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f3f4f6'
   },
   arbitrationModalTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -11724,12 +11793,12 @@ const styles = StyleSheet.create({
   },
   arbitrationInfoText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#1e40af',
-    lineHeight: 20
+    lineHeight: scaleFont(20)
   },
   arbitrationSectionTitle: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 10
@@ -11740,7 +11809,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     borderRadius: 12,
     padding: 12,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937',
     minHeight: 100,
     marginBottom: 20
@@ -11752,7 +11821,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   arbitrationExpertsCount: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -11771,7 +11840,7 @@ const styles = StyleSheet.create({
   },
   expertSearchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937',
     padding: 0
   },
@@ -11783,7 +11852,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   recommendedExpertsTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -11793,13 +11862,13 @@ const styles = StyleSheet.create({
     paddingVertical: 40
   },
   noExpertsFoundText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '500',
     color: '#6b7280',
     marginTop: 12
   },
   noExpertsFoundDesc: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
     marginTop: 4
   },
@@ -11829,17 +11898,17 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   expertName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937'
   },
   expertTitle: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     marginBottom: 2
   },
   expertExpertise: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af'
   },
   expertCheckbox: {
@@ -11872,7 +11941,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fca5a5'
   },
   submitArbitrationBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600'
   },
@@ -11883,7 +11952,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   cancelArbitrationBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -11895,7 +11964,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20
   },
   arbitrationStatusTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937',
     textAlign: 'center',
@@ -11946,11 +12015,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#ef4444'
   },
   votingStatText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   votingPercentage: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '700',
     color: '#1f2937',
     textAlign: 'center'
@@ -11960,7 +12029,7 @@ const styles = StyleSheet.create({
     paddingVertical: 20
   },
   arbitrationPendingInfoText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
     marginTop: 10,
     marginBottom: 16
@@ -11972,7 +12041,7 @@ const styles = StyleSheet.create({
     borderRadius: 12
   },
   simulateVoteBtnText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#fff',
     fontWeight: '600'
   },
@@ -11985,17 +12054,17 @@ const styles = StyleSheet.create({
     paddingVertical: 20
   },
   arbitrationResultTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937',
     marginTop: 12,
     marginBottom: 8
   },
   arbitrationResultDesc: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: scaleFont(20),
     paddingHorizontal: 20
   },
   closeArbitrationStatusBtn: {
@@ -12006,7 +12075,7 @@ const styles = StyleSheet.create({
     marginTop: 10
   },
   closeArbitrationStatusBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -12016,7 +12085,7 @@ const styles = StyleSheet.create({
     maxHeight: 400
   },
   expertVotesSectionTitle: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 12,
@@ -12050,7 +12119,7 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   expertVoteName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -12069,12 +12138,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#ef4444'
   },
   expertVoteBadgeText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#fff',
     fontWeight: '600'
   },
   expertVoteTitle: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280'
   },
   expertVoteReasonBox: {
@@ -12084,18 +12153,18 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   expertVoteReasonLabel: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '600',
     color: '#6b7280',
     marginBottom: 4
   },
   expertVoteReasonText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#374151',
-    lineHeight: 20
+    lineHeight: scaleFont(20)
   },
   expertVoteTime: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af',
     textAlign: 'right'
   }

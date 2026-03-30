@@ -26,16 +26,17 @@ const appendIfPresent = (params, key, value) => {
 };
 
 export const buildShareParams = (shareData = {}) => {
-  const shareType = shareData.shareType || shareData.type || 'question';
-  const qid = pickFirstNumberLike(shareData.qid, shareData.questionId, shareData.question_id);
-  const aid = pickFirstNumberLike(shareData.aid, shareData.answerId, shareData.answer_id);
-  const sid = pickFirstNumberLike(shareData.sid, shareData.supplementId, shareData.supplement_id);
-  const cid = pickFirstNumberLike(shareData.cid, shareData.commentId, shareData.comment_id);
+  const safeShareData = shareData && typeof shareData === 'object' ? shareData : {};
+  const shareType = safeShareData.shareType || safeShareData.type || 'question';
+  const qid = pickFirstNumberLike(safeShareData.qid, safeShareData.questionId, safeShareData.question_id);
+  const aid = pickFirstNumberLike(safeShareData.aid, safeShareData.answerId, safeShareData.answer_id);
+  const sid = pickFirstNumberLike(safeShareData.sid, safeShareData.supplementId, safeShareData.supplement_id);
+  const cid = pickFirstNumberLike(safeShareData.cid, safeShareData.commentId, safeShareData.comment_id);
   const rootCid = pickFirstNumberLike(
-    shareData.rootCid,
-    shareData.threadRootId,
-    shareData.thread_root_id,
-    shareData.rootCommentId
+    safeShareData.rootCid,
+    safeShareData.threadRootId,
+    safeShareData.thread_root_id,
+    safeShareData.rootCommentId
   );
 
   switch (shareType) {
@@ -43,21 +44,21 @@ export const buildShareParams = (shareData = {}) => {
     case 'question':
       return {
         type: 'sharequestion',
-        qid: qid || pickFirstNumberLike(shareData.id),
+        qid: qid || pickFirstNumberLike(safeShareData.id),
       };
     case 'shareanswer':
     case 'answer':
       return {
         type: 'shareanswer',
         qid,
-        aid: aid || pickFirstNumberLike(shareData.id),
+        aid: aid || pickFirstNumberLike(safeShareData.id),
       };
     case 'sharesupplement':
     case 'supplement':
       return {
         type: 'sharesupplement',
         qid,
-        sid: sid || pickFirstNumberLike(shareData.id),
+        sid: sid || pickFirstNumberLike(safeShareData.id),
       };
     case 'sharecomment':
     case 'comment':
@@ -66,23 +67,25 @@ export const buildShareParams = (shareData = {}) => {
         qid,
         aid,
         sid,
-        cid: cid || pickFirstNumberLike(shareData.id),
-        rootCid: rootCid || cid || pickFirstNumberLike(shareData.id),
+        cid: cid || pickFirstNumberLike(safeShareData.id),
+        rootCid: rootCid || cid || pickFirstNumberLike(safeShareData.id),
       };
     default:
       return {
         type: 'sharequestion',
-        qid: qid || pickFirstNumberLike(shareData.id),
+        qid: qid || pickFirstNumberLike(safeShareData.id),
       };
   }
 };
 
 export const buildShareUrl = (shareData = {}) => {
-  if (shareData?.url) {
-    return shareData.url;
+  const safeShareData = shareData && typeof shareData === 'object' ? shareData : {};
+
+  if (safeShareData.url) {
+    return safeShareData.url;
   }
 
-  const normalized = buildShareParams(shareData);
+  const normalized = buildShareParams(safeShareData);
   const params = new URLSearchParams();
 
   appendIfPresent(params, 'type', normalized.type);
@@ -91,19 +94,21 @@ export const buildShareUrl = (shareData = {}) => {
   appendIfPresent(params, 'sid', normalized.sid);
   appendIfPresent(params, 'cid', normalized.cid);
   appendIfPresent(params, 'rootCid', normalized.rootCid);
-  appendIfPresent(params, 'traceId', shareData.traceId);
+  appendIfPresent(params, 'traceId', safeShareData.traceId);
 
   const query = params.toString();
   return query ? `${SHARE_BASE_URL}?${query}` : SHARE_BASE_URL;
 };
 
 export const buildTwitterShareText = (shareData = {}) => {
-  if (typeof shareData.shareText === 'string' && shareData.shareText.trim()) {
-    return shareData.shareText.trim();
+  const safeShareData = shareData && typeof shareData === 'object' ? shareData : {};
+
+  if (typeof safeShareData.shareText === 'string' && safeShareData.shareText.trim()) {
+    return safeShareData.shareText.trim();
   }
 
-  const title = typeof shareData.title === 'string' ? shareData.title.trim() : '';
-  const content = typeof shareData.content === 'string' ? shareData.content.trim() : '';
+  const title = typeof safeShareData.title === 'string' ? safeShareData.title.trim() : '';
+  const content = typeof safeShareData.content === 'string' ? safeShareData.content.trim() : '';
   const leadText = title || content;
 
   if (leadText) {

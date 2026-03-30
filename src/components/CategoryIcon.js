@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
 import { Ionicons } from '@expo/vector-icons';
 
+import { scaleFont } from '../utils/responsive';
 /**
  * 分类图标组件
  * 支持 Font Awesome 格式的图标显示

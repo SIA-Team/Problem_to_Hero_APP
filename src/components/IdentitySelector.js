@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Image, ScrollView } from 'rea
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 
+import { scaleFont } from '../utils/responsive';
 // 模拟用户团队数据
 const userTeams = [{
   id: 1,
@@ -144,7 +145,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   headerTitle: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#374151'
   },
@@ -196,7 +197,7 @@ const styles = StyleSheet.create({
     flex: 1
   },
   identityName: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#374151',
     marginBottom: 2
@@ -205,7 +206,7 @@ const styles = StyleSheet.create({
     color: '#ef4444'
   },
   identityDesc: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   // 团队选择
@@ -223,12 +224,12 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   teamsSectionTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#374151'
   },
   teamsCount: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280'
   },
   teamsList: {
@@ -265,12 +266,12 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   teamName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937'
   },
   teamMembers: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280'
   },
   teamCheckbox: {

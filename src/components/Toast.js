@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { scaleFont } from '../utils/responsive';
 const { width } = Dimensions.get('window');
 
 /**
@@ -156,10 +157,10 @@ const styles = StyleSheet.create({
   },
   message: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '500',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: scaleFont(20),
   },
 });
 

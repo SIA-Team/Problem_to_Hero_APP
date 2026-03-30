@@ -20,6 +20,7 @@ import commentApi from '../services/api/commentApi';
 import questionApi from '../services/api/questionApi';
 import uploadApi from '../services/api/uploadApi';
 
+import { scaleFont } from '../utils/responsive';
 const DEFAULT_AVATAR = 'https://api.dicebear.com/7.x/avataaars/svg?seed=default';
 const INITIAL_COMMENT_LIST_STATE = {
   list: [],
@@ -2939,7 +2940,7 @@ const styles = StyleSheet.create({
     padding: 4
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -2957,7 +2958,7 @@ const styles = StyleSheet.create({
     gap: 2
   },
   shareBtnText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280'
   },
   content: {
@@ -2994,7 +2995,7 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   supplementAuthor: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -3008,7 +3009,7 @@ const styles = StyleSheet.create({
     gap: 2
   },
   followBtnSmallText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#ef4444',
     fontWeight: '500'
   },
@@ -3018,17 +3019,17 @@ const styles = StyleSheet.create({
     gap: 4
   },
   supplementLocation: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   supplementTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   supplementContent: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#1f2937',
-    lineHeight: 26,
+    lineHeight: scaleFont(26),
     fontWeight: '400',
     marginBottom: 12
   },
@@ -3041,7 +3042,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#f3f4f6'
   },
   supplementViewsText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   detailHintRow: {
@@ -3051,12 +3052,12 @@ const styles = StyleSheet.create({
     marginTop: 10
   },
   detailHintText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280'
   },
   detailErrorText: {
     marginTop: 8,
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#ef4444'
   },
   supplementsEmptyContainer: {
@@ -3064,13 +3065,13 @@ const styles = StyleSheet.create({
     paddingVertical: 60
   },
   supplementsEmptyText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#6b7280',
     marginTop: 16
   },
   supplementsEmptyDesc: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af',
     marginTop: 8
   },
@@ -3088,15 +3089,15 @@ const styles = StyleSheet.create({
     marginBottom: 6
   },
   originalQuestionLabel: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af',
     fontWeight: '500'
   },
   originalQuestionTitle: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '500',
     color: '#6b7280',
-    lineHeight: 20,
+    lineHeight: scaleFont(20),
     marginBottom: 8
   },
   originalQuestionFooter: {
@@ -3110,12 +3111,12 @@ const styles = StyleSheet.create({
     borderRadius: 10
   },
   originalQuestionAuthor: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     fontWeight: '500'
   },
   originalQuestionTime: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af'
   },
   tabsSection: {
@@ -3134,7 +3135,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   tabText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280'
   },
   tabTextActive: {
@@ -3177,7 +3178,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fef2f2'
   },
   sortFilterText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af'
   },
   sortFilterTextActive: {
@@ -3185,7 +3186,7 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   },
   sortFilterCount: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   contentSection: {
@@ -3216,19 +3217,19 @@ const styles = StyleSheet.create({
     gap: 6
   },
   answerAuthor: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937'
   },
   answerAuthorTitle: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginTop: 2
   },
   answerContent: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#374151',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     marginBottom: 12
   },
   answerFooter: {
@@ -3256,7 +3257,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   answerActionText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   inviteContainer: {
@@ -3282,7 +3283,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#ef4444'
   },
   inviteSubTabText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
     fontWeight: '500'
   },
@@ -3310,7 +3311,7 @@ const styles = StyleSheet.create({
   },
   inviteSearchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#1f2937',
     padding: 0
   },
@@ -3342,13 +3343,13 @@ const styles = StyleSheet.create({
     flex: 1
   },
   recommendUserName: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#1f2937',
     marginBottom: 2
   },
   recommendUserDesc: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#9ca3af'
   },
   recommendInviteBtn: {
@@ -3366,7 +3367,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#4267B2'
   },
   invitedListTitle: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '600',
     color: '#6b7280',
     marginBottom: 8,
@@ -3389,13 +3390,13 @@ const styles = StyleSheet.create({
     marginLeft: 12
   },
   inviteUserName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937',
     marginBottom: 4
   },
   inviteUserDesc: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   invitedTag: {
@@ -3408,7 +3409,7 @@ const styles = StyleSheet.create({
     borderRadius: 12
   },
   invitedTagText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#22c55e',
     fontWeight: '500'
   },
@@ -3432,18 +3433,18 @@ const styles = StyleSheet.create({
     gap: 8
   },
   commentAuthor: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#9ca3af'
   },
   commentTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   commentText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     marginBottom: 10
   },
   commentFooter: {
@@ -3469,7 +3470,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   commentActionText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   repliesContainer: {
@@ -3500,18 +3501,18 @@ const styles = StyleSheet.create({
     gap: 8
   },
   replyAuthor: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#9ca3af'
   },
   replyTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   replyText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     marginBottom: 10
   },
   modalOverlay: {
@@ -3553,7 +3554,7 @@ const styles = StyleSheet.create({
     zIndex: 10
   },
   commentReplyModalTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -3574,18 +3575,18 @@ const styles = StyleSheet.create({
     gap: 10
   },
   originalCommentAuthor: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '500',
     color: '#9ca3af'
   },
   originalCommentTime: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af'
   },
   originalCommentText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#1f2937',
-    lineHeight: 24
+    lineHeight: scaleFont(24)
   },
   repliesSectionHeader: {
     paddingHorizontal: 16,
@@ -3593,7 +3594,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa'
   },
   repliesSectionTitle: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
     fontWeight: '500'
   },
@@ -3607,7 +3608,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   loadingText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   replyAuthorMeta: {
@@ -3619,11 +3620,11 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap'
   },
   replyAuthorRelation: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   replyReplyTarget: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#6b7280'
   },
@@ -3638,7 +3639,7 @@ const styles = StyleSheet.create({
     gap: 3
   },
   replyActionText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af'
   },
   replyChildrenSection: {
@@ -3654,7 +3655,7 @@ const styles = StyleSheet.create({
     paddingBottom: 6
   },
   replyChildrenToggleText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -3674,7 +3675,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12
   },
   commentReplyWriteText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af'
   },
   bottomBar: {
@@ -3705,7 +3706,7 @@ const styles = StyleSheet.create({
     gap: 3
   },
   bottomIconText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280'
   },
   bottomCommentInput: {
@@ -3718,7 +3719,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb'
   },
   bottomCommentPlaceholder: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af'
   },
   bottomAnswerBtn: {
@@ -3731,7 +3732,7 @@ const styles = StyleSheet.create({
     borderRadius: 20
   },
   bottomAnswerText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#fff',
     fontWeight: '600'
   },
@@ -3757,7 +3758,7 @@ const styles = StyleSheet.create({
     width: 40
   },
   answerModalTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: modalTokens.textPrimary
   },
@@ -3771,7 +3772,7 @@ const styles = StyleSheet.create({
     backgroundColor: modalTokens.dangerSoft
   },
   answerPublishText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#fff',
     fontWeight: '600'
   },
@@ -3785,9 +3786,9 @@ const styles = StyleSheet.create({
     padding: 16
   },
   answerTextInput: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: modalTokens.textPrimary,
-    lineHeight: 26,
+    lineHeight: scaleFont(26),
     minHeight: 200,
     marginBottom: 16,
     textAlignVertical: 'top'
@@ -3814,7 +3815,7 @@ const styles = StyleSheet.create({
     padding: 4
   },
   answerWordCount: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af'
   },
   // 琛ュ厖鍥炵瓟涓婁笅鏂囨牱寮?
@@ -3831,7 +3832,7 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   supplementAnswerLabel: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#3b82f6',
     fontWeight: '600'
   },
@@ -3842,14 +3843,14 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   supplementAnswerAuthorName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937'
   },
   supplementAnswerContent: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
-    lineHeight: 20
+    lineHeight: scaleFont(20)
   }
 });
 

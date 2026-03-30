@@ -5,6 +5,7 @@ import superLikeCreditService from '../services/SuperLikeCreditService';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
 
+import { scaleFont } from '../utils/responsive';
 export default function UseSuperLikeButton({ 
   answerId, 
   answerTitle, 
@@ -127,7 +128,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '600',
   },
 });

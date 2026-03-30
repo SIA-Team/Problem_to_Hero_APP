@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import { showToast } from '../utils/toast';
 
+import { scaleFont } from '../utils/responsive';
 const MOCK_GROUPS = [
   {
     id: 1,
@@ -187,7 +188,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb',
   },
   headerTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: '#1f2937',
   },
@@ -209,13 +210,13 @@ const styles = StyleSheet.create({
     paddingVertical: 100,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#6b7280',
     marginTop: 16,
     fontWeight: '500',
   },
   emptyHint: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af',
     marginTop: 8,
   },
@@ -246,7 +247,7 @@ const styles = StyleSheet.create({
   },
   unreadText: {
     color: '#fff',
-    fontSize: 11,
+    fontSize: scaleFont(11),
     fontWeight: '600',
   },
   groupInfo: {
@@ -261,13 +262,13 @@ const styles = StyleSheet.create({
   },
   groupName: {
     flex: 1,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937',
     marginRight: 8,
   },
   groupTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
   },
   groupFooter: {
@@ -277,7 +278,7 @@ const styles = StyleSheet.create({
   },
   groupMessage: {
     flex: 1,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
     marginRight: 8,
   },
@@ -287,7 +288,7 @@ const styles = StyleSheet.create({
   },
   memberCount: {
     marginLeft: 4,
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
   },
 });

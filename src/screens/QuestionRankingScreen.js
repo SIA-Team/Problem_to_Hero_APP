@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { formatNumber } from '../utils/numberFormatter';
 
+import { scaleFont } from '../utils/responsive';
 // 排行榜分类
 const rankingTabs = [
   { key: 'answers', labelKey: 'screens.questionRanking.tabs.mostAnswers', icon: 'chatbubbles' },
@@ -219,7 +220,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937',
   },
@@ -238,7 +239,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   tabText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6b7280',
     fontWeight: '500',
   },
@@ -275,7 +276,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   rankText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '700',
     color: '#fff',
   },
@@ -285,8 +286,8 @@ const styles = StyleSheet.create({
   },
   questionTitle: {
     flex: 1,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: scaleFont(15),
+    lineHeight: scaleFont(22),
     color: '#1f2937',
     fontWeight: '500',
   },
@@ -295,11 +296,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingVertical: 0,
     borderRadius: 0,
-    fontSize: 19,
+    fontSize: scaleFont(19),
     color: '#ef4444',
     fontWeight: '600',
     includeFontPadding: false,
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
   },
   statsRow: {
     flexDirection: 'row',
@@ -312,12 +313,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   mainStatValue: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '700',
     color: '#10b981',
   },
   mainStatLabel: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
   },
   secondaryStat: {
@@ -326,7 +327,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   secondaryStatText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
   },
   listFooter: {
@@ -334,7 +335,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
   },
 });

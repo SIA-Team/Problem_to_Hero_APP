@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Switch, TextInput, Modal, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Switch, TextInput, Modal, ActivityIndicator, Platform, InteractionManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -13,7 +13,7 @@ import DatePickerModal from '../components/DatePickerModal';
 import Toast from '../components/Toast';
 import ServerSwitcher from '../components/ServerSwitcher';
 import LogoutConfirmModal from '../components/LogoutConfirmModal';
-import OccupationPickerModal from '../components/OccupationPickerModal';
+import OccupationPickerModal, { warmOccupationPickerData } from '../components/OccupationPickerModal';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import UserCacheService from '../services/UserCacheService';
@@ -21,12 +21,12 @@ import userApi from '../services/api/userApi';
 import authApi from '../services/api/authApi';
 import { showAppAlert } from '../utils/appAlert';
 import { getRegionData } from '../data/regionData';
+import { scaleFont } from '../utils/responsive';
 export default function SettingsScreen({
   navigation
 }) {
   const {
-    t,
-    i18n
+    t
   } = useTranslation();
   // Toast 状态
   const [toast, setToast] = useState({
@@ -87,28 +87,6 @@ export default function SettingsScreen({
   // 退出登录弹窗状态
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-
-  const currentLanguageLabel = i18n?.locale === 'en' ? 'English' : '简体中文';
-
-  const handleLanguageSelect = async locale => {
-    await i18n.setLanguage(locale);
-    showAppAlert(
-      t('screens.settings.alerts.saveSuccess.title'),
-      locale === 'en' ? 'Language switched to English.' : '语言已切换为简体中文。'
-    );
-  };
-
-  const handleLanguagePress = () => {
-    showAppAlert(
-      t('screens.settings.alerts.language.title'),
-      i18n?.locale === 'en' ? `Current language: ${currentLanguageLabel}` : `当前语言：${currentLanguageLabel}`,
-      [
-        { text: i18n?.locale === 'en' ? 'Cancel' : '取消', style: 'cancel' },
-        { text: '简体中文', onPress: () => handleLanguageSelect('zh') },
-        { text: 'English', onPress: () => handleLanguageSelect('en') }
-      ]
-    );
-  };
 
   // 缓存大小状态
   const [cacheSize, setCacheSize] = useState('计算中...');
@@ -232,6 +210,16 @@ export default function SettingsScreen({
     };
     
     loadNotificationSettings();
+  }, []);
+
+  useEffect(() => {
+    const interactionTask = InteractionManager.runAfterInteractions(() => {
+      warmOccupationPickerData();
+    });
+
+    return () => {
+      interactionTask?.cancel?.();
+    };
   }, []);
 
   /**
@@ -1309,7 +1297,7 @@ export default function SettingsScreen({
                 <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
               </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem} onPress={() => showAppAlert(
+            <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]} onPress={() => showAppAlert(
               t('screens.settings.alerts.clearCache.title'), 
               t('screens.settings.alerts.clearCache.message'), 
               [
@@ -1333,16 +1321,6 @@ export default function SettingsScreen({
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]} onPress={handleLanguagePress}>
-              <View style={styles.menuLeft}>
-                <Ionicons name="language-outline" size={22} color="#6b7280" />
-                <Text style={styles.menuLabel}>{t('screens.settings.general.language')}</Text>
-              </View>
-              <View style={styles.menuRight}>
-                <Text style={styles.menuValue}>{currentLanguageLabel}</Text>
-                <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
-              </View>
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -1631,7 +1609,7 @@ const styles = StyleSheet.create({
     padding: 4
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -1667,13 +1645,13 @@ const styles = StyleSheet.create({
     flex: 1
   },
   accountName: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 4
   },
   accountId: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af'
   },
   // 分组标题
@@ -1681,7 +1659,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   groupTitle: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
     paddingHorizontal: 16,
     paddingTop: 8,
@@ -1710,7 +1688,7 @@ const styles = StyleSheet.create({
     flex: 1
   },
   menuLabel: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
     marginLeft: 12
   },
@@ -1719,7 +1697,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   menuValue: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af',
     marginRight: 8
   },
@@ -1738,11 +1716,11 @@ const styles = StyleSheet.create({
     flex: 1
   },
   switchLabel: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937'
   },
   switchDesc: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginTop: 2
   },
@@ -1760,7 +1738,7 @@ const styles = StyleSheet.create({
     marginRight: 4
   },
   onlineText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#22c55e',
     marginRight: 8
   },
@@ -1774,7 +1752,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   logoutText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#ef4444',
     fontWeight: '500'
   },
@@ -1802,16 +1780,16 @@ const styles = StyleSheet.create({
     borderBottomColor: modalTokens.border
   },
   editModalCancel: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: modalTokens.textSecondary
   },
   editModalTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '700',
     color: modalTokens.textPrimary
   },
   editModalSave: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: modalTokens.danger,
     fontWeight: '700'
   },
@@ -1825,7 +1803,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: modalTokens.textPrimary
   },
   editInputMultiline: {
@@ -1833,7 +1811,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top'
   },
   editHint: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: modalTokens.textMuted,
     marginTop: 8
   },
@@ -1866,12 +1844,12 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f3f4f6'
   },
   modalTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: '#1f2937'
   },
   confirmText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#ef4444',
     fontWeight: '600'
   },
@@ -1890,7 +1868,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4
   },
   breadcrumbText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af'
   },
   breadcrumbTextActive: {
@@ -1914,7 +1892,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f3f4f6'
   },
   regionOptionText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937'
   }
 });

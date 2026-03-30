@@ -17,6 +17,7 @@ import { modalTokens } from '../components/modalTokens';
 import questionApi from '../services/api/questionApi';
 import { showAppAlert } from '../utils/appAlert';
 
+import { scaleFont } from '../utils/responsive';
 const TEAM_ROLE_LEADER = '\u961f\u957f';
 const TEAM_ROLE_MEMBER = '\u6210\u5458';
 const EMPTY_ERROR_KEY = '__EMPTY_NO_DATA__';
@@ -525,13 +526,13 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: 'bold',
     color: '#1f2937',
     textAlign: 'center',
   },
   headerSubtitle: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginTop: 2,
     textAlign: 'center',
@@ -555,7 +556,7 @@ const styles = StyleSheet.create({
   },
   createBtnText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
   },
   content: {
@@ -567,12 +568,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   listTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937',
   },
   listDesc: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     marginTop: 4,
   },
@@ -598,7 +599,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   teamName: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937',
     flex: 1,
@@ -614,7 +615,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   joinedText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#22c55e',
     fontWeight: '500',
   },
@@ -629,14 +630,14 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   pendingText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#f59e0b',
     fontWeight: '500',
   },
   teamDesc: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
-    lineHeight: 18,
+    lineHeight: scaleFont(18),
     marginBottom: 6,
   },
   userRoleRow: {
@@ -645,7 +646,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   userRoleText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
   },
   roleBadge: {
@@ -660,7 +661,7 @@ const styles = StyleSheet.create({
     borderColor: '#fecaca',
   },
   roleBadgeText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#6b7280',
     fontWeight: '500',
   },
@@ -693,7 +694,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e5e7eb',
   },
   metaText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
   },
   activeTag: {
@@ -710,7 +711,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   activeText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     fontWeight: '500',
   },
   applyBtn: {
@@ -729,7 +730,7 @@ const styles = StyleSheet.create({
   },
   applyBtnText: {
     color: '#ef4444',
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '500',
   },
   pendingTag: {
@@ -743,7 +744,7 @@ const styles = StyleSheet.create({
   },
   pendingTagText: {
     color: '#f59e0b',
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
   },
   enterTag: {
@@ -752,7 +753,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   enterTagText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     fontWeight: '500',
   },
@@ -762,12 +763,12 @@ const styles = StyleSheet.create({
     paddingVertical: 80,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#9ca3af',
     marginTop: 16,
   },
   emptyHint: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#d1d5db',
     marginTop: 8,
   },
@@ -793,7 +794,7 @@ const styles = StyleSheet.create({
     borderBottomColor: modalTokens.border,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '700',
     color: modalTokens.textPrimary,
   },
@@ -804,7 +805,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   inputLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#374151',
     marginBottom: 8,
@@ -816,7 +817,7 @@ const styles = StyleSheet.create({
     backgroundColor: modalTokens.surfaceSoft,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: modalTokens.textPrimary,
   },
   textArea: {
@@ -824,7 +825,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   inputHint: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginTop: 6,
   },
@@ -837,7 +838,7 @@ const styles = StyleSheet.create({
   },
   submitBtnText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
   },
   pendingModal: {
@@ -859,15 +860,15 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   pendingModalTitle: {
-    fontSize: 20,
+    fontSize: scaleFont(20),
     fontWeight: '700',
     color: modalTokens.textPrimary,
     marginBottom: 12,
   },
   pendingModalDesc: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textSecondary,
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     textAlign: 'center',
     marginBottom: 24,
   },
@@ -880,7 +881,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pendingModalBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600',
   },

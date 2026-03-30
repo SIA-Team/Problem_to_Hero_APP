@@ -20,6 +20,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
 import userApi from '../services/api/userApi';
+import { scaleFont } from '../utils/responsive';
 
 function FeedbackScreen({ navigation }) {
   const { t } = useTranslation();
@@ -499,7 +500,7 @@ const styles = StyleSheet.create({
     width: 60
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937',
     flex: 1,
@@ -511,7 +512,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end'
   },
   clearButtonText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6b7280'
   },
   scrollView: {
@@ -543,15 +544,15 @@ const styles = StyleSheet.create({
     flex: 1
   },
   tipTitle: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#92400e',
     marginBottom: 4
   },
   tipText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#b45309',
-    lineHeight: 18
+    lineHeight: scaleFont(18)
   },
   inputSection: {
     marginBottom: 24
@@ -562,18 +563,18 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   inputLabel: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#1f2937',
     marginLeft: 6
   },
   requiredMark: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#ef4444',
     marginLeft: 4
   },
   optionalMark: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
     marginLeft: 4
   },
@@ -597,7 +598,7 @@ const styles = StyleSheet.create({
   },
   titleInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#1f2937',
     padding: 0
   },
@@ -612,14 +613,14 @@ const styles = StyleSheet.create({
   contentInput: {
     flex: 1,
     minHeight: 152,
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     padding: 0,
     width: '100%'
   },
   charCount: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     textAlign: 'right',
     marginTop: 8
@@ -628,7 +629,7 @@ const styles = StyleSheet.create({
     marginBottom: 24
   },
   quickSelectTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#6b7280',
     marginBottom: 12
@@ -651,7 +652,7 @@ const styles = StyleSheet.create({
     borderColor: '#3b82f6'
   },
   quickSelectButtonText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   quickSelectButtonTextActive: {
@@ -668,9 +669,9 @@ const styles = StyleSheet.create({
   },
   noteText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
-    lineHeight: 16
+    lineHeight: scaleFont(16)
   },
   footer: {
     position: 'absolute',
@@ -707,7 +708,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0
   },
   submitButtonText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#fff'
   },
@@ -720,7 +721,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   uploadLabel: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#1f2937',
     marginLeft: 6
@@ -767,11 +768,11 @@ const styles = StyleSheet.create({
     gap: 4
   },
   imageAddText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   imageHint: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginTop: 8
   }

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import TranslateButton from '../components/TranslateButton';
 import { useTranslation } from '../i18n/withTranslation';
+import { scaleFont } from '../utils/responsive';
 
 // 关注的用户数据
 const followedUsers = [{
@@ -354,7 +355,7 @@ const styles = StyleSheet.create({
     padding: 4
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: 'bold',
     color: '#1f2937'
   },
@@ -371,7 +372,7 @@ const styles = StyleSheet.create({
     position: 'relative'
   },
   tabText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280'
   },
   tabTextActive: {
@@ -399,17 +400,17 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   questionTitle: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '500',
     color: '#1f2937',
-    lineHeight: 22
+    lineHeight: scaleFont(22)
   },
   rewardTagInline: {
     backgroundColor: 'transparent',
-    fontSize: 19,
+    fontSize: scaleFont(19),
     color: '#ef4444',
     fontWeight: '600',
-    lineHeight: 22
+    lineHeight: scaleFont(22)
   },
   questionHeaderRow: {
     flexDirection: 'row',
@@ -442,16 +443,16 @@ const styles = StyleSheet.create({
     gap: 4
   },
   authorName: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#999999',
     marginLeft: 4
   },
   questionTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#999999'
   },
   metaSeparator: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#999999',
     marginHorizontal: 3
   },
@@ -462,7 +463,7 @@ const styles = StyleSheet.create({
   },
   typeTagText: {
     color: '#fff',
-    fontSize: 11,
+    fontSize: scaleFont(11),
     fontWeight: '500'
   },
   // 新的悬赏容器样式
@@ -472,7 +473,7 @@ const styles = StyleSheet.create({
     gap: 6
   },
   rewardAmount: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: 'bold',
     color: '#ef4444'
   },
@@ -483,7 +484,7 @@ const styles = StyleSheet.create({
     borderWidth: 1
   },
   answerTypeText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     fontWeight: '500'
   },
   publicTag: {
@@ -513,7 +514,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   statText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280'
   },
   answerBtn: {
@@ -526,7 +527,7 @@ const styles = StyleSheet.create({
     gap: 3
   },
   answerBtnText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#fff',
     fontWeight: '500'
   },
@@ -547,7 +548,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     marginLeft: 8,
-    fontSize: 14
+    fontSize: scaleFont(14)
   },
   // 用户列表样式
   userSection: {
@@ -556,7 +557,7 @@ const styles = StyleSheet.create({
     padding: 12
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 12
@@ -583,17 +584,17 @@ const styles = StyleSheet.create({
     gap: 4
   },
   userName: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '500',
     color: '#1f2937'
   },
   userTitle: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     marginTop: 2
   },
   userStats: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af',
     marginTop: 4
   },
@@ -604,7 +605,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fef2f2'
   },
   followBtnText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#ef4444',
     fontWeight: '500'
   },
@@ -645,17 +646,17 @@ const styles = StyleSheet.create({
     marginLeft: 12
   },
   topicName: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '500',
     color: '#1f2937'
   },
   topicDesc: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     marginTop: 2
   },
   topicStats: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af',
     marginTop: 4
   }

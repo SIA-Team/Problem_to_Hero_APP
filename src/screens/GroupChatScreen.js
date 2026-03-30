@@ -26,6 +26,7 @@ import { showToast } from '../utils/toast';
 import apiClient from '../services/api/apiClient';
 import { API_ENDPOINTS, replaceUrlParams } from '../config/api';
 
+import { scaleFont } from '../utils/responsive';
 const DEFAULT_QUESTION = {
   title: '',
   author: '',
@@ -1117,12 +1118,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937',
   },
   memberCount: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginTop: 2,
   },
@@ -1146,7 +1147,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   questionAuthor: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937',
     marginLeft: 10,
@@ -1159,23 +1160,23 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   questionTagText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#ef4444',
   },
   questionTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937',
-    lineHeight: 24,
+    lineHeight: scaleFont(24),
   },
   groupDescription: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
-    lineHeight: 20,
+    lineHeight: scaleFont(20),
     marginTop: 8,
   },
   groupCapacityText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginTop: 8,
   },
@@ -1195,12 +1196,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#1f2937',
   },
   messageCount: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
   },
   sortFilterBar: {
@@ -1230,7 +1231,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fef2f2',
   },
   sortFilterText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
   },
   sortFilterTextActive: {
@@ -1244,11 +1245,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   messageStateText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
   },
   messageStateErrorText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#ef4444',
     textAlign: 'center',
   },
@@ -1259,7 +1260,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   retryBtnText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#ef4444',
     fontWeight: '500',
   },
@@ -1276,19 +1277,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   msgAuthor: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#9ca3af',
   },
   msgTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginLeft: 'auto',
   },
   msgText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#4b5563',
-    lineHeight: 20,
+    lineHeight: scaleFont(20),
     marginBottom: 10,
   },
   msgImage: {
@@ -1309,7 +1310,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   msgActionText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
   },
   msgActionTextLiked: {
@@ -1328,7 +1329,7 @@ const styles = StyleSheet.create({
     marginLeft: 'auto',
   },
   replyBtnText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#ef4444',
     fontWeight: '500',
   },
@@ -1354,7 +1355,7 @@ const styles = StyleSheet.create({
     borderBottomColor: modalTokens.border,
   },
   replyModalTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: modalTokens.textPrimary,
   },
@@ -1378,15 +1379,15 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   replyTargetAuthor: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '500',
     color: modalTokens.textPrimary,
   },
   replyTargetContent: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: modalTokens.textSecondary,
     marginTop: 2,
-    lineHeight: 18,
+    lineHeight: scaleFont(18),
   },
   replyInputWrapper: {
     margin: 16,
@@ -1398,7 +1399,7 @@ const styles = StyleSheet.create({
     borderColor: modalTokens.border,
   },
   replyInput: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textPrimary,
     textAlignVertical: 'top',
   },
@@ -1413,7 +1414,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   replyCancelText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textSecondary,
   },
   replySubmitBtn: {
@@ -1426,7 +1427,7 @@ const styles = StyleSheet.create({
     backgroundColor: modalTokens.dangerSoft,
   },
   replySubmitText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#fff',
     fontWeight: '500',
   },
@@ -1449,7 +1450,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   inputPlaceholderText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af',
   },
   sendBtn: {
@@ -1513,7 +1514,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   composerTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937',
   },
@@ -1540,9 +1541,9 @@ const styles = StyleSheet.create({
   composerInput: {
     minHeight: 132,
     maxHeight: 184,
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     paddingTop: 0,
     paddingLeft: 0,
     paddingRight: 56,

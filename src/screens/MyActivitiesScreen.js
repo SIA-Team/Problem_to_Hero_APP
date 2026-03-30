@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { showToast } from '../utils/toast';
 
+import { scaleFont } from '../utils/responsive';
 const MOCK_ACTIVITIES = [
   {
     id: 1,
@@ -218,7 +219,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eceff3',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '700',
     color: '#1f2937',
   },
@@ -236,7 +237,7 @@ const styles = StyleSheet.create({
   createBtnText: {
     marginLeft: 4,
     color: '#fff',
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '600',
   },
   loadingContainer: {
@@ -262,13 +263,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   summaryValue: {
-    fontSize: 24,
+    fontSize: scaleFont(24),
     fontWeight: '700',
     color: '#1f2937',
   },
   summaryLabel: {
     marginTop: 6,
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
   },
   summaryDivider: {
@@ -296,7 +297,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     flex: 1,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '700',
     color: '#111827',
     marginRight: 10,
@@ -311,7 +312,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e5e7eb',
   },
   statusText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#ef4444',
     fontWeight: '600',
   },
@@ -320,7 +321,7 @@ const styles = StyleSheet.create({
   },
   organizerText: {
     marginTop: 10,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
   },
   metaRow: {
@@ -337,7 +338,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     marginLeft: 4,
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
   },
   emptyContainer: {
@@ -347,13 +348,13 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     marginTop: 16,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#4b5563',
   },
   emptyHint: {
     marginTop: 8,
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
   },
 });

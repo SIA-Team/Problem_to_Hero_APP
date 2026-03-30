@@ -16,6 +16,7 @@ import { useTranslation } from '../i18n/useTranslation';
 import { showToast } from '../utils/toast';
 import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
 
+import { scaleFont } from '../utils/responsive';
 export default function HeroRankingScreen({ navigation }) {
   const { t } = useTranslation();
   
@@ -240,7 +241,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E7EB',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1F2937',
   },
@@ -258,7 +259,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tabText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6B7280',
     fontWeight: '500',
   },
@@ -304,10 +305,10 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   rankEmoji: {
-    fontSize: 24,
+    fontSize: scaleFont(24),
   },
   rankNumber: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
   },
   avatar: {
@@ -317,7 +318,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   userName: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1F2937',
     marginBottom: 4,
@@ -327,13 +328,13 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
   },
   countNumber: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '700',
     color: '#EF4444',
     marginRight: 4,
   },
   countLabel: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6B7280',
   },
 });

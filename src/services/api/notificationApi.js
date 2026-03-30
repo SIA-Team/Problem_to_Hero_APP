@@ -32,24 +32,93 @@ const notificationApi = {
       params: cleanParams({ category }),
     }),
 
-  sendPrivateMessage: (data) => apiClient.post(`${PRIVATE_MESSAGE_BASE_PATH}/send`, data),
+  sendPrivateMessage: (data) => {
+    console.log('\n========================================');
+    console.log('🔵 [API Request] /app/user/private-message/send');
+    console.log('📤 Request data:', JSON.stringify(data, null, 2));
+    console.log('========================================\n');
+    return apiClient.post(`${PRIVATE_MESSAGE_BASE_PATH}/send`, data).then(response => {
+      console.log('\n========================================');
+      console.log('📥 [API Response] /app/user/private-message/send');
+      console.log('✅ Response data:', JSON.stringify(response, null, 2));
+      console.log('========================================\n');
+      return response;
+    }).catch(error => {
+      console.log('\n========================================');
+      console.log('❌ [API Error] /app/user/private-message/send');
+      console.log('Error:', error);
+      console.log('========================================\n');
+      throw error;
+    });
+  },
 
-  getPrivateUnreadBrief: (params = {}) =>
-    apiClient.get(`${PRIVATE_MESSAGE_BASE_PATH}/unread-brief`, {
+  getPrivateUnreadBrief: (params = {}) => {
+    console.log('\n========================================');
+    console.log('🔵 [API Request] /app/user/private-message/unread-brief');
+    console.log('📤 Request params:', JSON.stringify(params, null, 2));
+    console.log('========================================\n');
+    return apiClient.get(`${PRIVATE_MESSAGE_BASE_PATH}/unread-brief`, {
       params: cleanParams(params),
-    }),
+    }).then(response => {
+      console.log('\n========================================');
+      console.log('📥 [API Response] /app/user/private-message/unread-brief');
+      console.log('✅ Response data:', JSON.stringify(response, null, 2));
+      console.log('========================================\n');
+      return response;
+    }).catch(error => {
+      console.log('\n========================================');
+      console.log('❌ [API Error] /app/user/private-message/unread-brief');
+      console.log('Error:', error);
+      console.log('========================================\n');
+      throw error;
+    });
+  },
 
-  getConversationMessages: (params = {}) =>
-    apiClient.get(`${PRIVATE_MESSAGE_BASE_PATH}/messages`, {
+  getConversationMessages: (params = {}) => {
+    console.log('\n========================================');
+    console.log('🔵 [API Request] /app/user/private-message/messages');
+    console.log('📤 Request params:', JSON.stringify(params, null, 2));
+    console.log('========================================\n');
+    return apiClient.get(`${PRIVATE_MESSAGE_BASE_PATH}/messages`, {
       params: cleanParams(params),
-    }),
+    }).then(response => {
+      console.log('\n========================================');
+      console.log('📥 [API Response] /app/user/private-message/messages');
+      console.log('✅ Response data:', JSON.stringify(response, null, 2));
+      console.log('========================================\n');
+      return response;
+    }).catch(error => {
+      console.log('\n========================================');
+      console.log('❌ [API Error] /app/user/private-message/messages');
+      console.log('Error:', error);
+      console.log('========================================\n');
+      throw error;
+    });
+  },
 
-  markConversationRead: (conversationId) =>
-    apiClient.post(
+  markConversationRead: (conversationId) => {
+    console.log('\n========================================');
+    console.log('🔵 [API Request] /app/user/private-message/conversation/{conversationId}/read');
+    console.log('📤 Request conversationId:', conversationId);
+    console.log('========================================\n');
+    return apiClient.post(
       replaceUrlParams(`${PRIVATE_MESSAGE_BASE_PATH}/conversation/:conversationId/read`, {
         conversationId,
       })
-    ),
+    ).then(response => {
+      console.log('\n========================================');
+      console.log('📥 [API Response] /app/user/private-message/conversation/{conversationId}/read');
+      console.log('✅ Response data:', JSON.stringify(response, null, 2));
+      console.log('========================================\n');
+      return response;
+    }).catch(error => {
+      console.log('\n========================================');
+      console.log('❌ [API Error] /app/user/private-message/conversation/{conversationId}/read');
+      console.log('Error:', error);
+      console.log('========================================\n');
+      throw error;
+    });
+  },
 };
 
 export default notificationApi;

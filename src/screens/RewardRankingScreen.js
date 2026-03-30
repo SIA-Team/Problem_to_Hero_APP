@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/useTranslation';
 import TranslateButton from '../components/TranslateButton';
 
+import { scaleFont } from '../utils/responsive';
 // 悬赏榜数据（示例数据）
 const rewardRankingData = [
   {
@@ -330,7 +331,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937',
   },
@@ -353,15 +354,15 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   descriptionTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937',
     marginLeft: 6,
   },
   descriptionText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
-    lineHeight: 18,
+    lineHeight: scaleFont(18),
   },
   scrollView: {
     flex: 1,
@@ -390,7 +391,7 @@ const styles = StyleSheet.create({
   },
   rankText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '700',
   },
   rewardContent: {
@@ -408,10 +409,10 @@ const styles = StyleSheet.create({
   },
   rewardTitle: {
     flex: 1,
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '500',
     color: '#1f2937',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
   },
   hotTag: {
     paddingHorizontal: 6,
@@ -421,7 +422,7 @@ const styles = StyleSheet.create({
   },
   hotTagText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: scaleFont(10),
     fontWeight: '600',
   },
   translateButton: {
@@ -444,7 +445,7 @@ const styles = StyleSheet.create({
   },
   rewardAmountText: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '700',
     marginLeft: 4,
   },
@@ -457,7 +458,7 @@ const styles = StyleSheet.create({
   },
   categoryText: {
     color: '#6b7280',
-    fontSize: 11,
+    fontSize: scaleFont(11),
     fontWeight: '500',
   },
   timeLeftBadge: {
@@ -470,7 +471,7 @@ const styles = StyleSheet.create({
   },
   timeLeftText: {
     color: '#f59e0b',
-    fontSize: 11,
+    fontSize: scaleFont(11),
     fontWeight: '600',
     marginLeft: 4,
   },
@@ -485,7 +486,7 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   statValue: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     marginLeft: 4,
     marginRight: 4,
@@ -501,7 +502,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   authorName: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
   },
 });

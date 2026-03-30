@@ -17,6 +17,7 @@ import { showAppAlert } from '../utils/appAlert';
 import { showToast } from '../utils/toast';
 import reportApi from '../services/api/reportApi';
 
+import { scaleFont } from '../utils/responsive';
 const REPORT_TARGET_TYPE_MAP = {
   question: 1,
   answer: 2,
@@ -240,7 +241,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937',
     flex: 1,
@@ -251,7 +252,7 @@ const styles = StyleSheet.create({
   },
   content: { flex: 1, paddingHorizontal: 16, paddingTop: 20 },
   subtitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
     marginBottom: 16,
     paddingHorizontal: 4,
@@ -267,7 +268,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   reportItemText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
     fontWeight: '500',
   },
@@ -289,7 +290,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   remarkLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937',
     fontWeight: '500',
     marginBottom: 8,
@@ -299,14 +300,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb',
     borderRadius: 12,
     padding: 12,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937',
     minHeight: 100,
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
   charCount: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     textAlign: 'right',
     marginTop: 4,
@@ -323,7 +324,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   submitText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600',
   },
@@ -337,7 +338,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   cancelText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6b7280',
     fontWeight: '500',
   },

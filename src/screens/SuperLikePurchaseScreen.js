@@ -6,6 +6,7 @@ import superLikeCreditService from '../services/SuperLikeCreditService';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
 
+import { scaleFont } from '../utils/responsive';
 export default function SuperLikePurchaseScreen({ navigation }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -261,7 +262,7 @@ const styles = StyleSheet.create({
     gap: 8 
   },
   headerTitle: { 
-    fontSize: 18, 
+    fontSize: scaleFont(18), 
     fontWeight: '600', 
     color: '#1f2937' 
   },
@@ -280,7 +281,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     marginBottom: 8 
   },
-  infoLabel: { fontSize: 14, color: '#92400e', fontWeight: '500' },
+  infoLabel: { fontSize: scaleFont(14), color: '#92400e', fontWeight: '500' },
   countBadge: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -290,10 +291,10 @@ const styles = StyleSheet.create({
     borderRadius: 12, 
     gap: 4 
   },
-  countText: { fontSize: 16, fontWeight: 'bold', color: '#f59e0b' },
-  infoDesc: { fontSize: 12, color: '#92400e', lineHeight: 18 },
+  countText: { fontSize: scaleFont(16), fontWeight: 'bold', color: '#f59e0b' },
+  infoDesc: { fontSize: scaleFont(12), color: '#92400e', lineHeight: scaleFont(18) },
   sectionTitle: { 
-    fontSize: 15, 
+    fontSize: scaleFont(15), 
     fontWeight: '600', 
     color: '#1f2937', 
     marginBottom: 12 
@@ -319,13 +320,13 @@ const styles = StyleSheet.create({
     borderColor: '#f59e0b' 
   },
   quickText: { 
-    fontSize: 15, 
+    fontSize: scaleFont(15), 
     fontWeight: '600', 
     color: '#f59e0b' 
   },
   quickTextActive: { color: '#fff' },
   quickPrice: { 
-    fontSize: 12, 
+    fontSize: scaleFont(12), 
     color: '#92400e' 
   },
   quickPriceActive: { color: '#fff', opacity: 0.9 },
@@ -342,12 +343,12 @@ const styles = StyleSheet.create({
   },
   customField: { 
     flex: 1, 
-    fontSize: 16, 
+    fontSize: scaleFont(16), 
     color: '#1f2937', 
     paddingVertical: 14 
   },
   priceHint: { 
-    fontSize: 16, 
+    fontSize: scaleFont(16), 
     fontWeight: '600', 
     color: '#f59e0b' 
   },
@@ -362,8 +363,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', 
     marginBottom: 8 
   },
-  priceLabel: { fontSize: 14, color: '#6b7280' },
-  priceValue: { fontSize: 14, color: '#1f2937', fontWeight: '500' },
+  priceLabel: { fontSize: scaleFont(14), color: '#6b7280' },
+  priceValue: { fontSize: scaleFont(14), color: '#1f2937', fontWeight: '500' },
   priceTotal: { 
     borderTopWidth: 1, 
     borderTopColor: '#e5e7eb', 
@@ -371,9 +372,9 @@ const styles = StyleSheet.create({
     marginTop: 4, 
     marginBottom: 0 
   },
-  priceTotalLabel: { fontSize: 15, color: '#1f2937', fontWeight: '600' },
+  priceTotalLabel: { fontSize: scaleFont(15), color: '#1f2937', fontWeight: '600' },
   priceTotalValue: { 
-    fontSize: 18, 
+    fontSize: scaleFont(18), 
     color: '#f59e0b', 
     fontWeight: 'bold' 
   },
@@ -388,9 +389,9 @@ const styles = StyleSheet.create({
   },
   tipsText: { 
     flex: 1, 
-    fontSize: 13, 
+    fontSize: scaleFont(13), 
     color: '#6b7280', 
-    lineHeight: 18 
+    lineHeight: scaleFont(18) 
   },
   confirmBtn: { 
     flexDirection: 'row', 
@@ -407,7 +408,7 @@ const styles = StyleSheet.create({
     opacity: 0.5 
   },
   confirmBtnText: { 
-    fontSize: 16, 
+    fontSize: scaleFont(16), 
     fontWeight: '600', 
     color: '#fff' 
   },
@@ -420,7 +421,7 @@ const styles = StyleSheet.create({
     alignItems: 'center' 
   },
   cancelBtnText: { 
-    fontSize: 16, 
+    fontSize: scaleFont(16), 
     fontWeight: '500', 
     color: '#6b7280' 
   },

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import superLikeCreditService from '../services/SuperLikeCreditService';
 import { useTranslation } from '../i18n/withTranslation';
 import { formatTime } from '../utils/timeFormatter';
+import { scaleFont } from '../utils/responsive';
 export default function SuperLikeHistoryScreen({
   navigation
 }) {
@@ -118,7 +119,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -131,13 +132,13 @@ const styles = StyleSheet.create({
     paddingVertical: 80
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#9ca3af',
     marginTop: 16,
     fontWeight: '500'
   },
   emptyHint: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#d1d5db',
     marginTop: 8,
     textAlign: 'center'
@@ -175,12 +176,12 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   transactionType: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#1f2937'
   },
   transactionAmount: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: 'bold'
   },
   amountPositive: {
@@ -190,13 +191,13 @@ const styles = StyleSheet.create({
     color: '#f59e0b'
   },
   answerTitle: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     marginBottom: 4,
-    lineHeight: 18
+    lineHeight: scaleFont(18)
   },
   transactionTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   }
 });

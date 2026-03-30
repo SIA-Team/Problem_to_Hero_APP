@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { formatTime } from '../utils/timeFormatter';
 
+import { scaleFont } from '../utils/responsive';
 /**
  * 提问列表项组件
  */
@@ -64,12 +65,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   time: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
   },
   title: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: scaleFont(15),
+    lineHeight: scaleFont(22),
     color: '#1f2937',
     marginBottom: 8,
   },
@@ -80,7 +81,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   rewardTagText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#f59e0b',
     fontWeight: '600',
   },
@@ -91,7 +92,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   solvedTagText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#10b981',
     fontWeight: '600',
   },
@@ -106,7 +107,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
   },
 });

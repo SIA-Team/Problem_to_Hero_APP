@@ -7,6 +7,7 @@ import { authApi } from '../services/api';
 import { showToast } from '../utils/toast';
 import { showAppAlert } from '../utils/appAlert';
 
+import { scaleFont } from '../utils/responsive';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation, onLogin }) {
@@ -267,16 +268,16 @@ const styles = StyleSheet.create({
     marginBottom: SCREEN_HEIGHT < 700 ? 20 : 40,
   },
   logoCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#fef2f2', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  appName: { fontSize: 28, fontWeight: 'bold', color: '#1f2937', letterSpacing: -0.5, marginBottom: 8 },
-  slogan: { fontSize: 14, color: '#9ca3af' },
+  appName: { fontSize: scaleFont(28), fontWeight: 'bold', color: '#1f2937', letterSpacing: -0.5, marginBottom: 8 },
+  slogan: { fontSize: scaleFont(14), color: '#9ca3af' },
   tabBar: { flexDirection: 'row', borderBottomWidth: 2, borderBottomColor: '#f3f4f6', marginBottom: 24 },
   tab: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -2 },
   tabActive: { borderBottomColor: '#ff4d4f' },
-  tabText: { fontSize: 16, color: '#9ca3af' },
+  tabText: { fontSize: scaleFont(16), color: '#9ca3af' },
   tabTextActive: { color: '#ff4d4f', fontWeight: '600' },
   formContainer: { backgroundColor: '#ffffff', marginBottom: 32 },
   inputGroup: { marginBottom: 20 },
-  inputLabel: { fontSize: 14, fontWeight: '500', color: '#374151', marginBottom: 8 },
+  inputLabel: { fontSize: scaleFont(14), fontWeight: '500', color: '#374151', marginBottom: 8 },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -297,21 +298,21 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
-  input: { flex: 1, marginLeft: 12, fontSize: 15, color: '#1f2937', paddingVertical: 14, outlineStyle: 'none' },
+  input: { flex: 1, marginLeft: 12, fontSize: scaleFont(15), color: '#1f2937', paddingVertical: 14, outlineStyle: 'none' },
   codeBtn: { paddingHorizontal: 14, paddingVertical: 14, marginLeft: 8 },
   codeBtnDisabled: { opacity: 0.5 },
-  codeBtnText: { fontSize: 13, color: '#ff4d4f', fontWeight: '500' },
+  codeBtnText: { fontSize: scaleFont(13), color: '#ff4d4f', fontWeight: '500' },
   codeBtnTextDisabled: { color: '#9ca3af' },
   termsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
-  termsText: { flex: 1, marginLeft: 8, fontSize: 14, color: '#6b7280', lineHeight: 20 },
+  termsText: { flex: 1, marginLeft: 8, fontSize: scaleFont(14), color: '#6b7280', lineHeight: scaleFont(20) },
   termsLink: { color: '#ef4444' },
   submitBtn: { backgroundColor: '#ef4444', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   submitBtnDisabled: { backgroundColor: '#fca5a5', opacity: 0.6 },
-  submitText: { fontSize: 16, color: '#fff', fontWeight: '600' },
+  submitText: { fontSize: scaleFont(16), color: '#fff', fontWeight: '600' },
   thirdPartySection: { marginTop: 'auto' },
   dividerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
   divider: { flex: 1, height: 1, backgroundColor: '#e5e7eb' },
-  dividerText: { marginHorizontal: 16, fontSize: 14, color: '#9ca3af' },
+  dividerText: { marginHorizontal: 16, fontSize: scaleFont(14), color: '#9ca3af' },
   socialBtns: { flexDirection: 'row', justifyContent: 'center', gap: 32 },
   socialBtn: {
     width: 50,

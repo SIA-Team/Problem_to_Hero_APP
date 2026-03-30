@@ -6,6 +6,7 @@ import Avatar from '../components/Avatar';
 import { modalTokens } from '../components/modalTokens';
 import { showAppAlert } from '../utils/appAlert';
 
+import { scaleFont } from '../utils/responsive';
 // 我的团队数据
 const myTeams = [{
   id: 1,
@@ -339,7 +340,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   headerTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -350,7 +351,7 @@ const styles = StyleSheet.create({
     borderRadius: 16
   },
   createBtnText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#fff',
     fontWeight: '600'
   },
@@ -378,13 +379,13 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   statValue: {
-    fontSize: 20,
+    fontSize: scaleFont(20),
     fontWeight: 'bold',
     color: '#1f2937',
     marginBottom: 4
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   statDivider: {
@@ -397,7 +398,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#374151',
     marginBottom: 12
@@ -433,7 +434,7 @@ const styles = StyleSheet.create({
     marginBottom: 6
   },
   teamName: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#1f2937',
     flex: 1
@@ -450,7 +451,7 @@ const styles = StyleSheet.create({
     borderColor: '#fecaca'
   },
   roleText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -458,9 +459,9 @@ const styles = StyleSheet.create({
     color: '#ef4444'
   },
   teamDesc: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
-    lineHeight: 18,
+    lineHeight: scaleFont(18),
     marginBottom: 8
   },
   teamMeta: {
@@ -473,7 +474,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   metaText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af'
   },
   moreBtn: {
@@ -485,13 +486,13 @@ const styles = StyleSheet.create({
     paddingVertical: 60
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '500',
     color: '#6b7280',
     marginTop: 16
   },
   emptyHint: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
     marginTop: 8,
     textAlign: 'center',
@@ -512,7 +513,7 @@ const styles = StyleSheet.create({
     borderBottomColor: modalTokens.border
   },
   sheetTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: modalTokens.textPrimary
   },
@@ -539,13 +540,13 @@ const styles = StyleSheet.create({
     marginBottom: 20
   },
   formLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#374151',
     marginBottom: 8
   },
   formHint: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginBottom: 12
   },
@@ -555,11 +556,11 @@ const styles = StyleSheet.create({
     borderColor: modalTokens.border,
     borderRadius: 12,
     padding: 12,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textPrimary
   },
   charCount: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: modalTokens.textMuted,
     textAlign: 'right',
     marginTop: 4
@@ -592,15 +593,15 @@ const styles = StyleSheet.create({
     borderRadius: 4
   },
   rewardTagSmallText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#fff',
     fontWeight: '600'
   },
   questionOptionTitle: {
     flex: 1,
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: modalTokens.textPrimary,
-    lineHeight: 18
+    lineHeight: scaleFont(18)
   },
   radioBtn: {
     width: 20,
@@ -639,7 +640,7 @@ const styles = StyleSheet.create({
     borderColor: modalTokens.border,
     borderRadius: 12,
     padding: 12,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textPrimary,
     minHeight: 100,
     textAlignVertical: 'top'
@@ -660,7 +661,7 @@ const styles = StyleSheet.create({
     backgroundColor: modalTokens.dangerSoft
   },
   submitBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600'
   }

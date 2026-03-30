@@ -8,7 +8,10 @@ import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
 import { showAppAlert } from '../utils/appAlert';
 import notificationApi from '../services/api/notificationApi';
+import userApi from '../services/api/userApi';
+import { filterFriendUsers, normalizeFollowingResponse, sendPlainPrivateMessage } from '../utils/privateShareService';
 
+import { scaleFont } from '../utils/responsive';
 // 顶部快捷入口数据
 const BUCKET_EVENT_TYPE_MAP = {
   COMMENT_SHARE: ['COMMENT_REPLY', 'MENTION'],
@@ -100,12 +103,26 @@ const DEFAULT_NOTIFICATION_FILTER = {
 };
 
 const NOTIFICATION_PAGE_SIZE = 10;
+const FOLLOWING_PAGE_SIZE = 100;
+const MAX_FOLLOWING_PAGES = 10;
 
 const isSuccessResponse = response => response && (response.code === 200 || response.code === 0);
 
 const toSafeNumber = value => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const toPositiveNumber = value => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const extractFollowingTotal = response => {
+  const payload = response?.data;
+  const nestedData = payload?.data;
+
+  return toPositiveNumber(payload?.total) || toPositiveNumber(payload?.count) || toPositiveNumber(payload?.totalCount) || toPositiveNumber(payload?.pagination?.total) || toPositiveNumber(payload?.page?.total) || toPositiveNumber(nestedData?.total) || toPositiveNumber(nestedData?.count) || toPositiveNumber(nestedData?.totalCount) || null;
 };
 
 const safeJsonParse = value => {
@@ -348,6 +365,7 @@ export default function MessagesScreen({
     t
   } = useTranslation();
   const isFocused = useIsFocused();
+  const followingLoadRequestIdRef = React.useRef(0);
   const [showPrivateModal, setShowPrivateModal] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
@@ -368,6 +386,10 @@ export default function MessagesScreen({
   const [categoryPreviewMap, setCategoryPreviewMap] = useState({});
   const [privateConversations, setPrivateConversations] = useState([]);
   const [privateLoading, setPrivateLoading] = useState(false);
+  const [privateSending, setPrivateSending] = useState(false);
+  const [followingUsers, setFollowingUsers] = useState([]);
+  const [followingUsersLoading, setFollowingUsersLoading] = useState(false);
+  const [followingUsersLoadError, setFollowingUsersLoadError] = useState('');
 
   const quickEntryLabels = {
     comment: t('screens.messagesScreen.quickEntries.commentForward'),
@@ -454,6 +476,61 @@ export default function MessagesScreen({
       console.error('加载私信简表失败:', error);
     } finally {
       setPrivateLoading(false);
+    }
+  };
+
+  const loadFollowingUsers = async () => {
+    const requestId = followingLoadRequestIdRef.current + 1;
+    followingLoadRequestIdRef.current = requestId;
+    setFollowingUsersLoading(true);
+    setFollowingUsersLoadError('');
+
+    try {
+      let pageNum = 1;
+      let expectedTotal = null;
+      let mergedUsers = [];
+
+      while (pageNum <= MAX_FOLLOWING_PAGES) {
+        const response = await userApi.getFollowing({
+          pageNum,
+          page: pageNum,
+          pageSize: FOLLOWING_PAGE_SIZE,
+          size: FOLLOWING_PAGE_SIZE,
+          limit: FOLLOWING_PAGE_SIZE
+        });
+        const pageUsers = normalizeFollowingResponse(response);
+        mergedUsers = [...mergedUsers, ...pageUsers].filter((user, index, list) => list.findIndex(currentUser => String(currentUser.userId || currentUser.id) === String(user.userId || user.id)) === index);
+
+        if (expectedTotal === null) {
+          expectedTotal = extractFollowingTotal(response);
+        }
+        if (pageUsers.length < FOLLOWING_PAGE_SIZE) {
+          break;
+        }
+        if (expectedTotal && mergedUsers.length >= expectedTotal) {
+          break;
+        }
+
+        pageNum += 1;
+      }
+
+      if (followingLoadRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setFollowingUsers(mergedUsers);
+    } catch (error) {
+      if (followingLoadRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      console.error('加载关注列表失败:', error);
+      setFollowingUsers([]);
+      setFollowingUsersLoadError(error.message || t('screens.privateConversation.loadFailed'));
+    } finally {
+      if (followingLoadRequestIdRef.current === requestId) {
+        setFollowingUsersLoading(false);
+      }
     }
   };
 
@@ -625,7 +702,26 @@ export default function MessagesScreen({
       }
     }]);
   };
-  const handleSendMessage = () => {
+
+  const resetPrivateComposer = () => {
+    followingLoadRequestIdRef.current += 1;
+    setShowPrivateModal(false);
+    setSelectedUser(null);
+    setMessageContent('');
+    setSearchText('');
+    setFollowingUsersLoadError('');
+  };
+
+  const openPrivateComposer = () => {
+    followingLoadRequestIdRef.current += 1;
+    setShowPrivateModal(true);
+    setSelectedUser(null);
+    setMessageContent('');
+    setSearchText('');
+    loadFollowingUsers();
+  };
+
+  const handleSendMessage = async () => {
     if (!selectedUser) {
       showAppAlert(t('screens.messagesScreen.alerts.hint'), t('screens.messagesScreen.alerts.selectUserHint'));
       return;
@@ -634,11 +730,31 @@ export default function MessagesScreen({
       showAppAlert(t('screens.messagesScreen.alerts.hint'), t('screens.messagesScreen.alerts.enterMessageHint'));
       return;
     }
-    showAppAlert(t('screens.messagesScreen.alerts.success'), t('screens.messagesScreen.alerts.sendSuccess').replace('{name}', selectedUser.name));
-    setShowPrivateModal(false);
-    setSelectedUser(null);
-    setMessageContent('');
-    setSearchText('');
+
+    if (privateSending) {
+      return;
+    }
+
+    setPrivateSending(true);
+
+    try {
+      await sendPlainPrivateMessage({
+        recipientUserId: selectedUser.userId || selectedUser.id,
+        content: messageContent,
+      });
+
+      showAppAlert(
+        t('screens.messagesScreen.alerts.success'),
+        t('screens.messagesScreen.alerts.sendSuccess').replace('{name}', selectedUser.nickname || selectedUser.username || selectedUser.name || `${selectedUser.userId || selectedUser.id}`)
+      );
+      resetPrivateComposer();
+      loadNotificationSummary();
+      loadPrivateUnreadBrief();
+    } catch (error) {
+      showAppAlert('提示', error.message || '发送失败，请稍后重试');
+    } finally {
+      setPrivateSending(false);
+    }
   };
   const handleOpenVoteModal = arbitration => {
     setCurrentArbitration(arbitration);
@@ -665,7 +781,7 @@ export default function MessagesScreen({
     }
     loadNotifications(notificationFilter, notificationPage + 1, true);
   };
-  const filteredUsers = allUsers.filter(user => user.name.toLowerCase().includes(searchText.toLowerCase()));
+  const filteredUsers = filterFriendUsers(followingUsers, searchText);
   return <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{
@@ -686,7 +802,7 @@ export default function MessagesScreen({
         }} activeOpacity={0.7}>
             <Text style={styles.markAllRead}>{t('screens.messagesScreen.markAllRead')}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.sendMsgBtn} onPress={() => setShowPrivateModal(true)} hitSlop={{
+          <TouchableOpacity style={styles.sendMsgBtn} onPress={openPrivateComposer} hitSlop={{
           top: 10,
           bottom: 10,
           left: 10,
@@ -953,6 +1069,39 @@ export default function MessagesScreen({
           {privateLoading ? <View style={styles.sectionLoading}>
               <ActivityIndicator color="#ef4444" />
             </View> : privateConversations.length === 0 ? <View style={styles.sectionEmpty}>
+              <Text style={styles.sectionEmptyText}>{t('screens.messagesScreen.empty')}</Text>
+            </View> : privateConversations.map(item => <TouchableOpacity key={item.conversationId} style={styles.privateItem} onPress={() => navigation.navigate('PrivateConversation', {
+            conversationId: item.conversationId,
+            peerUserId: item.peerUserId,
+            peerNickName: item.peerNickName,
+            peerAvatar: item.peerAvatar
+          })}>
+              <Avatar uri={item.peerAvatar} name={item.peerNickName} size={48} />
+              <View style={styles.privateContent}>
+                <View style={styles.privateTitleRow}>
+                  <Text style={styles.privateName}>{item.peerNickName || `User ${item.peerUserId}`}</Text>
+                  <Text style={styles.privateTime}>{formatRelativeTime(item.lastMessageTime)}</Text>
+                </View>
+                <Text style={styles.privateMessage} numberOfLines={1}>{item.lastMessagePreview || ''}</Text>
+              </View>
+              {toSafeNumber(item.unreadCount) > 0 && <View style={styles.privateBadge}>
+                  <Text style={styles.privateBadgeText}>{toSafeNumber(item.unreadCount)}</Text>
+                </View>}
+            </TouchableOpacity>)}
+        </View>
+
+        {false && <View style={styles.privateSection}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>{t('screens.messagesScreen.privateMessages.title')}</Text>
+              {notificationSummary.privateUnread > 0 && <View style={styles.inlineCountBadge}>
+                  <Text style={styles.inlineCountBadgeText}>{notificationSummary.privateUnread}</Text>
+                </View>}
+            </View>
+          </View>
+          {privateLoading ? <View style={styles.sectionLoading}>
+              <ActivityIndicator color="#ef4444" />
+            </View> : privateConversations.length === 0 ? <View style={styles.sectionEmpty}>
               <Text style={styles.sectionEmptyText}>暂无未读私信</Text>
             </View> : privateConversations.map(item => <TouchableOpacity key={item.conversationId} style={styles.privateItem} onPress={() => showAppAlert('私信', '当前版本暂未接入私信会话详情页')}>
               <Avatar uri={item.peerAvatar} name={item.peerNickName} size={48} />
@@ -967,7 +1116,7 @@ export default function MessagesScreen({
                   <Text style={styles.privateBadgeText}>{toSafeNumber(item.unreadCount)}</Text>
                 </View>}
             </TouchableOpacity>)}
-        </View>
+        </View>}
 
         <View style={{
         height: 20
@@ -978,17 +1127,12 @@ export default function MessagesScreen({
       <Modal visible={showPrivateModal} animationType="slide">
         <SafeAreaView style={styles.privateModal}>
           <View style={styles.privateModalHeader}>
-            <TouchableOpacity onPress={() => {
-            setShowPrivateModal(false);
-            setSelectedUser(null);
-            setMessageContent('');
-            setSearchText('');
-          }}>
+            <TouchableOpacity onPress={resetPrivateComposer}>
               <Ionicons name="close" size={26} color="#333" />
             </TouchableOpacity>
             <Text style={styles.privateModalTitle}>{t('screens.messagesScreen.privateModal.title')}</Text>
-            <TouchableOpacity style={[styles.sendBtn, (!selectedUser || !messageContent.trim()) && styles.sendBtnDisabled]} onPress={handleSendMessage} disabled={!selectedUser || !messageContent.trim()}>
-              <Text style={[styles.sendBtnText, (!selectedUser || !messageContent.trim()) && styles.sendBtnTextDisabled]}>{t('screens.messagesScreen.privateModal.send')}</Text>
+            <TouchableOpacity style={[styles.sendBtn, (!selectedUser || !messageContent.trim() || privateSending) && styles.sendBtnDisabled]} onPress={handleSendMessage} disabled={!selectedUser || !messageContent.trim() || privateSending}>
+              <Text style={[styles.sendBtnText, (!selectedUser || !messageContent.trim() || privateSending) && styles.sendBtnTextDisabled]}>{privateSending ? '发送中...' : t('screens.messagesScreen.privateModal.send')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -1009,8 +1153,8 @@ export default function MessagesScreen({
         }]}>
             <Text style={styles.selectedLabel}>{t('screens.messagesScreen.privateModal.sendTo')}</Text>
             <View style={styles.selectedUserTag}>
-              <Avatar uri={selectedUser?.avatar} name={selectedUser?.name} size={24} />
-              <Text style={styles.selectedUserName}>{selectedUser?.name}</Text>
+              <Avatar uri={selectedUser?.avatar} name={selectedUser?.nickname || selectedUser?.username || selectedUser?.name || `User ${selectedUser?.userId || selectedUser?.id || ''}`} size={24} />
+              <Text style={styles.selectedUserName}>{selectedUser?.nickname || selectedUser?.username || selectedUser?.name || `User ${selectedUser?.userId || selectedUser?.id || ''}`}</Text>
               <TouchableOpacity onPress={() => setSelectedUser(null)}>
                 <Ionicons name="close" size={16} color="#6b7280" />
               </TouchableOpacity>
@@ -1023,14 +1167,24 @@ export default function MessagesScreen({
         }]}>
             <Text style={styles.userListTitle}>{t('screens.messagesScreen.privateModal.selectUser')}</Text>
             <ScrollView style={styles.userList}>
-              {filteredUsers.map(user => <TouchableOpacity key={user.id} style={styles.userItem} onPress={() => setSelectedUser(user)}>
-                  <Avatar uri={user.avatar} name={user.name} size={44} />
+              {followingUsersLoading ? <View style={styles.userListFeedback}>
+                  <ActivityIndicator color="#ef4444" />
+                  <Text style={styles.userListFeedbackText}>{t('common.loading')}</Text>
+                </View> : followingUsersLoadError ? <View style={styles.userListFeedback}>
+                  <Text style={styles.userListFeedbackText}>{followingUsersLoadError}</Text>
+                  <TouchableOpacity style={styles.userListRetryButton} onPress={loadFollowingUsers}>
+                    <Text style={styles.userListRetryButtonText}>{t('common.retry')}</Text>
+                  </TouchableOpacity>
+                </View> : filteredUsers.length === 0 ? <View style={styles.userListFeedback}>
+                  <Text style={styles.userListFeedbackText}>{t('screens.messagesScreen.privateModal.emptyUsers')}</Text>
+                </View> : filteredUsers.map(user => <TouchableOpacity key={user.id} style={styles.userItem} onPress={() => setSelectedUser(user)}>
+                  <Avatar uri={user.avatar} name={user.nickname || user.username || `User ${user.userId || user.id}`} size={44} />
                   <View style={styles.userInfo}>
                     <View style={styles.userNameRow}>
-                      <Text style={styles.userName}>{user.name}</Text>
+                      <Text style={styles.userName}>{user.nickname || user.username || `User ${user.userId || user.id}`}</Text>
                       {Boolean(user.verified) && <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />}
                     </View>
-                    <Text style={styles.userTitle}>{user.title}</Text>
+                    <Text style={styles.userTitle}>{user.username ? `@${user.username}` : `ID: ${user.userId || user.id}`}</Text>
                   </View>
                 </TouchableOpacity>)}
             </ScrollView>
@@ -1147,7 +1301,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: 'bold',
     color: '#1f2937'
   },
@@ -1157,7 +1311,7 @@ const styles = StyleSheet.create({
     gap: 12
   },
   markAllRead: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   sendMsgBtn: {
@@ -1212,12 +1366,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4
   },
   quickBadgeText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#fff',
     fontWeight: '600'
   },
   quickLabel: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#4b5563',
     marginTop: 6
   },
@@ -1239,12 +1393,12 @@ const styles = StyleSheet.create({
     gap: 6
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#1f2937'
   },
   sectionMore: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#ef4444'
   },
   inviteItem: {
@@ -1259,11 +1413,11 @@ const styles = StyleSheet.create({
     marginLeft: 10
   },
   inviteName: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   inviteQuestion: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937',
     marginTop: 2
@@ -1272,7 +1426,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end'
   },
   inviteTime: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af',
     marginBottom: 6
   },
@@ -1283,7 +1437,7 @@ const styles = StyleSheet.create({
     borderRadius: 12
   },
   inviteBtnText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#fff',
     fontWeight: '500'
   },
@@ -1349,7 +1503,7 @@ const styles = StyleSheet.create({
     marginBottom: 2
   },
   emergencyName: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -1363,7 +1517,7 @@ const styles = StyleSheet.create({
     borderRadius: 8
   },
   urgentBadgeText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#fff',
     fontWeight: '700'
   },
@@ -1377,19 +1531,19 @@ const styles = StyleSheet.create({
     borderRadius: 8
   },
   respondingBadgeText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#fff',
     fontWeight: '600'
   },
   emergencyTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   emergencyTitle: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#1f2937',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     marginBottom: 10
   },
   emergencyInfo: {
@@ -1409,7 +1563,7 @@ const styles = StyleSheet.create({
     flex: 1
   },
   emergencyLocation: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#4b5563',
     flex: 1
   },
@@ -1423,7 +1577,7 @@ const styles = StyleSheet.create({
     borderRadius: 10
   },
   emergencyDistanceText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#d97706',
     fontWeight: '600'
   },
@@ -1438,7 +1592,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   emergencyRescuerText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   respondBtn: {
@@ -1456,7 +1610,7 @@ const styles = StyleSheet.create({
     elevation: 3
   },
   respondBtnText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#fff',
     fontWeight: '700'
   },
@@ -1470,7 +1624,7 @@ const styles = StyleSheet.create({
     borderRadius: 16
   },
   viewDetailBtnText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -1506,16 +1660,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between'
   },
   groupTitle: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '500',
     color: '#1f2937'
   },
   groupTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   groupMessage: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     marginTop: 4
   },
@@ -1529,7 +1683,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6
   },
   groupBadgeText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#fff',
     fontWeight: '600'
   },
@@ -1547,7 +1701,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   sectionEmptyText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af'
   },
   notificationItem: {
@@ -1572,18 +1726,18 @@ const styles = StyleSheet.create({
   },
   notificationTitle: {
     flex: 1,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937'
   },
   notificationTime: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af'
   },
   notificationSummary: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
-    lineHeight: 19
+    lineHeight: scaleFont(19)
   },
   notificationUnreadDot: {
     width: 8,
@@ -1600,7 +1754,7 @@ const styles = StyleSheet.create({
     paddingBottom: 4
   },
   loadMoreText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#ef4444',
     fontWeight: '500'
   },
@@ -1627,17 +1781,17 @@ const styles = StyleSheet.create({
     gap: 4
   },
   privateName: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '500',
     color: '#1f2937'
   },
   privateTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginLeft: 'auto'
   },
   privateMessage: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     marginTop: 4
   },
@@ -1651,7 +1805,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6
   },
   privateBadgeText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#fff',
     fontWeight: '600'
   },
@@ -1666,7 +1820,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5
   },
   inlineCountBadgeText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#fff',
     fontWeight: '600'
   },
@@ -1684,7 +1838,7 @@ const styles = StyleSheet.create({
     borderBottomColor: modalTokens.border
   },
   privateModalTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '700',
     color: modalTokens.textPrimary
   },
@@ -1698,7 +1852,7 @@ const styles = StyleSheet.create({
     backgroundColor: modalTokens.dangerSoft
   },
   sendBtnText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#fff',
     fontWeight: '600'
   },
@@ -1722,7 +1876,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     marginLeft: 8,
-    fontSize: 14
+    fontSize: scaleFont(14)
   },
   selectedUserSection: {
     flexDirection: 'row',
@@ -1734,7 +1888,7 @@ const styles = StyleSheet.create({
     borderBottomColor: modalTokens.border
   },
   selectedLabel: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     marginRight: 8
   },
@@ -1750,7 +1904,7 @@ const styles = StyleSheet.create({
     gap: 6
   },
   selectedUserName: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#1f2937'
   },
   userListSection: {
@@ -1758,13 +1912,36 @@ const styles = StyleSheet.create({
     padding: 12
   },
   userListTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#6b7280',
     marginBottom: 12
   },
   userList: {
     flex: 1
+  },
+  userListFeedback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+    gap: 10
+  },
+  userListFeedbackText: {
+    fontSize: scaleFont(13),
+    color: '#6b7280',
+    textAlign: 'center',
+    paddingHorizontal: 12
+  },
+  userListRetryButton: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16
+  },
+  userListRetryButtonText: {
+    fontSize: scaleFont(13),
+    fontWeight: '600',
+    color: '#fff'
   },
   userItem: {
     flexDirection: 'row',
@@ -1783,12 +1960,12 @@ const styles = StyleSheet.create({
     gap: 4
   },
   userName: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '500',
     color: '#1f2937'
   },
   userTitle: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginTop: 2
   },
@@ -1797,7 +1974,7 @@ const styles = StyleSheet.create({
     padding: 16
   },
   messageInputLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#374151',
     marginBottom: 8
@@ -1809,7 +1986,7 @@ const styles = StyleSheet.create({
     borderColor: modalTokens.border,
     borderRadius: 12,
     padding: 12,
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: modalTokens.textPrimary,
     minHeight: 150
   },
@@ -1837,7 +2014,7 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   arbitrationName: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     flex: 1
   },
@@ -1851,33 +2028,33 @@ const styles = StyleSheet.create({
     borderRadius: 8
   },
   votedBadgeText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#22c55e',
     fontWeight: '600'
   },
   arbitrationQuestion: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '500',
     color: '#1f2937',
     marginBottom: 2
   },
   arbitrationAnswer: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     marginBottom: 2
   },
   arbitrationReason: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginTop: 4,
-    lineHeight: 18
+    lineHeight: scaleFont(18)
   },
   arbitrationRight: {
     alignItems: 'flex-end',
     marginLeft: 10
   },
   arbitrationTime: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af',
     marginBottom: 8
   },
@@ -1891,7 +2068,7 @@ const styles = StyleSheet.create({
     borderRadius: 12
   },
   voteBtnText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#fff',
     fontWeight: '600'
   },
@@ -1902,7 +2079,7 @@ const styles = StyleSheet.create({
     borderRadius: 12
   },
   viewVoteBtnText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -1930,7 +2107,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   voteModalTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '700',
     color: modalTokens.textPrimary,
     textAlign: 'center',
@@ -1949,16 +2126,16 @@ const styles = StyleSheet.create({
     borderColor: modalTokens.border
   },
   voteQuestionLabel: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '600',
     color: '#6b7280',
     marginBottom: 6
   },
   voteQuestionText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '500',
     color: '#1f2937',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     marginBottom: 8
   },
   voteAnswerRow: {
@@ -1967,11 +2144,11 @@ const styles = StyleSheet.create({
     gap: 4
   },
   voteAnswerLabel: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   voteAnswerAuthor: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#3b82f6'
   },
@@ -1984,15 +2161,15 @@ const styles = StyleSheet.create({
     borderColor: '#fde68a'
   },
   voteReasonLabel: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '600',
     color: '#92400e',
     marginBottom: 6
   },
   voteReasonText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#78350f',
-    lineHeight: 20,
+    lineHeight: scaleFont(20),
     marginBottom: 10
   },
   voteApplicantRow: {
@@ -2001,17 +2178,17 @@ const styles = StyleSheet.create({
     gap: 6
   },
   voteApplicantName: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#92400e'
   },
   voteApplicantTime: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#d97706',
     marginLeft: 'auto'
   },
   voteChoiceTitle: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 12
@@ -2057,7 +2234,7 @@ const styles = StyleSheet.create({
     marginLeft: 12
   },
   voteChoiceLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 4
@@ -2066,12 +2243,12 @@ const styles = StyleSheet.create({
     color: '#3b82f6'
   },
   voteChoiceDesc: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
-    lineHeight: 18
+    lineHeight: scaleFont(18)
   },
   voteReasonInputLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 10
@@ -2082,7 +2259,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     borderRadius: 12,
     padding: 12,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937',
     minHeight: 100,
     textAlignVertical: 'top',
@@ -2105,7 +2282,7 @@ const styles = StyleSheet.create({
     backgroundColor: modalTokens.dangerSoft
   },
   submitVoteBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600'
   },
@@ -2116,7 +2293,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   cancelVoteBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6b7280',
     fontWeight: '500'
   }

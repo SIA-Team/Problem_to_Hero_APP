@@ -85,7 +85,6 @@ const HomeTabContent = ({
               </>}
             {item.type === 'paid' && <>
                 <Ionicons name="lock-closed" size={14} color="#8b5cf6" />
-                <Text style={styles.typeText}>付费</Text>
               </>}
           </View>}
         

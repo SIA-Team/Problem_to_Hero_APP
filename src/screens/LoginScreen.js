@@ -19,6 +19,7 @@ import { showToast } from '../utils/toast';
 import { showAppAlert } from '../utils/appAlert';
 import { SERVERS, getCurrentServer, switchServerAndReload, getCustomServerUrl } from '../utils/serverSwitcher';
 
+import { scaleFont } from '../utils/responsive';
 /**
  * 用户名密码登录页面
  * 标识：LoginScreen.js - 用户名密码登录（当前使用）
@@ -611,20 +612,20 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   appName: {
-    fontSize: 28,
+    fontSize: scaleFont(28),
     fontWeight: '700',
     color: '#1f2937',
     marginBottom: 8,
   },
   appSlogan: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
   },
   formContainer: {
     marginBottom: 32,
   },
   formTitle: {
-    fontSize: 24,
+    fontSize: scaleFont(24),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 24,
@@ -633,7 +634,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   inputLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#374151',
     marginBottom: 8,
@@ -657,7 +658,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#1f2937',
   },
   errorContainer: {
@@ -667,7 +668,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   errorText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#ef4444',
   },
   loginButton: {
@@ -682,7 +683,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fca5a5',
   },
   loginButtonText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#fff',
   },
@@ -698,7 +699,7 @@ const styles = StyleSheet.create({
   },
   dividerText: {
     marginHorizontal: 16,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af',
   },
   deviceLoginButton: {
@@ -716,16 +717,16 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   deviceLoginButtonText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#ef4444',
   },
   hintText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     textAlign: 'center',
     marginTop: 16,
-    lineHeight: 20,
+    lineHeight: scaleFont(20),
   },
   diagnosticButton: {
     flexDirection: 'row',
@@ -736,7 +737,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   diagnosticButtonText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#3b82f6',
     fontWeight: '500',
   },
@@ -761,7 +762,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   serverSwitcherTitle: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#374151',
     marginLeft: 8,
@@ -792,7 +793,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   serverName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#374151',
   },
@@ -807,12 +808,12 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   activeBadgeText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#fff',
     fontWeight: '600',
   },
   serverUrl: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     fontFamily: 'monospace',
   },
@@ -826,12 +827,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   loadingText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#3b82f6',
     marginLeft: 8,
   },
   serverSwitcherHint: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginTop: 12,
     textAlign: 'center',
@@ -845,7 +846,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     borderRadius: 8,
     padding: 12,
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#374151',
     fontFamily: 'monospace',
   },

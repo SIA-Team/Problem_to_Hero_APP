@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import { useTranslation } from '../i18n/withTranslation';
 
+import { scaleFont } from '../utils/responsive';
 export default function ContributorsScreen({ navigation, route }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -93,7 +94,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center' 
   },
   headerTitle: { 
-    fontSize: 18, 
+    fontSize: scaleFont(18), 
     fontWeight: '600', 
     color: '#1f2937', 
     flex: 1, 
@@ -112,13 +113,13 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     marginBottom: 8 
   },
-  totalLabel: { fontSize: 14, color: '#92400e', fontWeight: '500' },
+  totalLabel: { fontSize: scaleFont(14), color: '#92400e', fontWeight: '500' },
   totalAmount: { 
-    fontSize: 24, 
+    fontSize: scaleFont(24), 
     fontWeight: 'bold', 
     color: '#f59e0b' 
   },
-  totalDesc: { fontSize: 12, color: '#92400e' },
+  totalDesc: { fontSize: scaleFont(12), color: '#92400e' },
   list: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
   item: { 
     flexDirection: 'row', 
@@ -139,18 +140,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center' 
   },
   rankText: { 
-    fontSize: 12, 
+    fontSize: scaleFont(12), 
     fontWeight: 'bold', 
     color: '#f59e0b' 
   },
   info: { flex: 1 },
   name: { 
-    fontSize: 14, 
+    fontSize: scaleFont(14), 
     fontWeight: '500', 
     color: '#1f2937', 
     marginBottom: 4 
   },
-  time: { fontSize: 12, color: '#9ca3af' },
+  time: { fontSize: scaleFont(12), color: '#9ca3af' },
   amountBadge: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -161,7 +162,7 @@ const styles = StyleSheet.create({
     gap: 4 
   },
   amountText: { 
-    fontSize: 14, 
+    fontSize: scaleFont(14), 
     fontWeight: 'bold', 
     color: '#ef4444' 
   },
@@ -178,7 +179,7 @@ const styles = StyleSheet.create({
     alignItems: 'center' 
   },
   closeButtonText: { 
-    fontSize: 15, 
+    fontSize: scaleFont(15), 
     fontWeight: '500', 
     color: '#6b7280' 
   },

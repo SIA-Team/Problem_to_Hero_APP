@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
+import { scaleFont } from '../utils/responsive';
 const searchHistory = ['Python学习', '养猫攻略', '职业规划', '数据分析'];
 const hotSearches = [{
   rank: 1,
@@ -224,7 +225,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     marginLeft: 8,
-    fontSize: 14
+    fontSize: scaleFont(14)
   },
   searchBtn: {
     paddingHorizontal: 12,
@@ -236,7 +237,7 @@ const styles = StyleSheet.create({
   },
   searchBtnText: {
     color: '#ef4444',
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500'
   },
   content: {
@@ -255,7 +256,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -271,7 +272,7 @@ const styles = StyleSheet.create({
     borderRadius: 16
   },
   historyTagText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   refreshBtn: {
@@ -280,7 +281,7 @@ const styles = StyleSheet.create({
   },
   refreshText: {
     marginLeft: 4,
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   hotItem: {
@@ -297,25 +298,25 @@ const styles = StyleSheet.create({
   },
   rankText: {
     color: '#fff',
-    fontSize: 11,
+    fontSize: scaleFont(11),
     fontWeight: 'bold'
   },
   hotText: {
     flex: 1,
     marginLeft: 12,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937'
   },
   hotTag: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#ef4444'
   },
   risingTag: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#f97316'
   },
   moreText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#ef4444'
   },
   topicTag: {
@@ -324,6 +325,6 @@ const styles = StyleSheet.create({
     borderRadius: 16
   },
   topicTagText: {
-    fontSize: 13
+    fontSize: scaleFont(13)
   }
 });

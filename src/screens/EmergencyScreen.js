@@ -1,5 +1,5 @@
 ﻿import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert, Image, Platform, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, Platform, Modal, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import { getRegionData } from '../data/regionData';
 import emergencyApi from '../services/api/emergencyApi';
 import { API_ENDPOINTS, getFullApiUrl } from '../config/api';
 
+import { scaleFont } from '../utils/responsive';
 export default function EmergencyScreen({ navigation }) {
   const t = (key) => {
     if (!i18n || typeof i18n.t !== 'function') {
@@ -19,8 +20,7 @@ export default function EmergencyScreen({ navigation }) {
     }
     return i18n.t(key);
   };
-  
-  // 获取区域数据（与首页相同）
+
   const regionData = React.useMemo(() => getRegionData(), []);
   
   const [emergencyForm, setEmergencyForm] = useState({ 
@@ -33,13 +33,10 @@ export default function EmergencyScreen({ navigation }) {
   const [emergencyImages, setEmergencyImages] = useState([]); // 紧急求助图片片?
   const [showProgressModal, setShowProgressModal] = useState(false); // 显示进度模态框
   const [emergencyQuota, setEmergencyQuota] = useState(null);
-  
-  // 使用首页的区域选择逻辑
+  const [isLocating, setIsLocating] = useState(false);
   const [showRegionModal, setShowRegionModal] = useState(false);
   const [regionStep, setRegionStep] = useState(0);
   const [selectedRegion, setSelectedRegion] = useState({ country: '', city: '', state: '', district: '' });
-  
-  const [isLocating, setIsLocating] = useState(false);
 
   const loadEmergencyQuota = React.useCallback(async () => {
     try {
@@ -91,8 +88,7 @@ export default function EmergencyScreen({ navigation }) {
     if (count <= freeRescuerLimit) return 0;
     return (count - freeRescuerLimit) * extraRescuerFee;
   };
-  
-  // 区域选择函数（与首页完全相同）
+
   const getRegionOptions = () => {
     if (regionStep === 0) return regionData.countries;
     if (regionStep === 1) return regionData.cities[selectedRegion.country] || [];
@@ -102,42 +98,26 @@ export default function EmergencyScreen({ navigation }) {
   };
 
   const selectRegion = (value) => {
-    if (regionStep === 0) { 
-      setSelectedRegion({ ...selectedRegion, country: value, city: '', state: '', district: '' }); 
-      // 自动跳转到下一层
+    if (regionStep === 0) {
+      setSelectedRegion({ ...selectedRegion, country: value, city: '', state: '', district: '' });
       if (regionData.cities[value] && regionData.cities[value].length > 0) {
         setRegionStep(1);
       }
-    }
-    else if (regionStep === 1) { 
-      setSelectedRegion({ ...selectedRegion, city: value, state: '', district: '' }); 
-      // 自动跳转到下一层
+    } else if (regionStep === 1) {
+      setSelectedRegion({ ...selectedRegion, country: selectedRegion.country, city: value, state: '', district: '' });
       if (regionData.states[value] && regionData.states[value].length > 0) {
         setRegionStep(2);
       }
-    }
-    else if (regionStep === 2) { 
-      setSelectedRegion({ ...selectedRegion, state: value, district: '' }); 
-      // 自动跳转到下一层
+    } else if (regionStep === 2) {
+      setSelectedRegion({ ...selectedRegion, country: selectedRegion.country, city: selectedRegion.city, state: value, district: '' });
       if (regionData.districts[value] && regionData.districts[value].length > 0) {
         setRegionStep(3);
       }
-    }
-    else { 
-      setSelectedRegion({ ...selectedRegion, district: value }); 
+    } else {
+      setSelectedRegion({ ...selectedRegion, country: selectedRegion.country, city: selectedRegion.city, state: selectedRegion.state, district: value });
     }
   };
 
-  const getRegionTitle = () => ['选择国家', '选择省份', '选择城市', '选择区县'][regionStep];
-  
-  const getDisplayRegion = () => {
-    const parts = [selectedRegion.country, selectedRegion.city, selectedRegion.state, selectedRegion.district].filter(Boolean);
-    // 只显示最后一级，如果没有选择则显示"当前位置"
-    if (parts.length === 0) return '当前位置';
-    return parts[parts.length - 1];
-  };
-  
-  // 确认区域选择
   const confirmRegionSelection = () => {
     const parts = [selectedRegion.country, selectedRegion.city, selectedRegion.state, selectedRegion.district].filter(Boolean);
     const locationText = parts.join(' ');
@@ -145,8 +125,7 @@ export default function EmergencyScreen({ navigation }) {
     setShowRegionModal(false);
     setRegionStep(0);
   };
-  
-  // 打开区域选择器
+
   const openRegionSelector = () => {
     setShowRegionModal(true);
     setRegionStep(0);
@@ -309,17 +288,16 @@ export default function EmergencyScreen({ navigation }) {
       }
 
       const address = addressList[0];
-      // 构建地址文本
       const locationParts = [
         address.country,
         address.region || address.city,
         address.city,
-        address.district || address.subregion
+        address.district || address.subregion,
       ].filter(Boolean);
-      
+
       const locationText = locationParts.join(' ');
-      
-      setEmergencyForm(prev => ({ ...prev, location: locationText }));
+
+      setEmergencyForm((prev) => ({ ...prev, location: locationText }));
       showAppAlert('成功', '已获取当前位置');
     } catch (error) {
       console.error('Failed to locate emergency address:', error);
@@ -559,6 +537,18 @@ export default function EmergencyScreen({ navigation }) {
           </View>
         </View>
 
+        {/* Specific Location */}
+        <View style={styles.formGroup}>
+          <Text style={styles.formLabel}>具体位置</Text>
+          <TextInput
+            style={styles.formInput}
+            placeholder="您所在位置"
+            placeholderTextColor="#bbb"
+            value={emergencyForm.specificLocation || ''}
+            onChangeText={(text) => setEmergencyForm({...emergencyForm, specificLocation: text})}
+          />
+        </View>
+
         {/* Contact */}
         <View style={styles.formGroup}>
           <Text style={styles.formLabel}>{t('emergency.contact')}</Text>
@@ -661,17 +651,25 @@ export default function EmergencyScreen({ navigation }) {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* 区域选择弹窗 - 与首页完全相同 */}
+      {/* 区域选择弹窗 */}
       <Modal visible={showRegionModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.modalBackdrop}
-            activeOpacity={1} 
-            onPress={() => { setShowRegionModal(false); setRegionStep(0); }}
+            activeOpacity={1}
+            onPress={() => {
+              setShowRegionModal(false);
+              setRegionStep(0);
+            }}
           />
           <View style={[styles.regionModal, { paddingBottom: 30 }]}>
             <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => { setShowRegionModal(false); setRegionStep(0); }}>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowRegionModal(false);
+                  setRegionStep(0);
+                }}
+              >
                 <Ionicons name="close" size={24} color="#1f2937" />
               </TouchableOpacity>
               <Text style={styles.modalTitle}>选择区域</Text>
@@ -679,60 +677,47 @@ export default function EmergencyScreen({ navigation }) {
                 <Text style={styles.confirmText}>确认</Text>
               </TouchableOpacity>
             </View>
-            
-            {/* 面包屑导航 */}
+
             <View style={styles.breadcrumbContainer}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.breadcrumbScrollContent}>
-                <TouchableOpacity 
-                  style={styles.breadcrumbItem}
-                  onPress={() => setRegionStep(0)}
-                >
+                <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setRegionStep(0)}>
                   <Text style={[styles.breadcrumbText, regionStep === 0 && styles.breadcrumbTextActive]}>
                     {selectedRegion.country || '国家'}
                   </Text>
                 </TouchableOpacity>
-                
+
                 {selectedRegion.country && (
                   <>
                     <View style={styles.breadcrumbSeparatorWrapper}>
                       <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
                     </View>
-                    <TouchableOpacity 
-                      style={styles.breadcrumbItem}
-                      onPress={() => setRegionStep(1)}
-                    >
+                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setRegionStep(1)}>
                       <Text style={[styles.breadcrumbText, regionStep === 1 && styles.breadcrumbTextActive]}>
                         {selectedRegion.city || '省份'}
                       </Text>
                     </TouchableOpacity>
                   </>
                 )}
-                
+
                 {selectedRegion.city && (
                   <>
                     <View style={styles.breadcrumbSeparatorWrapper}>
                       <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
                     </View>
-                    <TouchableOpacity 
-                      style={styles.breadcrumbItem}
-                      onPress={() => setRegionStep(2)}
-                    >
+                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setRegionStep(2)}>
                       <Text style={[styles.breadcrumbText, regionStep === 2 && styles.breadcrumbTextActive]}>
                         {selectedRegion.state || '城市'}
                       </Text>
                     </TouchableOpacity>
                   </>
                 )}
-                
+
                 {selectedRegion.state && (
                   <>
                     <View style={styles.breadcrumbSeparatorWrapper}>
                       <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
                     </View>
-                    <TouchableOpacity 
-                      style={styles.breadcrumbItem}
-                      onPress={() => setRegionStep(3)}
-                    >
+                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setRegionStep(3)}>
                       <Text style={[styles.breadcrumbText, regionStep === 3 && styles.breadcrumbTextActive]}>
                         {selectedRegion.district || '区县'}
                       </Text>
@@ -741,7 +726,7 @@ export default function EmergencyScreen({ navigation }) {
                 )}
               </ScrollView>
             </View>
-            
+
             <ScrollView style={styles.regionList}>
               {getRegionOptions().map((option, idx) => (
                 <TouchableOpacity key={idx} style={styles.regionOption} onPress={() => selectRegion(option)}>
@@ -791,10 +776,10 @@ const styles = StyleSheet.create({
     borderBottomColor: modalTokens.border 
   },
   headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  headerTitle: { fontSize: 17, fontWeight: '600', color: modalTokens.textPrimary },
+  headerTitle: { fontSize: scaleFont(17), fontWeight: '600', color: modalTokens.textPrimary },
   submitBtn: { backgroundColor: modalTokens.danger, paddingHorizontal: modalTokens.actionPaddingX, paddingVertical: modalTokens.actionPaddingY, borderRadius: modalTokens.actionRadius },
   submitBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
-  submitText: { fontSize: 14, color: '#fff', fontWeight: '600' },
+  submitText: { fontSize: scaleFont(14), color: '#fff', fontWeight: '600' },
   submitTextDisabled: { color: '#fff' },
   warning: { 
     flexDirection: 'row', 
@@ -804,7 +789,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12, 
     gap: 8 
   },
-  warningText: { flex: 1, fontSize: 13, color: '#92400e', lineHeight: 18 },
+  warningText: { flex: 1, fontSize: scaleFont(13), color: '#92400e', lineHeight: scaleFont(18) },
   freeCountBanner: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -816,8 +801,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb' 
   },
   freeCountLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  freeCountText: { fontSize: 14, color: '#374151' },
-  freeCountNumber: { fontSize: 16, fontWeight: 'bold', color: '#22c55e' },
+  freeCountText: { fontSize: scaleFont(14), color: '#374151' },
+  freeCountNumber: { fontSize: scaleFont(16), fontWeight: 'bold', color: '#22c55e' },
   monthlyPayButton: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -827,7 +812,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8, 
     borderRadius: 20 
   },
-  monthlyPayButtonText: { fontSize: 13, color: '#fff', fontWeight: '600' },
+  monthlyPayButtonText: { fontSize: scaleFont(13), color: '#fff', fontWeight: '600' },
   formArea: { flex: 1, padding: 16 },
   formGroup: { marginBottom: 16 },
   labelWithCounter: {
@@ -836,9 +821,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8
   },
-  formLabel: { fontSize: 14, fontWeight: '500', color: '#374151' },
+  formLabel: { fontSize: scaleFont(14), fontWeight: '500', color: '#374151' },
   charCounter: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     fontWeight: '500'
   },
@@ -852,11 +837,11 @@ const styles = StyleSheet.create({
     borderRadius: 8, 
     paddingHorizontal: 12, 
     paddingVertical: 12, 
-    fontSize: 15, 
+    fontSize: scaleFont(15), 
     color: '#1f2937' 
   },
   quickTitlesContainer: { marginTop: 12 },
-  quickTitlesLabel: { fontSize: 12, color: '#6b7280', marginBottom: 8 },
+  quickTitlesLabel: { fontSize: scaleFont(12), color: '#6b7280', marginBottom: 8 },
   quickTitlesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   quickTitleTag: { 
     backgroundColor: '#fef2f2', 
@@ -866,7 +851,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6, 
     borderRadius: 16 
   },
-  quickTitleText: { fontSize: 12, color: '#ef4444', fontWeight: '500' },
+  quickTitleText: { fontSize: scaleFont(12), color: '#ef4444', fontWeight: '500' },
   formTextarea: { minHeight: 100, textAlignVertical: 'top' },
   
   // 图片上传样式
@@ -919,16 +904,16 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   addImageText: { 
-    fontSize: 12, 
+    fontSize: scaleFont(12), 
     color: '#9ca3af', 
     marginTop: 4,
     fontWeight: '500'
   },
   imageHint: { 
-    fontSize: 12, 
+    fontSize: scaleFont(12), 
     color: '#6b7280', 
     marginTop: 8,
-    lineHeight: 18,
+    lineHeight: scaleFont(18),
     paddingHorizontal: 4
   },
   
@@ -944,9 +929,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, 
     gap: 8 
   },
-  locationDisplayText: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#1f2937' },
+  locationDisplayText: { flex: 1, paddingVertical: 12, fontSize: scaleFont(15), color: '#1f2937' },
   locationPlaceholderText: { color: '#bbb' },
-  locationText: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#1f2937' },
   locationBtn: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -957,7 +941,7 @@ const styles = StyleSheet.create({
     gap: 4 
   },
   locationBtnDisabled: { opacity: 0.7 },
-  locationBtnText: { fontSize: 13, color: '#3b82f6', fontWeight: '500' },
+  locationBtnText: { fontSize: scaleFont(13), color: '#3b82f6', fontWeight: '500' },
   contactInput: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -968,7 +952,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, 
     gap: 8 
   },
-  contactText: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#1f2937' },
+  contactText: { flex: 1, paddingVertical: 12, fontSize: scaleFont(15), color: '#1f2937' },
   rescuerCountHeader: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -986,7 +970,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, 
     borderColor: '#bbf7d0' 
   },
-  rescuerFreeText: { fontSize: 12, color: '#16a34a', fontWeight: '500' },
+  rescuerFreeText: { fontSize: scaleFont(12), color: '#16a34a', fontWeight: '500' },
   rescuerCountInputWrapper: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -997,11 +981,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, 
     gap: 8 
   },
-  rescuerCountInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#1f2937' },
-  rescuerCountUnit: { fontSize: 15, color: '#6b7280', fontWeight: '500' },
+  rescuerCountInput: { flex: 1, paddingVertical: 12, fontSize: scaleFont(15), color: '#1f2937' },
+  rescuerCountUnit: { fontSize: scaleFont(15), color: '#6b7280', fontWeight: '500' },
   rescuerFeeInfo: { marginTop: 12 },
   rescuerFeeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  rescuerFeeTextFree: { fontSize: 14, color: '#22c55e', fontWeight: '500' },
+  rescuerFeeTextFree: { fontSize: scaleFont(14), color: '#22c55e', fontWeight: '500' },
   rescuerFeeCard: { 
     backgroundColor: '#fff7ed', 
     borderWidth: 1, 
@@ -1010,12 +994,12 @@ const styles = StyleSheet.create({
     padding: 12 
   },
   rescuerFeeLeft: { flex: 1 },
-  rescuerFeeLabel: { fontSize: 13, color: '#92400e', marginBottom: 4 },
-  rescuerFeeExtra: { fontSize: 15, color: '#ea580c', fontWeight: '600' },
+  rescuerFeeLabel: { fontSize: scaleFont(13), color: '#92400e', marginBottom: 4 },
+  rescuerFeeExtra: { fontSize: scaleFont(15), color: '#ea580c', fontWeight: '600' },
   rescuerFeeRight: { alignItems: 'flex-end' },
-  rescuerFeeTotalLabel: { fontSize: 12, color: '#92400e', marginBottom: 2 },
-  rescuerFeeTotal: { fontSize: 24, fontWeight: 'bold', color: '#ef4444' },
-  rescuerFeeNote: { fontSize: 12, color: '#92400e', marginTop: 8 },
+  rescuerFeeTotalLabel: { fontSize: scaleFont(12), color: '#92400e', marginBottom: 2 },
+  rescuerFeeTotal: { fontSize: scaleFont(24), fontWeight: 'bold', color: '#ef4444' },
+  rescuerFeeNote: { fontSize: scaleFont(12), color: '#92400e', marginTop: 8 },
   payButton: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -1027,85 +1011,25 @@ const styles = StyleSheet.create({
     marginTop: 12, 
     gap: 8 
   },
-  payButtonText: { fontSize: 15, color: '#fff', fontWeight: '600' },
+  payButtonText: { fontSize: scaleFont(15), color: '#fff', fontWeight: '600' },
   tips: { 
     backgroundColor: '#fef2f2', 
     borderRadius: 8, 
     padding: 12, 
     marginTop: 8 
   },
-  tipsTitle: { fontSize: 13, fontWeight: '500', color: '#991b1b', marginBottom: 8 },
-  tipsText: { fontSize: 12, color: '#b91c1c', lineHeight: 20 },
-  
-  // 进度模态框样式
-  locationModalOverlay: {
-    flex: 1,
-    backgroundColor: modalTokens.overlay,
-    justifyContent: 'flex-end',
-  },
-  locationModalBackdrop: { flex: 1 },
-  locationModalContent: {
-    backgroundColor: modalTokens.surface,
-    borderTopLeftRadius: modalTokens.sheetRadius,
-    borderTopRightRadius: modalTokens.sheetRadius,
-    borderTopWidth: 1,
-    borderColor: modalTokens.border,
-    maxHeight: '80%',
-    minHeight: '55%',
-  },
-  locationModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: modalTokens.border,
-  },
-  locationModalIconBtn: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  locationModalTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: modalTokens.textPrimary,
-  },
-  locationBreadcrumbs: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-    gap: 6,
-  },
-  locationBreadcrumbText: { fontSize: 13, color: '#6b7280' },
-  locationBreadcrumbTextActive: { color: '#ef4444', fontWeight: '600' },
-  locationBreadcrumbDivider: { fontSize: 13, color: '#9ca3af' },
-  locationOptionsList: { flex: 1, paddingHorizontal: 16, paddingBottom: 20 },
-  locationOptionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  locationOptionText: { fontSize: 15, color: '#1f2937' },
-
-  // 首页区域选择样式
+  tipsTitle: { fontSize: scaleFont(13), fontWeight: '500', color: '#991b1b', marginBottom: 8 },
+  tipsText: { fontSize: scaleFont(12), color: '#b91c1c', lineHeight: scaleFont(20) },
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: modalTokens.overlay },
   regionModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '70%' },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
-  modalTitle: { fontSize: 16, fontWeight: '600', color: modalTokens.textPrimary },
-  confirmText: { fontSize: 14, color: '#ef4444', fontWeight: '600' },
-  breadcrumbContainer: { 
-    paddingHorizontal: 16, 
-    paddingVertical: 10, 
-    borderBottomWidth: 1, 
+  modalTitle: { fontSize: scaleFont(16), fontWeight: '600', color: modalTokens.textPrimary },
+  confirmText: { fontSize: scaleFont(14), color: '#ef4444', fontWeight: '600' },
+  breadcrumbContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
     backgroundColor: '#fff'
   },
@@ -1113,18 +1037,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center'
   },
-  breadcrumbItem: { 
-    paddingHorizontal: 4, 
+  breadcrumbItem: {
+    paddingHorizontal: 4,
     paddingVertical: 4,
     justifyContent: 'center'
   },
-  breadcrumbText: { 
-    fontSize: 15, 
+  breadcrumbText: {
+    fontSize: scaleFont(15),
     color: '#6b7280',
     fontWeight: '400',
-    lineHeight: 20
+    lineHeight: scaleFont(20)
   },
-  breadcrumbTextActive: { 
+  breadcrumbTextActive: {
     color: '#ef4444',
     fontWeight: '500'
   },
@@ -1135,7 +1059,7 @@ const styles = StyleSheet.create({
   },
   regionList: { padding: 8 },
   regionOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
-  regionOptionText: { fontSize: 15, color: modalTokens.textPrimary },
+  regionOptionText: { fontSize: scaleFont(15), color: modalTokens.textPrimary },
 
   progressModalOverlay: {
     flex: 1,
@@ -1163,7 +1087,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   progressTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: modalTokens.textPrimary,
     marginTop: 12,
@@ -1173,7 +1097,7 @@ const styles = StyleSheet.create({
   },
   loadingHint: {
     marginTop: 16,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textSecondary,
   },
   progressNumberContainer: {
@@ -1182,19 +1106,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   progressNumber: {
-    fontSize: 48,
+    fontSize: scaleFont(48),
     fontWeight: '700',
     color: '#ef4444',
-    lineHeight: 56,
+    lineHeight: scaleFont(56),
   },
   progressTotal: {
-    fontSize: 24,
+    fontSize: scaleFont(24),
     fontWeight: '600',
     color: modalTokens.textMuted,
     marginLeft: 4,
   },
   progressLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textSecondary,
     marginBottom: 20,
   },
@@ -1223,7 +1147,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   progressInfoText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: modalTokens.textSecondary,
   },
   progressComplete: {
@@ -1237,7 +1161,7 @@ const styles = StyleSheet.create({
     borderTopColor: modalTokens.border,
   },
   progressCompleteText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#22c55e',
   },

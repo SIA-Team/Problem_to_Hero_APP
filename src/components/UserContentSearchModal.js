@@ -17,6 +17,7 @@ import AnswerListItem from './AnswerListItem';
 import FavoriteListItem from './FavoriteListItem';
 import { modalTokens } from './modalTokens';
 
+import { scaleFont } from '../utils/responsive';
 /**
  * 用户内容搜索模态框组件
  */
@@ -240,7 +241,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: modalTokens.textPrimary,
     padding: 0,
   },
@@ -253,7 +254,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   searchButtonText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: modalTokens.danger,
     fontWeight: '700',
   },
@@ -271,7 +272,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textSecondary,
   },
   emptyContainer: {
@@ -282,13 +283,13 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     marginTop: 16,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: modalTokens.textSecondary,
     fontWeight: '600',
   },
   emptyHint: {
     marginTop: 8,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textMuted,
   },
   resultsList: {

@@ -19,6 +19,7 @@ import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
 import answerApi from '../services/api/answerApi';
 import commentApi from '../services/api/commentApi';
 
+import { scaleFont } from '../utils/responsive';
 const INITIAL_SUPPLEMENT_PAGINATION = {
   pageNum: 1,
   pageSize: 10,
@@ -3021,7 +3022,7 @@ const styles = StyleSheet.create({
     padding: 4
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -3039,7 +3040,7 @@ const styles = StyleSheet.create({
     gap: 2
   },
   shareBtnText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280'
   },
   content: {
@@ -3088,7 +3089,7 @@ const styles = StyleSheet.create({
     borderRadius: 8
   },
   adoptedBadgeCompactText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#22c55e',
     fontWeight: '600'
   },
@@ -3108,7 +3109,7 @@ const styles = StyleSheet.create({
     borderRadius: 7
   },
   inviterTextCompact: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#3b82f6',
     fontWeight: '500',
     textAlign: 'center'
@@ -3125,7 +3126,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb'
   },
   arbitrationBtnTextCompact: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -3146,7 +3147,7 @@ const styles = StyleSheet.create({
     borderRadius: 8
   },
   inviterText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#3b82f6',
     fontWeight: '500'
   },
@@ -3177,7 +3178,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap'
   },
   answerAuthor: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -3192,13 +3193,13 @@ const styles = StyleSheet.create({
     marginLeft: 6
   },
   adoptAnswerBtnText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#22c55e',
     fontWeight: '700',
     letterSpacing: 0.2
   },
   answerAuthorTitle: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af'
   },
   followBtn: {
@@ -3211,7 +3212,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6'
   },
   followBtnText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#fff',
     fontWeight: '500'
   },
@@ -3230,14 +3231,14 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   adoptedText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#22c55e',
     fontWeight: '500'
   },
   answerContent: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#374151',
-    lineHeight: 24,
+    lineHeight: scaleFont(24),
     marginBottom: 12
   },
   answerMeta: {
@@ -3249,16 +3250,16 @@ const styles = StyleSheet.create({
     gap: 6
   },
   answerViews: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af'
   },
   answerMetaSeparator: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#d1d5db',
     marginHorizontal: 2
   },
   answerTime: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af'
   },
   tabsSection: {
@@ -3277,7 +3278,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   tabText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280'
   },
   tabTextActive: {
@@ -3320,7 +3321,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fef2f2'
   },
   sortFilterText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af'
   },
   sortFilterTextActive: {
@@ -3328,7 +3329,7 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   },
   sortFilterCount: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   contentSection: {
@@ -3365,7 +3366,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap'
   },
   supplementAuthor: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937'
   },
@@ -3384,13 +3385,13 @@ const styles = StyleSheet.create({
     flexShrink: 1
   },
   supplementLocation: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   supplementContent: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#374151',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     marginBottom: 12
   },
   supplementActions: {
@@ -3415,7 +3416,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   supplementActionText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   commentCard: {
@@ -3440,18 +3441,18 @@ const styles = StyleSheet.create({
     marginBottom: 6
   },
   commentAuthor: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937'
   },
   commentTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   commentText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#374151',
-    lineHeight: 20,
+    lineHeight: scaleFont(20),
     marginBottom: 8
   },
   commentActions: {
@@ -3477,7 +3478,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   commentActionText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   modalBackdrop: {
@@ -3518,7 +3519,7 @@ const styles = StyleSheet.create({
   commentListModalTitle: {
     flex: 1,
     textAlign: 'center',
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -3543,18 +3544,18 @@ const styles = StyleSheet.create({
     gap: 8
   },
   commentListAuthor: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937'
   },
   commentListTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   commentListText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     marginBottom: 10
   },
   commentListContent: {
@@ -3571,7 +3572,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   commentListActionText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   commentListBottomBar: {
@@ -3593,7 +3594,7 @@ const styles = StyleSheet.create({
     gap: 8
   },
   commentListWriteText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af'
   },
   originalCommentCard: {
@@ -3610,17 +3611,17 @@ const styles = StyleSheet.create({
     gap: 8
   },
   originalCommentAuthor: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937'
   },
   originalCommentTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   originalCommentText: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: scaleFont(15),
+    lineHeight: scaleFont(22),
     color: '#1f2937'
   },
   repliesSectionHeader: {
@@ -3629,7 +3630,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb'
   },
   repliesSectionTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#6b7280'
   },
@@ -3654,27 +3655,27 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap'
   },
   replyAuthor: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#9ca3af'
   },
   replyAuthorRelation: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   replyReplyTarget: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#6b7280'
   },
   replyTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   replyText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     marginBottom: 10
   },
   replyActions: {
@@ -3688,7 +3689,7 @@ const styles = StyleSheet.create({
     gap: 3
   },
   replyActionText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af'
   },
   replyChildrenSection: {
@@ -3704,7 +3705,7 @@ const styles = StyleSheet.create({
     paddingBottom: 6
   },
   replyChildrenToggleText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -3715,7 +3716,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 8,
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af'
   },
   loadMoreBtn: {
@@ -3726,7 +3727,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16
   },
   loadMoreText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#ef4444',
     fontWeight: '500'
   },
@@ -3758,7 +3759,7 @@ const styles = StyleSheet.create({
     opacity: 0.6
   },
   bottomIconText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280'
   },
   bottomCommentInput: {
@@ -3773,7 +3774,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb'
   },
   bottomCommentPlaceholder: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af'
   },
   modalOverlay: {
@@ -3800,7 +3801,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12
   },
   replyModalTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: modalTokens.textPrimary
   },
@@ -3810,7 +3811,7 @@ const styles = StyleSheet.create({
     borderColor: modalTokens.border,
     borderRadius: 12,
     padding: 12,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textPrimary,
     minHeight: 100,
     textAlignVertical: 'top',
@@ -3826,7 +3827,7 @@ const styles = StyleSheet.create({
     backgroundColor: modalTokens.dangerSoft
   },
   replySubmitText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600'
   },
@@ -3858,7 +3859,7 @@ const styles = StyleSheet.create({
     borderBottomColor: modalTokens.border
   },
   arbitrationModalTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: modalTokens.textPrimary
   },
@@ -3880,12 +3881,12 @@ const styles = StyleSheet.create({
   },
   arbitrationInfoText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#1e40af',
-    lineHeight: 20
+    lineHeight: scaleFont(20)
   },
   arbitrationSectionTitle: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: modalTokens.textPrimary,
     marginBottom: 10
@@ -3896,7 +3897,7 @@ const styles = StyleSheet.create({
     borderColor: modalTokens.border,
     borderRadius: 12,
     padding: 12,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textPrimary,
     minHeight: 100,
     marginBottom: 20
@@ -3908,7 +3909,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   arbitrationExpertsCount: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: modalTokens.textSecondary,
     fontWeight: '500'
   },
@@ -3926,7 +3927,7 @@ const styles = StyleSheet.create({
   },
   expertSearchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textPrimary,
     padding: 0
   },
@@ -3937,7 +3938,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   recommendedExpertsTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: modalTokens.textPrimary
   },
@@ -3946,13 +3947,13 @@ const styles = StyleSheet.create({
     paddingVertical: 40
   },
   noExpertsFoundText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '500',
     color: modalTokens.textSecondary,
     marginTop: 12
   },
   noExpertsFoundDesc: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: modalTokens.textMuted,
     marginTop: 4
   },
@@ -3982,17 +3983,17 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   expertName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: modalTokens.textPrimary
   },
   expertTitle: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: modalTokens.textSecondary,
     marginBottom: 2
   },
   expertExpertise: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: modalTokens.textMuted
   },
   expertCheckbox: {
@@ -4025,7 +4026,7 @@ const styles = StyleSheet.create({
     backgroundColor: modalTokens.dangerSoft
   },
   submitArbitrationBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600'
   },
@@ -4036,7 +4037,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   cancelArbitrationBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: modalTokens.textSecondary,
     fontWeight: '500'
   },
@@ -4063,7 +4064,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   answerModalTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: modalTokens.textPrimary
   },
@@ -4078,7 +4079,7 @@ const styles = StyleSheet.create({
     backgroundColor: modalTokens.dangerSoft
   },
   answerPublishText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#fff',
     fontWeight: '600'
   },
@@ -4091,9 +4092,9 @@ const styles = StyleSheet.create({
   },
   answerTextInput: {
     padding: 16,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: modalTokens.textPrimary,
-    lineHeight: 26,
+    lineHeight: scaleFont(26),
     minHeight: 300
   },
   answerIdentitySection: {
@@ -4118,7 +4119,7 @@ const styles = StyleSheet.create({
     padding: 10
   },
   answerWordCount: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: modalTokens.textMuted
   },
   supplementAnswerContext: {
@@ -4134,7 +4135,7 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   supplementAnswerLabel: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#3b82f6',
     fontWeight: '600'
   },
@@ -4145,14 +4146,14 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   supplementAnswerAuthorName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937'
   },
   supplementAnswerContent: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
-    lineHeight: 20
+    lineHeight: scaleFont(20)
   },
   // 鍔犺浇鍜岄敊璇姸鎬佹牱寮?
   errorContainer: {
@@ -4162,17 +4163,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20
   },
   errorTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#ef4444',
     marginTop: 16,
     marginBottom: 8
   },
   errorMessage: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: scaleFont(20),
     marginBottom: 20
   },
   retryButton: {
@@ -4182,7 +4183,7 @@ const styles = StyleSheet.create({
     borderRadius: 8
   },
   retryButtonText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#fff',
     fontWeight: '600'
   },
@@ -4191,7 +4192,7 @@ const styles = StyleSheet.create({
     paddingVertical: 20
   },
   loadingMoreText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280'
   }
 });

@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
+import { scaleFont } from '../utils/responsive';
 export default function CreateActivityScreen({
   navigation,
   route
@@ -316,7 +317,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   headerTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: '#1f2937',
     flex: 1,
@@ -330,7 +331,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   submitText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#ef4444',
     fontWeight: '600'
   },
@@ -339,7 +340,7 @@ const styles = StyleSheet.create({
     padding: 16
   },
   inputLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#374151',
     marginBottom: 8,
@@ -352,7 +353,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb',
     borderRadius: 8,
     padding: 12,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     borderWidth: 1,
     borderColor: '#e5e7eb'
   },
@@ -381,7 +382,7 @@ const styles = StyleSheet.create({
     borderColor: '#3b82f6'
   },
   organizerOptionText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#666'
   },
   organizerOptionTextActive: {
@@ -400,7 +401,7 @@ const styles = StyleSheet.create({
   },
   fixedOrganizerText: {
     flex: 1,
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6b21a8',
     fontWeight: '500'
   },
@@ -411,7 +412,7 @@ const styles = StyleSheet.create({
     borderRadius: 10
   },
   fixedOrganizerBadgeText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#fff',
     fontWeight: '600'
   },
@@ -433,7 +434,7 @@ const styles = StyleSheet.create({
     flex: 1
   },
   selectedTeamName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b21a8',
     fontWeight: '500'
   },
@@ -443,7 +444,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   changeTeamText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#8b5cf6',
     fontWeight: '500'
   },
@@ -461,7 +462,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed'
   },
   selectTeamPromptText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#8b5cf6',
     fontWeight: '500'
   },
@@ -490,7 +491,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f3f4f6'
   },
   teamSelectorTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -531,13 +532,13 @@ const styles = StyleSheet.create({
     flex: 1
   },
   teamSelectorName: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '500',
     color: '#1f2937',
     marginBottom: 2
   },
   teamSelectorMembers: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   typeSelector: {
@@ -560,7 +561,7 @@ const styles = StyleSheet.create({
     borderColor: '#ef4444'
   },
   typeOptionText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#666'
   },
   typeOptionTextActive: {
@@ -579,7 +580,7 @@ const styles = StyleSheet.create({
     flex: 1
   },
   timeInputLabel: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     marginBottom: 6
   },
@@ -587,7 +588,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb',
     borderRadius: 8,
     padding: 12,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     borderWidth: 1,
     borderColor: '#e5e7eb',
     color: '#1f2937'
@@ -596,7 +597,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12
   },
   timeSeparator: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -634,7 +635,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   addImageText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#9ca3af',
     marginTop: 4
   }

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
 
+import { scaleFont } from '../utils/responsive';
 export default function AddRewardScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
@@ -161,7 +162,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center' 
   },
   headerTitle: { 
-    fontSize: 18, 
+    fontSize: scaleFont(18), 
     fontWeight: '600', 
     color: '#1f2937', 
     flex: 1, 
@@ -182,15 +183,15 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     marginBottom: 8 
   },
-  currentRewardLabel: { fontSize: 14, color: '#065f46' }, // 深绿色文字
+  currentRewardLabel: { fontSize: scaleFont(14), color: '#065f46' }, // 深绿色文字
   currentRewardAmount: { 
-    fontSize: 28, 
+    fontSize: scaleFont(28), 
     fontWeight: 'bold', 
     color: '#10b981' // 翠绿色金额
   },
-  currentRewardDesc: { fontSize: 12, color: '#065f46' },
+  currentRewardDesc: { fontSize: scaleFont(12), color: '#065f46' },
   sectionTitle: { 
-    fontSize: 15, 
+    fontSize: scaleFont(15), 
     fontWeight: '600', 
     color: '#1f2937', 
     marginBottom: 12 
@@ -215,7 +216,7 @@ const styles = StyleSheet.create({
     borderColor: '#10b981' // 翠绿色边框
   },
   quickAmountText: { 
-    fontSize: 16, 
+    fontSize: scaleFont(16), 
     fontWeight: '600', 
     color: '#6b7280' 
   },
@@ -231,14 +232,14 @@ const styles = StyleSheet.create({
     marginBottom: 16 
   },
   currencySymbol: { 
-    fontSize: 18, 
+    fontSize: scaleFont(18), 
     fontWeight: '600', 
     color: '#6b7280', 
     marginRight: 8 
   },
   customAmountField: { 
     flex: 1, 
-    fontSize: 16, 
+    fontSize: scaleFont(16), 
     color: '#1f2937', 
     paddingVertical: 14 
   },
@@ -255,9 +256,9 @@ const styles = StyleSheet.create({
   },
   tipsText: { 
     flex: 1, 
-    fontSize: 13, 
+    fontSize: scaleFont(13), 
     color: '#92400e', // 深棕色文字
-    lineHeight: 18 
+    lineHeight: scaleFont(18) 
   },
   confirmBtn: { 
     backgroundColor: '#10b981', // 翠绿色按钮
@@ -278,7 +279,7 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   confirmBtnText: { 
-    fontSize: 16, 
+    fontSize: scaleFont(16), 
     fontWeight: '600', 
     color: '#fff' 
   },
@@ -291,7 +292,7 @@ const styles = StyleSheet.create({
     alignItems: 'center' 
   },
   cancelBtnText: { 
-    fontSize: 16, 
+    fontSize: scaleFont(16), 
     fontWeight: '500', 
     color: '#6b7280' 
   },

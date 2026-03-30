@@ -8,6 +8,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'rea
 import { Ionicons } from '@expo/vector-icons';
 import { translateTextWithCache, detectLanguage, getCurrentLanguage } from '../services/translationService';
 import { useTranslation } from '../i18n/withTranslation';
+import { scaleFont } from '../utils/responsive';
 const TranslateButton = ({
   text,
   onTranslated,
@@ -105,7 +106,7 @@ const styles = StyleSheet.create({
     marginRight: 4
   },
   buttonText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -113,7 +114,7 @@ const styles = StyleSheet.create({
     color: '#3b82f6'
   },
   errorText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#ef4444',
     marginTop: 2
   }

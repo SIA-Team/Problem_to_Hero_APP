@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 
+import { scaleFont } from '../utils/responsive';
 // 模拟题库数据
 const platformBanks = [
   { id: 1, name: 'React Native基础知识', questionCount: 50, author: '平台', type: 'platform', mainCategory: '行业', subCategory: '互联网' },
@@ -148,15 +149,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   backBtn: { padding: 4 },
-  headerTitle: { fontSize: 18, fontWeight: '600', color: '#1f2937' },
+  headerTitle: { fontSize: scaleFont(18), fontWeight: '600', color: '#1f2937' },
   uploadBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#fef3c7', borderRadius: 8 },
-  uploadBtnText: { fontSize: 13, color: '#f59e0b', fontWeight: '600' },
+  uploadBtnText: { fontSize: scaleFont(13), color: '#f59e0b', fontWeight: '600' },
 
   // 标签栏
   tabBar: { flexDirection: 'row', backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: 12, gap: 12 },
   tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, gap: 6, borderBottomWidth: 2, borderBottomColor: 'transparent' },
   tabActive: { borderBottomColor: '#f59e0b' },
-  tabText: { fontSize: 14, color: '#9ca3af', fontWeight: '500' },
+  tabText: { fontSize: scaleFont(14), color: '#9ca3af', fontWeight: '500' },
   tabTextActive: { color: '#f59e0b', fontWeight: '600' },
 
   // 题库卡片
@@ -164,11 +165,11 @@ const styles = StyleSheet.create({
   bankCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   bankHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   bankTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
-  bankName: { fontSize: 16, fontWeight: '600', color: '#1f2937', flex: 1 },
+  bankName: { fontSize: scaleFont(16), fontWeight: '600', color: '#1f2937', flex: 1 },
   bankMeta: { flexDirection: 'row', gap: 16, marginBottom: 12 },
   bankMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  bankMetaText: { fontSize: 12, color: '#9ca3af' },
+  bankMetaText: { fontSize: scaleFont(12), color: '#9ca3af' },
   bankFooter: { paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
   startExamBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f59e0b', paddingVertical: 10, borderRadius: 8, gap: 6 },
-  startExamText: { fontSize: 14, color: '#fff', fontWeight: '600' },
+  startExamText: { fontSize: scaleFont(14), color: '#fff', fontWeight: '600' },
 });

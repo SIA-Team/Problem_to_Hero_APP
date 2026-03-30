@@ -13,10 +13,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { modalTokens } from './modalTokens';
+import ShareToFriendsModal from './ShareToFriendsModal';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import { showToast } from '../utils/toast';
 import { buildShareUrl, openTwitterShare } from '../utils/shareService';
 
+import { scaleFont } from '../utils/responsive';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 let clipboardModule;
@@ -60,6 +62,12 @@ const copyLinkSafely = async (text) => {
 // 分享选项配置 - 只保留 Twitter 和 Copy Link
 const shareOptions = [
   {
+    id: 'friends',
+    name: 'Site Users',
+    icon: 'people-outline',
+    color: '#111827',
+  },
+  {
     id: 'twitter',
     name: 'Twitter',
     icon: 'logo-twitter',
@@ -78,6 +86,7 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
   const [slideAnim] = React.useState(new Animated.Value(SCREEN_HEIGHT));
   const [backdropOpacity] = React.useState(new Animated.Value(0));
   const [pendingPlatform, setPendingPlatform] = React.useState(null);
+  const [showFriendsModal, setShowFriendsModal] = React.useState(false);
 
   React.useEffect(() => {
     if (visible) {
@@ -133,6 +142,12 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
     setPendingPlatform(platform);
 
     try {
+      if (platform === 'friends') {
+        handleClose();
+        setShowFriendsModal(true);
+        return;
+      }
+
       if (platform === 'link') {
         const shareUrl = buildShareUrl(shareData);
         const result = await copyLinkSafely(shareUrl);
@@ -174,73 +189,79 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={handleClose}
-      statusBarTranslucent
-    >
-      <TouchableWithoutFeedback onPress={handleClose}>
-        <Animated.View style={[
-          styles.overlay,
-          { opacity: backdropOpacity }
-        ]}>
-          <TouchableWithoutFeedback>
-            <Animated.View
-              style={[
-                styles.container,
-                {
-                  transform: [{ translateY: slideAnim }],
-                  paddingBottom: bottomSafeInset,
-                },
-              ]}
-            >
-              <View style={styles.header}>
-                <Text style={styles.headerTitle}>Share to</Text>
-                <TouchableOpacity
-                  onPress={handleClose}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  style={styles.closeButton}
-                >
-                  <Ionicons name="close" size={24} color="#9CA3AF" />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                bounces={false}
+    <>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="none"
+        onRequestClose={handleClose}
+        statusBarTranslucent
+      >
+        <TouchableWithoutFeedback onPress={handleClose}>
+          <Animated.View style={[styles.overlay, { opacity: backdropOpacity }]}>
+            <TouchableWithoutFeedback>
+              <Animated.View
+                style={[
+                  styles.container,
+                  {
+                    transform: [{ translateY: slideAnim }],
+                    paddingBottom: bottomSafeInset,
+                  },
+                ]}
               >
-                <View style={styles.section}>
-                  <View style={styles.optionsGrid}>
-                    {shareOptions.map((option) => (
-                      <TouchableOpacity
-                        key={option.id}
-                        style={styles.optionItem}
-                        onPress={() => handleShare(option.id)}
-                        activeOpacity={0.7}
-                        disabled={pendingPlatform !== null}
-                      >
-                        <View
-                          style={[
-                            styles.optionIcon,
-                            { backgroundColor: option.color + '15' },
-                            pendingPlatform === option.id && styles.optionIconPending,
-                          ]}
-                        >
-                          <Ionicons name={option.icon} size={28} color={option.color} />
-                        </View>
-                        <Text style={styles.optionText}>{option.name}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                <View style={styles.header}>
+                  <Text style={styles.headerTitle}>Share to</Text>
+                  <TouchableOpacity
+                    onPress={handleClose}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    style={styles.closeButton}
+                  >
+                    <Ionicons name="close" size={24} color="#9CA3AF" />
+                  </TouchableOpacity>
                 </View>
-              </ScrollView>
-            </Animated.View>
-          </TouchableWithoutFeedback>
-        </Animated.View>
-      </TouchableWithoutFeedback>
-    </Modal>
+
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  bounces={false}
+                >
+                  <View style={styles.section}>
+                    <View style={styles.optionsGrid}>
+                      {shareOptions.map(option => (
+                        <TouchableOpacity
+                          key={option.id}
+                          style={styles.optionItem}
+                          onPress={() => handleShare(option.id)}
+                          activeOpacity={0.7}
+                          disabled={pendingPlatform !== null}
+                        >
+                          <View
+                            style={[
+                              styles.optionIcon,
+                              { backgroundColor: option.color + '15' },
+                              pendingPlatform === option.id && styles.optionIconPending,
+                            ]}
+                          >
+                            <Ionicons name={option.icon} size={28} color={option.color} />
+                          </View>
+                          <Text style={styles.optionText}>{option.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </ScrollView>
+              </Animated.View>
+            </TouchableWithoutFeedback>
+          </Animated.View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      <ShareToFriendsModal
+        visible={showFriendsModal}
+        onClose={() => setShowFriendsModal(false)}
+        shareData={shareData}
+        onShare={onShare}
+      />
+    </>
   );
 }
 
@@ -266,7 +287,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '700',
     color: '#1F2937',
   },
@@ -281,6 +302,7 @@ const styles = StyleSheet.create({
   },
   optionsGrid: {
     flexDirection: 'row',
+    justifyContent: 'flex-start',
     paddingHorizontal: 6,
   },
   optionItem: {
@@ -300,8 +322,8 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   optionText: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: scaleFont(14),
+    lineHeight: scaleFont(20),
     color: '#6B7280',
     textAlign: 'center',
   },

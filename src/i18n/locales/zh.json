@@ -743,6 +743,7 @@
         "searchPlaceholder": "搜索用户...",
         "sendTo": "发送给：",
         "selectUser": "选择用户",
+        "emptyUsers": "暂无可发送私信的关注用户",
         "messageContent": "私信内容",
         "messagePlaceholder": "请输入私信内容..."
       },
@@ -775,6 +776,14 @@
         "hint": "提示"
       },
       "empty": "暂无消息"
+    },
+    "privateConversation": {
+      "title": "私信会话",
+      "empty": "还没有私信消息",
+      "inputPlaceholder": "输入消息...",
+      "loadFailed": "加载私信消息失败",
+      "sendFailed": "发送私信失败",
+      "sendUnavailable": "当前会话缺少接收方信息，暂时无法发送"
     },
     "groupChat": {
       "title": "问题群组",
@@ -1072,6 +1081,12 @@
         "subtitle": "根据当前问题为您推荐相关内容",
         "hot": "热"
       }
+    },
+    "paidUsersList": {
+      "title": "付费明细",
+      "totalIncome": "总收入",
+      "paidCount": "付费人数",
+      "empty": "暂无付费用户"
     },
     "questionRanking": {
       "title": "问题榜",

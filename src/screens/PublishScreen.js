@@ -4,7 +4,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import CategoryIcon from '../components/CategoryIcon';
 import IdentitySelector from '../components/IdentitySelector';
-import CitySelector from '../components/CitySelector';
 import ImagePickerSheet from '../components/ImagePickerSheet';
 import categoryApi from '../services/api/categoryApi';
 import questionApi from '../services/api/questionApi';
@@ -13,6 +12,8 @@ import expertApi from '../services/api/expertApi';
 import { showToast } from '../utils/toast';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/useTranslation';
+import { getRegionData } from '../data/regionData';
+import { scaleFont, scaleWidth } from '../utils/responsive';
 const questionTypes = [{
   id: 0,
   nameKey: 'publish.questionTypes.public',
@@ -38,6 +39,9 @@ export default function PublishScreen({
   route
 }) {
   const { t } = useTranslation();
+  
+  // 获取多语言区域数据
+  const regionData = React.useMemo(() => getRegionData(), []);
   
   // 获取路由参数中的草稿数据
   const draftData = route?.params?.draftData;
@@ -104,8 +108,9 @@ export default function PublishScreen({
   const [loadingLevel2, setLoadingLevel2] = useState(false); // 二级分类加载状态
   const [level1SearchQuery, setLevel1SearchQuery] = useState(''); // 一级分类搜索关键词
 
-  // 位置选择状态
   const [showLocationModal, setShowLocationModal] = useState(false);
+  const [regionStep, setRegionStep] = useState(0);
+  const [selectedLocationRegion, setSelectedLocationRegion] = useState({ country: '', city: '', state: '', district: '' });
 
   // 加载分类数据
   useEffect(() => {
@@ -850,7 +855,46 @@ export default function PublishScreen({
   };
   const handleLocationPress = () => {
     setShowLocationModal(true);
+    setRegionStep(0);
   };
+  
+  const getLocationRegionOptions = () => {
+    if (regionStep === 0) return regionData.countries;
+    if (regionStep === 1) return regionData.cities[selectedLocationRegion.country] || [];
+    if (regionStep === 2) return regionData.states[selectedLocationRegion.city] || [];
+    if (regionStep === 3) return regionData.districts[selectedLocationRegion.state] || [];
+    return [];
+  };
+  
+  const selectLocationRegion = (value) => {
+    if (regionStep === 0) {
+      setSelectedLocationRegion({ ...selectedLocationRegion, country: value, city: '', state: '', district: '' });
+      if (regionData.cities[value] && regionData.cities[value].length > 0) {
+        setRegionStep(1);
+      }
+    } else if (regionStep === 1) {
+      setSelectedLocationRegion({ ...selectedLocationRegion, city: value, state: '', district: '' });
+      if (regionData.states[value] && regionData.states[value].length > 0) {
+        setRegionStep(2);
+      }
+    } else if (regionStep === 2) {
+      setSelectedLocationRegion({ ...selectedLocationRegion, state: value, district: '' });
+      if (regionData.districts[value] && regionData.districts[value].length > 0) {
+        setRegionStep(3);
+      }
+    } else {
+      setSelectedLocationRegion({ ...selectedLocationRegion, district: value });
+    }
+  };
+  
+  const confirmLocationSelection = () => {
+    const parts = [selectedLocationRegion.country, selectedLocationRegion.city, selectedLocationRegion.state, selectedLocationRegion.district].filter(Boolean);
+    const locationText = parts.join(' ');
+    setLocation(locationText);
+    setShowLocationModal(false);
+    setRegionStep(0);
+  };
+  
   const handleLocationSelect = city => {
     setLocation(city);
   };
@@ -1037,6 +1081,21 @@ export default function PublishScreen({
                 <Text style={styles.typeDesc}>{t(type.descKey)}</Text>
               </TouchableOpacity>)}
           </View>
+        </View>
+
+        {/* 地区选择 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>地区</Text>
+          <TouchableOpacity style={styles.categorySelector} onPress={handleLocationPress}>
+            <View style={styles.categorySelectorLeft}>
+              <Text style={[styles.categorySelectorText, !location && {
+              color: '#9ca3af'
+            }]}>
+                {location || '您的问题属于的地区'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+          </TouchableOpacity>
         </View>
 
         {/* 问题类别选择 */}
@@ -1522,8 +1581,93 @@ export default function PublishScreen({
         </View>
       </Modal>
 
-      {/* 城市选择弹窗 */}
-      <CitySelector visible={showLocationModal} currentCity={location} onSelect={handleLocationSelect} onClose={handleLocationClose} />
+      {/* 区域选择弹窗 */}
+      <Modal visible={showLocationModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => {
+              setShowLocationModal(false);
+              setRegionStep(0);
+            }}
+          />
+          <View style={[styles.regionModal, { paddingBottom: 30 }]}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowLocationModal(false);
+                  setRegionStep(0);
+                }}
+              >
+                <Ionicons name="close" size={24} color="#1f2937" />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>选择区域</Text>
+              <TouchableOpacity onPress={confirmLocationSelection}>
+                <Text style={styles.confirmText}>确认</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.breadcrumbContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.breadcrumbScrollContent}>
+                <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setRegionStep(0)}>
+                  <Text style={[styles.breadcrumbText, regionStep === 0 && styles.breadcrumbTextActive]}>
+                    {selectedLocationRegion.country || '国家'}
+                  </Text>
+                </TouchableOpacity>
+
+                {selectedLocationRegion.country && (
+                  <>
+                    <View style={styles.breadcrumbSeparatorWrapper}>
+                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
+                    </View>
+                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setRegionStep(1)}>
+                      <Text style={[styles.breadcrumbText, regionStep === 1 && styles.breadcrumbTextActive]}>
+                        {selectedLocationRegion.city || '省份'}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                {selectedLocationRegion.city && (
+                  <>
+                    <View style={styles.breadcrumbSeparatorWrapper}>
+                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
+                    </View>
+                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setRegionStep(2)}>
+                      <Text style={[styles.breadcrumbText, regionStep === 2 && styles.breadcrumbTextActive]}>
+                        {selectedLocationRegion.state || '城市'}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                {selectedLocationRegion.state && (
+                  <>
+                    <View style={styles.breadcrumbSeparatorWrapper}>
+                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
+                    </View>
+                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setRegionStep(3)}>
+                      <Text style={[styles.breadcrumbText, regionStep === 3 && styles.breadcrumbTextActive]}>
+                        {selectedLocationRegion.district || '区县'}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </ScrollView>
+            </View>
+
+            <ScrollView style={styles.regionList}>
+              {getLocationRegionOptions().map((option, idx) => (
+                <TouchableOpacity key={idx} style={styles.regionOption} onPress={() => selectLocationRegion(option)}>
+                  <Text style={styles.regionOptionText}>{option}</Text>
+                  <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* 图片选择器 */}
       <ImagePickerSheet visible={showImagePicker} onClose={() => setShowImagePicker(false)} onImageSelected={handleImageSelected} title={t('publish.addImage')} />
@@ -1557,12 +1701,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937'
   },
   saveDraft: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#ef4444'
   },
   content: {
@@ -1576,13 +1720,13 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 12
   },
   sectionDesc: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     marginBottom: 12
   },
@@ -1607,13 +1751,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#fef2f2'
   },
   typeName: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#374151',
     marginTop: 8
   },
   typeDesc: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#9ca3af',
     marginTop: 4
   },
@@ -1641,7 +1785,7 @@ const styles = StyleSheet.create({
     marginRight: 10
   },
   categorySelectorText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937'
   },
   quickAmounts: {
@@ -1659,7 +1803,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ef4444'
   },
   amountText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#374151',
     fontWeight: '500'
   },
@@ -1672,7 +1816,7 @@ const styles = StyleSheet.create({
     marginTop: 12
   },
   customLabel: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   customInput: {
@@ -1683,11 +1827,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
     borderRadius: 8,
-    fontSize: 14
+    fontSize: scaleFont(14)
   },
   currencySymbol: {
     marginLeft: 8,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280'
   },
   titleInput: {
@@ -1695,14 +1839,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
     borderWidth: 1,
     borderColor: '#e5e7eb'
   },
   charCount: {
     textAlign: 'right',
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginTop: 8
   },
@@ -1711,9 +1855,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 14,
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
-    lineHeight: 24,
+    lineHeight: scaleFont(24),
     borderWidth: 1,
     borderColor: '#e5e7eb'
   },
@@ -1772,7 +1916,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   addImageText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#9ca3af',
     marginTop: 4
   },
@@ -1791,7 +1935,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fef2f2'
   },
   topicTagText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   topicTagTextActive: {
@@ -1809,7 +1953,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
     borderRadius: 8,
-    fontSize: 14
+    fontSize: scaleFont(14)
   },
   addTopicBtn: {
     marginLeft: 8,
@@ -1819,7 +1963,7 @@ const styles = StyleSheet.create({
     borderRadius: 8
   },
   addTopicBtnText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#fff'
   },
   settingsSection: {
@@ -1839,11 +1983,11 @@ const styles = StyleSheet.create({
   settingLabel: {
     flex: 1,
     marginLeft: 12,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937'
   },
   settingValue: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
     marginRight: 4
   },
@@ -1857,7 +2001,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fecaca'
   },
   publishBtnText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#fff',
     fontWeight: '600'
   },
@@ -1895,7 +2039,7 @@ const styles = StyleSheet.create({
     borderBottomColor: modalTokens.border
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: modalTokens.textPrimary
   },
@@ -1911,7 +2055,7 @@ const styles = StyleSheet.create({
     maxHeight: 500
   },
   levelTitle: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '600',
     color: modalTokens.textSecondary,
     marginBottom: 12
@@ -1932,7 +2076,7 @@ const styles = StyleSheet.create({
   },
   level1SearchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textPrimary,
     padding: 0,
     marginHorizontal: 8
@@ -1967,29 +2111,29 @@ const styles = StyleSheet.create({
     paddingTop: 8
   },
   level1Name: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '500',
     color: modalTokens.textPrimary,
-    lineHeight: 22
+    lineHeight: scaleFont(22)
   },
   level1Desc: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: modalTokens.textMuted,
     marginTop: 2,
-    lineHeight: 16
+    lineHeight: scaleFont(16)
   },
   noSearchResultContainer: {
     alignItems: 'center',
     paddingVertical: 60
   },
   noSearchResultText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: modalTokens.textSecondary,
     marginTop: 16
   },
   noSearchResultHint: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: modalTokens.textMuted,
     marginTop: 8
   },
@@ -2003,7 +2147,7 @@ const styles = StyleSheet.create({
     paddingVertical: 40
   },
   level2LoadingText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textSecondary,
     marginLeft: 8
   },
@@ -2030,7 +2174,7 @@ const styles = StyleSheet.create({
     borderColor: '#fecaca'
   },
   level2Name: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: modalTokens.textPrimary
   },
   level2Empty: {
@@ -2038,7 +2182,7 @@ const styles = StyleSheet.create({
     paddingVertical: 30
   },
   level2EmptyText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textMuted,
     marginTop: 8
   },
@@ -2048,7 +2192,7 @@ const styles = StyleSheet.create({
     paddingVertical: 60
   },
   categoryLoadingText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textSecondary,
     marginTop: 16
   },
@@ -2058,13 +2202,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24
   },
   categoryErrorText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#ef4444',
     marginTop: 16
   },
   categoryErrorDesc: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: modalTokens.textSecondary,
     marginTop: 8,
     textAlign: 'center'
@@ -2079,7 +2223,7 @@ const styles = StyleSheet.create({
     marginTop: 20
   },
   retryBtnText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#fff',
     fontWeight: '600'
   },
@@ -2127,13 +2271,13 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   visibilityTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '700',
     color: modalTokens.textPrimary,
     marginBottom: 6
   },
   visibilitySubtitle: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: modalTokens.textMuted
   },
   visibilityOptions: {
@@ -2169,15 +2313,15 @@ const styles = StyleSheet.create({
     marginRight: 8
   },
   visibilityOptionTitle: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: modalTokens.textPrimary,
     marginBottom: 3
   },
   visibilityOptionDesc: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: modalTokens.textSecondary,
-    lineHeight: 16
+    lineHeight: scaleFont(16)
   },
   visibilityCloseBtn: {
     marginHorizontal: 16,
@@ -2189,7 +2333,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   visibilityCloseBtnText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: modalTokens.textSecondary
   },
@@ -2223,7 +2367,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e5e7eb'
   },
   selectedUserName: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#1f2937',
     fontWeight: '500'
   },
@@ -2241,7 +2385,7 @@ const styles = StyleSheet.create({
   expertSearchInput: {
     flex: 1,
     marginLeft: 8,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937'
   },
   expertListContainer: {
@@ -2255,7 +2399,7 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   recommendedHeaderText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '700',
     color: '#1f2937'
   },
@@ -2299,12 +2443,12 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap'
   },
   expertName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937'
   },
   expertTitle: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     marginBottom: 6
   },
@@ -2323,12 +2467,12 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   expertFieldText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#f59e0b',
     fontWeight: '500'
   },
   expertMoreCategories: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af',
     marginLeft: 4
   },
@@ -2337,7 +2481,7 @@ const styles = StyleSheet.create({
     paddingVertical: 40
   },
   loadingText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
     marginTop: 12
   },
@@ -2348,7 +2492,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16
   },
   loadingMoreText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     marginLeft: 8
   },
@@ -2357,7 +2501,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16
   },
   noMoreText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af'
   },
   noResultsContainer: {
@@ -2365,13 +2509,13 @@ const styles = StyleSheet.create({
     paddingVertical: 40
   },
   noResultsText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#6b7280',
     marginTop: 12
   },
   noResultsHint: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
     marginTop: 4
   },
@@ -2395,13 +2539,13 @@ const styles = StyleSheet.create({
     flex: 1
   },
   answerSettingTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 2
   },
   answerSettingDesc: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280'
   },
   answerPriceContainer: {
@@ -2413,7 +2557,7 @@ const styles = StyleSheet.create({
     borderColor: '#fef3c7'
   },
   answerPriceLabel: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '600',
     color: '#92400e',
     marginBottom: 8
@@ -2430,12 +2574,12 @@ const styles = StyleSheet.create({
   priceInput: {
     flex: 1,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937',
     marginLeft: 4
   },
   answerPriceHint: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#92400e',
     marginTop: 6
   },
@@ -2448,14 +2592,75 @@ const styles = StyleSheet.create({
     borderRadius: 10
   },
   privateAnswerText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     flex: 1
   },
   rewardAmountLabel: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 12
-  }
+  },
+  // 区域选择模态框样式
+  regionModal: {
+    backgroundColor: modalTokens.surface,
+    borderTopLeftRadius: modalTokens.sheetRadius,
+    borderTopRightRadius: modalTokens.sheetRadius,
+    borderTopWidth: 1,
+    borderColor: modalTokens.border,
+    maxHeight: '70%'
+  },
+  breadcrumbContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#fff'
+  },
+  breadcrumbScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  breadcrumbItem: {
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    justifyContent: 'center'
+  },
+  breadcrumbText: {
+    fontSize: scaleFont(15),
+    color: '#6b7280',
+    fontWeight: '400',
+    lineHeight: scaleFont(20)
+  },
+  breadcrumbTextActive: {
+    color: '#ef4444',
+    fontWeight: '500'
+  },
+  breadcrumbSeparatorWrapper: {
+    paddingHorizontal: 6,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  regionList: {
+    padding: 8
+  },
+  regionOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: modalTokens.border
+  },
+  regionOptionText: {
+    fontSize: scaleFont(15),
+    color: modalTokens.textPrimary
+  },
+  confirmText: {
+    fontSize: scaleFont(14),
+    color: '#ef4444',
+    fontWeight: '600'
+  },
 });

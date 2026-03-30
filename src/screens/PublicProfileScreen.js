@@ -28,6 +28,7 @@ import { showAppAlert } from '../utils/appAlert';
 import { showToast } from '../utils/toast';
 import { invalidateBlacklistRelatedCaches } from '../utils/blacklistContent';
 
+import { scaleFont } from '../utils/responsive';
 const EMPTY_TAB_PAGES = {
   questions: 1,
   answers: 1,
@@ -689,7 +690,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
   },
   errorContainer: {
@@ -700,7 +701,7 @@ const styles = StyleSheet.create({
   },
   errorMessage: {
     marginTop: 12,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#374151',
     textAlign: 'center',
   },
@@ -712,7 +713,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   retryButtonText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#fff',
     fontWeight: '600',
   },
@@ -721,7 +722,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af',
   },
   blockedContentBanner: {
@@ -738,7 +739,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f3f4f6',
   },
   blockedContentText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
   },
   footerContainer: {
@@ -746,7 +747,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
   },
 });

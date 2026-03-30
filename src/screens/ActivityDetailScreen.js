@@ -15,6 +15,7 @@ import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
 import { getActivityImages, getJoinedActivityState, getQuitActivityState, normalizeActivityItem } from '../utils/activityUtils';
 
+import { scaleFont } from '../utils/responsive';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const horizontalPadding = 20;
 const coverWidth = screenWidth - horizontalPadding * 2;
@@ -356,7 +357,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     textAlign: 'center',
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '700',
     color: '#111827',
   },
@@ -375,7 +376,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#6b7280',
     marginTop: 12,
     textAlign: 'center',
@@ -418,7 +419,7 @@ const styles = StyleSheet.create({
   },
   previewBadgeText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '600',
   },
   badgeRow: {
@@ -459,7 +460,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '600',
   },
   thumbnailRow: {
@@ -492,14 +493,14 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   title: {
-    fontSize: 24,
+    fontSize: scaleFont(24),
     fontWeight: '700',
     color: '#111827',
     marginBottom: 12,
   },
   description: {
-    fontSize: 15,
-    lineHeight: 24,
+    fontSize: scaleFont(15),
+    lineHeight: scaleFont(24),
     color: '#4b5563',
   },
   infoGrid: {
@@ -527,25 +528,25 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     marginTop: 10,
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
   },
   infoValue: {
     marginTop: 6,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#111827',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
   },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '700',
     color: '#111827',
     marginBottom: 8,
   },
   sectionBody: {
-    fontSize: 14,
-    lineHeight: 22,
+    fontSize: scaleFont(14),
+    lineHeight: scaleFont(22),
     color: '#6b7280',
   },
   imageViewerContainer: {
@@ -567,7 +568,7 @@ const styles = StyleSheet.create({
   },
   imageViewerCounter: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '500',
   },
   viewerHeaderSpacer: {

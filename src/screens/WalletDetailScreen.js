@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 
+import { scaleFont } from '../utils/responsive';
 export default function WalletDetailScreen({ navigation, route }) {
   const { t } = useTranslation();
   const { balance = 0, currency = 'usd' } = route.params || {};
@@ -249,7 +250,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937',
   },
@@ -284,12 +285,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   balanceLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
     marginBottom: 4,
   },
   balanceAmount: {
-    fontSize: 32,
+    fontSize: scaleFont(32),
     fontWeight: '700',
     color: '#1f2937',
   },
@@ -313,7 +314,7 @@ const styles = StyleSheet.create({
     // Active state handled by indicator
   },
   tabText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#9ca3af',
     fontWeight: '500',
   },
@@ -365,25 +366,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listItemType: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 4,
   },
   listItemTime: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
   },
   listItemRight: {
     alignItems: 'flex-end',
   },
   listItemAmount: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '700',
     marginBottom: 4,
   },
   listItemStatus: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
   },
   emptyContainer: {
@@ -393,14 +394,14 @@ const styles = StyleSheet.create({
     paddingVertical: 80,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#6b7280',
     marginTop: 16,
     marginBottom: 8,
   },
   emptyHint: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af',
   },
 });

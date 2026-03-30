@@ -19,6 +19,7 @@ import { formatTime } from '../utils/timeFormatter';
 import { formatNumber } from '../utils/numberFormatter';
 import ServerSwitcher from '../components/ServerSwitcher';
 
+import { scaleFont } from '../utils/responsive';
 const HISTORY_PAGE_SIZE = 10;
 
 const getFirstNonEmptyValue = (...values) => values.find(value => value !== undefined && value !== null && value !== '');
@@ -2010,7 +2011,7 @@ const styles = StyleSheet.create({
     gap: 6
   },
   userName: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: 'bold',
     color: '#1f2937'
   },
@@ -2028,7 +2029,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   verificationText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     fontWeight: '500'
   },
   verifyButton: {
@@ -2041,20 +2042,20 @@ const styles = StyleSheet.create({
     marginLeft: 4
   },
   verifyButtonText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#3b82f6',
     fontWeight: '500'
   },
   userId: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginTop: 4
   },
   userBio: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#4b5563',
     marginTop: 12,
-    lineHeight: 18
+    lineHeight: scaleFont(18)
   },
   userMeta: {
     flexDirection: 'row',
@@ -2067,7 +2068,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   metaText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   indexRow: {
@@ -2104,12 +2105,12 @@ const styles = StyleSheet.create({
     flex: 1
   },
   indexLabel: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af',
     marginBottom: 2
   },
   indexValue: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: 'bold',
     color: '#1f2937'
   },
@@ -2130,12 +2131,12 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   statValue: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: 'bold',
     color: '#1f2937'
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af',
     marginTop: 2
   },
@@ -2163,11 +2164,11 @@ const styles = StyleSheet.create({
     marginLeft: 12
   },
   walletLabel: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   walletBalance: {
-    fontSize: 20,
+    fontSize: scaleFont(20),
     fontWeight: 'bold',
     color: '#1f2937'
   },
@@ -2182,7 +2183,7 @@ const styles = StyleSheet.create({
     borderRadius: 14
   },
   rechargeBtnText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#fff',
     fontWeight: '500'
   },
@@ -2194,7 +2195,7 @@ const styles = StyleSheet.create({
     borderRadius: 14
   },
   withdrawBtnText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280'
   },
   walletStats: {
@@ -2209,12 +2210,12 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   walletStatValue: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937'
   },
   walletStatLabel: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af',
     marginTop: 2
   },
@@ -2237,7 +2238,7 @@ const styles = StyleSheet.create({
     gap: 8
   },
   superLikeTitleText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -2262,7 +2263,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb'
   },
   superLikeBtnText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#f59e0b'
   },
@@ -2287,7 +2288,7 @@ const styles = StyleSheet.create({
   menuLabel: {
     flex: 1,
     marginLeft: 12,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937'
   },
   menuRight: {
@@ -2295,7 +2296,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   menuValue: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
     marginRight: 4
   },
@@ -2317,7 +2318,7 @@ const styles = StyleSheet.create({
     position: 'relative'
   },
   contentTabText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280'
   },
   contentTabTextActive: {
@@ -2343,7 +2344,7 @@ const styles = StyleSheet.create({
     marginBottom: 6
   },
   questionTime: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af',
     marginLeft: 'auto'
   },
@@ -2354,7 +2355,7 @@ const styles = StyleSheet.create({
     borderRadius: 4
   },
   rewardTagInlineText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#fff',
     fontWeight: '600'
   },
@@ -2366,14 +2367,14 @@ const styles = StyleSheet.create({
     marginLeft: 4
   },
   solvedTagInlineText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#fff',
     fontWeight: '600'
   },
   questionTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937',
-    lineHeight: 20
+    lineHeight: scaleFont(20)
   },
   questionStats: {
     flexDirection: 'row',
@@ -2386,7 +2387,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   questionStatText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   viewAllBtn: {
@@ -2398,7 +2399,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#f3f4f6'
   },
   viewAllText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#ef4444'
   },
   answerItem: {
@@ -2418,25 +2419,25 @@ const styles = StyleSheet.create({
     borderRadius: 4
   },
   adoptedTagInlineText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#fff',
     fontWeight: '600'
   },
   answerTime: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af',
     marginLeft: 'auto'
   },
   answerQuestion: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#1f2937',
     marginBottom: 4
   },
   answerContent: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
-    lineHeight: 18
+    lineHeight: scaleFont(18)
   },
   answerStats: {
     flexDirection: 'row',
@@ -2452,7 +2453,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   logoutText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#ef4444',
     fontWeight: '500'
   },
@@ -2470,12 +2471,12 @@ const styles = StyleSheet.create({
     borderBottomColor: modalTokens.border
   },
   listModalTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: modalTokens.textPrimary
   },
   clearText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#ef4444'
   },
   listModalContent: {
@@ -2493,9 +2494,9 @@ const styles = StyleSheet.create({
     flex: 1
   },
   listItemTitle: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
-    lineHeight: 22
+    lineHeight: scaleFont(22)
   },
   listItemMeta: {
     flexDirection: 'row',
@@ -2504,11 +2505,11 @@ const styles = StyleSheet.create({
     gap: 12
   },
   listItemAuthor: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280'
   },
   listItemTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   favoriteTabs: {
@@ -2528,7 +2529,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#ef4444'
   },
   favoriteTabText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280'
   },
   favoriteTabTextActive: {
@@ -2555,7 +2556,7 @@ const styles = StyleSheet.create({
     borderRadius: 8
   },
   draftTypeText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#ef4444',
     fontWeight: '500'
   },
@@ -2564,12 +2565,12 @@ const styles = StyleSheet.create({
     marginLeft: 12
   },
   draftTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937',
     marginBottom: 4
   },
   draftTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   draftDeleteBtn: {
@@ -2601,7 +2602,7 @@ const styles = StyleSheet.create({
     elevation: 1
   },
   favoriteTabInlineText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   favoriteTabInlineTextActive: {
@@ -2620,9 +2621,9 @@ const styles = StyleSheet.create({
     flex: 1
   },
   favoriteItemTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937',
-    lineHeight: 20,
+    lineHeight: scaleFont(20),
     marginBottom: 6
   },
   favoriteItemMeta: {
@@ -2631,11 +2632,11 @@ const styles = StyleSheet.create({
     gap: 12
   },
   favoriteItemAuthor: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   favoriteItemTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   // 浏览历史样式
@@ -2651,9 +2652,9 @@ const styles = StyleSheet.create({
     flex: 1
   },
   historyItemTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937',
-    lineHeight: 20,
+    lineHeight: scaleFont(20),
     marginBottom: 6
   },
   historyItemMeta: {
@@ -2662,19 +2663,19 @@ const styles = StyleSheet.create({
     gap: 12
   },
   historyItemAuthor: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   historyItemTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   favoriteItemAuthor: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280'
   },
   favoriteItemTime: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   // 认证弹窗样式
@@ -2693,7 +2694,7 @@ const styles = StyleSheet.create({
     borderBottomColor: modalTokens.border
   },
   verificationTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: 'bold',
     color: modalTokens.textPrimary
   },
@@ -2716,7 +2717,7 @@ const styles = StyleSheet.create({
     borderRadius: 2
   },
   progressText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: modalTokens.textSecondary,
     marginTop: 8
   },
@@ -2729,7 +2730,7 @@ const styles = StyleSheet.create({
     padding: 16
   },
   typeSelectionTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 20,
@@ -2763,13 +2764,13 @@ const styles = StyleSheet.create({
     flex: 1
   },
   typeTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 4
   },
   typeDesc: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   // 表单样式
@@ -2784,7 +2785,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12
   },
   fieldLabel: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#333',
     marginBottom: 10,
     fontWeight: '500'
@@ -2802,7 +2803,7 @@ const styles = StyleSheet.create({
     minHeight: 48
   },
   fieldInputText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937'
   },
   // 联系方式区域
@@ -2815,15 +2816,15 @@ const styles = StyleSheet.create({
     borderTopColor: '#f3f4f6'
   },
   contactMethodTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#333',
     fontWeight: '600',
     marginBottom: 4
   },
   contactMethodDesc: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
-    lineHeight: 18
+    lineHeight: scaleFont(18)
   },
   // 上传区域
   uploadSection: {
@@ -2833,7 +2834,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20
   },
   uploadSectionTitle: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#333',
     fontWeight: '600',
     marginBottom: 16
@@ -2850,7 +2851,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   uploadLabel: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#666',
     marginBottom: 8,
     fontWeight: '500'
@@ -2879,7 +2880,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   uploadPlaceholderText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af',
     marginTop: 8
   },
@@ -2899,9 +2900,9 @@ const styles = StyleSheet.create({
   },
   uploadTipText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
-    lineHeight: 18
+    lineHeight: scaleFont(18)
   },
   // 专业资质认证
   qualificationHeader: {
@@ -2911,7 +2912,7 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   optionalTag: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#10b981',
     backgroundColor: '#d1fae5',
     paddingHorizontal: 8,
@@ -2919,10 +2920,10 @@ const styles = StyleSheet.create({
     borderRadius: 4
   },
   qualificationDesc: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     marginBottom: 16,
-    lineHeight: 18
+    lineHeight: scaleFont(18)
   },
   qualificationItem: {
     flexDirection: 'row',
@@ -2950,7 +2951,7 @@ const styles = StyleSheet.create({
     flex: 1
   },
   qualificationNameInput: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937',
     padding: 8,
     backgroundColor: '#fff',
@@ -2974,12 +2975,12 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed'
   },
   addQualificationText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#3b82f6',
     fontWeight: '500'
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 16,
@@ -3001,7 +3002,7 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   confirmTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 16,
@@ -3015,12 +3016,12 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f3f4f6'
   },
   confirmLabel: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     marginBottom: 4
   },
   confirmValue: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
     fontWeight: '500'
   },
@@ -3036,7 +3037,7 @@ const styles = StyleSheet.create({
     borderRadius: 6
   },
   uploadedImageLabel: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#3b82f6',
     fontWeight: '500'
   },
@@ -3047,13 +3048,13 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   warningTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#92400e',
     marginBottom: 8
   },
   warningText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#78350f',
     marginBottom: 4
   },
@@ -3064,7 +3065,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12
   },
   agreementText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#374151'
   },
   // 底部按钮
@@ -3081,7 +3082,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   verificationSubmitText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#fff'
   },
@@ -3093,7 +3094,7 @@ const styles = StyleSheet.create({
     paddingVertical: 60
   },
   loadingText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
     marginTop: 12
   },
@@ -3104,13 +3105,13 @@ const styles = StyleSheet.create({
     paddingVertical: 60
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#6b7280',
     marginTop: 12,
     fontWeight: '500'
   },
   emptyHint: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#9ca3af',
     marginTop: 4
   }

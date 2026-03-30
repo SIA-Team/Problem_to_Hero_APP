@@ -6,6 +6,7 @@ import Avatar from '../components/Avatar';
 import { useTranslation } from '../i18n/withTranslation';
 import { showToast } from '../utils/toast';
 
+import { scaleFont } from '../utils/responsive';
 // 收入榜数据
 const incomeRankingData = [{
   id: 1,
@@ -292,7 +293,7 @@ const styles = StyleSheet.create({
     padding: 4
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: 'bold',
     color: '#1f2937'
   },
@@ -312,7 +313,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#ef4444'
   },
   tabText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6b7280'
   },
   tabTextActive: {
@@ -327,7 +328,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa'
   },
   updateText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginLeft: 4
   },
@@ -339,7 +340,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   footerText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#9ca3af'
   },
   rankingItem: {
@@ -359,7 +360,7 @@ const styles = StyleSheet.create({
     marginRight: 12
   },
   rankText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: 'bold',
     color: '#fff'
   },
@@ -374,12 +375,12 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   userName: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#1f2937'
   },
   userTitle: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     marginBottom: 6
   },
@@ -394,7 +395,7 @@ const styles = StyleSheet.create({
     gap: 3
   },
   statText: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af'
   },
   incomeInfo: {
@@ -408,7 +409,7 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   incomeAmount: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '700',
     color: '#ef4444'
   },
@@ -428,7 +429,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb'
   },
   trendText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#22c55e',
     fontWeight: '600'
   },
@@ -436,7 +437,7 @@ const styles = StyleSheet.create({
     color: '#ef4444'
   },
   monthIncome: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af'
   }
 });

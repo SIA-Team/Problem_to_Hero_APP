@@ -16,6 +16,7 @@ import DebugToken from '../utils/debugToken';
 import { showToast } from '../utils/toast';
 import PasswordChangedModal from '../components/PasswordChangedModal';
 
+import { scaleFont } from '../utils/responsive';
 /**
  * 修改密码页面
  */
@@ -484,7 +485,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937',
   },
@@ -506,15 +507,15 @@ const styles = StyleSheet.create({
   },
   tipText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#1e40af',
-    lineHeight: 18,
+    lineHeight: scaleFont(18),
   },
   formGroup: {
     marginBottom: 24,
   },
   label: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#374151',
     marginBottom: 8,
@@ -532,7 +533,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     paddingVertical: 12,
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#1f2937',
   },
   forgotBtn: {
@@ -540,7 +541,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   forgotText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#3b82f6',
   },
   strengthContainer: {
@@ -558,7 +559,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   strengthText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '500',
   },
   requirementsContainer: {
@@ -568,7 +569,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   requirementsTitle: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: '500',
     color: '#6b7280',
     marginBottom: 8,
@@ -580,7 +581,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   requirementText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
   },
   requirementTextActive: {
@@ -595,11 +596,11 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   matchTextSuccess: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#22c55e',
   },
   matchTextError: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#ef4444',
   },
   submitBtn: {
@@ -614,7 +615,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   submitBtnText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#fff',
   },
@@ -627,14 +628,14 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
   },
   securityTipsTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#374151',
     marginBottom: 12,
   },
   securityTipItem: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
   },
 });

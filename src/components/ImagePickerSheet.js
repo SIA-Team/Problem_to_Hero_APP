@@ -16,6 +16,7 @@ import { showToast } from '../utils/toast';
 import { modalTokens } from './modalTokens';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 
+import { scaleFont } from '../utils/responsive';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 /**
@@ -257,7 +258,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   title: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: modalTokens.textPrimary,
   },
@@ -291,7 +292,7 @@ const styles = StyleSheet.create({
     }),
   },
   optionText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textSecondary,
     fontWeight: '600',
   },
@@ -317,7 +318,7 @@ const styles = StyleSheet.create({
     }),
   },
   cancelButtonText: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: modalTokens.textSecondary,
     fontWeight: '600',
   },

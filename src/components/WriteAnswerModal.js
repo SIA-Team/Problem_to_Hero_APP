@@ -7,6 +7,7 @@ import ImagePickerSheet from './ImagePickerSheet';
 import { showToast } from '../utils/toast';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 
+import { scaleFont } from '../utils/responsive';
 export default function WriteAnswerModal({
   visible,
   onClose,
@@ -197,7 +198,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   answerModalTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: '#222',
   },
@@ -212,7 +213,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffcdd2',
   },
   answerPublishText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#fff',
     fontWeight: '600',
   },
@@ -236,9 +237,9 @@ const styles = StyleSheet.create({
   },
   answerQuestionText: {
     flex: 1,
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#333',
-    lineHeight: 22,
+    lineHeight: scaleFont(22),
     fontWeight: '500',
   },
   answerSupplementInfo: {
@@ -251,15 +252,15 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   answerSupplementLabel: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#f59e0b',
     fontWeight: '600',
   },
   answerSupplementText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
-    lineHeight: 18,
+    lineHeight: scaleFont(18),
   },
   answerContentArea: {
     flex: 1,
@@ -267,9 +268,9 @@ const styles = StyleSheet.create({
   },
   answerTextInput: {
     padding: 16,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#333',
-    lineHeight: 26,
+    lineHeight: scaleFont(26),
     minHeight: 300,
   },
   answerIdentitySection: {
@@ -319,7 +320,7 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   answerWordCount: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#999',
   },
 });

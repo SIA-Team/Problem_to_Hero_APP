@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { showToast } from '../utils/toast';
+import { scaleFont } from '../utils/responsive';
 export default function UploadBankScreen({
   navigation
 }) {
@@ -331,7 +332,7 @@ const styles = StyleSheet.create({
     padding: 4
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -342,7 +343,7 @@ const styles = StyleSheet.create({
     borderRadius: 8
   },
   submitBtnText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#fff',
     fontWeight: '600'
   },
@@ -360,7 +361,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 12
@@ -369,7 +370,7 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   label: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '500',
     color: '#374151',
     marginBottom: 8
@@ -384,7 +385,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937'
   },
   textArea: {
@@ -394,7 +395,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937',
     minHeight: 80,
     textAlignVertical: 'top'
@@ -409,7 +410,7 @@ const styles = StyleSheet.create({
     borderRadius: 8
   },
   infoText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#1e40af'
   },
   addQuestionBtn: {
@@ -418,7 +419,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   addQuestionText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#f59e0b',
     fontWeight: '500'
   },
@@ -437,7 +438,7 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   questionNumber: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -462,7 +463,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fef3c7'
   },
   typeOptionText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -491,7 +492,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0fdf4'
   },
   judgeOptionText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -511,12 +512,12 @@ const styles = StyleSheet.create({
     gap: 4
   },
   addOptionText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#f59e0b',
     fontWeight: '500'
   },
   multipleHint: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#3b82f6',
     fontWeight: '400'
   },
@@ -537,7 +538,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#1f2937'
   },
   removeOptionBtn: {
@@ -545,7 +546,7 @@ const styles = StyleSheet.create({
   },
   // 类别选择
   subLabel: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     marginBottom: 8
   },
@@ -568,7 +569,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fef3c7'
   },
   categoryBtnText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -594,7 +595,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#eff6ff'
   },
   subCategoryBtnText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280',
     fontWeight: '500'
   },
@@ -613,7 +614,7 @@ const styles = StyleSheet.create({
     marginTop: 12
   },
   selectedCategoryText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#166534',
     fontWeight: '500'
   }

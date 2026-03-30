@@ -1,6 +1,7 @@
 import React, { useState, useEffect, memo } from 'react';
 import { Image, View, Text, StyleSheet } from 'react-native';
 
+import { scaleFont } from '../utils/responsive';
 /**
  * 通用头像组件
  * 自动处理加载失败，显示首字母占位符

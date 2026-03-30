@@ -7,6 +7,7 @@ import { getRegionData } from '../data/regionData';
 import { loadComboChannels, mergeUniqueChannels, saveComboChannels } from '../services/channelSubscriptionService';
 import { showAppAlert } from '../utils/appAlert';
 
+import { scaleFont } from '../utils/responsive';
 // 地区数据（使用多语言数据）
 // 已移除硬编码数据，改用 getRegionData()
 
@@ -686,14 +687,14 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb'
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: 'bold',
     color: '#1f2937',
     flex: 1,
     textAlign: 'center'
   },
   saveBtn: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: '#ef4444',
     fontWeight: '600'
   },
@@ -719,12 +720,12 @@ const styles = StyleSheet.create({
     gap: 6
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: '600',
     color: '#1f2937'
   },
   editBtn: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#ef4444',
     fontWeight: '500'
   },
@@ -747,7 +748,7 @@ const styles = StyleSheet.create({
     borderRadius: 6
   },
   myChannelText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#374151',
     fontWeight: '400'
   },
@@ -778,7 +779,7 @@ const styles = StyleSheet.create({
     borderColor: '#d1d5db'
   },
   channelText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#374151',
     fontWeight: '400'
   },
@@ -789,7 +790,7 @@ const styles = StyleSheet.create({
     padding: 2
   },
   channelPlusIcon: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#374151',
     fontWeight: '600'
   },
@@ -800,9 +801,9 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   sectionNote: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
-    lineHeight: 18,
+    lineHeight: scaleFont(18),
     marginBottom: 8
   },
   addBtn: {
@@ -811,7 +812,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   addBtnText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: '#ef4444',
     fontWeight: '500'
   },
@@ -822,17 +823,17 @@ const styles = StyleSheet.create({
     marginTop: 8
   },
   comboDesc: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     marginBottom: 12,
-    lineHeight: 18
+    lineHeight: scaleFont(18)
   },
   comboInput: {
     backgroundColor: '#fff',
     borderRadius: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    fontSize: 14,
+    fontSize: scaleFont(14),
     borderWidth: 1,
     borderColor: '#e5e7eb',
     marginBottom: 12
@@ -859,7 +860,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ef4444'
   },
   stepDotText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: '600',
     color: '#9ca3af'
   },
@@ -882,7 +883,7 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   comboStepTitle: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -891,11 +892,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4
   },
   skipBtnText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#ef4444'
   },
   comboPath: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#ef4444',
     marginBottom: 8
   },
@@ -915,7 +916,7 @@ const styles = StyleSheet.create({
   },
   regionSearchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#374151',
     padding: 0
   },
@@ -946,7 +947,7 @@ const styles = StyleSheet.create({
   },
   comboOptionText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#374151'
   },
   comboActions: {
@@ -966,7 +967,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb'
   },
   comboBackText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#6b7280'
   },
   comboNextBtn: {
@@ -980,7 +981,7 @@ const styles = StyleSheet.create({
     borderRadius: 6
   },
   comboNextText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#fff',
     fontWeight: '600'
   },
@@ -996,7 +997,7 @@ const styles = StyleSheet.create({
     opacity: 0.6
   },
   comboCreateText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#fff',
     fontWeight: '600'
   },
@@ -1017,13 +1018,13 @@ const styles = StyleSheet.create({
     flex: 1
   },
   comboItemName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 4
   },
   comboItemPath: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#ef4444'
   }
 });

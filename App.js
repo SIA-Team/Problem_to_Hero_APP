@@ -27,8 +27,10 @@ import HomeScreen from './src/screens/HomeScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import PublishScreen from './src/screens/PublishScreen';
 import MessagesScreen from './src/screens/MessagesScreen';
+import PrivateConversationScreen from './src/screens/PrivateConversationScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import QuestionDetailScreen from './src/screens/QuestionDetailScreen';
+import PaidUsersListScreen from './src/screens/PaidUsersListScreen';
 import FollowScreen from './src/screens/FollowScreen';
 import HotListScreen from './src/screens/HotListScreen';
 import IncomeRankingScreen from './src/screens/IncomeRankingScreen';
@@ -790,6 +792,7 @@ export default function App() {
             </Stack.Screen>
           <Stack.Screen name="Search" component={SearchScreen} />
           <Stack.Screen name="QuestionDetail" component={QuestionDetailScreen} />
+          <Stack.Screen name="PaidUsersList" component={PaidUsersListScreen} options={{ title: '付费明细' }} />
           <Stack.Screen name="SupplementDetail" component={SupplementDetailScreen} />
           <Stack.Screen name="QuestionActivityList" component={QuestionActivityListScreen} />
           <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
@@ -800,6 +803,7 @@ export default function App() {
         <Stack.Screen name="QuestionRanking" component={QuestionRankingScreen} />
         <Stack.Screen name="HeroRanking" component={HeroRankingScreen} />
         <Stack.Screen name="Messages" component={MessagesScreen} />
+        <Stack.Screen name="PrivateConversation" component={PrivateConversationScreen} />
         <Stack.Screen name="GroupChat" component={GroupChatScreen} />
         <Stack.Screen name="AnswerDetail" component={AnswerDetailScreen} />
         <Stack.Screen name="MyActivities" component={MyActivitiesScreen} />

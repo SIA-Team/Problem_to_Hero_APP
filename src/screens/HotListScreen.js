@@ -8,6 +8,7 @@ import { getHotListData } from '../data/hotListData';
 import TranslateButton from '../components/TranslateButton';
 import { modalTokens } from '../components/modalTokens';
 
+import { scaleFont } from '../utils/responsive';
 // 区域数据
 const regionData = {
   countries: [{
@@ -1319,7 +1320,7 @@ const styles = StyleSheet.create({
     padding: 4
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: 'bold',
     color: '#1f2937'
   },
@@ -1343,7 +1344,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   tabText: {
-    fontSize: 15,
+    fontSize: scaleFont(15),
     color: '#6b7280'
   },
   tabTextActive: {
@@ -1372,7 +1373,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb'
   },
   regionTabText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#374151',
     fontWeight: '500'
   },
@@ -1397,7 +1398,7 @@ const styles = StyleSheet.create({
     borderColor: '#ef4444'
   },
   subTabText: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#666'
   },
   subTabTextActive: {
@@ -1412,7 +1413,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa'
   },
   updateText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#9ca3af',
     marginLeft: 4
   },
@@ -1439,7 +1440,7 @@ const styles = StyleSheet.create({
     marginRight: 12
   },
   rankText: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     fontWeight: 'bold',
     color: '#fff'
   },
@@ -1453,10 +1454,10 @@ const styles = StyleSheet.create({
   },
   hotTitle: {
     flex: 1,
-    fontSize: 15,
+    fontSize: scaleFont(15),
     fontWeight: '500',
     color: '#1f2937',
-    lineHeight: 22
+    lineHeight: scaleFont(22)
   },
   hotTag: {
     marginLeft: 8,
@@ -1465,7 +1466,7 @@ const styles = StyleSheet.create({
     borderRadius: 4
   },
   hotTagText: {
-    fontSize: 10,
+    fontSize: scaleFont(10),
     color: '#fff',
     fontWeight: '600'
   },
@@ -1485,12 +1486,12 @@ const styles = StyleSheet.create({
     gap: 4
   },
   hotValue: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: '#ef4444',
     fontWeight: '600'
   },
   hotLabel: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af'
   },
   hotAuthor: {
@@ -1503,12 +1504,12 @@ const styles = StyleSheet.create({
     borderRadius: 9
   },
   authorName: {
-    fontSize: 12,
+    fontSize: scaleFont(12),
     color: '#6b7280',
     marginLeft: 6
   },
   answerCount: {
-    fontSize: 11,
+    fontSize: scaleFont(11),
     color: '#9ca3af',
     marginLeft: 8
   },
@@ -1545,7 +1546,7 @@ const styles = StyleSheet.create({
     borderBottomColor: modalTokens.border
   },
   regionModalTitle: {
-    fontSize: 17,
+    fontSize: scaleFont(17),
     fontWeight: '600',
     color: modalTokens.textPrimary
   },
@@ -1570,7 +1571,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ef4444'
   },
   regionTypeTabText: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textSecondary,
     fontWeight: '500'
   },
@@ -1603,17 +1604,17 @@ const styles = StyleSheet.create({
     borderColor: '#ef4444'
   },
   regionFlag: {
-    fontSize: 32,
+    fontSize: scaleFont(32),
     marginBottom: 8
   },
   regionName: {
-    fontSize: 13,
+    fontSize: scaleFont(13),
     color: modalTokens.textPrimary,
     fontWeight: '500',
     textAlign: 'center'
   },
   regionCityName: {
-    fontSize: 14,
+    fontSize: scaleFont(14),
     color: modalTokens.textPrimary,
     fontWeight: '500',
     textAlign: 'center'
