@@ -1,5 +1,7 @@
 const { expo: baseConfig } = require('./app.json');
 
+const DEFAULT_OFFICIAL_RECHARGE_URL = 'https://problemvshero.com/recharge';
+
 const androidGoogleMapsApiKey =
   process.env.EXPO_ANDROID_GOOGLE_MAPS_API_KEY ||
   process.env.GOOGLE_MAPS_API_KEY ||
@@ -10,6 +12,16 @@ const iosGoogleMapsApiKey =
   process.env.EXPO_IOS_GOOGLE_MAPS_API_KEY ||
   process.env.IOS_GOOGLE_MAPS_API_KEY ||
   androidGoogleMapsApiKey;
+
+const officialWebsiteUrl =
+  process.env.EXPO_PUBLIC_OFFICIAL_WEBSITE_URL ||
+  process.env.OFFICIAL_WEBSITE_URL ||
+  DEFAULT_OFFICIAL_RECHARGE_URL;
+
+const officialRechargeUrl =
+  process.env.EXPO_PUBLIC_RECHARGE_URL ||
+  process.env.RECHARGE_URL ||
+  officialWebsiteUrl;
 
 const androidConfig = {
   ...(baseConfig.android || {}),
@@ -34,5 +46,7 @@ module.exports = () => ({
   extra: {
     ...(baseConfig.extra || {}),
     googleMapsConfigured: Boolean(androidGoogleMapsApiKey),
+    officialWebsiteUrl,
+    officialRechargeUrl,
   },
 });

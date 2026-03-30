@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, TextInput, StyleSheet, ScrollView, Image } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from './Avatar';
 import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
+import ModalSafeAreaView from './ModalSafeAreaView';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 
 import { scaleFont } from '../utils/responsive';
@@ -94,7 +94,7 @@ const WriteCommentModal = ({
     >
       <View style={styles.overlay}>
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <ModalSafeAreaView style={styles.container} edges={['top']}>
           <View style={styles.header}>
             {renderHeaderSide('left')}
             <Text style={styles.title}>{title}</Text>
@@ -191,7 +191,7 @@ const WriteCommentModal = ({
               <Text style={styles.charCount}>{text.length}/500</Text>
             )}
           </View>
-        </SafeAreaView>
+        </ModalSafeAreaView>
       </View>
 
       <ImagePickerSheet

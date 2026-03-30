@@ -264,6 +264,16 @@
     "shareUrl": "https://qa-app.com/user/12345678",
     "shareFailed": "分享失败",
     "rechargeSuccess": "充值成功",
+    "rechargeUnavailableTitle": "暂时无法打开充值页面",
+    "rechargeUnavailableMessage": "充值链接暂未配置，请联系管理员补充官网充值地址。",
+    "rechargeSimulationTitle": "模拟充值到账",
+    "rechargeSimulationMessage": "从官网返回后，你可以先模拟一笔充值到账，用来联调钱包余额和充值记录。",
+    "mockRechargeTag": "模拟到账",
+    "skipSimulation": "暂不模拟",
+    "missing_config": "充值链接暂未配置，请联系管理员补充官网充值地址。",
+    "invalid_url": "充值链接格式不正确，请检查是否为完整的 http 或 https 地址。",
+    "missing_params": "充值链接缺少必要参数，请检查链接模板中的占位符是否都有值。",
+    "unsupported_url": "当前设备暂不支持打开该充值链接，请稍后重试。",
     "withdrawSuccess": "提现申请已提交",
     "selectAmount": "请选择充值金额",
     "withdrawAll": "全部提现",
@@ -567,6 +577,8 @@
       "exit": {
         "title": "退出团队",
         "message": "确定要退出该团队吗？退出后将无法查看团队消息",
+        "memberMessage": "确定要退出该团队吗？当最后一个团员退出后该团队将解散。",
+        "leaderMessage": "请指定一人为团长",
         "confirmButton": "确定退出"
       },
       "dismiss": {
@@ -622,6 +634,7 @@
         "rejected": "已拒绝",
         "teamDismissed": "团队已解散",
         "teamExited": "已退出团队",
+        "leaderTransferred": "团长已转让，您已退出团队",
         "announcementPublished": "公告发布成功！",
         "enterTitle": "请输入公告标题",
         "enterContent": "请输入公告内容",
@@ -630,6 +643,10 @@
         "joinRejected": "已拒绝 {user} 的加入申请",
         "adminApproved": "已同意 {user} 成为管理员",
         "adminRejected": "已拒绝 {user} 的管理员申请"
+      },
+      "transfer": {
+        "title": "选择新团长",
+        "selectMember": "请选择一位成员作为新团长"
       }
     },
     "supplementDetail": {

@@ -264,6 +264,16 @@
     "shareUrl": "https://qa-app.com/user/12345678",
     "shareFailed": "Share failed",
     "rechargeSuccess": "Recharge Successful",
+    "rechargeUnavailableTitle": "Unable to open recharge page",
+    "rechargeUnavailableMessage": "Recharge URL is not configured yet. Please add the official recharge URL.",
+    "rechargeSimulationTitle": "Simulate recharge completion",
+    "rechargeSimulationMessage": "After returning from the official website, you can simulate a completed recharge to test wallet balance and recharge history.",
+    "mockRechargeTag": "mocked",
+    "skipSimulation": "Skip",
+    "missing_config": "Recharge URL is not configured yet. Please add the official recharge URL.",
+    "invalid_url": "Recharge URL is invalid. Please use a full http or https URL.",
+    "missing_params": "Recharge URL is missing required parameters. Please check the URL template placeholders.",
+    "unsupported_url": "This device cannot open the recharge URL right now. Please try again later.",
     "withdrawSuccess": "Withdrawal Submitted",
     "selectAmount": "Select Amount",
     "withdrawAll": "Withdraw All",
@@ -567,6 +577,8 @@
       "exit": {
         "title": "Exit Team",
         "message": "Are you sure you want to exit this team? You won't be able to view team messages after exiting",
+        "memberMessage": "Are you sure you want to exit this team? The team will be dismissed when the last member exits.",
+        "leaderMessage": "Please designate one person as the leader",
         "confirmButton": "Confirm Exit"
       },
       "dismiss": {
@@ -622,6 +634,7 @@
         "rejected": "Rejected",
         "teamDismissed": "Team dismissed",
         "teamExited": "Exited team",
+        "leaderTransferred": "Leader transferred, you have exited the team",
         "announcementPublished": "Announcement published successfully!",
         "enterTitle": "Please enter announcement title",
         "enterContent": "Please enter announcement content",
@@ -630,6 +643,10 @@
         "joinRejected": "Rejected {user}'s join request",
         "adminApproved": "Approved {user} to become admin",
         "adminRejected": "Rejected {user}'s admin request"
+      },
+      "transfer": {
+        "title": "Select New Leader",
+        "selectMember": "Please select a member as the new leader"
       }
     },
     "supplementDetail": {

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Modal, Image } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from './Avatar';
 import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
+import ModalSafeAreaView from './ModalSafeAreaView';
 import { modalTokens } from './modalTokens';
 import { toast } from '../utils/toast';
 import answerApi from '../services/api/answerApi';
@@ -163,7 +163,7 @@ export default function SupplementAnswerModal({
       statusBarTranslucent
       navigationBarTranslucent
     >
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <ModalSafeAreaView style={styles.container} edges={['top']}>
         {/* 头部 */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
@@ -246,7 +246,7 @@ export default function SupplementAnswerModal({
 
         {/* 图片选择器 */}
         <ImagePickerSheet visible={showImagePicker} onClose={() => setShowImagePicker(false)} onImageSelected={handleImageSelected} title="选择图片" />
-      </SafeAreaView>
+      </ModalSafeAreaView>
     </Modal>;
 }
 const styles = StyleSheet.create({

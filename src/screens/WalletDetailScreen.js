@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, F
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
+import { getMockRechargeRecords } from '../utils/walletMock';
 
 import { scaleFont } from '../utils/responsive';
 export default function WalletDetailScreen({ navigation, route }) {
@@ -36,6 +37,7 @@ export default function WalletDetailScreen({ navigation, route }) {
   // 加载数据
   const loadData = async () => {
     try {
+      const mockRechargeRecords = await getMockRechargeRecords();
       // TODO: 调用实际的 API
       // 这里使用模拟数据
       setIncomeList([
@@ -52,6 +54,7 @@ export default function WalletDetailScreen({ navigation, route }) {
       ]);
       
       setRechargeList([
+        ...mockRechargeRecords,
         { id: 1, type: 'Stripe充值', amount: 100.00, time: '2024-03-20 08:00', status: 'completed' },
         { id: 2, type: 'Stripe充值', amount: 50.00, time: '2024-03-15 14:30', status: 'completed' },
         { id: 3, type: 'Stripe充值', amount: 200.00, time: '2024-03-10 10:00', status: 'failed' },

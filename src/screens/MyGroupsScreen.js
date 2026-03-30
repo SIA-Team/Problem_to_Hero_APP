@@ -11,9 +11,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import { createMyGroupsData } from '../data/profileMenuMockData';
 import { showToast } from '../utils/toast';
 
 import { scaleFont } from '../utils/responsive';
+/*
 const MOCK_GROUPS = [
   {
     id: 1,
@@ -43,6 +45,7 @@ const MOCK_GROUPS = [
     unreadCount: 15,
   },
 ];
+*/
 
 export default function MyGroupsScreen({ navigation }) {
   const [groups, setGroups] = useState([]);
@@ -56,7 +59,7 @@ export default function MyGroupsScreen({ navigation }) {
   const loadGroups = async () => {
     try {
       setLoading(true);
-      setGroups(MOCK_GROUPS);
+      setGroups(createMyGroupsData());
     } catch (error) {
       console.error('加载群聊列表失败:', error);
       showToast('加载失败，请重试', 'error');

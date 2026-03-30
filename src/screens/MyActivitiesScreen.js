@@ -11,9 +11,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { createMyActivitiesData } from '../data/profileMenuMockData';
 import { showToast } from '../utils/toast';
 
 import { scaleFont } from '../utils/responsive';
+/*
 const MOCK_ACTIVITIES = [
   {
     id: 1,
@@ -46,6 +48,7 @@ const MOCK_ACTIVITIES = [
     joinedAt: '3 天前加入',
   },
 ];
+*/
 
 export default function MyActivitiesScreen({ navigation }) {
   const [activities, setActivities] = useState([]);
@@ -59,7 +62,7 @@ export default function MyActivitiesScreen({ navigation }) {
   const loadActivities = async () => {
     try {
       setLoading(true);
-      setActivities(MOCK_ACTIVITIES);
+      setActivities(createMyActivitiesData());
     } catch (error) {
       console.error('加载我的活动失败:', error);
       showToast('加载失败，请重试', 'error');

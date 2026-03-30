@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import IdentitySelector from '../components/IdentitySelector';
 import ImagePickerSheet from '../components/ImagePickerSheet';
+import ModalSafeAreaView from '../components/ModalSafeAreaView';
 import WriteAnswerModal from '../components/WriteAnswerModal';
 import QuestionDetailSkeleton from '../components/QuestionDetailSkeleton';
 import ShareModal from '../components/ShareModal';
@@ -7180,7 +7181,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
 
       {/* 发布补充问题弹窗 */}
       <Modal visible={showSupplementModal} animationType="slide">
-        <SafeAreaView style={styles.answerModal}>
+        <ModalSafeAreaView style={styles.answerModal} edges={['top']}>
           <View style={styles.answerModalHeader}>
             <TouchableOpacity onPress={() => setShowSupplementModal(false)} style={styles.answerCloseBtn}>
               <Ionicons name="close" size={26} color="#333" />
@@ -7246,7 +7247,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             </View>
             <Text style={styles.answerWordCount}>{supplementText.length}/500</Text>
           </View>
-        </SafeAreaView>
+        </ModalSafeAreaView>
       </Modal>
 
       {/* 补充问题图片选择器 */}

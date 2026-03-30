@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import IdentitySelector from '../components/IdentitySelector';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
@@ -39,7 +40,159 @@ const initialMessages = [{
   bookmarks: 12
 }];
 
+const initialDiscussionComments = {
+  1: [{
+    id: 1001,
+    parentId: 0,
+    rootCommentId: 1001,
+    replyToCommentId: 0,
+    replyToUserName: '',
+    author: '李四',
+    userName: '李四',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=member2',
+    userAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=member2',
+    content: '欢迎加入，后面我们可以一起整理学习资料。',
+    time: '1小时前',
+    likes: 2,
+    dislikes: 0,
+    shares: 0,
+    bookmarks: 1,
+    liked: false,
+    disliked: false,
+    collected: false,
+    replyCount: 2,
+    replies: 2,
+    reports: 0
+  }, {
+    id: 1002,
+    parentId: 1001,
+    rootCommentId: 1001,
+    replyToCommentId: 1001,
+    replyToUserName: '李四',
+    author: '王五',
+    userName: '王五',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=member3',
+    userAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=member3',
+    content: '我这边也可以补一份入门示例。',
+    time: '45分钟前',
+    likes: 1,
+    dislikes: 0,
+    shares: 0,
+    bookmarks: 0,
+    liked: false,
+    disliked: false,
+    collected: false,
+    replyCount: 0,
+    replies: 0,
+    reports: 0
+  }, {
+    id: 1003,
+    parentId: 1002,
+    rootCommentId: 1001,
+    replyToCommentId: 1002,
+    replyToUserName: '王五',
+    author: '张三',
+    userName: '张三',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=member1',
+    userAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=member1',
+    content: '可以，整理好后我帮你置顶。',
+    time: '30分钟前',
+    likes: 0,
+    dislikes: 0,
+    shares: 0,
+    bookmarks: 0,
+    liked: false,
+    disliked: false,
+    collected: false,
+    replyCount: 0,
+    replies: 0,
+    reports: 0
+  }],
+  2: [{
+    id: 2001,
+    parentId: 0,
+    rootCommentId: 2001,
+    replyToCommentId: 0,
+    replyToUserName: '',
+    author: '张三',
+    userName: '张三',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=member1',
+    userAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=member1',
+    content: '可以先从最基础的语法和函数装饰器看起。',
+    time: '50分钟前',
+    likes: 3,
+    dislikes: 0,
+    shares: 0,
+    bookmarks: 1,
+    liked: false,
+    disliked: false,
+    collected: false,
+    replyCount: 0,
+    replies: 0,
+    reports: 0
+  }, {
+    id: 2002,
+    parentId: 0,
+    rootCommentId: 2002,
+    replyToCommentId: 0,
+    replyToUserName: '',
+    author: '王五',
+    userName: '王五',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=member3',
+    userAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=member3',
+    content: '我待会发一个简单示例，你可以跟着跑一遍。',
+    time: '40分钟前',
+    likes: 1,
+    dislikes: 0,
+    shares: 0,
+    bookmarks: 0,
+    liked: false,
+    disliked: false,
+    collected: false,
+    replyCount: 0,
+    replies: 0,
+    reports: 0
+  }],
+  3: []
+};
+
+const buildDiscussionReplyTree = (rows = [], rootCommentId = null) => {
+  const normalizedRootId = rootCommentId !== undefined && rootCommentId !== null ? String(rootCommentId) : null;
+  const nodeMap = new Map();
+  const roots = [];
+  rows.forEach(row => {
+    if (!row || String(row.id) === normalizedRootId) {
+      return;
+    }
+    nodeMap.set(String(row.id), {
+      ...row,
+      children: []
+    });
+  });
+  nodeMap.forEach(node => {
+    const parentKey = String(node.parentId ?? '');
+    if (!normalizedRootId || parentKey === normalizedRootId || !nodeMap.has(parentKey)) {
+      roots.push(node);
+      return;
+    }
+    nodeMap.get(parentKey).children.push(node);
+  });
+  return roots;
+};
+
+const flattenDiscussionReplyTree = (nodes = [], accumulator = []) => {
+  nodes.forEach(node => {
+    accumulator.push(node);
+    if (Array.isArray(node.children) && node.children.length > 0) {
+      flattenDiscussionReplyTree(node.children, accumulator);
+    }
+  });
+  return accumulator;
+};
+
 // 团队公告数据
+const WriteCommentModal = () => null;
+
 const announcements = [{
   id: 1,
   title: '本周学习主题：Python装饰器',
@@ -170,12 +323,29 @@ export default function TeamDetailScreen({
     }
   }, [t, activeTab]);
   const [messages, setMessages] = useState(initialMessages);
+  const [discussionCommentsMap, setDiscussionCommentsMap] = useState(initialDiscussionComments);
   const [inputText, setInputText] = useState('');
   const [liked, setLiked] = useState({});
   const [disliked, setDisliked] = useState({});
   const [bookmarked, setBookmarked] = useState({});
   const [isJoined, setIsJoined] = useState(routeIsJoined !== undefined ? routeIsJoined : team.role === '队长' || team.role === '成员');
   const [isPending, setIsPending] = useState(routeIsPending || false);
+  const [showDiscussionCommentListModal, setShowDiscussionCommentListModal] = useState(false);
+  const [showDiscussionReplyModal, setShowDiscussionReplyModal] = useState(false);
+  const [showDiscussionComposerModal, setShowDiscussionComposerModal] = useState(false);
+  const [currentDiscussionMessageId, setCurrentDiscussionMessageId] = useState(null);
+  const [currentDiscussionCommentId, setCurrentDiscussionCommentId] = useState(null);
+  const [discussionCommentTarget, setDiscussionCommentTarget] = useState({
+    messageId: null,
+    parentId: 0,
+    replyToCommentId: 0,
+    replyToUserName: '',
+    originalComment: null
+  });
+  const [discussionCommentText, setDiscussionCommentText] = useState('');
+  const [discussionCommentIdentity, setDiscussionCommentIdentity] = useState('personal');
+  const [discussionCommentSelectedTeams, setDiscussionCommentSelectedTeams] = useState([]);
+  const [discussionComposerKey, setDiscussionComposerKey] = useState(0);
   const [showReplyModal, setShowReplyModal] = useState(false);
   const [replyTarget, setReplyTarget] = useState(null);
   const [replyText, setReplyText] = useState('');
@@ -321,6 +491,217 @@ export default function TeamDetailScreen({
     setMessages([newMessage, ...messages]);
     setInputText('');
   };
+  const getDiscussionComments = messageId => discussionCommentsMap[messageId] || [];
+  const getDiscussionCommentCount = messageId => getDiscussionComments(messageId).length;
+  const getDiscussionTopLevelComments = messageId => getDiscussionComments(messageId).filter(comment => Number(comment.parentId || 0) === 0);
+  const findDiscussionCommentById = (messageId, commentId) => {
+    if (!messageId || !commentId) {
+      return null;
+    }
+    return getDiscussionComments(messageId).find(comment => String(comment.id) === String(commentId)) || null;
+  };
+  const getDiscussionThreadRootId = (messageId, commentId) => {
+    if (!messageId || !commentId) {
+      return null;
+    }
+    let currentComment = findDiscussionCommentById(messageId, commentId);
+    let safetyCount = 0;
+    while (currentComment && Number(currentComment.parentId || 0) > 0 && safetyCount < 50) {
+      const parentComment = findDiscussionCommentById(messageId, currentComment.parentId);
+      if (!parentComment || String(parentComment.id) === String(currentComment.id)) {
+        break;
+      }
+      currentComment = parentComment;
+      safetyCount += 1;
+    }
+    return currentComment?.id ?? commentId;
+  };
+  const buildDiscussionCommentReplyTarget = (comment, messageId) => {
+    if (!comment) {
+      return {
+        messageId,
+        parentId: 0,
+        replyToCommentId: 0,
+        replyToUserName: '',
+        originalComment: null
+      };
+    }
+    const resolvedCommentId = Number(comment.id) || 0;
+    return {
+      messageId,
+      parentId: resolvedCommentId,
+      replyToCommentId: resolvedCommentId,
+      replyToUserName: comment.userName || comment.author || '',
+      originalComment: comment
+    };
+  };
+  const updateDiscussionComment = (messageId, commentId, updater) => {
+    if (!messageId || !commentId) {
+      return;
+    }
+    setDiscussionCommentsMap(prevMap => {
+      const currentList = prevMap[messageId] || [];
+      let changed = false;
+      const nextList = currentList.map(comment => {
+        if (String(comment.id) !== String(commentId)) {
+          return comment;
+        }
+        changed = true;
+        return updater(comment);
+      });
+      if (!changed) {
+        return prevMap;
+      }
+      return {
+        ...prevMap,
+        [messageId]: nextList
+      };
+    });
+  };
+  const toggleDiscussionCommentLike = (messageId, commentId) => {
+    updateDiscussionComment(messageId, commentId, comment => {
+      const nextLiked = !comment.liked;
+      return {
+        ...comment,
+        liked: nextLiked,
+        likes: Math.max((Number(comment.likes) || 0) + (nextLiked ? 1 : -1), 0)
+      };
+    });
+  };
+  const toggleDiscussionCommentCollect = (messageId, commentId) => {
+    updateDiscussionComment(messageId, commentId, comment => {
+      const nextCollected = !comment.collected;
+      return {
+        ...comment,
+        collected: nextCollected,
+        bookmarks: Math.max((Number(comment.bookmarks) || 0) + (nextCollected ? 1 : -1), 0)
+      };
+    });
+  };
+  const toggleDiscussionCommentDislike = (messageId, commentId) => {
+    updateDiscussionComment(messageId, commentId, comment => {
+      const nextDisliked = !comment.disliked;
+      return {
+        ...comment,
+        disliked: nextDisliked,
+        dislikes: Math.max((Number(comment.dislikes) || 0) + (nextDisliked ? 1 : -1), 0)
+      };
+    });
+  };
+  const openDiscussionCommentList = messageId => {
+    setCurrentDiscussionMessageId(messageId);
+    setCurrentDiscussionCommentId(null);
+    setShowDiscussionReplyModal(false);
+    setShowDiscussionCommentListModal(true);
+  };
+  const openDiscussionComposer = target => {
+    setDiscussionCommentTarget({
+      messageId: target?.messageId ?? currentDiscussionMessageId,
+      parentId: Number(target?.parentId ?? 0) || 0,
+      replyToCommentId: Number(target?.replyToCommentId ?? 0) || 0,
+      replyToUserName: target?.replyToUserName ?? '',
+      originalComment: target?.originalComment || null
+    });
+    setDiscussionCommentText('');
+    setDiscussionCommentIdentity('personal');
+    setDiscussionCommentSelectedTeams([]);
+    setDiscussionComposerKey(prev => prev + 1);
+    setShowDiscussionComposerModal(true);
+  };
+  const closeDiscussionComposer = () => {
+    setShowDiscussionComposerModal(false);
+    setDiscussionCommentText('');
+    setDiscussionCommentIdentity('personal');
+    setDiscussionCommentSelectedTeams([]);
+    setDiscussionCommentTarget({
+      messageId: null,
+      parentId: 0,
+      replyToCommentId: 0,
+      replyToUserName: '',
+      originalComment: null
+    });
+  };
+  const handleSubmitDiscussionComment = () => {
+    const messageId = discussionCommentTarget.messageId ?? currentDiscussionMessageId;
+    if (!messageId) {
+      closeDiscussionComposer();
+      return;
+    }
+    const normalizedText = discussionCommentText.trim();
+    const content = normalizedText;
+    if (!content) {
+      return;
+    }
+    const directParentId = Number(discussionCommentTarget.replyToCommentId || discussionCommentTarget.parentId || 0) || 0;
+    const rootCommentId = directParentId ? getDiscussionThreadRootId(messageId, directParentId) : null;
+    const newCommentId = Date.now();
+    const isTeamIdentity = discussionCommentIdentity === 'team';
+    const authorName = isTeamIdentity ? team.name : '我';
+    const authorAvatar = isTeamIdentity ? team.avatar : 'https://api.dicebear.com/7.x/avataaars/svg?seed=me';
+    const newComment = {
+      id: newCommentId,
+      parentId: directParentId,
+      rootCommentId: rootCommentId || newCommentId,
+      replyToCommentId: directParentId,
+      replyToUserName: discussionCommentTarget.replyToUserName || '',
+      author: authorName,
+      userName: authorName,
+      avatar: authorAvatar,
+      userAvatar: authorAvatar,
+      content,
+      time: t('screens.teamDetail.chat.justNow'),
+      likes: 0,
+      dislikes: 0,
+      shares: 0,
+      bookmarks: 0,
+      liked: false,
+      disliked: false,
+      collected: false,
+      replyCount: 0,
+      replies: 0,
+      reports: 0
+    };
+    setDiscussionCommentsMap(prevMap => {
+      const currentList = prevMap[messageId] || [];
+      const nextList = [...currentList, newComment];
+      if (rootCommentId) {
+        return {
+          ...prevMap,
+          [messageId]: nextList.map(comment => String(comment.id) === String(rootCommentId) ? {
+            ...comment,
+            replyCount: (Number(comment.replyCount) || 0) + 1,
+            replies: (Number(comment.replies) || 0) + 1
+          } : comment)
+        };
+      }
+      return {
+        ...prevMap,
+        [messageId]: nextList
+      };
+    });
+    closeDiscussionComposer();
+    if (rootCommentId) {
+      setCurrentDiscussionMessageId(messageId);
+      setCurrentDiscussionCommentId(rootCommentId);
+      setShowDiscussionReplyModal(true);
+    } else {
+      setCurrentDiscussionMessageId(messageId);
+      setShowDiscussionCommentListModal(true);
+    }
+  };
+  const handleDiscussionCommentReport = () => {
+    showAppAlert(t('screens.teamDetail.report.title'), t('screens.teamDetail.report.message'), [{
+      text: t('common.cancel'),
+      style: 'cancel'
+    }, {
+      text: t('common.confirm'),
+      onPress: () => showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.report.submitted'))
+    }]);
+  };
+  const currentDiscussionComments = currentDiscussionMessageId ? getDiscussionComments(currentDiscussionMessageId) : [];
+  const currentDiscussionTopLevelComments = currentDiscussionMessageId ? getDiscussionTopLevelComments(currentDiscussionMessageId) : [];
+  const currentDiscussionRootComment = currentDiscussionMessageId && currentDiscussionCommentId ? findDiscussionCommentById(currentDiscussionMessageId, currentDiscussionCommentId) : null;
+  const currentDiscussionReplyNodes = currentDiscussionRootComment ? buildDiscussionReplyTree(currentDiscussionComments.filter(comment => Number(comment.parentId || 0) > 0 && String(comment.rootCommentId) === String(currentDiscussionRootComment.id)), currentDiscussionRootComment.id) : [];
 
   // 邀请用户处理
   const handleToggleUser = user => {
@@ -397,18 +778,55 @@ export default function TeamDetailScreen({
     }
     return users;
   };
+  // 转让团长相关状态
+  const [showTransferLeaderModal, setShowTransferLeaderModal] = useState(false);
+  const [selectedNewLeader, setSelectedNewLeader] = useState(null);
+
   const handleExitTeam = () => {
-    showAppAlert(t('screens.teamDetail.exit.title'), t('screens.teamDetail.exit.message'), [{
-      text: t('common.cancel'),
-      style: 'cancel'
-    }, {
-      text: t('screens.teamDetail.exit.confirmButton'),
-      style: 'destructive',
-      onPress: () => {
-        showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.teamExited'));
-        navigation.goBack();
-      }
-    }]);
+    // 如果是团长，需要先转让团长
+    if (team.isAdmin && team.currentUserId === team.creatorId) {
+      showAppAlert(
+        t('screens.teamDetail.exit.title'),
+        t('screens.teamDetail.exit.leaderMessage'),
+        [{
+          text: t('common.cancel'),
+          style: 'cancel'
+        }, {
+          text: t('common.confirm'),
+          onPress: () => {
+            setShowTransferLeaderModal(true);
+          }
+        }]
+      );
+    } else {
+      // 普通成员退出
+      showAppAlert(
+        t('screens.teamDetail.exit.title'),
+        t('screens.teamDetail.exit.memberMessage'),
+        [{
+          text: t('common.cancel'),
+          style: 'cancel'
+        }, {
+          text: t('screens.teamDetail.exit.confirmButton'),
+          style: 'destructive',
+          onPress: () => {
+            showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.teamExited'));
+            navigation.goBack();
+          }
+        }]
+      );
+    }
+  };
+
+  const handleConfirmTransferLeader = () => {
+    if (!selectedNewLeader) {
+      showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.transfer.selectMember'));
+      return;
+    }
+    showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.leaderTransferred'));
+    setShowTransferLeaderModal(false);
+    setSelectedNewLeader(null);
+    navigation.goBack();
   };
   const handleDismissTeam = () => {
     setShowDismissModal(true);
@@ -435,6 +853,89 @@ export default function TeamDetailScreen({
       }
     }]);
   };
+  const renderDiscussionReplyCard = (reply, options = {}) => {
+    const relationCommentId = Number(reply.replyToCommentId ?? reply.parentId ?? 0) || 0;
+    const relationComment = findDiscussionCommentById(currentDiscussionMessageId, relationCommentId);
+    const relationUserName = reply.replyToUserName || relationComment?.userName || relationComment?.author || '';
+    const rootCommentId = options.rootCommentId ?? null;
+    const contextReplyId = options.contextReplyId ?? null;
+    const shouldHideContextRelation = contextReplyId !== null && String(relationCommentId) === String(contextReplyId);
+    const shouldShowReplyRelation = !!relationUserName && !shouldHideContextRelation && rootCommentId !== null && String(relationCommentId) !== String(rootCommentId) && String(relationCommentId) !== String(reply.id);
+    return <View key={reply.id} style={styles.replyCard}>
+        <TouchableOpacity style={styles.replyHeader} activeOpacity={0.7}>
+          <Avatar uri={reply.userAvatar || reply.avatar} name={reply.userName || reply.author} size={24} />
+          <View style={styles.replyAuthorMeta}>
+            <View style={styles.replyAuthorLine}>
+              <Text style={styles.replyAuthor}>{reply.userName || reply.author}</Text>
+              {shouldShowReplyRelation ? <>
+                  <Text style={styles.replyAuthorRelation}> 回复 </Text>
+                  <Text style={styles.replyReplyTarget}>{relationUserName}</Text>
+                </> : null}
+            </View>
+          </View>
+          <View style={{
+          flex: 1
+        }} />
+          <Text style={styles.replyTime}>{reply.time}</Text>
+        </TouchableOpacity>
+        <Text style={styles.replyText}>{reply.content}</Text>
+        <View style={styles.replyActions}>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => toggleDiscussionCommentLike(currentDiscussionMessageId, reply.id)}>
+            <Ionicons name={reply.liked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={reply.liked ? "#ef4444" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, reply.liked && {
+            color: '#ef4444'
+          }]}>{Number(reply.likes || 0)}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
+          setShowDiscussionReplyModal(false);
+          openDiscussionComposer(buildDiscussionCommentReplyTarget(reply, currentDiscussionMessageId));
+        }}>
+            <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
+            <Text style={styles.replyActionText}>{Number(reply.replies || reply.replyCount || 0)}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn}>
+            <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
+            <Text style={styles.replyActionText}>{Number(reply.shares || 0)}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => toggleDiscussionCommentCollect(currentDiscussionMessageId, reply.id)}>
+            <Ionicons name={reply.collected ? "star" : "star-outline"} size={12} color={reply.collected ? "#f59e0b" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, reply.collected && {
+            color: '#f59e0b'
+          }]}>{Number(reply.bookmarks || 0)}</Text>
+          </TouchableOpacity>
+          <View style={{
+          flex: 1
+        }} />
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => toggleDiscussionCommentDislike(currentDiscussionMessageId, reply.id)}>
+            <Ionicons name={reply.disliked ? "thumbs-down" : "thumbs-down-outline"} size={12} color={reply.disliked ? "#6b7280" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, reply.disliked && {
+            color: '#6b7280'
+          }]}>{Number(reply.dislikes || 0)}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={handleDiscussionCommentReport}>
+            <Ionicons name="flag-outline" size={12} color="#ef4444" />
+            <Text style={styles.replyActionText}>{Number(reply.reports || 0)}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>;
+  };
+  const renderDiscussionReplyTreeNodes = (nodes = [], options = {}) => nodes.map(reply => {
+    const childNodes = Array.isArray(reply.children) ? reply.children : [];
+    const hasChildren = childNodes.length > 0;
+    const descendantReplies = hasChildren ? flattenDiscussionReplyTree(childNodes) : [];
+    return <View key={reply.id}>
+        {renderDiscussionReplyCard(reply, options)}
+        {hasChildren ? <View style={styles.replyChildrenSection}>
+            <View style={styles.replyChildrenToggle}>
+              <Text style={styles.replyChildrenToggleText}>{`展开回复 (${descendantReplies.length})`}</Text>
+            </View>
+            {descendantReplies.map(childReply => renderDiscussionReplyCard(childReply, {
+            ...options,
+            contextReplyId: reply.id
+          }))}
+          </View> : null}
+      </View>;
+  });
   const openReplyModal = msg => {
     setReplyTarget(msg);
     setReplyText('');
@@ -459,13 +960,11 @@ export default function TeamDetailScreen({
     setReplyTarget(null);
   };
   const handleReport = msg => {
-    showAppAlert(t('screens.teamDetail.report.title'), t('screens.teamDetail.report.message'), [{
-      text: t('common.cancel'),
-      style: 'cancel'
-    }, {
-      text: t('common.confirm'),
-      onPress: () => showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.report.submitted'))
-    }]);
+    navigation.navigate('Report', {
+      type: 'answer',
+      targetType: 2,
+      targetId: Number(msg?.id) || 0
+    });
   };
   const handlePublishAnnouncement = () => {
     if (!announcementTitle.trim()) {
@@ -538,10 +1037,10 @@ export default function TeamDetailScreen({
         {!restrictedView && <View style={styles.teamInfoCard}>
             <View style={styles.teamTitleRow}>
               <Text style={styles.teamName}>{team.name}</Text>
-              {/* 管理员：显示解散团队按钮 */}
-              {Boolean(team.isAdmin) && <TouchableOpacity style={styles.compactDismissBtn} onPress={handleDismissTeam}>
-                  <Ionicons name="trash-outline" size={14} color="#ef4444" />
-                  <Text style={styles.compactDismissBtnText}>{t('screens.teamDetail.actions.dismiss')}</Text>
+              {/* 管理员：显示退出团队按钮 */}
+              {Boolean(team.isAdmin) && <TouchableOpacity style={styles.compactDismissBtn} onPress={handleExitTeam}>
+                  <Ionicons name="exit-outline" size={14} color="#ef4444" />
+                  <Text style={styles.compactDismissBtnText}>{t('screens.teamDetail.actions.exit')}</Text>
                 </TouchableOpacity>}
               {/* 普通成员：显示三个操作按钮 */}
               {!team.isAdmin && team.currentUserId !== team.creatorId && <View style={styles.compactActionsRow}>
@@ -641,40 +1140,64 @@ export default function TeamDetailScreen({
                 {messages.map(msg => <View key={msg.id} style={styles.teamChatMessage}>
                     <View style={styles.teamChatBubble}>
                       <View style={styles.teamChatHeader}>
-                        <Avatar uri={msg.avatar} name={msg.author} size={32} />
+                        <Avatar uri={msg.avatar} name={msg.author} size={24} />
                         <Text style={styles.teamChatUser}>{msg.author}</Text>
                         <Text style={styles.teamChatTime}>{msg.time}</Text>
                       </View>
-                      <Text style={styles.teamChatText}>{msg.content}</Text>
-                      <View style={styles.messageActions}>
-                        <View style={styles.messageActionsLeft}>
-                          <TouchableOpacity style={styles.messageActionBtn} onPress={() => setLiked({
-                    ...liked,
-                    [msg.id]: !liked[msg.id]
-                  })}>
-                            <Ionicons name={liked[msg.id] ? "thumbs-up" : "thumbs-up-outline"} size={14} color={liked[msg.id] ? "#f59e0b" : "#9ca3af"} />
-                            <Text style={[styles.messageActionText, liked[msg.id] && {
-                      color: '#f59e0b'
-                    }]}>
-                              {msg.likes + (liked[msg.id] ? 1 : 0)}
-                            </Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity style={styles.messageActionBtn} onPress={() => openReplyModal(msg)}>
-                            <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
-                            <Text style={styles.messageActionText}>{t('screens.teamDetail.actions.reply')}</Text>
-                          </TouchableOpacity>
-                        </View>
-                        <View style={styles.messageActionsRight}>
-                          <TouchableOpacity style={styles.messageActionBtn} onPress={() => setDisliked({
-                    ...disliked,
-                    [msg.id]: !disliked[msg.id]
-                  })}>
-                            <Ionicons name={disliked[msg.id] ? "thumbs-down" : "thumbs-down-outline"} size={14} color="#9ca3af" />
-                            <Text style={styles.messageActionText}>{msg.dislikes + (disliked[msg.id] ? 1 : 0)}</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity style={styles.messageActionBtn} onPress={() => handleReport(msg)}>
-                            <Ionicons name="flag-outline" size={14} color="#ef4444" />
-                          </TouchableOpacity>
+                      <View style={styles.teamChatContent}>
+                        <Text style={styles.teamChatText}>{msg.content}</Text>
+                        
+                        <View style={styles.teamChatFooter}>
+                          <View style={styles.teamChatFooterLeft}>
+                            <TouchableOpacity style={styles.teamChatActionBtn} onPress={() => setLiked({
+                      ...liked,
+                      [msg.id]: !liked[msg.id]
+                    })}>
+                              <Ionicons name={liked[msg.id] ? "thumbs-up" : "thumbs-up-outline"} size={14} color={liked[msg.id] ? "#ef4444" : "#9ca3af"} />
+                              <Text style={[styles.teamChatActionText, liked[msg.id] && {
+                        color: '#ef4444'
+                      }]}>
+                                {msg.likes + (liked[msg.id] ? 1 : 0)}
+                              </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.teamChatActionBtn} onPress={() => openDiscussionCommentList(msg.id)}>
+                              <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
+                              <Text style={styles.teamChatActionText}>{getDiscussionCommentCount(msg.id)}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.teamChatActionBtn} onPress={() => {
+                      // 转发功能
+                    }}>
+                              <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
+                              <Text style={styles.teamChatActionText}>{msg.shares || 0}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.teamChatActionBtn} onPress={() => setBookmarked({
+                      ...bookmarked,
+                      [msg.id]: !bookmarked[msg.id]
+                    })}>
+                              <Ionicons name={bookmarked[msg.id] ? "star" : "star-outline"} size={14} color={bookmarked[msg.id] ? "#f59e0b" : "#9ca3af"} />
+                              <Text style={[styles.teamChatActionText, bookmarked[msg.id] && {
+                        color: '#f59e0b'
+                      }]}>
+                                {msg.bookmarks + (bookmarked[msg.id] ? 1 : 0)}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                          <View style={styles.teamChatFooterRight}>
+                            <TouchableOpacity style={styles.teamChatActionBtn} onPress={() => setDisliked({
+                      ...disliked,
+                      [msg.id]: !disliked[msg.id]
+                    })}>
+                              <Ionicons name={disliked[msg.id] ? "thumbs-down" : "thumbs-down-outline"} size={14} color={disliked[msg.id] ? "#6b7280" : "#9ca3af"} />
+                              <Text style={[styles.teamChatActionText, disliked[msg.id] && {
+                        color: '#6b7280'
+                      }]}>
+                                {msg.dislikes + (disliked[msg.id] ? 1 : 0)}
+                              </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.teamChatActionBtn} onPress={() => handleReport(msg)}>
+                              <Ionicons name="flag-outline" size={14} color="#ef4444" />
+                            </TouchableOpacity>
+                          </View>
                         </View>
                       </View>
                     </View>
@@ -808,7 +1331,221 @@ export default function TeamDetailScreen({
       </Modal>
 
       {/* 成员列表弹窗 - 仅在已加入模式下使用 */}
-      {!restrictedView && <Modal visible={showMembersModal} animationType="slide" transparent>
+      <Modal visible={showDiscussionCommentListModal} transparent animationType="slide" onRequestClose={() => setShowDiscussionCommentListModal(false)}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowDiscussionCommentListModal(false)} />
+          <View style={styles.commentListModal}>
+            <View style={styles.commentListModalHandle} />
+            <View style={styles.commentListModalHeader}>
+              <View style={styles.commentListHeaderLeft} />
+              <Text style={styles.commentListModalTitle}>全部评论</Text>
+              <TouchableOpacity onPress={() => setShowDiscussionCommentListModal(false)} style={styles.commentListCloseBtn}>
+                <Ionicons name="close" size={26} color="#1f2937" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.commentListScroll} showsVerticalScrollIndicator={false}>
+              {currentDiscussionTopLevelComments.length === 0 ? <View style={styles.approvalEmpty}>
+                  <Ionicons name="chatbubble-outline" size={48} color="#d1d5db" />
+                  <Text style={styles.approvalEmptyText}>暂无评论</Text>
+                  <Text style={styles.approvalEmptyHint}>成为第一个评论的人</Text>
+                </View> : currentDiscussionTopLevelComments.map(comment => <View key={comment.id} style={styles.commentListCard}>
+                  <TouchableOpacity style={styles.commentListHeader} activeOpacity={0.7}>
+                    <Avatar uri={comment.userAvatar || comment.avatar} name={comment.userName || comment.author} size={24} />
+                    <Text style={styles.commentListAuthor}>{comment.userName || comment.author}</Text>
+                    <View style={{
+                  flex: 1
+                }} />
+                    <Text style={styles.commentListTime}>{comment.time}</Text>
+                  </TouchableOpacity>
+                  <View style={styles.commentListContent}>
+                    <Text style={styles.commentListText}>{comment.content}</Text>
+                    <View style={styles.commentListActions}>
+                      <TouchableOpacity style={styles.commentListActionBtn} onPress={() => toggleDiscussionCommentLike(currentDiscussionMessageId, comment.id)}>
+                        <Ionicons name={comment.liked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={comment.liked ? "#ef4444" : "#9ca3af"} />
+                        <Text style={[styles.commentListActionText, comment.liked && {
+                      color: '#ef4444'
+                    }]}>{Number(comment.likes || 0)}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.commentListActionBtn} onPress={() => {
+                    setCurrentDiscussionCommentId(comment.id);
+                    setShowDiscussionCommentListModal(false);
+                    setTimeout(() => setShowDiscussionReplyModal(true), 50);
+                  }}>
+                        <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
+                        <Text style={styles.commentListActionText}>{Number(comment.replyCount ?? comment.replies ?? 0)}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.commentListActionBtn}>
+                        <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
+                        <Text style={styles.commentListActionText}>{Number(comment.shares || 0)}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.commentListActionBtn} onPress={() => toggleDiscussionCommentCollect(currentDiscussionMessageId, comment.id)}>
+                        <Ionicons name={comment.collected ? "star" : "star-outline"} size={14} color={comment.collected ? "#f59e0b" : "#9ca3af"} />
+                        <Text style={[styles.commentListActionText, comment.collected && {
+                      color: '#f59e0b'
+                    }]}>{Number(comment.bookmarks || 0)}</Text>
+                      </TouchableOpacity>
+                      <View style={{
+                    flex: 1
+                  }} />
+                      <TouchableOpacity style={styles.commentListActionBtn} onPress={() => toggleDiscussionCommentDislike(currentDiscussionMessageId, comment.id)}>
+                        <Ionicons name={comment.disliked ? "thumbs-down" : "thumbs-down-outline"} size={14} color={comment.disliked ? "#6b7280" : "#9ca3af"} />
+                        <Text style={[styles.commentListActionText, comment.disliked && {
+                      color: '#6b7280'
+                    }]}>{Number(comment.dislikes || 0)}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.commentListActionBtn} onPress={handleDiscussionCommentReport}>
+                        <Ionicons name="flag-outline" size={14} color="#ef4444" />
+                        <Text style={styles.commentListActionText}>{Number(comment.reports || 0)}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>)}
+            </ScrollView>
+
+            <View style={styles.commentListBottomBar}>
+              <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
+              setCurrentDiscussionCommentId(null);
+              setShowDiscussionCommentListModal(false);
+              openDiscussionComposer({
+                messageId: currentDiscussionMessageId,
+                parentId: 0,
+                replyToCommentId: 0,
+                replyToUserName: '',
+                originalComment: null
+              });
+            }}>
+                <Ionicons name="create-outline" size={18} color="#6b7280" />
+                <Text style={styles.commentListWriteText}>写评论...</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showDiscussionReplyModal} transparent animationType="slide" onRequestClose={() => {
+      setShowDiscussionCommentListModal(true);
+      setTimeout(() => setShowDiscussionReplyModal(false), 50);
+    }}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => {
+          setShowDiscussionCommentListModal(true);
+          setTimeout(() => setShowDiscussionReplyModal(false), 50);
+        }} />
+          <View style={styles.commentListModal}>
+            <View style={styles.commentListModalHandle} />
+            <View style={styles.commentListModalHeader}>
+              <TouchableOpacity onPress={() => {
+              setShowDiscussionCommentListModal(true);
+              setTimeout(() => setShowDiscussionReplyModal(false), 50);
+            }} style={[styles.commentListCloseBtn, {
+              left: 16,
+              right: 'auto'
+            }]}>
+                <Ionicons name="arrow-back" size={26} color="#1f2937" />
+              </TouchableOpacity>
+              <Text style={styles.commentListModalTitle}>{Number(currentDiscussionRootComment?.replyCount ?? currentDiscussionRootComment?.replies ?? 0)}条回复</Text>
+              <View style={styles.commentListHeaderRight} />
+            </View>
+
+            {Boolean(currentDiscussionRootComment) && <View style={styles.originalCommentCard}>
+                <TouchableOpacity style={styles.originalCommentHeader} activeOpacity={0.7}>
+                  <Avatar uri={currentDiscussionRootComment.userAvatar || currentDiscussionRootComment.avatar} name={currentDiscussionRootComment.userName || currentDiscussionRootComment.author} size={32} />
+                  <Text style={styles.originalCommentAuthor}>{currentDiscussionRootComment.userName || currentDiscussionRootComment.author}</Text>
+                  <View style={{
+                flex: 1
+              }} />
+                  <Text style={styles.originalCommentTime}>{currentDiscussionRootComment.time}</Text>
+                </TouchableOpacity>
+                <Text style={styles.originalCommentText}>{currentDiscussionRootComment.content}</Text>
+              </View>}
+
+            <View style={styles.repliesSectionHeader}>
+              <Text style={styles.repliesSectionTitle}>全部回复</Text>
+            </View>
+
+            <ScrollView style={styles.commentListScroll} showsVerticalScrollIndicator={false}>
+              {currentDiscussionReplyNodes.length > 0 ? renderDiscussionReplyTreeNodes(currentDiscussionReplyNodes, {
+              rootCommentId: currentDiscussionRootComment?.id ?? null
+            }) : <View style={styles.approvalEmpty}>
+                  <Ionicons name="chatbubble-outline" size={48} color="#d1d5db" />
+                  <Text style={styles.approvalEmptyText}>暂无回复</Text>
+                  <Text style={styles.approvalEmptyHint}>来留下第一条回复吧</Text>
+                </View>}
+            </ScrollView>
+
+            <View style={styles.commentListBottomBar}>
+              <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
+              setShowDiscussionReplyModal(false);
+              openDiscussionComposer(buildDiscussionCommentReplyTarget(currentDiscussionRootComment, currentDiscussionMessageId));
+            }}>
+                <Ionicons name="create-outline" size={18} color="#6b7280" />
+                <Text style={styles.commentListWriteText}>写回复...</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <WriteCommentModal visible={showDiscussionComposerModal} onClose={closeDiscussionComposer} onPublish={handleSubmitDiscussionComment} originalComment={discussionCommentTarget.originalComment} publishInFooter placeholder="写下你的评论..." title="写评论" />
+
+      <Modal visible={showDiscussionComposerModal} transparent animationType="slide" onRequestClose={closeDiscussionComposer}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={closeDiscussionComposer} />
+          <View style={styles.commentListModal}>
+            <View style={styles.commentListModalHandle} />
+            <View style={styles.commentListModalHeader}>
+              <TouchableOpacity onPress={closeDiscussionComposer} style={styles.commentListCloseBtn}>
+                <Ionicons name="close" size={26} color="#1f2937" />
+              </TouchableOpacity>
+              <Text style={styles.commentListModalTitle}>写评论</Text>
+              <View style={styles.commentListHeaderRight} />
+            </View>
+
+            {Boolean(discussionCommentTarget.originalComment) && <View style={styles.originalCommentCard}>
+                <TouchableOpacity style={styles.originalCommentHeader} activeOpacity={0.7}>
+                  <Avatar uri={discussionCommentTarget.originalComment.userAvatar || discussionCommentTarget.originalComment.avatar} name={discussionCommentTarget.originalComment.userName || discussionCommentTarget.originalComment.author} size={32} />
+                  <Text style={styles.originalCommentAuthor}>{discussionCommentTarget.originalComment.userName || discussionCommentTarget.originalComment.author}</Text>
+                  <View style={{
+                flex: 1
+              }} />
+                  <Text style={styles.originalCommentTime}>{discussionCommentTarget.originalComment.time}</Text>
+                </TouchableOpacity>
+                <Text style={styles.originalCommentText}>{discussionCommentTarget.originalComment.content}</Text>
+              </View>}
+
+            <ScrollView style={styles.commentListScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <View>
+                <TextInput style={styles.commentTextInput} placeholder="写下你的评论..." placeholderTextColor="#bbb" value={discussionCommentText} onChangeText={setDiscussionCommentText} multiline autoFocus textAlignVertical="top" />
+                <View style={styles.commentIdentitySection}>
+                  <IdentitySelector key={`discussion-composer-${discussionComposerKey}`} selectedIdentity={discussionCommentIdentity} selectedTeams={discussionCommentSelectedTeams} onIdentityChange={setDiscussionCommentIdentity} onTeamsChange={setDiscussionCommentSelectedTeams} />
+                </View>
+              </View>
+            </ScrollView>
+
+            <View style={styles.commentListBottomBar}>
+              <View style={styles.commentToolbar}>
+                <View style={styles.commentToolsLeft}>
+                  <TouchableOpacity style={styles.commentToolItem}>
+                    <Ionicons name="image-outline" size={24} color="#666" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.commentToolItem}>
+                    <Ionicons name="at-outline" size={24} color="#666" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.commentToolItem}>
+                    <Ionicons name="happy-outline" size={24} color="#666" />
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity style={[styles.commentPublishBtn, !discussionCommentText.trim() && styles.commentPublishBtnDisabled]} onPress={handleSubmitDiscussionComment} disabled={!discussionCommentText.trim()}>
+                  <Text style={[styles.commentPublishText, !discussionCommentText.trim() && styles.commentPublishTextDisabled]}>发布</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {!restrictedView && <Modal visible={showMembersModal} animationType="slide" transparent onRequestClose={() => setShowMembersModal(false)}>
           <View style={styles.modalOverlay}>
             <View style={styles.membersModal}>
               <View style={styles.membersModalHeader}>
@@ -817,7 +1554,8 @@ export default function TeamDetailScreen({
                   <Ionicons name="close" size={24} color="#6b7280" />
                 </TouchableOpacity>
               </View>
-              <ScrollView style={styles.membersModalList} showsVerticalScrollIndicator={false}>
+              <View style={styles.membersModalContent}>
+                <ScrollView style={styles.membersModalList} contentContainerStyle={styles.membersModalListContent} showsVerticalScrollIndicator={false}>
                 {teamMembers.map(member => <View key={member.id} style={styles.memberModalItem}>
                     <Avatar uri={member.avatar} name={member.name} size={48} />
                     <View style={styles.memberModalInfo}>
@@ -831,7 +1569,8 @@ export default function TeamDetailScreen({
                       <Text style={styles.memberModalRole}>{member.role}</Text>
                     </View>
                   </View>)}
-              </ScrollView>
+                </ScrollView>
+              </View>
             </View>
           </View>
         </Modal>}
@@ -972,6 +1711,59 @@ export default function TeamDetailScreen({
                 <Text style={styles.confirmDismissBtnText}>{t('screens.teamDetail.dismiss.confirmButton')}</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 转让团长弹窗 */}
+      <Modal visible={showTransferLeaderModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.transferLeaderModal}>
+            <View style={styles.transferLeaderHeader}>
+              <TouchableOpacity onPress={() => {
+                setShowTransferLeaderModal(false);
+                setSelectedNewLeader(null);
+              }}>
+                <Text style={styles.transferLeaderCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <Text style={styles.transferLeaderTitle}>{t('screens.teamDetail.transfer.title')}</Text>
+              <TouchableOpacity 
+                onPress={handleConfirmTransferLeader}
+                disabled={!selectedNewLeader}
+              >
+                <Text style={[
+                  styles.transferLeaderConfirmText,
+                  !selectedNewLeader && styles.transferLeaderConfirmTextDisabled
+                ]}>{t('common.confirm')}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView 
+              style={styles.transferLeaderList} 
+              contentContainerStyle={styles.transferLeaderListContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {teamMembers
+                .filter(member => member.role !== '队长')
+                .map(member => (
+                  <TouchableOpacity
+                    key={member.id}
+                    style={styles.transferLeaderItem}
+                    onPress={() => setSelectedNewLeader(member.id)}
+                  >
+                    <View style={styles.transferLeaderRadio}>
+                      {selectedNewLeader === member.id && (
+                        <View style={styles.transferLeaderRadioInner} />
+                      )}
+                    </View>
+                    <Avatar uri={member.avatar} name={member.name} size={40} />
+                    <View style={styles.transferLeaderInfo}>
+                      <Text style={styles.transferLeaderName}>{member.name}</Text>
+                      <Text style={styles.transferLeaderRole}>{member.role}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1267,67 +2059,74 @@ const styles = StyleSheet.create({
   // 团队聊天区域 - 参照团队弹窗样式
   teamChatSection: {
     flex: 1,
-    paddingTop: 16,
-    paddingHorizontal: 16,
+    paddingTop: 0,
+    paddingHorizontal: 0,
     backgroundColor: '#fff'
   },
   teamChatMessage: {
-    marginBottom: 16
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
   },
   teamChatBubble: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-    padding: 12
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    padding: 0
   },
   teamChatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
     gap: 8
   },
   teamChatAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16
+    width: 24,
+    height: 24,
+    borderRadius: 12
   },
   teamChatUser: {
-    fontSize: scaleFont(13),
-    fontWeight: '600',
-    color: '#1f2937',
+    fontSize: scaleFont(12),
+    fontWeight: '500',
+    color: '#9ca3af',
     flex: 1
   },
   teamChatTime: {
-    fontSize: scaleFont(11),
+    fontSize: scaleFont(12),
     color: '#9ca3af'
   },
   teamChatText: {
-    fontSize: scaleFont(13),
-    color: '#374151',
-    lineHeight: scaleFont(18),
-    marginBottom: 8,
-    paddingLeft: 40
+    fontSize: scaleFont(15),
+    color: '#1f2937',
+    lineHeight: scaleFont(22),
+    marginBottom: 10,
+    paddingLeft: 0
   },
-  messageActions: {
+  teamChatContent: {
+    flex: 1
+  },
+  teamChatFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingLeft: 40
+    marginTop: 4
   },
-  messageActionsLeft: {
+  teamChatFooterLeft: {
     flexDirection: 'row',
-    gap: 16,
+    alignItems: 'center',
+    gap: 12,
     flex: 1
   },
-  messageActionsRight: {
-    flexDirection: 'row',
-    gap: 12
-  },
-  messageActionBtn: {
+  teamChatFooterRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4
   },
-  messageActionText: {
+  teamChatActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4
+  },
+  teamChatActionText: {
     fontSize: scaleFont(12),
     color: '#9ca3af'
   },
@@ -1636,6 +2435,274 @@ const styles = StyleSheet.create({
     backgroundColor: modalTokens.overlay,
     justifyContent: 'flex-end'
   },
+  modalBackdrop: {
+    flex: 1
+  },
+  commentListModal: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '85%'
+  },
+  commentListModalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 8
+  },
+  commentListModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  commentListHeaderLeft: {
+    width: 40
+  },
+  commentListHeaderRight: {
+    width: 40
+  },
+  commentListCloseBtn: {
+    position: 'absolute',
+    right: 16,
+    padding: 4,
+    zIndex: 10
+  },
+  commentListModalTitle: {
+    fontSize: scaleFont(17),
+    fontWeight: '600',
+    color: '#1f2937'
+  },
+  originalCommentCard: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 8,
+    borderBottomColor: '#f9fafb'
+  },
+  originalCommentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 10
+  },
+  originalCommentAuthor: {
+    fontSize: scaleFont(13),
+    fontWeight: '500',
+    color: '#9ca3af'
+  },
+  originalCommentTime: {
+    fontSize: scaleFont(13),
+    color: '#9ca3af'
+  },
+  originalCommentText: {
+    fontSize: scaleFont(16),
+    color: '#1f2937',
+    lineHeight: scaleFont(24)
+  },
+  repliesSectionHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fafafa'
+  },
+  repliesSectionTitle: {
+    fontSize: scaleFont(13),
+    color: '#9ca3af',
+    fontWeight: '500'
+  },
+  commentListScroll: {
+    maxHeight: 500,
+    backgroundColor: '#fff'
+  },
+  commentListCard: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  commentListHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 8
+  },
+  commentListAuthor: {
+    fontSize: scaleFont(12),
+    fontWeight: '500',
+    color: '#9ca3af'
+  },
+  commentListTime: {
+    fontSize: scaleFont(12),
+    color: '#9ca3af'
+  },
+  commentListContent: {
+    flex: 1
+  },
+  commentListText: {
+    fontSize: scaleFont(15),
+    color: '#1f2937',
+    lineHeight: scaleFont(22),
+    marginBottom: 10
+  },
+  commentListActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  commentListActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4
+  },
+  commentListActionText: {
+    fontSize: scaleFont(12),
+    color: '#9ca3af'
+  },
+  commentListBottomBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6'
+  },
+  commentListWriteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f9fafb',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20
+  },
+  commentListWriteText: {
+    fontSize: scaleFont(14),
+    color: '#9ca3af'
+  },
+  replyCard: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  replyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 8
+  },
+  replyAuthorMeta: {
+    flexShrink: 1
+  },
+  replyAuthorLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap'
+  },
+  replyAuthor: {
+    fontSize: scaleFont(12),
+    fontWeight: '500',
+    color: '#9ca3af'
+  },
+  replyAuthorRelation: {
+    fontSize: scaleFont(12),
+    color: '#9ca3af'
+  },
+  replyReplyTarget: {
+    fontSize: scaleFont(12),
+    fontWeight: '500',
+    color: '#6b7280'
+  },
+  replyTime: {
+    fontSize: scaleFont(12),
+    color: '#9ca3af'
+  },
+  replyText: {
+    fontSize: scaleFont(15),
+    color: '#1f2937',
+    lineHeight: scaleFont(22),
+    marginBottom: 10
+  },
+  replyActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  replyActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3
+  },
+  replyActionText: {
+    fontSize: scaleFont(11),
+    color: '#9ca3af'
+  },
+  replyChildrenSection: {
+    marginTop: 4,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10
+  },
+  replyChildrenToggle: {
+    paddingBottom: 6
+  },
+  replyChildrenToggleText: {
+    fontSize: scaleFont(12),
+    color: '#6b7280',
+    fontWeight: '500'
+  },
+  commentToolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    backgroundColor: '#fff'
+  },
+  commentToolsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  commentToolItem: {
+    padding: 10
+  },
+  commentPublishBtn: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 4,
+    zIndex: 1
+  },
+  commentPublishBtnDisabled: {
+    backgroundColor: '#ffcdd2'
+  },
+  commentPublishText: {
+    fontSize: scaleFont(14),
+    color: '#fff',
+    fontWeight: '600'
+  },
+  commentPublishTextDisabled: {
+    color: '#fff'
+  },
+  commentTextInput: {
+    padding: 16,
+    fontSize: scaleFont(16),
+    color: '#333',
+    lineHeight: scaleFont(26),
+    minHeight: 200
+  },
+  commentIdentitySection: {
+    paddingHorizontal: 16,
+    paddingBottom: 16
+  },
   replyModal: {
     backgroundColor: modalTokens.surface,
     borderTopLeftRadius: modalTokens.sheetRadius,
@@ -1690,7 +2757,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderColor: modalTokens.border,
     padding: 16,
-    maxHeight: '70%'
+    height: '70%',
+    minHeight: 320
   },
   membersModalHeader: {
     flexDirection: 'row',
@@ -1706,8 +2774,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: modalTokens.textPrimary
   },
+  membersModalContent: {
+    flex: 1
+  },
   membersModalList: {
     flex: 1
+  },
+  membersModalListContent: {
+    paddingBottom: 12
   },
   memberModalItem: {
     flexDirection: 'row',
@@ -2322,5 +3396,91 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600'
+  },
+  // 转让团长弹窗
+  transferLeaderModal: {
+    backgroundColor: modalTokens.surface,
+    borderTopLeftRadius: modalTokens.sheetRadius,
+    borderTopRightRadius: modalTokens.sheetRadius,
+    borderTopWidth: 1,
+    borderColor: modalTokens.border,
+    height: '70%',
+    paddingBottom: 20
+  },
+  transferLeaderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: modalTokens.border
+  },
+  transferLeaderCancelText: {
+    fontSize: scaleFont(16),
+    color: '#6b7280',
+    fontWeight: '500',
+    width: 60
+  },
+  transferLeaderTitle: {
+    fontSize: scaleFont(18),
+    fontWeight: '600',
+    color: modalTokens.textPrimary,
+    flex: 1,
+    textAlign: 'center'
+  },
+  transferLeaderConfirmText: {
+    fontSize: scaleFont(16),
+    color: '#f59e0b',
+    fontWeight: '600',
+    width: 60,
+    textAlign: 'right'
+  },
+  transferLeaderConfirmTextDisabled: {
+    color: '#d1d5db'
+  },
+  transferLeaderList: {
+    paddingHorizontal: 20,
+    paddingTop: 12
+  },
+  transferLeaderListContent: {
+    paddingBottom: 20
+  },
+  transferLeaderItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: modalTokens.border
+  },
+  transferLeaderRadio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12
+  },
+  transferLeaderRadioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#f59e0b'
+  },
+  transferLeaderInfo: {
+    flex: 1,
+    marginLeft: 12
+  },
+  transferLeaderName: {
+    fontSize: scaleFont(15),
+    fontWeight: '500',
+    color: modalTokens.textPrimary,
+    marginBottom: 2
+  },
+  transferLeaderRole: {
+    fontSize: scaleFont(13),
+    color: modalTokens.textMuted
   }
 });

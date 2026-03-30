@@ -3,10 +3,12 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import { createMyTeamsData } from '../data/profileMenuMockData';
 import { modalTokens } from '../components/modalTokens';
 import { showAppAlert } from '../utils/appAlert';
 
 import { scaleFont } from '../utils/responsive';
+/*
 // 我的团队数据
 const myTeams = [{
   id: 1,
@@ -39,10 +41,11 @@ const myTeams = [{
   // 当前用户ID（队长3）
   isAdmin: false // 不是管理员
 }];
+*/
 export default function MyTeamsScreen({
   navigation
 }) {
-  const [teams, setTeams] = useState(myTeams);
+  const [teams, setTeams] = useState(() => createMyTeamsData());
   const [selectedQuestions, setSelectedQuestions] = useState([]);
   const [teamName, setTeamName] = useState('');
   const [teamDescription, setTeamDescription] = useState('');

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Alert, Share, Modal, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Alert, Share, Modal, TextInput, ActivityIndicator, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,16 +11,20 @@ import LogoutConfirmModal from '../components/LogoutConfirmModal';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import UserCacheService from '../services/UserCacheService';
+import { DEFAULT_MY_ACTIVITIES, DEFAULT_MY_GROUPS, DEFAULT_MY_TEAMS } from '../data/profileMenuMockData';
 import authApi from '../services/api/authApi';
 import userApi from '../services/api/userApi';
 import questionApi from '../services/api/questionApi';
 import { showAppAlert } from '../utils/appAlert';
+import { openOfficialRechargePage } from '../utils/externalLinks';
+import { applyMockRecharge, getWalletBalanceWithMock } from '../utils/walletMock';
 import { formatTime } from '../utils/timeFormatter';
 import { formatNumber } from '../utils/numberFormatter';
 import ServerSwitcher from '../components/ServerSwitcher';
 
 import { scaleFont } from '../utils/responsive';
 const HISTORY_PAGE_SIZE = 10;
+const MOCK_RECHARGE_RETURN_AMOUNT = 100;
 
 const getFirstNonEmptyValue = (...values) => values.find(value => value !== undefined && value !== null && value !== '');
 
@@ -35,6 +39,18 @@ const extractBrowseHistoryRows = response => {
     };
   }
 
+  const rows = payload?.rows || payload?.list || payload?.records || payload?.items || [];
+  const total = Number(payload?.total ?? payload?.count ?? payload?.totalCount ?? rows.length) || rows.length;
+
+  return {
+    rows: Array.isArray(rows) ? rows : [],
+    total
+  };
+};
+
+const extractDraftRowsAndTotal = response => {
+  const rawData = response?.data;
+  const payload = rawData?.data && typeof rawData?.data === 'object' ? rawData.data : rawData;
   const rows = payload?.rows || payload?.list || payload?.records || payload?.items || [];
   const total = Number(payload?.total ?? payload?.count ?? payload?.totalCount ?? rows.length) || rows.length;
 
@@ -102,6 +118,9 @@ export default function ProfileScreen({
     balance: 0,
     currency: 'usd'
   });
+  const pendingRechargeSimulationRef = React.useRef(false);
+  const appStateRef = React.useRef(AppState.currentState);
+  const handleRechargeReturnRef = React.useRef(async () => {});
   const getCurrencySymbol = React.useCallback(currency => {
     switch (String(currency || 'usd').toLowerCase()) {
       case 'usd':
@@ -134,6 +153,7 @@ export default function ProfileScreen({
     occupation: '',
     passwordChanged: false // 是否修改过密码（默认 false，表示未修改，会显示默认密码）
   });
+  const [draftsTotalCount, setDraftsTotalCount] = useState(0);
 
   // 加载用户信息
   const loadUserProfile = React.useCallback(async () => {
@@ -175,12 +195,22 @@ export default function ProfileScreen({
 
   // 首次加载
   const loadWalletBalance = React.useCallback(async () => {
+    const fallbackWalletBalance = await getWalletBalanceWithMock(0);
+
+    setWalletData(prev => ({
+      balance: fallbackWalletBalance.balance,
+      currency: prev?.currency || 'usd'
+    }));
+
     try {
       const response = await userApi.getWalletBalance();
       if (response.code === 0 || response.code === 200) {
+        const nextCurrency = response?.data?.currency || 'usd';
+        const walletBalance = await getWalletBalanceWithMock(response?.data?.balance);
+
         setWalletData({
-          balance: Number(response?.data?.balance) || 0,
-          currency: response?.data?.currency || 'usd'
+          balance: walletBalance.balance,
+          currency: nextCurrency
         });
       }
     } catch (error) {
@@ -188,10 +218,52 @@ export default function ProfileScreen({
     }
   }, []);
 
+  const handleMockRecharge = async amount => {
+    const numericAmount = Number(amount);
+
+    await applyMockRecharge({
+      amount: numericAmount,
+      currency: walletData.currency
+    });
+    setWalletData(prev => ({
+      ...prev,
+      balance: (Number(prev.balance) || 0) + (Number.isFinite(numericAmount) ? numericAmount : 0)
+    }));
+    await loadWalletBalance();
+    showAppAlert(
+      t('profile.rechargeSuccess'),
+      `${t('profile.rechargeSuccess')} $${numericAmount.toFixed(2)} (${t('profile.mockRechargeTag')})`
+    );
+  };
+  handleRechargeReturnRef.current = async () => {
+    await handleMockRecharge(MOCK_RECHARGE_RETURN_AMOUNT);
+  };
+
   useEffect(() => {
     loadUserProfile();
     loadWalletBalance();
   }, [loadUserProfile, loadWalletBalance]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      const isReturningToForeground =
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === 'active';
+
+      if (isReturningToForeground && pendingRechargeSimulationRef.current) {
+        pendingRechargeSimulationRef.current = false;
+        handleRechargeReturnRef.current().catch(error => {
+          console.error('Failed to simulate recharge after returning to app:', error);
+        });
+      }
+
+      appStateRef.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   // 每次页面获得焦点时重新加载（从设置页面返回时会触发）
   useFocusEffect(React.useCallback(() => {
@@ -219,22 +291,22 @@ export default function ProfileScreen({
   const menuItems = React.useMemo(() => [{
     icon: 'document-text',
     label: t('profile.myDrafts'),
-    value: '12',
+    value: String(draftsTotalCount),
     color: '#22c55e'
   }, {
     icon: 'people',
     label: t('profile.myGroups'),
-    value: '8',
+    value: String(DEFAULT_MY_GROUPS.length),
     color: '#a855f7'
   }, {
     icon: 'people-circle',
     label: t('profile.myTeams'),
-    value: '3',
+    value: String(DEFAULT_MY_TEAMS.length),
     color: '#f59e0b'
   }, {
     icon: 'calendar',
     label: t('profile.myActivities'),
-    value: '15',
+    value: String(DEFAULT_MY_ACTIVITIES.length),
     color: '#ef4444'
   }, {
     icon: 'eye',
@@ -246,7 +318,7 @@ export default function ProfileScreen({
     label: t('profile.verification'),
     value: '',
     color: '#3b82f6'
-  }], [t]);
+  }], [draftsTotalCount, t]);
   const myQuestions = React.useMemo(() => [{
     id: 1,
     title: '如何在三个月内从零基础学会Python编程？',
@@ -377,9 +449,10 @@ export default function ProfileScreen({
       });
       if (response.code === 200 || response.code === 0) {
         const {
-          rows = [],
-          total = 0
-        } = response.data || {};
+          rows,
+          total
+        } = extractDraftRowsAndTotal(response);
+        setDraftsTotalCount(total);
         if (isLoadMore) {
           setDraftsList(prev => [...prev, ...rows]);
           setDraftsPageNum(pageNum);
@@ -398,6 +471,20 @@ export default function ProfileScreen({
       setDraftsLoading(false);
     }
   };
+  const loadDraftsCount = React.useCallback(async () => {
+    try {
+      const response = await questionApi.getDraftsList({
+        pageNum: 1,
+        pageSize: 1
+      });
+      if (response.code === 200 || response.code === 0) {
+        const { total } = extractDraftRowsAndTotal(response);
+        setDraftsTotalCount(total);
+      }
+    } catch (error) {
+      console.error('鑾峰彇鑽夌鏁伴噺澶辫触:', error);
+    }
+  }, []);
   const [activeTab, setActiveTab] = useState('');
 
   // 退出登录确认弹窗状态
@@ -471,10 +558,18 @@ export default function ProfileScreen({
   }, [activeTab, historyLoaded, historyLoading, loadBrowseHistoryList, t]);
 
   React.useEffect(() => {
+    loadDraftsCount();
+  }, [loadDraftsCount]);
+
+  React.useEffect(() => {
     if (showHistoryModal && !historyLoaded && !historyLoading) {
       loadBrowseHistoryList();
     }
   }, [historyLoaded, historyLoading, loadBrowseHistoryList, showHistoryModal]);
+
+  useFocusEffect(React.useCallback(() => {
+    loadDraftsCount();
+  }, [loadDraftsCount]));
 
   // 认证状态: 'none' | 'personal' | 'enterprise' | 'government'
   const [verificationType, setVerificationType] = useState('none'); // 示例：未认证（显示"去认证"按钮）
@@ -657,23 +752,28 @@ export default function ProfileScreen({
       id: question.id
     });
   };
-  const handleWalletAction = action => {
+  const handleWalletAction = async action => {
     switch (action) {
-      case 'recharge':
-        showAppAlert(t('profile.recharge'), t('profile.selectAmount'), [{
-          text: '$10',
-          onPress: () => showAppAlert(t('profile.rechargeSuccess'), t('profile.rechargeSuccess') + ' $10')
-        }, {
-          text: '$50',
-          onPress: () => showAppAlert(t('profile.rechargeSuccess'), t('profile.rechargeSuccess') + ' $50')
-        }, {
-          text: '$100',
-          onPress: () => showAppAlert(t('profile.rechargeSuccess'), t('profile.rechargeSuccess') + ' $100')
-        }, {
-          text: t('common.cancel'),
-          style: 'cancel'
-        }]);
+      case 'recharge': {
+        const result = await openOfficialRechargePage({
+          userId: userProfile.userId,
+          username: userProfile.username
+        });
+
+        if (result.ok) {
+          pendingRechargeSimulationRef.current = true;
+        } else {
+          const reasonKey = `profile.${result.reason}`;
+          const reasonMessage = t(reasonKey);
+
+          showAppAlert(
+            t('profile.rechargeUnavailableTitle'),
+            reasonMessage === reasonKey ? t('profile.rechargeUnavailableMessage') : reasonMessage
+          );
+        }
+
         break;
+      }
       case 'withdraw':
         showAppAlert(t('profile.withdraw'), `${t('profile.withdrawableAmount')}：${formattedWalletBalance}`, [{
           text: t('profile.withdrawAll'),

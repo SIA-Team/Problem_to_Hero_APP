@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import IdentitySelector from './IdentitySelector';
+import ModalSafeAreaView from './ModalSafeAreaView';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 
 const CommentModal = ({ 
@@ -32,7 +32,7 @@ const CommentModal = ({
       statusBarTranslucent
       navigationBarTranslucent
     >
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <ModalSafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
             <Ionicons name="close" size={24} color="#1f2937" />
@@ -87,7 +87,7 @@ const CommentModal = ({
             <Text style={styles.charCount}>{text.length}/500</Text>
           </View>
         </View>
-      </SafeAreaView>
+      </ModalSafeAreaView>
     </Modal>
   );
 };

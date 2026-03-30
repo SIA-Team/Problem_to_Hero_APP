@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Modal, Image } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
+import ModalSafeAreaView from './ModalSafeAreaView';
 import { showToast } from '../utils/toast';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 
@@ -66,7 +66,7 @@ export default function WriteAnswerModal({
         statusBarTranslucent
         navigationBarTranslucent
       >
-        <SafeAreaView style={styles.answerModal} edges={['top']}>
+        <ModalSafeAreaView style={styles.answerModal} edges={['top']}>
           <View style={styles.answerModalHeader}>
             <TouchableOpacity onPress={onClose} style={styles.answerCloseBtn}>
               <Ionicons name="close" size={26} color="#333" />
@@ -163,7 +163,7 @@ export default function WriteAnswerModal({
               {text.length}/{wordLimit}
             </Text>
           </View>
-        </SafeAreaView>
+        </ModalSafeAreaView>
       </Modal>
 
       <ImagePickerSheet

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import ModalSafeAreaView from '../components/ModalSafeAreaView';
 import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
 import { showAppAlert } from '../utils/appAlert';
@@ -1125,7 +1126,7 @@ export default function MessagesScreen({
 
       {/* 发送私信弹窗 */}
       <Modal visible={showPrivateModal} animationType="slide">
-        <SafeAreaView style={styles.privateModal}>
+        <ModalSafeAreaView style={styles.privateModal} edges={['top']}>
           <View style={styles.privateModalHeader}>
             <TouchableOpacity onPress={resetPrivateComposer}>
               <Ionicons name="close" size={26} color="#333" />
@@ -1197,7 +1198,7 @@ export default function MessagesScreen({
             <Text style={styles.messageInputLabel}>{t('screens.messagesScreen.privateModal.messageContent')}</Text>
             <TextInput style={styles.messageTextInput} placeholder={t('screens.messagesScreen.privateModal.messagePlaceholder')} placeholderTextColor="#bbb" value={messageContent} onChangeText={setMessageContent} multiline textAlignVertical="top" />
           </View>
-        </SafeAreaView>
+        </ModalSafeAreaView>
       </Modal>
 
       {/* 专家投票弹窗 */}
