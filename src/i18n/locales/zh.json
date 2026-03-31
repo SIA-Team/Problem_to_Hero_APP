@@ -421,6 +421,7 @@
     "contentTabs": {
       "questions": "提问",
       "answers": "回答",
+      "likes": "点赞",
       "favorites": "收藏",
       "history": "浏览历史"
     },
@@ -647,6 +648,31 @@
       "transfer": {
         "title": "选择新团长",
         "selectMember": "请选择一位成员作为新团长"
+      }
+    },
+    "inviteTeamMember": {
+      "title": "邀请团队成员",
+      "tabs": {
+        "platform": "本站用户",
+        "twitter": "推特",
+        "facebook": "Facebook"
+      },
+      "search": {
+        "placeholder": "搜索用户..."
+      },
+      "selectedCount": "已选择 {count} 位用户",
+      "userMeta": {
+        "followers": "关注者",
+        "members": "成员"
+      },
+      "actions": {
+        "cancel": "取消",
+        "sendInvite": "发送邀请"
+      },
+      "alerts": {
+        "successTitle": "邀请成功",
+        "successMessage": "已向 {count} 位用户发送邀请",
+        "confirm": "确定"
       }
     },
     "supplementDetail": {

@@ -6,7 +6,6 @@ import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import Avatar from '../components/Avatar';
 import ShareModal from '../components/ShareModal';
-import TranslateButton from '../components/TranslateButton';
 import WriteCommentModal from '../components/WriteCommentModal';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/useTranslation';
@@ -160,10 +159,6 @@ export default function HomeScreen({ navigation }) {
       handleOptimizedTabChange(activeTab);
     }
   }, [activeTab, handleOptimizedTabChange]);
-  
-  
-  // 翻译状态
-  const [translatedContent, setTranslatedContent] = useState({});
   
   // 问题标题展开/折叠状态
   const [expandedTitles, setExpandedTitles] = useState({});
@@ -796,7 +791,7 @@ export default function HomeScreen({ navigation }) {
                           {'  '}
                         </>
                       ) : null}
-                      {translatedContent[item.id]?.title || item.title}
+                      {item.title}
                       {item.status === 2 && (
                         <Text style={styles.solvedTagInline}> {t('home.solved')}</Text>
                       )}
@@ -825,41 +820,26 @@ export default function HomeScreen({ navigation }) {
                             {'  '}
                           </>
                         ) : null}
-                        {translatedContent[item.id]?.title || item.title}
+                        {item.title}
                         {item.status === 2 && (
                           <Text style={styles.solvedTagInline}> {t('home.solved')}</Text>
                         )}
                       </Text>
                     </View>
                     
-                    {/* 翻译按钮和全文按钮在同一行 */}
-                    <View style={styles.translateFullTextRow}>
-                      <TranslateButton 
-                        text={item.title}
-                        compact={false}
-                        onTranslated={(translatedText, isTranslated) => {
-                          setTranslatedContent(prev => ({
-                            ...prev,
-                            [item.id]: {
-                              ...prev[item.id],
-                              title: isTranslated ? translatedText : null
-                            }
-                          }));
+                    {/* 全文按钮 */}
+                    {needsExpand[item.id] && (
+                      <TouchableOpacity 
+                        style={styles.fullTextBtnBottom}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          navigation.navigate('QuestionDetail', { id: item.id });
                         }}
-                      />
-                      {needsExpand[item.id] && (
-                        <TouchableOpacity 
-                          style={styles.fullTextBtnRight}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            navigation.navigate('QuestionDetail', { id: item.id });
-                          }}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.fullTextBtnText}>...{t('home.fullText')}</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.fullTextBtnText}>...{t('home.fullText')}</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
 
                   {/* 付费查看按钮 */}
@@ -1441,15 +1421,6 @@ const styles = StyleSheet.create({
   fullTextInline: { 
     fontSize: scaleFont(17),
     color: '#1a1a1a',
-  },
-  translateFullTextRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 4,
-  },
-  fullTextBtnRight: {
-    paddingLeft: 8,
   },
   fullTextBtnBottom: {
     alignSelf: 'flex-start',

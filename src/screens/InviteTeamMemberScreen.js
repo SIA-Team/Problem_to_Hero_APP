@@ -54,27 +54,12 @@ export default function InviteTeamMemberScreen({
     verified: false,
     followers: '5k'
   }];
-  const facebookUsers = [{
-    id: 21,
-    name: 'Python学习小组',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=fb1',
-    verified: false,
-    members: '2.5k'
-  }, {
-    id: 22,
-    name: '编程爱好者',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=fb2',
-    verified: true,
-    members: '8k'
-  }];
   const getCurrentUserList = () => {
     switch (inviteTab) {
       case 'platform':
         return platformUsers;
       case 'twitter':
         return twitterUsers;
-      case 'facebook':
-        return facebookUsers;
       default:
         return [];
     }
@@ -136,16 +121,6 @@ export default function InviteTeamMemberScreen({
             {t('screens.inviteTeamMember.tabs.twitter')}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.tab, inviteTab === 'facebook' && styles.tabActive]} onPress={() => {
-        setInviteTab('facebook');
-        setSelectedUsers([]);
-        setSearchText('');
-      }}>
-          <Ionicons name="logo-facebook" size={18} color={inviteTab === 'facebook' ? '#f59e0b' : '#9ca3af'} />
-          <Text style={[styles.tabText, inviteTab === 'facebook' && styles.tabTextActive]}>
-            {t('screens.inviteTeamMember.tabs.facebook')}
-          </Text>
-        </TouchableOpacity>
       </View>
 
       {/* 搜索框 */}
@@ -178,7 +153,6 @@ export default function InviteTeamMemberScreen({
                   <Text style={styles.userMeta}>
                     {inviteTab === 'platform' && user.title}
                     {inviteTab === 'twitter' && `${user.followers} ${t('screens.inviteTeamMember.userMeta.followers')}`}
-                    {inviteTab === 'facebook' && `${user.members} ${t('screens.inviteTeamMember.userMeta.members')}`}
                   </Text>
                 </View>
               </View>

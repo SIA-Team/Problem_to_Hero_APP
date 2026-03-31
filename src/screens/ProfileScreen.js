@@ -102,15 +102,15 @@ export default function ProfileScreen({
   const getLocationDisplay = (location) => {
     if (!location) return '';
     
-    // 按空格分割
+    // 按空格分�?
     const parts = location.split(' ').filter(Boolean);
     
-    // 如果有多级，只返回最后一级
+    // 如果有多级，只返回最后一�?
     if (parts.length >= 2) {
       return parts[parts.length - 1];
     }
     
-    // 如果只有一级，返回原值
+    // 如果只有一级，返回原�?
     return location;
   };
   
@@ -129,7 +129,7 @@ export default function ProfileScreen({
       case 'rmb':
         return '¥';
       case 'eur':
-        return '€';
+        return 'EUR ';
       case 'gbp':
         return '£';
       default:
@@ -142,7 +142,7 @@ export default function ProfileScreen({
     return `${getCurrencySymbol(walletData.currency)}${safeAmount.toFixed(2)}`;
   }, [walletData.balance, walletData.currency, getCurrencySymbol]);
 
-  // 用户信息状态
+  // 用户信息状�?
   const [userProfile, setUserProfile] = useState({
     nickname: '',
     userId: '',
@@ -151,7 +151,7 @@ export default function ProfileScreen({
     bio: '',
     location: '',
     occupation: '',
-    passwordChanged: false // 是否修改过密码（默认 false，表示未修改，会显示默认密码）
+    passwordChanged: false // 是否修改过密码（默认 false，表示未修改，会显示默认密码�?
   });
   const [draftsTotalCount, setDraftsTotalCount] = useState(0);
 
@@ -163,7 +163,7 @@ export default function ProfileScreen({
     await UserCacheService.loadUserProfileWithCache(
     // 缓存加载完成回调（立即显示）
     cachedProfile => {
-      console.log('ProfileScreen: 从缓存加载用户信息', cachedProfile);
+      console.log('ProfileScreen: loaded cached profile', cachedProfile);
       setUserProfile(prev => ({
         ...prev,
         nickname: cachedProfile.nickName || '',
@@ -176,7 +176,7 @@ export default function ProfileScreen({
         passwordChanged: cachedProfile.passwordChanged === true || hasChangedPassword
       }));
     },
-    // 最新数据加载完成回调（静默更新）
+    // 最新数据加载完成回调（静默更新�?
     freshProfile => {
       console.log('ProfileScreen: 从服务器更新用户信息', freshProfile);
       setUserProfile(prev => ({
@@ -267,7 +267,7 @@ export default function ProfileScreen({
 
   // 每次页面获得焦点时重新加载（从设置页面返回时会触发）
   useFocusEffect(React.useCallback(() => {
-    console.log('🔄 ProfileScreen 获得焦点，重新加载用户信息');
+    console.log('ProfileScreen: screen focused, reloading user profile');
     loadUserProfile();
     loadWalletBalance();
   }, [loadUserProfile, loadWalletBalance]));
@@ -321,7 +321,7 @@ export default function ProfileScreen({
   }], [draftsTotalCount, t]);
   const myQuestions = React.useMemo(() => [{
     id: 1,
-    title: '如何在三个月内从零基础学会Python编程？',
+    title: 'How to learn Python in three months?',
     type: 'reward',
     reward: 50,
     views: '1.2k',
@@ -345,7 +345,7 @@ export default function ProfileScreen({
     time: t('profile.time.yesterday')
   }, {
     id: 3,
-    title: '35岁程序员如何规划职业发展？',
+    title: 'How should a 35-year-old programmer plan career growth?',
     type: 'reward',
     reward: 100,
     views: '5.6k',
@@ -359,7 +359,7 @@ export default function ProfileScreen({
   const myAnswers = React.useMemo(() => [{
     id: 1,
     questionTitle: '如何高效学习一门新技能？',
-    content: '作为一个自学了多门技能的人，我来分享一下我的经验...',
+    content: '作为一个自学了多门技能的人，我来分享一下我的经�?..',
     likes: 256,
     comments: 23,
     shares: 45,
@@ -380,8 +380,8 @@ export default function ProfileScreen({
     time: t('profile.time.hoursAgo').replace('{hours}', '3')
   }, {
     id: 3,
-    questionTitle: '35岁转行做程序员还来得及吗？',
-    content: '完全来得及！我就是35岁转行的，现在已经工作2年了...',
+    questionTitle: 'Is it too late to switch into programming at 35?',
+    content: '完全来得及！我就�?5岁转行的，现在已经工�?年了...',
     likes: 512,
     comments: 45,
     shares: 89,
@@ -392,13 +392,13 @@ export default function ProfileScreen({
   }, {
     id: 4,
     questionTitle: '如何克服拖延症？',
-    content: '拖延症的根本原因是对任务的恐惧，可以尝试番茄工作法...',
+    content: '拖延症的根本原因是对任务的恐惧，可以尝试番茄工作�?..',
     likes: 98,
     comments: 8,
     adopted: false,
     time: t('profile.time.daysAgo').replace('{days}', '2')
   }], [t]);
-  const contentTabs = React.useMemo(() => [t('profile.contentTabs.questions'), t('profile.contentTabs.answers'), t('profile.contentTabs.favorites'), t('profile.contentTabs.history')], [t]);
+  const contentTabs = React.useMemo(() => [t('profile.contentTabs.questions'), t('profile.contentTabs.answers'), t('profile.contentTabs.likes'), t('profile.contentTabs.favorites'), t('profile.contentTabs.history')], [t]);
 
   // 收藏数据
   const favoritesData = React.useMemo(() => ({
@@ -406,36 +406,88 @@ export default function ProfileScreen({
       id: 1,
       title: '如何高效学习一门新技能？',
       author: '学习达人',
-      time: t('profile.savedAt') + '2' + t('profile.time.daysAgo').replace('{days}', '')
+      time: '2天前'
     }, {
       id: 2,
       title: 'Python数据分析入门指南',
-      author: '数据分析师',
-      time: t('profile.savedAt') + '3' + t('profile.time.daysAgo').replace('{days}', '')
+      author: 'Data Analyst',
+      time: '3天前'
     }],
     answers: [{
       id: 1,
       title: '关于职场新人如何快速成长的回答',
       author: '职场导师',
-      time: t('profile.savedAt') + '1周前'
+      time: '1周前'
     }, {
       id: 2,
       title: '关于如何克服拖延症的回答',
-      author: '心理咨询师',
-      time: t('profile.savedAt') + '2周前'
+      author: 'Counselor',
+      time: '2周前'
     }],
     comments: [{
       id: 1,
       title: '"这个方法真的很有用！"',
       author: '小明',
-      time: t('profile.savedAt') + '3' + t('profile.time.daysAgo').replace('{days}', '')
+      time: '3天前'
     }, {
       id: 2,
       title: '"感谢分享，学到了很多"',
       author: '小红',
-      time: t('profile.savedAt') + '5' + t('profile.time.daysAgo').replace('{days}', '')
+      time: '5天前'
     }]
-  }), [t]);
+  }), []);
+
+  // 点赞数据（包含普通点赞和超级赞）
+  const likesData = React.useMemo(() => ([
+    {
+      id: 1,
+      type: 'question',
+      title: '如何高效学习一门新技能？',
+      author: '学习达人',
+      time: '2 hours ago',
+      isSuperLike: true,
+      likes: 256
+    },
+    {
+      id: 2,
+      type: 'answer',
+      questionTitle: 'Python数据分析入门需要学什么？',
+      content: '首先需要掌握Python基础语法，然后学习NumPy和Pandas...',
+      author: 'Data Analyst',
+      time: '5 hours ago',
+      isSuperLike: false,
+      likes: 189
+    },
+    {
+      id: 3,
+      type: 'supplement',
+      questionTitle: 'Is it too late to switch into programming at 35?',
+      content: '补充一下，我当时转行时还参加了培训�?..',
+      author: '职场导师',
+      time: '1天前',
+      isSuperLike: true,
+      likes: 128
+    },
+    {
+      id: 4,
+      type: 'comment',
+      content: '这个方法真的很有用！感谢分享',
+      author: '小明',
+      time: '2天前',
+      isSuperLike: false,
+      likes: 45
+    },
+    {
+      id: 5,
+      type: 'supplementAnswer',
+      questionTitle: '如何克服拖延症？',
+      content: '补充回答：除了番茄工作法，还可以尝试时间块管�?..',
+      author: 'Counselor',
+      time: '3天前',
+      isSuperLike: true,
+      likes: 234
+    }
+  ]), []);
 
   // 获取草稿列表
   const loadDraftsList = async (isLoadMore = false) => {
@@ -461,7 +513,7 @@ export default function ProfileScreen({
           setDraftsPageNum(1);
         }
 
-        // 检查是否还有更多数据
+        // 检查是否还有更多数�?
         const currentTotal = isLoadMore ? draftsList.length + rows.length : rows.length;
         setDraftsHasMore(currentTotal < total);
       }
@@ -487,7 +539,7 @@ export default function ProfileScreen({
   }, []);
   const [activeTab, setActiveTab] = useState('');
 
-  // 退出登录确认弹窗状态
+  // 退出登录确认弹窗状�?
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showFavoritesModal, setShowFavoritesModal] = useState(false);
@@ -501,7 +553,7 @@ export default function ProfileScreen({
     }
   }, [t, activeTab]);
 
-  // 草稿数据状态
+  // 草稿数据状�?
   const [draftsList, setDraftsList] = useState([]);
   const [draftsLoading, setDraftsLoading] = useState(false);
   const [draftsPageNum, setDraftsPageNum] = useState(1);
@@ -512,6 +564,7 @@ export default function ProfileScreen({
   const [historyHasMore, setHistoryHasMore] = useState(true);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [favoritesTab, setFavoritesTab] = useState('questions');
+  const [likesTab, setLikesTab] = useState('questions');
 
   const loadBrowseHistoryList = React.useCallback(async (isLoadMore = false) => {
     if (historyLoading || (isLoadMore && !historyHasMore)) return;
@@ -571,10 +624,10 @@ export default function ProfileScreen({
     loadDraftsCount();
   }, [loadDraftsCount]));
 
-  // 认证状态: 'none' | 'personal' | 'enterprise' | 'government'
-  const [verificationType, setVerificationType] = useState('none'); // 示例：未认证（显示"去认证"按钮）
+  // 认证状�? 'none' | 'personal' | 'enterprise' | 'government'
+  const [verificationType, setVerificationType] = useState('none'); // 示例：未认证（显�?去认�?按钮�?
 
-  // 认证弹窗状态
+  // 认证弹窗状�?
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [verificationStep, setVerificationStep] = useState(0); // 0: 选择类型, 1: 填写信息, 2: 确认信息
   const [selectedVerificationType, setSelectedVerificationType] = useState(''); // 'personal' | 'enterprise' | 'government'
@@ -598,7 +651,7 @@ export default function ProfileScreen({
       legalName: '',
       legalIdNumber: '',
       contactPerson: '',
-      // 企业联系人（必填）
+      // 企业联系人（必填�?
       contactPhone: '',
       // 联系电话
       contactEmail: '' // 联系邮箱
@@ -624,7 +677,7 @@ export default function ProfileScreen({
     }
   });
 
-  // 获取认证图标和文字信息
+  // 获取认证图标和文字信�?
   const getVerificationInfo = () => {
     switch (verificationType) {
       case 'personal':
@@ -634,7 +687,7 @@ export default function ProfileScreen({
           text: t('profile.personalVerification'),
           verified: true
         };
-      // 黄色V标 - 个人认证
+      // 黄色V�?- 个人认证
       case 'enterprise':
         return {
           color: '#3b82f6',
@@ -642,7 +695,7 @@ export default function ProfileScreen({
           text: t('profile.enterpriseVerification'),
           verified: true
         };
-      // 蓝色V标 - 企业认证
+      // 蓝色V�?- 企业认证
       case 'government':
         return {
           color: '#ef4444',
@@ -650,7 +703,7 @@ export default function ProfileScreen({
           text: t('profile.governmentVerification'),
           verified: true
         };
-      // 红色V标 - 政府认证
+      // 红色V�?- 政府认证
       case 'none':
       default:
         return {
@@ -659,7 +712,7 @@ export default function ProfileScreen({
           text: t('profile.notVerified'),
           verified: false
         };
-      // 未认证 - 灰色X标
+      // 未认�?- 灰色X�?
     }
   };
   const verificationInfo = getVerificationInfo();
@@ -733,7 +786,7 @@ export default function ProfileScreen({
         });
         break;
       case t('profile.viewPublicProfile'):
-        // 导航到公开主页（使用当前用户ID）
+        // 导航到公开主页（使用当前用户ID�?
         navigation.navigate('PublicProfile', {
           userId: String(userProfile.userId || '')
         });
@@ -775,19 +828,19 @@ export default function ProfileScreen({
         break;
       }
       case 'withdraw':
-        showAppAlert(t('profile.withdraw'), `${t('profile.withdrawableAmount')}：${formattedWalletBalance}`, [{
+        showAppAlert(t('profile.withdraw'), t('profile.withdrawableAmount') + ': ' + formattedWalletBalance, [{
           text: t('profile.withdrawAll'),
-          onPress: () => showAppAlert(t('profile.withdrawSuccess'), t('profile.withdrawSuccess') + '，' + t('profile.withdrawEstimate'))
+          onPress: () => showAppAlert(t('profile.withdrawSuccess'), t('profile.withdrawSuccess') + ': ' + t('profile.withdrawEstimate'))
         }, {
           text: t('common.cancel'),
           style: 'cancel'
         }]);
         break;
       case 'expense':
-        showAppAlert(t('profile.expenseDetails'), t('profile.monthlyExpense') + '$150.00\n\n- Python学习问题：$50\n- 职业规划问题：$100');
+        showAppAlert(t('profile.expenseDetails'), t('profile.monthlyExpense') + '$150.00\n\n- Python学习问题�?50\n- 职业规划问题�?100');
         break;
       case 'income':
-        showAppAlert(t('profile.incomeDetails'), t('profile.monthlyIncome') + '$320.00\n\n- 被采纳回答 x 8：$280\n- 优质回答奖励：$40');
+        showAppAlert(t('profile.incomeDetails'), t('profile.monthlyIncome') + '$320.00\n\n- 被采纳回�?x 8�?280\n- 优质回答奖励�?40');
         break;
       case 'pending':
         showAppAlert(t('profile.pendingAdoption'), t('profile.pendingAnswers').replace('{count}', '12'));
@@ -814,25 +867,25 @@ export default function ProfileScreen({
   };
   const handleDraftPress = async item => {
     try {
-      console.log('═══════════════════════════════════════════════════════════');
+      console.log('----------------------------------------');
       console.log('📝 点击草稿，ID:', item.id);
-      console.log('═══════════════════════════════════════════════════════════');
+      console.log('----------------------------------------');
 
       // 显示加载提示
       setShowDraftsModal(false);
 
       // 调用接口获取草稿完整数据
       const response = await questionApi.getDraftDetail(item.id);
-      console.log('═══════════════════════════════════════════════════════════');
+      console.log('----------------------------------------');
       console.log('📋 草稿详情接口响应');
-      console.log('═══════════════════════════════════════════════════════════');
+      console.log('----------------------------------------');
       console.log('完整响应:', JSON.stringify(response, null, 2));
-      console.log('═══════════════════════════════════════════════════════════');
+      console.log('----------------------------------------');
       if (response && response.code === 200 && response.data) {
         const draftData = response.data;
-        console.log('═══════════════════════════════════════════════════════════');
+        console.log('----------------------------------------');
         console.log('📦 草稿数据详情');
-        console.log('═══════════════════════════════════════════════════════════');
+        console.log('----------------------------------------');
         console.log('ID:', draftData.id);
         console.log('标题:', draftData.title);
         console.log('描述:', draftData.description);
@@ -841,7 +894,7 @@ export default function ProfileScreen({
         console.log('分类名称:', draftData.categoryName);
         console.log('图片URLs:', draftData.imageUrls);
         console.log('图片URLs类型:', typeof draftData.imageUrls);
-        console.log('图片URLs是否为数组:', Array.isArray(draftData.imageUrls));
+        console.log('图片URLs是否为数�?', Array.isArray(draftData.imageUrls));
         console.log('图片URLs长度:', draftData.imageUrls?.length);
         if (Array.isArray(draftData.imageUrls)) {
           draftData.imageUrls.forEach((url, index) => {
@@ -850,18 +903,18 @@ export default function ProfileScreen({
         }
         console.log('话题:', draftData.topics);
         console.log('专家:', draftData.experts);
-        console.log('═══════════════════════════════════════════════════════════');
+        console.log('----------------------------------------');
 
         // 跳转到发布页面，传递完整的草稿数据
         navigation.navigate('Publish', {
           draftData
         });
       } else {
-        console.error('❌ 获取草稿失败:', response);
+        console.error('�?获取草稿失败:', response);
         showAppAlert('获取草稿失败', response?.msg || '无法加载草稿数据');
       }
     } catch (error) {
-      console.error('❌ 获取草稿详情失败:', error);
+      console.error('�?获取草稿详情失败:', error);
       showAppAlert('获取草稿失败', '网络错误，请稍后重试');
     }
   };
@@ -881,21 +934,21 @@ export default function ProfileScreen({
   const handleConfirmLogout = async () => {
     setIsLoggingOut(true);
     try {
-      // 调用退出登录 API
+      // 调用退出登�?API
       const response = await authApi.logout();
       if (response.code === 200) {
-        console.log('✅ 退出登录成功');
+        console.log('Logout succeeded');
         // 调用父组件的 onLogout 回调
         if (onLogout) {
           onLogout();
         }
       } else {
-        console.error('❌ 退出登录失败:', response.msg);
-        showAppAlert('退出失败', response.msg || '退出登录失败，请重试');
+        console.error('�?退出登录失�?', response.msg);
+        showAppAlert('Logout failed', response.msg || 'Logout failed, please try again');
       }
     } catch (error) {
-      console.error('❌ 退出登录异常:', error);
-      showAppAlert('退出失败', '网络错误，请检查连接后重试');
+      console.error('�?退出登录异�?', error);
+      showAppAlert('Logout failed', 'Network error, please check connection and try again');
     } finally {
       setIsLoggingOut(false);
       setShowLogoutModal(false);
@@ -909,6 +962,19 @@ export default function ProfileScreen({
         return favoritesData.answers;
       case 'comments':
         return favoritesData.comments;
+      default:
+        return [];
+    }
+  };
+
+  const getLikesData = () => {
+    switch (likesTab) {
+      case 'questions':
+        return likesData.filter(item => item.type === 'question' || item.type === 'supplement');
+      case 'answers':
+        return likesData.filter(item => item.type === 'answer' || item.type === 'supplementAnswer');
+      case 'comments':
+        return likesData.filter(item => item.type === 'comment');
       default:
         return [];
     }
@@ -935,7 +1001,7 @@ export default function ProfileScreen({
         return;
       }
       // 专业资质认证改为可选，不再验证
-      // 如果用户上传了资质，检查是否所有资质都填写了名称
+      // 如果用户上传了资质，检查是否所有资质都填写了名�?
       if (data.qualifications && data.qualifications.length > 0) {
         const unnamedQualification = data.qualifications.find(q => !q.name || q.name.trim() === '');
         if (unnamedQualification) {
@@ -956,12 +1022,12 @@ export default function ProfileScreen({
         showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.contactPersonRequired'));
         return;
       }
-      // 验证联系方式：邮箱或电话至少填写一个
+      // 验证联系方式：邮箱或电话至少填写一�?
       if ((!data.contactPhone || data.contactPhone.trim() === '') && (!data.contactEmail || data.contactEmail.trim() === '')) {
         showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.contactMethodRequired'));
         return;
       }
-      // 验证电话格式（如果填写了）
+      // 验证电话格式（如果填写了�?
       if (data.contactPhone && data.contactPhone.trim() !== '') {
         const phoneRegex = /^1[3-9]\d{9}$/;
         if (!phoneRegex.test(data.contactPhone.trim())) {
@@ -969,7 +1035,7 @@ export default function ProfileScreen({
           return;
         }
       }
-      // 验证邮箱格式（如果填写了）
+      // 验证邮箱格式（如果填写了�?
       if (data.contactEmail && data.contactEmail.trim() !== '') {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(data.contactEmail.trim())) {
@@ -986,12 +1052,12 @@ export default function ProfileScreen({
         showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.authorizerIdRequired'));
         return;
       }
-      // 验证联系方式：邮箱或电话至少填写一个
+      // 验证联系方式：邮箱或电话至少填写一�?
       if ((!data.contactPhone || data.contactPhone.trim() === '') && (!data.contactEmail || data.contactEmail.trim() === '')) {
         showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.contactMethodRequired'));
         return;
       }
-      // 验证电话格式（如果填写了）
+      // 验证电话格式（如果填写了�?
       if (data.contactPhone && data.contactPhone.trim() !== '') {
         const phoneRegex = /^1[3-9]\d{9}$/;
         if (!phoneRegex.test(data.contactPhone.trim())) {
@@ -999,7 +1065,7 @@ export default function ProfileScreen({
           return;
         }
       }
-      // 验证邮箱格式（如果填写了）
+      // 验证邮箱格式（如果填写了�?
       if (data.contactEmail && data.contactEmail.trim() !== '') {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(data.contactEmail.trim())) {
@@ -1062,7 +1128,7 @@ export default function ProfileScreen({
             status
           } = await ImagePicker.requestMediaLibraryPermissionsAsync();
           if (status !== 'granted') {
-            showAppAlert(t('common.confirm'), '需要相册访问权限才能上传图片');
+            showAppAlert(t('common.confirm'), 'Media library permission is required to upload images.');
             return;
           }
 
@@ -1088,7 +1154,7 @@ export default function ProfileScreen({
             });
           }
         } catch (error) {
-          showAppAlert(t('common.confirm'), '上传图片失败：' + error.message);
+          showAppAlert(t('common.confirm'), 'Image upload failed: ' + error.message);
         }
       }
     }, {
@@ -1100,7 +1166,7 @@ export default function ProfileScreen({
             status
           } = await ImagePicker.requestCameraPermissionsAsync();
           if (status !== 'granted') {
-            showAppAlert(t('common.confirm'), '需要相机访问权限才能拍照');
+            showAppAlert(t('common.confirm'), 'Camera permission is required to take a photo.');
             return;
           }
 
@@ -1125,7 +1191,7 @@ export default function ProfileScreen({
             });
           }
         } catch (error) {
-          showAppAlert(t('common.confirm'), '拍照失败：' + error.message);
+          showAppAlert(t('common.confirm'), 'Taking photo failed: ' + error.message);
         }
       }
     }, {
@@ -1225,7 +1291,7 @@ export default function ProfileScreen({
                       {verificationInfo.text}
                     </Text>
                   </TouchableOpacity> :
-              // 未认证：显示"去认证"按钮
+              // 未认证：显示"去认�?按钮
               <TouchableOpacity style={styles.verifyButton} onPress={handleVerificationPress} activeOpacity={0.7}>
                     <Text style={styles.verifyButtonText}>{t('profile.goVerify')}</Text>
                   </TouchableOpacity>}
@@ -1315,7 +1381,7 @@ export default function ProfileScreen({
           </View>
         </View>
 
-        {/* 超级赞余额卡片 - 已隐藏 */}
+        {/* 超级赞余额卡�?- 已隐�?*/}
         {/* <View style={styles.superLikeCard}>
           <View style={styles.superLikeHeader}>
             <View style={styles.superLikeTitle}>
@@ -1348,7 +1414,7 @@ export default function ProfileScreen({
             </TouchableOpacity>)}
         </View>
 
-        {/* 服务器切换 */}
+        {/* 服务器切�?*/}
         <ServerSwitcher />
 
         {/* 我的内容 */}
@@ -1366,7 +1432,7 @@ export default function ProfileScreen({
         }}>
             {myQuestions.map(q => <TouchableOpacity key={q.id} style={styles.questionItem} onPress={() => handleQuestionPress(q)}>
                 <View style={styles.questionHeader}>
-                  <Text style={styles.questionTime}>{q.time}</Text>
+                  <Text style={styles.questionTime}>{formatTime(q.time)}</Text>
                 </View>
                 <Text style={styles.questionTitle}>
                   {q.type === 'reward' && <Text style={styles.rewardTagInline}>
@@ -1407,7 +1473,7 @@ export default function ProfileScreen({
                   <View style={{flex: 1}} />
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('踩', '踩功能');
+                    showAppAlert('Dislike', 'Dislike feature');
                   }}>
                     <Ionicons name="thumbs-down-outline" size={12} color="#9ca3af" />
                     <Text style={styles.questionStatText}>{formatNumber(q.dislikes)}</Text>
@@ -1435,7 +1501,7 @@ export default function ProfileScreen({
             defaultTab: 'supplements'
           })}>
                 <View style={styles.answerHeader}>
-                  <Text style={styles.answerTime}>{a.time}</Text>
+                  <Text style={styles.answerTime}>{formatTime(a.time)}</Text>
                 </View>
                 <Text style={styles.answerQuestion} numberOfLines={1}>
                   {a.adopted && <Text style={styles.adoptedTagInline}>
@@ -1470,7 +1536,7 @@ export default function ProfileScreen({
                   <View style={{flex: 1}} />
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('踩', '踩功能');
+                    showAppAlert('Dislike', 'Dislike feature');
                   }}>
                     <Ionicons name="thumbs-down-outline" size={12} color="#9ca3af" />
                     <Text style={styles.questionStatText}>{formatNumber(a.dislikes)}</Text>
@@ -1481,6 +1547,113 @@ export default function ProfileScreen({
                       type: 'answer',
                       targetType: 2,
                       targetId: a.id
+                    });
+                  }}>
+                    <Ionicons name="flag-outline" size={12} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>)}
+          </View>
+
+          {/* 点赞列表 */}
+          <View style={{
+          display: activeTab === t('profile.contentTabs.likes') ? 'flex' : 'none'
+        }}>
+            {/* 点赞分类标签 */}
+            <View style={styles.favoriteTabsInline}>
+              <TouchableOpacity style={[styles.favoriteTabInline, likesTab === 'questions' && styles.favoriteTabInlineActive]} onPress={() => setLikesTab('questions')}>
+                <Text style={[styles.favoriteTabInlineText, likesTab === 'questions' && styles.favoriteTabInlineTextActive]}>
+                  {t('profile.favoriteCategories.questions')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.favoriteTabInline, likesTab === 'answers' && styles.favoriteTabInlineActive]} onPress={() => setLikesTab('answers')}>
+                <Text style={[styles.favoriteTabInlineText, likesTab === 'answers' && styles.favoriteTabInlineTextActive]}>
+                  {t('profile.favoriteCategories.answers')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.favoriteTabInline, likesTab === 'comments' && styles.favoriteTabInlineActive]} onPress={() => setLikesTab('comments')}>
+                <Text style={[styles.favoriteTabInlineText, likesTab === 'comments' && styles.favoriteTabInlineTextActive]}>
+                  {t('profile.favoriteCategories.comments')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
+            {/* 点赞内容列表 */}
+            {getLikesData().map(item => <TouchableOpacity key={item.id} style={styles.likeItem} onPress={() => {
+              if (item.type === 'question' || item.type === 'supplement') {
+                navigation.navigate('QuestionDetail', { questionId: item.id });
+              } else if (item.type === 'answer' || item.type === 'supplementAnswer') {
+                navigation.navigate('AnswerDetail', { answerId: item.id });
+              } else if (item.type === 'comment') {
+                showAppAlert('评论详情', '评论详情功能');
+              }
+            }}>
+                <View style={styles.likeItemHeader}>
+                  {item.isSuperLike && <Ionicons name="star" size={14} color="#f59e0b" style={{marginRight: 6}} />}
+                  <Text style={styles.likeItemTime}>{formatTime(item.time)}</Text>
+                </View>
+                {(item.type === 'question' || item.type === 'supplement') && <>
+                    <Text style={styles.likeItemTitle}>{item.title}</Text>
+                    <View style={styles.likeItemMeta}>
+                      <Text style={styles.likeItemAuthor}>{item.author}</Text>
+                    </View>
+                  </>}
+                {(item.type === 'answer' || item.type === 'supplementAnswer') && <>
+                    <Text style={styles.likeItemQuestion} numberOfLines={1}>{item.questionTitle}</Text>
+                    <Text style={styles.likeItemContent} numberOfLines={2}>{item.content}</Text>
+                    <View style={styles.likeItemMeta}>
+                      <Text style={styles.likeItemAuthor}>{item.author}</Text>
+                    </View>
+                  </>}
+                {item.type === 'comment' && <>
+                    <Text style={styles.likeItemContent} numberOfLines={2}>{item.content}</Text>
+                    <View style={styles.likeItemMeta}>
+                      <Text style={styles.likeItemAuthor}>{item.author}</Text>
+                    </View>
+                  </>}
+                <View style={styles.answerStats}>
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    showAppAlert('点赞', '点赞功能');
+                  }}>
+                    <Ionicons name="thumbs-up" size={12} color="#ef4444" />
+                    <Text style={[styles.questionStatText, {color: '#ef4444'}]}>{formatNumber(item.likes)}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    showAppAlert('回复', '回复功能');
+                  }}>
+                    <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
+                    <Text style={styles.questionStatText}>0</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    showAppAlert('转发', '转发功能');
+                  }}>
+                    <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
+                    <Text style={styles.questionStatText}>0</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    showAppAlert('收藏', '收藏功能');
+                  }}>
+                    <Ionicons name="star-outline" size={12} color="#9ca3af" />
+                    <Text style={styles.questionStatText}>0</Text>
+                  </TouchableOpacity>
+                  <View style={{flex: 1}} />
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    showAppAlert('Dislike', 'Dislike feature');
+                  }}>
+                    <Ionicons name="thumbs-down-outline" size={12} color="#9ca3af" />
+                    <Text style={styles.questionStatText}>0</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    navigation.navigate('Report', {
+                      type: likesTab === 'questions' ? 'question' : likesTab === 'answers' ? 'answer' : 'comment',
+                      targetType: likesTab === 'questions' ? 1 : likesTab === 'answers' ? 2 : 5,
+                      targetId: item.id
                     });
                   }}>
                     <Ionicons name="flag-outline" size={12} color="#ef4444" />
@@ -1514,46 +1687,61 @@ export default function ProfileScreen({
             
             {/* 收藏内容列表 */}
             {getFavoritesData().map(item => <TouchableOpacity key={item.id} style={styles.favoriteItem} onPress={() => handleFavoritePress(item)}>
-                <View style={styles.favoriteItemContent}>
-                  <Text style={styles.favoriteItemTitle}>{item.title}</Text>
-                  <View style={styles.favoriteItemMeta}>
-                    <Text style={styles.favoriteItemAuthor}>{item.author}</Text>
-                    <Text style={styles.favoriteItemTime}>{item.time}</Text>
-                    <View style={{flex: 1}} />
-                    <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
-                      e.stopPropagation();
-                      showAppAlert('转发', '转发功能');
-                    }}>
-                      <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
-                      <Text style={styles.questionStatText}>0</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
-                      e.stopPropagation();
-                      showAppAlert('取消收藏', '取消收藏功能');
-                    }}>
-                      <Ionicons name="star" size={12} color="#f59e0b" />
-                      <Text style={[styles.questionStatText, {color: '#f59e0b'}]}>1</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
-                      e.stopPropagation();
-                      showAppAlert('踩', '踩功能');
-                    }}>
-                      <Ionicons name="thumbs-down-outline" size={12} color="#9ca3af" />
-                      <Text style={styles.questionStatText}>0</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
-                      e.stopPropagation();
-                      navigation.navigate('Report', {
-                        type: favoritesTab === 'questions' ? 'question' : favoritesTab === 'answers' ? 'answer' : 'comment',
-                        targetType: favoritesTab === 'questions' ? 1 : favoritesTab === 'answers' ? 2 : 5,
-                        targetId: item.id
-                      });
-                    }}>
-                      <Ionicons name="flag-outline" size={12} color="#ef4444" />
-                    </TouchableOpacity>
-                  </View>
+                <View style={styles.favoriteItemHeader}>
+                  <Text style={styles.favoriteItemTime}>{formatTime(item.time)}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+                <Text style={styles.favoriteItemTitle}>{item.title}</Text>
+                <View style={styles.favoriteItemMeta}>
+                  <Text style={styles.favoriteItemAuthor}>{item.author}</Text>
+                </View>
+                <View style={styles.answerStats}>
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    showAppAlert('点赞', '点赞功能');
+                  }}>
+                    <Ionicons name="thumbs-up-outline" size={12} color="#9ca3af" />
+                    <Text style={styles.questionStatText}>0</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    showAppAlert('回复', '回复功能');
+                  }}>
+                    <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
+                    <Text style={styles.questionStatText}>0</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    showAppAlert('转发', '转发功能');
+                  }}>
+                    <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
+                    <Text style={styles.questionStatText}>0</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    showAppAlert('取消收藏', '取消收藏功能');
+                  }}>
+                    <Ionicons name="star" size={12} color="#f59e0b" />
+                    <Text style={[styles.questionStatText, {color: '#f59e0b'}]}>1</Text>
+                  </TouchableOpacity>
+                  <View style={{flex: 1}} />
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    showAppAlert('Dislike', 'Dislike feature');
+                  }}>
+                    <Ionicons name="thumbs-down-outline" size={12} color="#9ca3af" />
+                    <Text style={styles.questionStatText}>0</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
+                    e.stopPropagation();
+                    navigation.navigate('Report', {
+                      type: favoritesTab === 'questions' ? 'question' : favoritesTab === 'answers' ? 'answer' : 'comment',
+                      targetType: favoritesTab === 'questions' ? 1 : favoritesTab === 'answers' ? 2 : 5,
+                      targetId: item.id
+                    });
+                  }}>
+                    <Ionicons name="flag-outline" size={12} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
               </TouchableOpacity>)}
           </View>
 
@@ -1576,7 +1764,7 @@ export default function ProfileScreen({
           <TouchableOpacity style={styles.viewAllBtn} onPress={() => showAppAlert(t('profile.viewAll'), `${t('profile.viewAll')}${activeTab}`)}><Text style={styles.viewAllText}>{t('profile.viewAll')}</Text><Ionicons name="chevron-forward" size={16} color="#ef4444" /></TouchableOpacity>
         </View>
 
-        {/* 退出登录 */}
+        {/* 退出登�?*/}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <Text style={styles.logoutText}>{t('profile.logout')}</Text>
         </TouchableOpacity>
@@ -1673,7 +1861,7 @@ export default function ProfileScreen({
           <ScrollView style={styles.listModalContent}>
             {draftsLoading && draftsList.length === 0 ? <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#ef4444" />
-                <Text style={styles.loadingText}>加载中...</Text>
+                <Text style={styles.loadingText}>加载�?..</Text>
               </View> : draftsList.length === 0 ? <View style={styles.emptyContainer}>
                 <Ionicons name="document-text-outline" size={48} color="#d1d5db" />
                 <Text style={styles.emptyText}>暂无草稿</Text>
@@ -1687,7 +1875,7 @@ export default function ProfileScreen({
                     </View>
                     <View style={styles.draftInfo}>
                       <Text style={styles.draftTitle} numberOfLines={1}>
-                        {item.title && item.title !== '未命名草稿' ? item.title : item.description ? item.description.substring(0, 20) + '...' : '无标题'}
+                        {item.title && item.title !== 'Untitled draft' ? item.title : item.description ? item.description.substring(0, 20) + '...' : 'Untitled'}
                       </Text>
                       <Text style={styles.draftTime}>
                         {item.createTime ? new Date(item.createTime).toLocaleString() : '未知时间'}
@@ -1718,7 +1906,7 @@ export default function ProfileScreen({
           }} />
           </View>
 
-          {/* 进度条 - 移除，不再需要 */}
+          {/* 进度�?- 移除，不再需�?*/}
 
           <ScrollView style={styles.verificationContent} showsVerticalScrollIndicator={false}>
             {/* 步骤0: 选择认证类型 */}
@@ -1777,7 +1965,7 @@ export default function ProfileScreen({
                 <View style={styles.fieldContainer}>
                   <Text style={styles.fieldLabel}>证件类型 <Text style={styles.required}>*</Text></Text>
                   <TouchableOpacity style={styles.fieldInput}>
-                    <Text style={styles.fieldInputText}>身份证</Text>
+                    <Text style={styles.fieldInputText}>ID card</Text>
                     <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
                   </TouchableOpacity>
                 </View>
@@ -1785,7 +1973,7 @@ export default function ProfileScreen({
                 {/* 证件号码 */}
                 <View style={styles.fieldContainer}>
                   <Text style={styles.fieldLabel}>证件号码 <Text style={styles.required}>*</Text></Text>
-                  <TextInput style={styles.fieldInput} placeholder="请输入证件号码" placeholderTextColor="#9ca3af" value={verificationData.personal.idNumber} onChangeText={text => updateVerificationField('idNumber', text)} />
+                  <TextInput style={styles.fieldInput} placeholder="Enter ID number" placeholderTextColor="#9ca3af" value={verificationData.personal.idNumber} onChangeText={text => updateVerificationField('idNumber', text)} />
                 </View>
 
                 {/* 上传证件照片 */}
@@ -1822,7 +2010,7 @@ export default function ProfileScreen({
 
                   <View style={styles.uploadTip}>
                     <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
-                    <Text style={styles.uploadTipText}>请确保证件信息清晰可见，照片完整无遮挡</Text>
+                    <Text style={styles.uploadTipText}>Please make sure the ID information is clear and fully visible.</Text>
                   </View>
                 </View>
 
@@ -1856,7 +2044,7 @@ export default function ProfileScreen({
 
                   <View style={styles.uploadTip}>
                     <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
-                    <Text style={styles.uploadTipText}>支持上传律师证、医师证、教师证等专业资质证书</Text>
+                    <Text style={styles.uploadTipText}>Professional certificates such as lawyer, doctor, or teacher credentials are supported.</Text>
                   </View>
                 </View>
 
@@ -1867,19 +2055,19 @@ export default function ProfileScreen({
                 {/* 企业名称 */}
                 <View style={styles.fieldContainer}>
                   <Text style={styles.fieldLabel}>企业名称 <Text style={styles.required}>*</Text></Text>
-                  <TextInput style={styles.fieldInput} placeholder="请输入企业全称" placeholderTextColor="#9ca3af" value={verificationData.enterprise.name} onChangeText={text => updateVerificationField('name', text)} />
+                  <TextInput style={styles.fieldInput} placeholder="Enter enterprise name" placeholderTextColor="#9ca3af" value={verificationData.enterprise.name} onChangeText={text => updateVerificationField('name', text)} />
                 </View>
 
-                {/* 注册号 */}
+                {/* 注册�?*/}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>注册号</Text>
+                  <Text style={styles.fieldLabel}>Registration Number</Text>
                   <TextInput style={styles.fieldInput} placeholder="请输入企业注册号" placeholderTextColor="#9ca3af" value={verificationData.enterprise.registrationNumber} onChangeText={text => updateVerificationField('registrationNumber', text)} />
                 </View>
 
                 {/* 税号 */}
                 <View style={styles.fieldContainer}>
                   <Text style={styles.fieldLabel}>税号 <Text style={styles.required}>*</Text></Text>
-                  <TextInput style={styles.fieldInput} placeholder="请输入纳税人识别号" placeholderTextColor="#9ca3af" value={verificationData.enterprise.taxNumber} onChangeText={text => updateVerificationField('taxNumber', text)} />
+                  <TextInput style={styles.fieldInput} placeholder="Enter tax number" placeholderTextColor="#9ca3af" value={verificationData.enterprise.taxNumber} onChangeText={text => updateVerificationField('taxNumber', text)} />
                 </View>
 
                 {/* 企业地址 */}
@@ -1888,22 +2076,22 @@ export default function ProfileScreen({
                   <TextInput style={styles.fieldInput} placeholder="请输入企业注册地址" placeholderTextColor="#9ca3af" value={verificationData.enterprise.address} onChangeText={text => updateVerificationField('address', text)} />
                 </View>
 
-                {/* 企业联系人 */}
+                {/* 企业联系�?*/}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>企业联系人 <Text style={styles.required}>*</Text></Text>
+                  <Text style={styles.fieldLabel}>企业联系�?<Text style={styles.required}>*</Text></Text>
                   <TextInput style={styles.fieldInput} placeholder="请输入联系人姓名" placeholderTextColor="#9ca3af" value={verificationData.enterprise.contactPerson} onChangeText={text => updateVerificationField('contactPerson', text)} />
                 </View>
 
                 {/* 联系方式说明 */}
                 <View style={styles.contactMethodSection}>
                   <Text style={styles.contactMethodTitle}>联系方式 <Text style={styles.required}>*</Text></Text>
-                  <Text style={styles.contactMethodDesc}>请至少填写一种联系方式</Text>
+                  <Text style={styles.contactMethodDesc}>Please provide at least one contact method.</Text>
                 </View>
 
                 {/* 联系电话 */}
                 <View style={styles.fieldContainer}>
                   <Text style={styles.fieldLabel}>联系电话</Text>
-                  <TextInput style={styles.fieldInput} placeholder="请输入手机号码" placeholderTextColor="#9ca3af" keyboardType="phone-pad" maxLength={11} value={verificationData.enterprise.contactPhone} onChangeText={text => updateVerificationField('contactPhone', text)} />
+                  <TextInput style={styles.fieldInput} placeholder="Enter phone number" placeholderTextColor="#9ca3af" keyboardType="phone-pad" maxLength={11} value={verificationData.enterprise.contactPhone} onChangeText={text => updateVerificationField('contactPhone', text)} />
                 </View>
 
                 {/* 联系邮箱 */}
@@ -1930,7 +2118,7 @@ export default function ProfileScreen({
 
                   <View style={styles.uploadTip}>
                     <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
-                    <Text style={styles.uploadTipText}>请上传清晰的注册文件照片（如营业执照、组织机构代码证等），确保信息完整可见</Text>
+                    <Text style={styles.uploadTipText}>Please upload a clear registration document photo with complete information.</Text>
                   </View>
                 </View>
               </View>}
@@ -1940,7 +2128,7 @@ export default function ProfileScreen({
                 {/* 机构名称 */}
                 <View style={styles.fieldContainer}>
                   <Text style={styles.fieldLabel}>机构名称 <Text style={styles.required}>*</Text></Text>
-                  <TextInput style={styles.fieldInput} placeholder="请输入政府机构全称" placeholderTextColor="#9ca3af" value={verificationData.government.name} onChangeText={text => updateVerificationField('name', text)} />
+                  <TextInput style={styles.fieldInput} placeholder="Enter government organization name" placeholderTextColor="#9ca3af" value={verificationData.government.name} onChangeText={text => updateVerificationField('name', text)} />
                 </View>
 
                 {/* 机构ID */}
@@ -1952,12 +2140,12 @@ export default function ProfileScreen({
                 {/* 部门名称 */}
                 <View style={styles.fieldContainer}>
                   <Text style={styles.fieldLabel}>部门名称 <Text style={styles.required}>*</Text></Text>
-                  <TextInput style={styles.fieldInput} placeholder="请输入所属部门名称" placeholderTextColor="#9ca3af" value={verificationData.government.department} onChangeText={text => updateVerificationField('department', text)} />
+                  <TextInput style={styles.fieldInput} placeholder="Enter department name" placeholderTextColor="#9ca3af" value={verificationData.government.department} onChangeText={text => updateVerificationField('department', text)} />
                 </View>
 
-                {/* 授权人 */}
+                {/* 授权�?*/}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>授权人 <Text style={styles.required}>*</Text></Text>
+                  <Text style={styles.fieldLabel}>授权�?<Text style={styles.required}>*</Text></Text>
                   <TextInput style={styles.fieldInput} placeholder="请输入授权人姓名" placeholderTextColor="#9ca3af" value={verificationData.government.authorizerName} onChangeText={text => updateVerificationField('authorizerName', text)} />
                 </View>
 
@@ -1966,9 +2154,9 @@ export default function ProfileScreen({
                   <Text style={styles.uploadSectionTitle}>上传授权人身份证 <Text style={styles.required}>*</Text></Text>
                   
                   <View style={styles.uploadGrid}>
-                    {/* 身份证正面 */}
+                    {/* 身份证正�?*/}
                     <View style={styles.uploadItemWrapper}>
-                      <Text style={styles.uploadLabel}>身份证正面 <Text style={styles.required}>*</Text></Text>
+                      <Text style={styles.uploadLabel}>身份证正�?<Text style={styles.required}>*</Text></Text>
                       <TouchableOpacity style={styles.uploadBox} onPress={() => handleImageUpload('authorizerIdFront')}>
                         {verificationData.government.authorizerIdFront ? <Image source={{
                       uri: verificationData.government.authorizerIdFront
@@ -1979,9 +2167,9 @@ export default function ProfileScreen({
                       </TouchableOpacity>
                     </View>
 
-                    {/* 身份证反面 */}
+                    {/* 身份证反�?*/}
                     <View style={styles.uploadItemWrapper}>
-                      <Text style={styles.uploadLabel}>身份证反面 <Text style={styles.required}>*</Text></Text>
+                      <Text style={styles.uploadLabel}>身份证反�?<Text style={styles.required}>*</Text></Text>
                       <TouchableOpacity style={styles.uploadBox} onPress={() => handleImageUpload('authorizerIdBack')}>
                         {verificationData.government.authorizerIdBack ? <Image source={{
                       uri: verificationData.government.authorizerIdBack
@@ -1995,7 +2183,7 @@ export default function ProfileScreen({
 
                   <View style={styles.uploadTip}>
                     <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
-                    <Text style={styles.uploadTipText}>请上传授权人身份证正反面，确保信息清晰可见</Text>
+                    <Text style={styles.uploadTipText}>Please upload clear front and back photos of the authorizer ID.</Text>
                   </View>
                 </View>
 
@@ -2008,13 +2196,13 @@ export default function ProfileScreen({
                 {/* 联系方式说明 */}
                 <View style={styles.contactMethodSection}>
                   <Text style={styles.contactMethodTitle}>联系方式 <Text style={styles.required}>*</Text></Text>
-                  <Text style={styles.contactMethodDesc}>请至少填写一种联系方式</Text>
+                  <Text style={styles.contactMethodDesc}>Please provide at least one contact method.</Text>
                 </View>
 
                 {/* 联系电话 */}
                 <View style={styles.fieldContainer}>
                   <Text style={styles.fieldLabel}>联系电话</Text>
-                  <TextInput style={styles.fieldInput} placeholder="请输入手机号码" placeholderTextColor="#9ca3af" keyboardType="phone-pad" maxLength={11} value={verificationData.government.contactPhone} onChangeText={text => updateVerificationField('contactPhone', text)} />
+                  <TextInput style={styles.fieldInput} placeholder="Enter phone number" placeholderTextColor="#9ca3af" keyboardType="phone-pad" maxLength={11} value={verificationData.government.contactPhone} onChangeText={text => updateVerificationField('contactPhone', text)} />
                 </View>
 
                 {/* 联系邮箱 */}
@@ -2062,7 +2250,7 @@ export default function ProfileScreen({
         </SafeAreaView>
       </Modal>
 
-      {/* 退出登录确认弹窗 */}
+      {/* 退出登录确认弹�?*/}
       <LogoutConfirmModal visible={showLogoutModal} onClose={() => setShowLogoutModal(false)} onConfirm={handleConfirmLogout} username={userProfile.username || userProfile.nickname} isLoading={isLoggingOut} showDefaultPassword={!userProfile.passwordChanged} />
     </SafeAreaView>;
 }
@@ -2710,12 +2898,67 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
   favoriteItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6'
+  },
+  favoriteItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginBottom: 8
+  },
+  // 点赞列表样式
+  likeItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  likeItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginBottom: 8
+  },
+  likeItemContent: {
+    flex: 1
+  },
+  superLikeIcon: {
+    marginBottom: 6
+  },
+  likeItemTitle: {
+    fontSize: scaleFont(14),
+    color: '#1f2937',
+    lineHeight: scaleFont(20),
+    marginBottom: 6,
+    fontWeight: '500'
+  },
+  likeItemQuestion: {
+    fontSize: scaleFont(12),
+    color: '#6b7280',
+    lineHeight: scaleFont(18),
+    marginBottom: 4
+  },
+  likeItemContent: {
+    fontSize: scaleFont(14),
+    color: '#1f2937',
+    lineHeight: scaleFont(20),
+    marginBottom: 6
+  },
+  likeItemMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8
+  },
+  likeItemAuthor: {
+    fontSize: scaleFont(12),
+    color: '#9ca3af'
+  },
+  likeItemTime: {
+    fontSize: scaleFont(12),
+    color: '#9ca3af'
   },
   favoriteItemContent: {
     flex: 1
@@ -2729,7 +2972,7 @@ const styles = StyleSheet.create({
   favoriteItemMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12
+    marginBottom: 8
   },
   favoriteItemAuthor: {
     fontSize: scaleFont(12),
@@ -2878,7 +3121,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff'
   },
-  // 字段容器（每个输入项）
+  // 字段容器（每个输入项�?
   fieldContainer: {
     backgroundColor: '#fff',
     paddingHorizontal: 16,
@@ -3186,7 +3429,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff'
   },
-  // 加载和空状态样式
+  // 加载和空状态样�?
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

@@ -346,6 +346,7 @@ export default function TeamDetailScreen({
   const [discussionCommentIdentity, setDiscussionCommentIdentity] = useState('personal');
   const [discussionCommentSelectedTeams, setDiscussionCommentSelectedTeams] = useState([]);
   const [discussionComposerKey, setDiscussionComposerKey] = useState(0);
+  const [discussionComposerMode, setDiscussionComposerMode] = useState('comment');
   const [showReplyModal, setShowReplyModal] = useState(false);
   const [replyTarget, setReplyTarget] = useState(null);
   const [replyText, setReplyText] = useState('');
@@ -370,6 +371,9 @@ export default function TeamDetailScreen({
   // 解散团队弹窗
   const [showDismissModal, setShowDismissModal] = useState(false);
   const [dismissConfirmText, setDismissConfirmText] = useState('');
+
+  // 团队讨论排序方式
+  const [discussionSortBy, setDiscussionSortBy] = useState('featured'); // featured or newest
 
   // 审批消息数据（管理员可见）
   const [joinRequests, setJoinRequests] = useState([{
@@ -476,20 +480,13 @@ export default function TeamDetailScreen({
   const visibleMembers = teamMembers.slice(0, maxVisibleMembers);
   const hasMoreMembers = teamMembers.length > maxVisibleMembers;
   const handleSend = () => {
-    if (!inputText.trim()) return;
-    const newMessage = {
-      id: Date.now(),
-      author: '我',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=me',
-      content: inputText,
-      time: t('screens.teamDetail.chat.justNow'),
-      likes: 0,
-      dislikes: 0,
-      shares: 0,
-      bookmarks: 0
-    };
-    setMessages([newMessage, ...messages]);
-    setInputText('');
+    openDiscussionComposer({
+      messageId: null,
+      parentId: 0,
+      replyToCommentId: 0,
+      replyToUserName: '',
+      originalComment: null
+    }, 'message');
   };
   const getDiscussionComments = messageId => discussionCommentsMap[messageId] || [];
   const getDiscussionCommentCount = messageId => getDiscussionComments(messageId).length;
@@ -594,7 +591,7 @@ export default function TeamDetailScreen({
     setShowDiscussionReplyModal(false);
     setShowDiscussionCommentListModal(true);
   };
-  const openDiscussionComposer = target => {
+  const openDiscussionComposer = (target, mode = 'comment') => {
     setDiscussionCommentTarget({
       messageId: target?.messageId ?? currentDiscussionMessageId,
       parentId: Number(target?.parentId ?? 0) || 0,
@@ -602,6 +599,7 @@ export default function TeamDetailScreen({
       replyToUserName: target?.replyToUserName ?? '',
       originalComment: target?.originalComment || null
     });
+    setDiscussionComposerMode(mode);
     setDiscussionCommentText('');
     setDiscussionCommentIdentity('personal');
     setDiscussionCommentSelectedTeams([]);
@@ -610,6 +608,7 @@ export default function TeamDetailScreen({
   };
   const closeDiscussionComposer = () => {
     setShowDiscussionComposerModal(false);
+    setDiscussionComposerMode('comment');
     setDiscussionCommentText('');
     setDiscussionCommentIdentity('personal');
     setDiscussionCommentSelectedTeams([]);
@@ -623,21 +622,37 @@ export default function TeamDetailScreen({
   };
   const handleSubmitDiscussionComment = () => {
     const messageId = discussionCommentTarget.messageId ?? currentDiscussionMessageId;
-    if (!messageId) {
-      closeDiscussionComposer();
-      return;
-    }
     const normalizedText = discussionCommentText.trim();
     const content = normalizedText;
     if (!content) {
       return;
     }
-    const directParentId = Number(discussionCommentTarget.replyToCommentId || discussionCommentTarget.parentId || 0) || 0;
-    const rootCommentId = directParentId ? getDiscussionThreadRootId(messageId, directParentId) : null;
-    const newCommentId = Date.now();
     const isTeamIdentity = discussionCommentIdentity === 'team';
     const authorName = isTeamIdentity ? team.name : '我';
     const authorAvatar = isTeamIdentity ? team.avatar : 'https://api.dicebear.com/7.x/avataaars/svg?seed=me';
+    if (discussionComposerMode === 'message') {
+      const newMessage = {
+        id: Date.now(),
+        author: authorName,
+        avatar: authorAvatar,
+        content,
+        time: t('screens.teamDetail.chat.justNow'),
+        likes: 0,
+        dislikes: 0,
+        shares: 0,
+        bookmarks: 0
+      };
+      setMessages(prevMessages => [newMessage, ...prevMessages]);
+      closeDiscussionComposer();
+      return;
+    }
+    if (!messageId) {
+      closeDiscussionComposer();
+      return;
+    }
+    const directParentId = Number(discussionCommentTarget.replyToCommentId || discussionCommentTarget.parentId || 0) || 0;
+    const rootCommentId = directParentId ? getDiscussionThreadRootId(messageId, directParentId) : null;
+    const newCommentId = Date.now();
     const newComment = {
       id: newCommentId,
       parentId: directParentId,
@@ -841,6 +856,21 @@ export default function TeamDetailScreen({
     setDismissConfirmText('');
     navigation.goBack();
   };
+
+  // 切换团队讨论排序方式
+  const handleDiscussionSortChange = newSortBy => {
+    if (newSortBy !== discussionSortBy) {
+      setDiscussionSortBy(newSortBy);
+      // 这里不改动数据和接口，只是切换状态
+    }
+  };
+  const handleOpenCreateActivity = () => {
+    navigation.navigate('CreateActivity', {
+      teamId: team.id,
+      teamName: team.name,
+      fromTeamDetail: true
+    });
+  };
   const handleJoinTeam = () => {
     showAppAlert(t('screens.teamDetail.join.applyTitle'), t('screens.teamDetail.join.applyMessage'), [{
       text: t('common.cancel'),
@@ -1003,17 +1033,7 @@ export default function TeamDetailScreen({
           })}>
                   <Ionicons name="person-add" size={22} color="#22c55e" />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.iconBtn} onPress={() => {
-            navigation.navigate('Main', {
-              screen: '活动',
-              params: {
-                createMode: true,
-                teamId: team.id,
-                teamName: team.name,
-                fromTeamDetail: true
-              }
-            });
-          }}>
+                <TouchableOpacity style={styles.iconBtn} onPress={handleOpenCreateActivity}>
                   <Ionicons name="calendar" size={22} color="#3b82f6" />
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.iconBtn} onPress={() => setShowPublishAnnouncementModal(true)}>
@@ -1044,17 +1064,7 @@ export default function TeamDetailScreen({
                 </TouchableOpacity>}
               {/* 普通成员：显示三个操作按钮 */}
               {!team.isAdmin && team.currentUserId !== team.creatorId && <View style={styles.compactActionsRow}>
-                  <TouchableOpacity style={styles.compactActionBtn} onPress={() => {
-              navigation.navigate('Main', {
-                screen: '活动',
-                params: {
-                  createMode: true,
-                  teamId: team.id,
-                  teamName: team.name,
-                  fromTeamDetail: true
-                }
-              });
-            }}>
+                  <TouchableOpacity style={styles.compactActionBtn} onPress={handleOpenCreateActivity}>
                     <Ionicons name="calendar" size={14} color="#3b82f6" />
                     <Text style={styles.compactActionBtnText}>{t('screens.teamDetail.actions.activity')}</Text>
                   </TouchableOpacity>
@@ -1136,7 +1146,24 @@ export default function TeamDetailScreen({
             </View>
 
             {/* 内容区域 */}
-            {activeTab === '团队讨论' ? <View style={styles.teamChatSection}>
+            {activeTab === '团队讨论' ? (
+              <>
+                {/* 团队讨论排序过滤器 */}
+                <View style={styles.sortFilterContainer}>
+                  <View style={styles.sortFilterLeft}>
+                    <TouchableOpacity style={[styles.sortFilterBtn, discussionSortBy === 'featured' && styles.sortFilterBtnActive]} onPress={() => handleDiscussionSortChange('featured')}>
+                      <Ionicons name="star" size={14} color={discussionSortBy === 'featured' ? '#ef4444' : '#9ca3af'} />
+                      <Text style={[styles.sortFilterText, discussionSortBy === 'featured' && styles.sortFilterTextActive]}>精选</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.sortFilterBtn, discussionSortBy === 'newest' && styles.sortFilterBtnActive]} onPress={() => handleDiscussionSortChange('newest')}>
+                      <Ionicons name="time" size={14} color={discussionSortBy === 'newest' ? '#ef4444' : '#9ca3af'} />
+                      <Text style={[styles.sortFilterText, discussionSortBy === 'newest' && styles.sortFilterTextActive]}>最新</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.sortFilterCount}>共 {messages.length} 条讨论</Text>
+                </View>
+                
+                <View style={styles.teamChatSection}>
                 {messages.map(msg => <View key={msg.id} style={styles.teamChatMessage}>
                     <View style={styles.teamChatBubble}>
                       <View style={styles.teamChatHeader}>
@@ -1202,7 +1229,9 @@ export default function TeamDetailScreen({
                       </View>
                     </View>
                   </View>)}
-              </View> : activeTab === '团队公告' ? (/* 团队公告列表 */
+              </View>
+              </>
+            ) : activeTab === '团队公告' ? (/* 团队公告列表 */
         <View style={styles.announcementList}>
                 {announcements.map(announcement => <View key={announcement.id} style={styles.announcementItem}>
                     {Boolean(announcement.isPinned) && <View style={styles.pinnedBadge}>
@@ -1231,20 +1260,21 @@ export default function TeamDetailScreen({
                             <Text style={styles.approvalUserName}>{request.user}</Text>
                             <Text style={styles.approvalTime}>{request.time}</Text>
                           </View>
+                          {/* 按钮移到用户信息行右侧 */}
+                          <View style={styles.approvalActionsInline}>
+                            <TouchableOpacity style={styles.approvalRejectBtnSmall} onPress={() => handleApproveJoin(request.id, false)}>
+                              <Ionicons name="close-circle" size={16} color="#ef4444" />
+                              <Text style={styles.approvalRejectTextSmall}>{t('screens.teamDetail.approval.reject')}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.approvalApproveBtnSmall} onPress={() => handleApproveJoin(request.id, true)}>
+                              <Ionicons name="checkmark-circle" size={16} color="#fff" />
+                              <Text style={styles.approvalApproveTextSmall}>{t('screens.teamDetail.approval.approve')}</Text>
+                            </TouchableOpacity>
+                          </View>
                         </View>
                         <View style={styles.approvalReasonBox}>
                           <Text style={styles.approvalReasonLabel}>{t('screens.teamDetail.approval.reasonLabel')}</Text>
                           <Text style={styles.approvalReasonText}>{request.reason}</Text>
-                        </View>
-                        <View style={styles.approvalActions}>
-                          <TouchableOpacity style={styles.approvalRejectBtn} onPress={() => handleApproveJoin(request.id, false)}>
-                            <Ionicons name="close-circle" size={18} color="#ef4444" />
-                            <Text style={styles.approvalRejectText}>{t('screens.teamDetail.approval.reject')}</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity style={styles.approvalApproveBtn} onPress={() => handleApproveJoin(request.id, true)}>
-                            <Ionicons name="checkmark-circle" size={18} color="#fff" />
-                            <Text style={styles.approvalApproveText}>{t('screens.teamDetail.approval.approve')}</Text>
-                          </TouchableOpacity>
                         </View>
                       </View>)}
                   </View>}
@@ -1265,20 +1295,21 @@ export default function TeamDetailScreen({
                             </View>
                             <Text style={styles.approvalTime}>{request.time}</Text>
                           </View>
+                          {/* 按钮移到用户信息行右侧 */}
+                          <View style={styles.approvalActionsInline}>
+                            <TouchableOpacity style={styles.approvalRejectBtnSmall} onPress={() => handleApproveAdmin(request.id, false)}>
+                              <Ionicons name="close-circle" size={16} color="#ef4444" />
+                              <Text style={styles.approvalRejectTextSmall}>{t('screens.teamDetail.approval.reject')}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.approvalApproveBtnSmall} onPress={() => handleApproveAdmin(request.id, true)}>
+                              <Ionicons name="checkmark-circle" size={16} color="#fff" />
+                              <Text style={styles.approvalApproveTextSmall}>{t('screens.teamDetail.approval.approve')}</Text>
+                            </TouchableOpacity>
+                          </View>
                         </View>
                         <View style={styles.approvalReasonBox}>
                           <Text style={styles.approvalReasonLabel}>{t('screens.teamDetail.approval.reasonLabel')}</Text>
                           <Text style={styles.approvalReasonText}>{request.reason}</Text>
-                        </View>
-                        <View style={styles.approvalActions}>
-                          <TouchableOpacity style={styles.approvalRejectBtn} onPress={() => handleApproveAdmin(request.id, false)}>
-                            <Ionicons name="close-circle" size={18} color="#ef4444" />
-                            <Text style={styles.approvalRejectText}>{t('screens.teamDetail.approval.reject')}</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity style={styles.approvalApproveBtn} onPress={() => handleApproveAdmin(request.id, true)}>
-                            <Ionicons name="checkmark-circle" size={18} color="#fff" />
-                            <Text style={styles.approvalApproveText}>{t('screens.teamDetail.approval.approve')}</Text>
-                          </TouchableOpacity>
                         </View>
                       </View>)}
                   </View>}
@@ -1295,8 +1326,10 @@ export default function TeamDetailScreen({
 
       {/* 底部输入栏 - 限制访问模式下不显示 */}
       {Boolean(!restrictedView && isJoined && activeTab === '团队讨论') && <View style={styles.teamChatInputContainer}>
-          <TextInput style={styles.teamChatInput} placeholder={t('screens.teamDetail.chat.inputPlaceholder')} placeholderTextColor="#9ca3af" value={inputText} onChangeText={setInputText} multiline />
-          <TouchableOpacity style={styles.teamChatSendBtn} onPress={handleSend} disabled={!inputText.trim()}>
+          <TouchableOpacity style={styles.teamChatInput} activeOpacity={0.85} onPress={handleSend}>
+            <Text style={styles.teamChatInputPlaceholder}>{t('screens.teamDetail.chat.inputPlaceholder')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.teamChatSendBtn} onPress={handleSend}>
             <Ionicons name="send" size={20} color="#fff" />
           </TouchableOpacity>
         </View>}
@@ -1487,7 +1520,7 @@ export default function TeamDetailScreen({
         </View>
       </Modal>
 
-      <WriteCommentModal visible={showDiscussionComposerModal} onClose={closeDiscussionComposer} onPublish={handleSubmitDiscussionComment} originalComment={discussionCommentTarget.originalComment} publishInFooter placeholder="写下你的评论..." title="写评论" />
+      <WriteCommentModal visible={showDiscussionComposerModal} onClose={closeDiscussionComposer} onPublish={handleSubmitDiscussionComment} originalComment={discussionCommentTarget.originalComment} publishInFooter placeholder={discussionComposerMode === 'message' ? '说点什么...' : '写下你的评论...'} title={discussionComposerMode === 'message' ? '' : '写评论'} />
 
       <Modal visible={showDiscussionComposerModal} transparent animationType="slide" onRequestClose={closeDiscussionComposer}>
         <View style={styles.modalOverlay}>
@@ -1498,7 +1531,7 @@ export default function TeamDetailScreen({
               <TouchableOpacity onPress={closeDiscussionComposer} style={styles.commentListCloseBtn}>
                 <Ionicons name="close" size={26} color="#1f2937" />
               </TouchableOpacity>
-              <Text style={styles.commentListModalTitle}>写评论</Text>
+              {discussionComposerMode !== 'message' && <Text style={styles.commentListModalTitle}>写评论</Text>}
               <View style={styles.commentListHeaderRight} />
             </View>
 
@@ -1516,10 +1549,10 @@ export default function TeamDetailScreen({
 
             <ScrollView style={styles.commentListScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <View>
-                <TextInput style={styles.commentTextInput} placeholder="写下你的评论..." placeholderTextColor="#bbb" value={discussionCommentText} onChangeText={setDiscussionCommentText} multiline autoFocus textAlignVertical="top" />
-                <View style={styles.commentIdentitySection}>
-                  <IdentitySelector key={`discussion-composer-${discussionComposerKey}`} selectedIdentity={discussionCommentIdentity} selectedTeams={discussionCommentSelectedTeams} onIdentityChange={setDiscussionCommentIdentity} onTeamsChange={setDiscussionCommentSelectedTeams} />
-                </View>
+                <TextInput style={styles.commentTextInput} placeholder={discussionComposerMode === 'message' ? '说点什么...' : '写下你的评论...'} placeholderTextColor="#bbb" value={discussionCommentText} onChangeText={setDiscussionCommentText} multiline autoFocus textAlignVertical="top" />
+                {discussionComposerMode !== 'message' && <View style={styles.commentIdentitySection}>
+                    <IdentitySelector key={`discussion-composer-${discussionComposerKey}`} selectedIdentity={discussionCommentIdentity} selectedTeams={discussionCommentSelectedTeams} onIdentityChange={setDiscussionCommentIdentity} onTeamsChange={setDiscussionCommentSelectedTeams} />
+                  </View>}
               </View>
             </ScrollView>
 
@@ -2063,6 +2096,45 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     backgroundColor: '#fff'
   },
+  // 排序过滤器容器（团队讨论）
+  sortFilterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fafafa',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  sortFilterLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16
+  },
+  sortFilterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12
+  },
+  sortFilterBtnActive: {
+    backgroundColor: '#fef2f2'
+  },
+  sortFilterText: {
+    fontSize: scaleFont(13),
+    color: '#9ca3af'
+  },
+  sortFilterTextActive: {
+    color: '#ef4444',
+    fontWeight: '500'
+  },
+  sortFilterCount: {
+    fontSize: scaleFont(12),
+    color: '#9ca3af'
+  },
   teamChatMessage: {
     padding: 16,
     borderBottomWidth: 1,
@@ -2152,6 +2224,10 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(14),
     color: '#1f2937',
     maxHeight: 100
+  },
+  teamChatInputPlaceholder: {
+    fontSize: scaleFont(14),
+    color: '#9ca3af'
   },
   teamChatSendBtn: {
     backgroundColor: '#f59e0b',
@@ -2364,7 +2440,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb',
     borderRadius: 8,
     padding: 12,
-    marginBottom: 12
+    marginBottom: 0
   },
   approvalReasonLabel: {
     fontSize: scaleFont(12),
@@ -2377,6 +2453,47 @@ const styles = StyleSheet.create({
     color: '#374151',
     lineHeight: scaleFont(20)
   },
+  // 内联按钮容器（在用户信息行右侧）
+  approvalActionsInline: {
+    flexDirection: 'row',
+    gap: 6,
+    marginLeft: 8
+  },
+  // 小尺寸拒绝按钮
+  approvalRejectBtnSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#fef2f2',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#fecaca'
+  },
+  approvalRejectTextSmall: {
+    fontSize: scaleFont(12),
+    color: '#ef4444',
+    fontWeight: '600'
+  },
+  // 小尺寸同意按钮
+  approvalApproveBtnSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#22c55e',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6
+  },
+  approvalApproveTextSmall: {
+    fontSize: scaleFont(12),
+    color: '#fff',
+    fontWeight: '600'
+  },
+  // 保留原有样式以防其他地方使用
   approvalActions: {
     flexDirection: 'row',
     gap: 12

@@ -16,19 +16,122 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
 import { showAppAlert } from '../utils/appAlert';
-import { showToast } from '../utils/toast';
-import activityApi from '../services/api/activityApi';
 import { scaleFont } from '../utils/responsive';
-import {
-  getActivitiesByTab,
-  getActivityImages,
-  getJoinedActivityState,
-  getQuitActivityState,
-  normalizeActivityItem,
-  normalizeActivityList,
-} from '../utils/activityUtils';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+
+// 假数据
+const MOCK_ACTIVITIES = [
+  {
+    id: 1,
+    title: '技术分享会：React Native 最佳实践',
+    desc: '分享React Native开发中的最佳实践和常见问题解决方案',
+    image: 'https://picsum.photos/400/300?random=1',
+    images: ['https://picsum.photos/400/300?random=1', 'https://picsum.photos/400/300?random=2'],
+    type: 'online',
+    typeName: '线上',
+    organizer: '技术团队',
+    organizerType: 'team',
+    participants: 128,
+    startTime: '2026-04-01',
+    endTime: '2026-04-01',
+    status: 'ongoing',
+    tags: ['热门'],
+    joined: false,
+  },
+  {
+    id: 2,
+    title: '周末户外徒步活动',
+    desc: '一起去爬山，享受大自然的美好',
+    image: 'https://picsum.photos/400/300?random=3',
+    images: ['https://picsum.photos/400/300?random=3'],
+    type: 'offline',
+    typeName: '线下',
+    address: '北京市海淀区香山公园',
+    organizer: '户外爱好者',
+    organizerType: 'personal',
+    participants: 45,
+    startTime: '2026-04-05',
+    endTime: '2026-04-05',
+    status: 'ongoing',
+    tags: ['最新'],
+    joined: false,
+  },
+  {
+    id: 3,
+    title: '编程马拉松大赛',
+    desc: '48小时编程挑战，展示你的编程技能',
+    image: 'https://picsum.photos/400/300?random=4',
+    images: ['https://picsum.photos/400/300?random=4', 'https://picsum.photos/400/300?random=5', 'https://picsum.photos/400/300?random=6'],
+    type: 'online',
+    typeName: '线上',
+    organizer: '平台官方',
+    organizerType: 'platform',
+    participants: 256,
+    startTime: '2026-04-10',
+    endTime: '2026-04-12',
+    status: 'ongoing',
+    tags: ['热门'],
+    joined: true,
+    progress: '已完成 30%',
+  },
+  {
+    id: 4,
+    title: '产品设计工作坊',
+    desc: '学习产品设计的核心理念和实践方法',
+    image: 'https://picsum.photos/400/300?random=7',
+    images: ['https://picsum.photos/400/300?random=7'],
+    type: 'offline',
+    typeName: '线下',
+    address: '上海市浦东新区张江高科技园区',
+    organizer: '设计团队',
+    organizerType: 'team',
+    participants: 30,
+    startTime: '2026-03-20',
+    endTime: '2026-03-20',
+    status: 'ended',
+    statusName: '已结束',
+    tags: [],
+    joined: false,
+  },
+];
+
+const getActivitiesByTab = (activities, tabKey) => {
+  switch (tabKey) {
+    case 'hot':
+      return activities.filter(a => a.tags?.includes('热门'));
+    case 'new':
+      return activities.filter(a => a.tags?.includes('最新'));
+    case 'ended':
+      return activities.filter(a => a.status === 'ended');
+    case 'mine':
+      return activities.filter(a => a.joined);
+    case 'all':
+    default:
+      return activities;
+  }
+};
+
+const getActivityImages = activity => {
+  return activity.images || (activity.image ? [activity.image] : []);
+};
+
+const getJoinedActivityState = activity => {
+  return {
+    ...activity,
+    joined: true,
+    participants: activity.participants + 1,
+  };
+};
+
+const getQuitActivityState = activity => {
+  return {
+    ...activity,
+    joined: false,
+    participants: Math.max(0, activity.participants - 1),
+    progress: undefined,
+  };
+};
 
 const getOrganizerIcon = organizerType => {
   switch (organizerType) {
@@ -110,13 +213,15 @@ export default function ActivityScreen({ navigation, route }) {
       }
 
       setErrorMessage('');
-      const response = await activityApi.getActivityList();
-      const nextActivities = normalizeActivityList(response?.data);
-      setActivities(nextActivities);
+      
+      // 模拟网络延迟
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // 使用假数据
+      setActivities(MOCK_ACTIVITIES);
     } catch (error) {
       const nextErrorMessage = error?.message || t('common.noData');
       setErrorMessage(nextErrorMessage);
-      showToast(nextErrorMessage, 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -129,15 +234,13 @@ export default function ActivityScreen({ navigation, route }) {
   );
 
   const handleActivityChange = updatedActivity => {
-    const normalizedActivity = normalizeActivityItem(updatedActivity);
-
-    if (!normalizedActivity?.id) {
+    if (!updatedActivity?.id) {
       return;
     }
 
     setActivities(currentActivities =>
       currentActivities.map(activity =>
-        activity.id === normalizedActivity.id ? normalizedActivity : activity
+        activity.id === updatedActivity.id ? updatedActivity : activity
       )
     );
   };
