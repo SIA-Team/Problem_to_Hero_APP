@@ -2450,7 +2450,6 @@ export default function AnswerDetailScreen({
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.shareBtn} onPress={() => openShareModalWithData(buildAnswerSharePayload())}>
             <Ionicons name="arrow-redo-outline" size={22} color="#6b7280" />
-            <Text style={styles.shareBtnText}>{answer.shareCount || answer.share_count || answer.shares || 0}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.shareBtn}>
             <Ionicons name="flag-outline" size={22} color="#ef4444" />

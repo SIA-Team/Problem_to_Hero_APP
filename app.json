@@ -14,7 +14,7 @@
     ],
     "updates": {
       "enabled": true,
-      "checkAutomatically": "ON_LOAD",
+      "checkAutomatically": "ON_ERROR_RECOVERY",
       "fallbackToCacheTimeout": 0,
       "url": "https://u.expo.dev/2e6de8bb-4642-4ad3-9a2b-f914db1c07cc"
     },
@@ -29,6 +29,11 @@
         "NSCameraUsageDescription": "允许使用相机拍摄头像",
         "NSPhotoLibraryAddUsageDescription": "允许保存照片到相册",
         "NSLocationWhenInUseUsageDescription": "允许访问您的位置信息",
+        "LSApplicationQueriesSchemes": [
+          "comgooglemaps",
+          "waze",
+          "maps"
+        ],
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         },

@@ -22,6 +22,7 @@ import { setToastRef, showToast } from './src/utils/toast';
 import { setAppAlertRef } from './src/utils/appAlert';
 import { syncCacheIdentity } from './src/utils/cacheManager';
 import UpdateChecker from './src/components/UpdateChecker';
+import { EmergencyProvider } from './src/contexts/EmergencyContext';
 
 import HomeScreen from './src/screens/HomeScreen';
 import SearchScreen from './src/screens/SearchScreen';
@@ -58,6 +59,7 @@ import QuestionBankScreen from './src/screens/QuestionBankScreen';
 import UploadBankScreen from './src/screens/UploadBankScreen';
 import ChannelManageScreen from './src/screens/ChannelManageScreen';
 import EmergencyScreen from './src/screens/EmergencyScreen';
+import EmergencyListScreen from './src/screens/EmergencyListScreen';
 import CreateActivityScreen from './src/screens/CreateActivityScreen';
 import InviteAnswerScreen from './src/screens/InviteAnswerScreen';
 import InviteTeamMemberScreen from './src/screens/InviteTeamMemberScreen';
@@ -765,26 +767,29 @@ export default function App() {
 
   if (!isLoggedIn) {
     return (
-      <SafeAreaProvider>
-        <NavigationContainer>
-          <StatusBar style="dark" />
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Login">
-              {(props) => <LoginScreen {...props} onLogin={handleLogin} />}
-            </Stack.Screen>
-            <Stack.Screen name="NetworkTest" component={NetworkTestScreen} />
-          </Stack.Navigator>
-          <AppAlertContainer ref={appAlertRef} />
-          <ToastContainer ref={toastRef} />
-        </NavigationContainer>
-      </SafeAreaProvider>
+      <EmergencyProvider>
+        <SafeAreaProvider>
+          <NavigationContainer>
+            <StatusBar style="dark" />
+            <Stack.Navigator screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="Login">
+                {(props) => <LoginScreen {...props} onLogin={handleLogin} />}
+              </Stack.Screen>
+              <Stack.Screen name="NetworkTest" component={NetworkTestScreen} />
+            </Stack.Navigator>
+            <AppAlertContainer ref={appAlertRef} />
+            <ToastContainer ref={toastRef} />
+          </NavigationContainer>
+        </SafeAreaProvider>
+      </EmergencyProvider>
     );
   }
 
   return (
-    <SafeAreaProvider>
-      <UpdateChecker />
-      <NavigationContainer>
+    <EmergencyProvider>
+      <SafeAreaProvider>
+        <UpdateChecker />
+        <NavigationContainer>
         <StatusBar style="dark" />
         <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="Main">
@@ -803,6 +808,7 @@ export default function App() {
         <Stack.Screen name="QuestionRanking" component={QuestionRankingScreen} />
         <Stack.Screen name="HeroRanking" component={HeroRankingScreen} />
         <Stack.Screen name="Messages" component={MessagesScreen} />
+        <Stack.Screen name="EmergencyList" component={EmergencyListScreen} />
         <Stack.Screen name="PrivateConversation" component={PrivateConversationScreen} />
         <Stack.Screen name="GroupChat" component={GroupChatScreen} />
         <Stack.Screen name="AnswerDetail" component={AnswerDetailScreen} />
@@ -842,5 +848,6 @@ export default function App() {
           <ToastContainer ref={toastRef} />
       </NavigationContainer>
     </SafeAreaProvider>
+    </EmergencyProvider>
   );
 }

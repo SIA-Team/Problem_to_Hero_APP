@@ -115,7 +115,8 @@
     "published": "紧急求助已发布！",
     "rescuersNeeded": "需要救援人数：",
     "nearbyNotified": "附近用户将收到通知！",
-    "enterTitle": "请输入求助标题"
+    "enterTitle": "请输入求助标题",
+    "confirm": "确定"
   },
   "publish": {
     "title": "发布问题",

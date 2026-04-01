@@ -120,6 +120,29 @@ VERSION_COMPARISON.md
 模拟器连接问题解决方案.md
 方案2*.md
 
+# 项目文档和说明文件（临时开发文档）
+*说明*.md
+*文档*.md
+*指南*.md
+*清单*.md
+*总结*.md
+*方案*.md
+*修复*.md
+*优化*.md
+*实现*.md
+*设计*.md
+emergency_*.md
+activeTab_*.md
+ADOPT_*.md
+
+# Expo 导出检查文件
+.expo-export-check/
+.expo-web-check/
+.expo-home/
+
+# PowerShell 测试脚本
+*.ps1
+
 # QR codes and images
 *.png
 !assets/*.png

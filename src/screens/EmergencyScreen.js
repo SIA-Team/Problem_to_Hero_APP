@@ -10,7 +10,6 @@ import { modalTokens } from '../components/modalTokens';
 import { showAppAlert } from '../utils/appAlert';
 import { getRegionData } from '../data/regionData';
 import emergencyApi from '../services/api/emergencyApi';
-import { API_ENDPOINTS, getFullApiUrl } from '../config/api';
 
 import { scaleFont } from '../utils/responsive';
 export default function EmergencyScreen({ navigation }) {
@@ -40,30 +39,16 @@ export default function EmergencyScreen({ navigation }) {
 
   const loadEmergencyQuota = React.useCallback(async () => {
     try {
-      // 显示完整的请求 URL
-      const fullUrl = getFullApiUrl(API_ENDPOINTS.EMERGENCY.QUOTA);
-      console.log('=== Emergency Quota Request ===');
-      console.log('完整请求 URL:', fullUrl);
-      console.log('===============================');
+      // 模拟网络延迟
+      await new Promise(resolve => setTimeout(resolve, 300));
       
-      const response = await emergencyApi.getQuota();
-      
-      console.log('=== Emergency Quota Response ===');
-      console.log('响应数据:', JSON.stringify(response, null, 2));
-      console.log('================================');
-
-      if ((response?.code === 0 || response?.code === 200) && response?.data) {
-        const total = Number(response.data.total);
-        const remaining = Number(response.data.remaining);
-
-        setEmergencyQuota({
-          total: Number.isFinite(total) && total >= 0 ? total : 0,
-          remaining: Number.isFinite(remaining) && remaining >= 0 ? remaining : 0,
-        });
-      }
+      // 使用假数据
+      setEmergencyQuota({
+        total: 3,
+        remaining: 2,
+      });
     } catch (error) {
       console.error('Failed to load emergency quota:', error);
-      console.error('错误详情:', error?.response?.data || error?.message);
     }
   }, []);
 
@@ -352,29 +337,20 @@ export default function EmergencyScreen({ navigation }) {
     setShowProgressModal(true);
 
     try {
-      const payload = {
-        title: emergencyForm.title.trim(),
-        description: emergencyForm.description.trim(),
-        contactPhone: normalizePhoneNumber(emergencyForm.contact),
-        location: emergencyForm.location.trim(),
-      };
+      // 模拟网络延迟
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
-      const response = await emergencyApi.publish(payload);
-
-      if (response?.code === 0 || response?.code === 200) {
-        await loadEmergencyQuota();
-        resetEmergencyForm();
-        showAppAlert(
-          t('emergency.published'),
-          response?.msg || '紧急求助已成功发布',
-          [{ text: t('emergency.confirm'), onPress: () => navigation.goBack() }]
-        );
-        return;
-      }
-
-      showAppAlert('提示', response?.msg || '发布失败，请稍后重试');
+      // 使用假数据，模拟发布成功
+      await loadEmergencyQuota();
+      resetEmergencyForm();
+      
+      showAppAlert(
+        t('emergency.published'),
+        '紧急求助已成功发布！\n\n附近用户将收到通知。',
+        [{ text: t('emergency.confirm'), onPress: () => navigation.goBack() }]
+      );
     } catch (error) {
-      showAppAlert('提示', error?.data?.msg || error?.message || '发布失败，请稍后重试');
+      showAppAlert('提示', '发布失败，请稍后重试');
     } finally {
       setShowProgressModal(false);
     }

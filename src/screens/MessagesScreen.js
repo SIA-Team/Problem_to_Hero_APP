@@ -8,11 +8,13 @@ import ModalSafeAreaView from '../components/ModalSafeAreaView';
 import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
 import { showAppAlert } from '../utils/appAlert';
+import { openMapChooser } from '../utils/mapChooser';
 import notificationApi from '../services/api/notificationApi';
 import userApi from '../services/api/userApi';
 import { filterFriendUsers, normalizeFollowingResponse, sendPlainPrivateMessage } from '../utils/privateShareService';
 
 import { scaleFont } from '../utils/responsive';
+import { useEmergency } from '../contexts/EmergencyContext';
 // 顶部快捷入口数据
 const BUCKET_EVENT_TYPE_MAP = {
   COMMENT_SHARE: ['COMMENT_REPLY', 'MENTION'],
@@ -232,20 +234,28 @@ const emergencyRequests = [{
   name: '王小明',
   title: '车辆抛锚急需拖车救援',
   location: '北京市朝阳区建国路88号',
+  latitude: 39.9144,
+  longitude: 116.4674,
   distance: '2.3km',
   time: '3分钟前',
+  timestamp: Date.now() - 3 * 60 * 1000, // 3分钟前
   rescuerCount: 3,
-  status: 'urgent', // urgent: 紧急, responding: 响应中, completed: 已完成
-  urgencyLevel: 'high' // high: 高, medium: 中, low: 低
+  respondedCount: 1, // 已响应人数
+  status: 'urgent',
+  urgencyLevel: 'high'
 }, {
   id: 2,
   avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=emergency2',
   name: '李华',
   title: '突发疾病需要紧急送医',
   location: '上海市浦东新区世纪大道1号',
+  latitude: 31.2362,
+  longitude: 121.4998,
   distance: '5.8km',
   time: '8分钟前',
+  timestamp: Date.now() - 8 * 60 * 1000, // 8分钟前
   rescuerCount: 5,
+  respondedCount: 5, // 已响应人数等于需要人数，已完成
   status: 'responding',
   urgencyLevel: 'high'
 }, {
@@ -254,11 +264,45 @@ const emergencyRequests = [{
   name: '张伟',
   title: '钥匙锁车内需要开锁服务',
   location: '广州市天河区珠江新城',
+  latitude: 23.1252,
+  longitude: 113.3249,
   distance: '1.2km',
   time: '15分钟前',
+  timestamp: Date.now() - 15 * 60 * 1000, // 15分钟前
   rescuerCount: 2,
+  respondedCount: 0,
   status: 'urgent',
   urgencyLevel: 'medium'
+}, {
+  id: 4,
+  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=emergency4',
+  name: '赵敏',
+  title: '宠物走失急需帮助寻找',
+  location: '深圳市南山区科技园',
+  latitude: 22.5403,
+  longitude: 113.9545,
+  distance: '3.5km',
+  time: '45分钟前',
+  timestamp: Date.now() - 45 * 60 * 1000, // 45分钟前
+  rescuerCount: 2,
+  respondedCount: 2, // 已完成
+  status: 'urgent',
+  urgencyLevel: 'medium'
+}, {
+  id: 5,
+  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=emergency5',
+  name: '周杰',
+  title: '手机丢失需要帮助',
+  location: '杭州市西湖区文一路',
+  latitude: 30.2908,
+  longitude: 120.1210,
+  distance: '6.2km',
+  time: '2小时前',
+  timestamp: Date.now() - 2 * 60 * 60 * 1000, // 2小时前
+  rescuerCount: 1,
+  respondedCount: 0,
+  status: 'urgent',
+  urgencyLevel: 'low'
 }];
 
 // 消息列表数据
@@ -367,6 +411,7 @@ export default function MessagesScreen({
   } = useTranslation();
   const isFocused = useIsFocused();
   const followingLoadRequestIdRef = React.useRef(0);
+  const { respondedEmergencies, ignoredEmergencies, respondToEmergency, ignoreEmergency } = useEmergency();
   const [showPrivateModal, setShowPrivateModal] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
@@ -776,6 +821,51 @@ export default function MessagesScreen({
     setVoteChoice(null);
     setVoteReason('');
   };
+
+  // 处理响应紧急求助
+  const handleRespondEmergency = (item) => {
+    showAppAlert('确认响应', `确定要响应 ${item.name} 的紧急求助吗？`, [
+      { text: '取消', style: 'cancel' },
+      { 
+        text: '立即响应', 
+        onPress: () => {
+          respondToEmergency(item.id);
+          showAppAlert('成功', '已响应求助，请尽快前往现场');
+        }
+      }
+    ]);
+  };
+
+  // 处理忽略紧急求助
+  const handleIgnoreEmergency = (item) => {
+    ignoreEmergency(item.id);
+  };
+
+  const handleOpenEmergencyLocation = (item) => {
+    void openMapChooser({
+      label: `${item.name} 的求助位置`,
+      location: item.location,
+      distance: item.distance,
+      latitude: item.latitude,
+      longitude: item.longitude,
+    });
+  };
+
+  // 判断紧急求助是否在1小时内
+  const isWithinOneHour = (timestamp) => {
+    return Date.now() - timestamp < 60 * 60 * 1000; // 1小时 = 60分钟 * 60秒 * 1000毫秒
+  };
+
+  // 过滤紧急求助列表：排除已响应、已忽略和已满员的，只显示最新3条
+  const filteredEmergencyRequests = emergencyRequests
+    .filter(item => {
+      const isCompleted = item.respondedCount >= item.rescuerCount;
+      return !respondedEmergencies.includes(item.id) && 
+             !ignoredEmergencies.includes(item.id) && 
+             !isCompleted; // 排除已满员的
+    })
+    .slice(0, 3);
+
   const handleLoadMoreNotifications = () => {
     if (!canLoadMoreNotifications || notificationLoadingMore) {
       return;
@@ -872,94 +962,93 @@ export default function MessagesScreen({
                 <View style={styles.emergencyPulseDot} />
               </View>
             </View>
-            <TouchableOpacity onPress={() => navigation.navigate('Emergency')}>
+            <TouchableOpacity onPress={() => navigation.navigate('EmergencyList')}>
               <Text style={styles.sectionMore}>查看全部</Text>
             </TouchableOpacity>
           </View>
           
-          {emergencyRequests.map(item => (
-            <TouchableOpacity 
-              key={item.id} 
-              style={[
-                styles.emergencyItem,
-                item.urgencyLevel === 'high' && styles.emergencyItemHigh
-              ]}
-              activeOpacity={0.7}
-            >
-              {/* 紧急标识条 */}
-              {item.urgencyLevel === 'high' && (
-                <View style={styles.emergencyIndicator} />
-              )}
-              
-              <View style={styles.emergencyHeader}>
-                <Avatar uri={item.avatar} name={item.name} size={44} />
-                <View style={styles.emergencyHeaderContent}>
-                  <View style={styles.emergencyNameRow}>
+          {filteredEmergencyRequests.map(item => {
+            const withinOneHour = isWithinOneHour(item.timestamp);
+            const isResponded = respondedEmergencies.includes(item.id);
+            
+            return (
+              <View 
+                key={item.id} 
+                style={[
+                  styles.emergencyItem,
+                  withinOneHour && styles.emergencyItemHigh
+                ]}
+              >
+                {/* 紧急标识条 - 只在1小时内显示 */}
+                {withinOneHour && (
+                  <View style={styles.emergencyIndicator} />
+                )}
+                
+                <View style={styles.emergencyHeader}>
+                  <Avatar uri={item.avatar} name={item.name} size={44} />
+                  <View style={styles.emergencyHeaderContent}>
                     <Text style={styles.emergencyName}>{item.name}</Text>
-                    {item.status === 'urgent' && (
-                      <View style={styles.urgentBadge}>
-                        <Ionicons name="warning" size={10} color="#fff" />
-                        <Text style={styles.urgentBadgeText}>紧急</Text>
+                    <Text style={styles.emergencyTime}>{item.time}</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.emergencyTitle} numberOfLines={2}>
+                  {item.title}
+                </Text>
+
+                <View style={styles.emergencyInfo}>
+                  <TouchableOpacity
+                    style={styles.emergencyInfoItem}
+                    activeOpacity={0.72}
+                    onPress={() => handleOpenEmergencyLocation(item)}
+                  >
+                    <Ionicons name="location" size={14} color="#ef4444" />
+                    <Text style={styles.emergencyLocation} numberOfLines={1}>
+                      {item.location}
+                    </Text>
+                  </TouchableOpacity>
+                  <View style={styles.emergencyDistance}>
+                    <Ionicons name="navigate" size={12} color="#f59e0b" />
+                    <Text style={styles.emergencyDistanceText}>{item.distance}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.emergencyFooter}>
+                  <View style={styles.emergencyRescuerInfo}>
+                    <Ionicons name="people-outline" size={16} color="#6b7280" />
+                    <Text style={styles.emergencyRescuerText}>
+                      需要 {item.rescuerCount} 人救援
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.emergencyActions}>
+                    {isResponded ? (
+                      <View style={styles.respondedBadge}>
+                        <Ionicons name="checkmark-circle" size={14} color="#22c55e" />
+                        <Text style={styles.respondedBadgeText}>已响应</Text>
                       </View>
-                    )}
-                    {item.status === 'responding' && (
-                      <View style={styles.respondingBadge}>
-                        <Ionicons name="people" size={10} color="#fff" />
-                        <Text style={styles.respondingBadgeText}>响应中</Text>
-                      </View>
+                    ) : (
+                      <>
+                        <TouchableOpacity 
+                          style={styles.ignoreBtn}
+                          onPress={() => handleIgnoreEmergency(item)}
+                        >
+                          <Text style={styles.ignoreBtnText}>忽略</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.respondBtn}
+                          onPress={() => handleRespondEmergency(item)}
+                        >
+                          <Ionicons name="flash" size={14} color="#fff" />
+                          <Text style={styles.respondBtnText}>立即响应</Text>
+                        </TouchableOpacity>
+                      </>
                     )}
                   </View>
-                  <Text style={styles.emergencyTime}>{item.time}</Text>
                 </View>
               </View>
-
-              <Text style={styles.emergencyTitle} numberOfLines={2}>
-                {item.title}
-              </Text>
-
-              <View style={styles.emergencyInfo}>
-                <View style={styles.emergencyInfoItem}>
-                  <Ionicons name="location" size={14} color="#ef4444" />
-                  <Text style={styles.emergencyLocation} numberOfLines={1}>
-                    {item.location}
-                  </Text>
-                </View>
-                <View style={styles.emergencyDistance}>
-                  <Ionicons name="navigate" size={12} color="#f59e0b" />
-                  <Text style={styles.emergencyDistanceText}>{item.distance}</Text>
-                </View>
-              </View>
-
-              <View style={styles.emergencyFooter}>
-                <View style={styles.emergencyRescuerInfo}>
-                  <Ionicons name="people-outline" size={16} color="#6b7280" />
-                  <Text style={styles.emergencyRescuerText}>
-                    需要 {item.rescuerCount} 人救援
-                  </Text>
-                </View>
-                
-                {item.status === 'urgent' ? (
-                  <TouchableOpacity 
-                    style={styles.respondBtn}
-                    onPress={() => {
-                      showAppAlert('确认响应', `确定要响应 ${item.name} 的紧急求助吗？`, [
-                        { text: '取消', style: 'cancel' },
-                        { text: '立即响应', onPress: () => showAppAlert('成功', '已响应求助，请尽快前往现场') }
-                      ]);
-                    }}
-                  >
-                    <Ionicons name="flash" size={14} color="#fff" />
-                    <Text style={styles.respondBtnText}>立即响应</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity style={styles.viewDetailBtn}>
-                    <Text style={styles.viewDetailBtnText}>查看详情</Text>
-                    <Ionicons name="chevron-forward" size={14} color="#6b7280" />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </TouchableOpacity>
-          ))}
+            );
+          })}
         </View>
 
         {/* 仲裁邀请 - 已隐藏 */}
@@ -1614,6 +1703,56 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(13),
     color: '#fff',
     fontWeight: '700'
+  },
+  emergencyActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  ignoreBtn: {
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e5e7eb'
+  },
+  ignoreBtnText: {
+    fontSize: scaleFont(13),
+    color: '#6b7280',
+    fontWeight: '600'
+  },
+  respondedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#bbf7d0'
+  },
+  respondedBadgeText: {
+    fontSize: scaleFont(13),
+    color: '#22c55e',
+    fontWeight: '600'
+  },
+  completedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e5e7eb'
+  },
+  completedBadgeText: {
+    fontSize: scaleFont(13),
+    color: '#6b7280',
+    fontWeight: '600'
   },
   viewDetailBtn: {
     flexDirection: 'row',

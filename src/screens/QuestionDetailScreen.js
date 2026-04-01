@@ -909,6 +909,29 @@ export default function QuestionDetailScreen({
     return null;
   })();
   const hasCountValue = (...values) => values.some(value => value !== undefined && value !== null && value !== '');
+  const normalizeFlag = (...values) => {
+    for (const value of values) {
+      if (value === undefined || value === null) {
+        continue;
+      }
+      if (typeof value === 'boolean') {
+        return value;
+      }
+      if (typeof value === 'number') {
+        return value === 1;
+      }
+      if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (normalized === '1' || normalized === 'true') {
+          return true;
+        }
+        if (normalized === '0' || normalized === 'false') {
+          return false;
+        }
+      }
+    }
+    return false;
+  };
   const normalizeQuestionDetail = question => {
     if (!question || typeof question !== 'object') {
       return question;
@@ -1514,10 +1537,10 @@ export default function QuestionDetailScreen({
     const normalizedQuestionId = answer.questionId ?? answer.question_id ?? answer.question?.id ?? null;
     const normalizedAuthorName = answer.userName ?? answer.userNickname ?? answer.authorNickName ?? answer.author ?? '匿名用户';
     const normalizedAuthorAvatar = answer.userAvatar ?? answer.authorAvatar ?? answer.avatar ?? null;
-    const normalizedCollected = answer.collected ?? answer.isCollected ?? answer.bookmarked ?? answer.isBookmarked ?? false;
-    const normalizedLiked = answer.liked ?? answer.isLiked ?? false;
-    const normalizedDisliked = answer.disliked ?? answer.isDisliked ?? false;
-    const normalizedAdopted = answer.adopted ?? (answer.isAccepted === 1 || answer.isAccepted === true);
+    const normalizedCollected = normalizeFlag(answer.collected, answer.isCollected, answer.bookmarked, answer.isBookmarked);
+    const normalizedLiked = normalizeFlag(answer.liked, answer.isLiked);
+    const normalizedDisliked = normalizeFlag(answer.disliked, answer.isDisliked);
+    const normalizedAdopted = normalizeFlag(answer.adopted, answer.isAccepted, answer.isAdopted);
     const normalizedCollectCount = answer.collectCount ?? answer.bookmarkCount ?? answer.bookmark_count ?? answer.bookmarks ?? 0;
     const normalizedSuperLikeCount = answer.superLikeCount ?? answer.superLikes ?? 0;
     const normalizedCreateTime = resolveEntityTimestamp(answer);
@@ -1538,12 +1561,12 @@ export default function QuestionDetailScreen({
       avatar: normalizedAuthorAvatar,
       adopted: normalizedAdopted,
       isAccepted: answer.isAccepted ?? (normalizedAdopted ? 1 : 0),
-      liked: !!normalizedLiked,
-      disliked: !!normalizedDisliked,
-      collected: !!normalizedCollected,
-      isCollected: !!normalizedCollected,
-      bookmarked: !!normalizedCollected,
-      isBookmarked: !!normalizedCollected,
+      liked: normalizedLiked,
+      disliked: normalizedDisliked,
+      collected: normalizedCollected,
+      isCollected: normalizedCollected,
+      bookmarked: normalizedCollected,
+      isBookmarked: normalizedCollected,
       likeCount: answer.likeCount ?? answer.likes ?? 0,
       dislikeCount: answer.dislikeCount ?? answer.dislikes ?? 0,
       commentCount: answer.commentCount ?? answer.comments ?? 0,
@@ -1562,8 +1585,8 @@ export default function QuestionDetailScreen({
       __likeCountResolved: answer.__likeCountResolved ?? hasLikeCountField,
       __dislikeCountResolved: answer.__dislikeCountResolved ?? hasDislikeCountField,
       __collectCountResolved: answer.__collectCountResolved ?? hasCollectCountField,
-      canAdopt: answer.canAdopt ?? false,
-      canEdit: answer.canEdit ?? false
+      canAdopt: normalizeFlag(answer.canAdopt),
+      canEdit: normalizeFlag(answer.canEdit)
     };
   };
   const normalizeAnswers = (rows = []) => rows.map(normalizeAnswerItem);
@@ -6164,14 +6187,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 </View> : <>
                   {answersList.map(answer => {
               const answerStateKey = getAnswerIdentityKey(answer) || String(answer.id);
-              const isAdopted = answerAdopted[answerStateKey] !== undefined ? answerAdopted[answerStateKey] : answer.adopted;
+              const isAdopted = answerAdopted[answerStateKey] !== undefined ? answerAdopted[answerStateKey] : normalizeFlag(answer.adopted, answer.isAccepted, answer.isAdopted);
               const isAdoptLoading = !!answerAdoptLoading[answerStateKey];
               const currentQuestionId = getAnswerQuestionId(answer) ?? questionData?.id ?? route?.params?.id;
               const currentAnswerId = getAnswerPrimaryId(answer) ?? answer.id;
               const isLiked = answerLiked[answer.id] !== undefined ? answerLiked[answer.id] : !!answer.liked;
               const isCollected = answerBookmarked[answer.id] !== undefined ? answerBookmarked[answer.id] : !!answer.collected;
               const isDisliked = answerDisliked[answer.id] !== undefined ? answerDisliked[answer.id] : !!answer.disliked;
-              const canAdopt = answer.canAdopt !== undefined ? answer.canAdopt : true;
+              const canAdopt = normalizeFlag(answer.canAdopt);
               const likeCount = getAnswerLikeDisplayCount(answer, answerLiked[answer.id]);
               const collectCount = getAnswerCollectDisplayCount(answer, answerBookmarked[answer.id]);
               const dislikeCount = getAnswerDislikeDisplayCount(answer, answerDisliked[answer.id]);
@@ -6191,15 +6214,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     <Text style={styles.answerAuthor}>{answer.userName || answer.userNickname || answer.author || '匿名用户'}</Text>
                     {Boolean(answer.verified) && <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />}
                     
-                    {/* 采纳按钮 - 放在用户名后面，所有回答都显示 */}
-                    <TouchableOpacity style={[styles.adoptAnswerBtn, isAdopted && styles.adoptAnswerBtnActive, isAdoptLoading && styles.adoptAnswerBtnLoading]} onPress={e => {
+                    {Boolean(canAdopt || isAdopted) && <TouchableOpacity style={[styles.adoptAnswerBtn, isAdopted && styles.adoptAnswerBtnActive, isAdoptLoading && styles.adoptAnswerBtnLoading]} onPress={e => {
                         e.stopPropagation();
                         handleAnswerAdopt(currentQuestionId, currentAnswerId);
                       }} disabled={!canAdopt || isAdoptLoading || isAdopted}>
-                      <Text style={[styles.adoptAnswerBtnText, isAdopted && styles.adoptAnswerBtnTextActive]}>
-                        {isAdopted ? t('screens.questionDetail.answer.adopted') : t('screens.questionDetail.answer.adopt')}
-                      </Text>
-                    </TouchableOpacity>
+                        <Text style={[styles.adoptAnswerBtnText, isAdopted && styles.adoptAnswerBtnTextActive]}>
+                          {isAdopted ? t('screens.questionDetail.answer.adopted') : t('screens.questionDetail.answer.adopt')}
+                        </Text>
+                      </TouchableOpacity>}
                   </View>
                   <View style={styles.answerMetaRow}>
                     {Boolean(answer.title) && <Text style={styles.answerAuthorTitle}>{answer.title}</Text>}
