@@ -356,6 +356,10 @@ export default function TeamDetailScreen({
   const [announcementContent, setAnnouncementContent] = useState('');
   const [isPinned, setIsPinned] = useState(false);
   const [showPendingModal, setShowPendingModal] = useState(false);
+  const isLikeInteractionDisabled = (likedState, dislikedState) => !likedState && !!dislikedState;
+  const isDislikeInteractionDisabled = (likedState, dislikedState) => !dislikedState && !!likedState;
+  const getTeamMessageLikedState = message => liked[message?.id] !== undefined ? liked[message.id] : !!message?.liked;
+  const getTeamMessageDislikedState = message => disliked[message?.id] !== undefined ? disliked[message.id] : !!message?.disliked;
 
   // 邀请功能相关状态
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -557,6 +561,9 @@ export default function TeamDetailScreen({
   };
   const toggleDiscussionCommentLike = (messageId, commentId) => {
     updateDiscussionComment(messageId, commentId, comment => {
+      if (isLikeInteractionDisabled(!!comment.liked, !!comment.disliked)) {
+        return comment;
+      }
       const nextLiked = !comment.liked;
       return {
         ...comment,
@@ -577,6 +584,9 @@ export default function TeamDetailScreen({
   };
   const toggleDiscussionCommentDislike = (messageId, commentId) => {
     updateDiscussionComment(messageId, commentId, comment => {
+      if (isDislikeInteractionDisabled(!!comment.liked, !!comment.disliked)) {
+        return comment;
+      }
       const nextDisliked = !comment.disliked;
       return {
         ...comment,
@@ -910,11 +920,11 @@ export default function TeamDetailScreen({
         </TouchableOpacity>
         <Text style={styles.replyText}>{reply.content}</Text>
         <View style={styles.replyActions}>
-          <TouchableOpacity style={styles.replyActionBtn} onPress={() => toggleDiscussionCommentLike(currentDiscussionMessageId, reply.id)}>
-            <Ionicons name={reply.liked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={reply.liked ? "#ef4444" : "#9ca3af"} />
+          <TouchableOpacity style={[styles.replyActionBtn, isLikeInteractionDisabled(!!reply.liked, !!reply.disliked) && styles.interactionBtnDisabled]} onPress={() => toggleDiscussionCommentLike(currentDiscussionMessageId, reply.id)} disabled={isLikeInteractionDisabled(!!reply.liked, !!reply.disliked)}>
+            <Ionicons name={reply.liked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={reply.liked ? "#ef4444" : isLikeInteractionDisabled(!!reply.liked, !!reply.disliked) ? "#d1d5db" : "#9ca3af"} />
             <Text style={[styles.replyActionText, reply.liked && {
             color: '#ef4444'
-          }]}>{Number(reply.likes || 0)}</Text>
+          }, isLikeInteractionDisabled(!!reply.liked, !!reply.disliked) && styles.interactionTextDisabled]}>{Number(reply.likes || 0)}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
           setShowDiscussionReplyModal(false);
@@ -936,11 +946,11 @@ export default function TeamDetailScreen({
           <View style={{
           flex: 1
         }} />
-          <TouchableOpacity style={styles.replyActionBtn} onPress={() => toggleDiscussionCommentDislike(currentDiscussionMessageId, reply.id)}>
-            <Ionicons name={reply.disliked ? "thumbs-down" : "thumbs-down-outline"} size={12} color={reply.disliked ? "#6b7280" : "#9ca3af"} />
+          <TouchableOpacity style={[styles.replyActionBtn, isDislikeInteractionDisabled(!!reply.liked, !!reply.disliked) && styles.interactionBtnDisabled]} onPress={() => toggleDiscussionCommentDislike(currentDiscussionMessageId, reply.id)} disabled={isDislikeInteractionDisabled(!!reply.liked, !!reply.disliked)}>
+            <Ionicons name={reply.disliked ? "thumbs-down" : "thumbs-down-outline"} size={12} color={reply.disliked ? "#6b7280" : isDislikeInteractionDisabled(!!reply.liked, !!reply.disliked) ? "#d1d5db" : "#9ca3af"} />
             <Text style={[styles.replyActionText, reply.disliked && {
             color: '#6b7280'
-          }]}>{Number(reply.dislikes || 0)}</Text>
+          }, isDislikeInteractionDisabled(!!reply.liked, !!reply.disliked) && styles.interactionTextDisabled]}>{Number(reply.dislikes || 0)}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.replyActionBtn} onPress={handleDiscussionCommentReport}>
             <Ionicons name="flag-outline" size={12} color="#ef4444" />
@@ -1176,15 +1186,15 @@ export default function TeamDetailScreen({
                         
                         <View style={styles.teamChatFooter}>
                           <View style={styles.teamChatFooterLeft}>
-                            <TouchableOpacity style={styles.teamChatActionBtn} onPress={() => setLiked({
+                            <TouchableOpacity style={[styles.teamChatActionBtn, isLikeInteractionDisabled(getTeamMessageLikedState(msg), getTeamMessageDislikedState(msg)) && styles.interactionBtnDisabled]} onPress={() => setLiked({
                       ...liked,
-                      [msg.id]: !liked[msg.id]
-                    })}>
-                              <Ionicons name={liked[msg.id] ? "thumbs-up" : "thumbs-up-outline"} size={14} color={liked[msg.id] ? "#ef4444" : "#9ca3af"} />
-                              <Text style={[styles.teamChatActionText, liked[msg.id] && {
+                      [msg.id]: !getTeamMessageLikedState(msg)
+                    })} disabled={isLikeInteractionDisabled(getTeamMessageLikedState(msg), getTeamMessageDislikedState(msg))}>
+                              <Ionicons name={getTeamMessageLikedState(msg) ? "thumbs-up" : "thumbs-up-outline"} size={14} color={getTeamMessageLikedState(msg) ? "#ef4444" : isLikeInteractionDisabled(getTeamMessageLikedState(msg), getTeamMessageDislikedState(msg)) ? "#d1d5db" : "#9ca3af"} />
+                              <Text style={[styles.teamChatActionText, getTeamMessageLikedState(msg) && {
                         color: '#ef4444'
-                      }]}>
-                                {msg.likes + (liked[msg.id] ? 1 : 0)}
+                      }, isLikeInteractionDisabled(getTeamMessageLikedState(msg), getTeamMessageDislikedState(msg)) && styles.interactionTextDisabled]}>
+                                {msg.likes + (getTeamMessageLikedState(msg) ? 1 : 0)}
                               </Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.teamChatActionBtn} onPress={() => openDiscussionCommentList(msg.id)}>
@@ -1210,15 +1220,15 @@ export default function TeamDetailScreen({
                             </TouchableOpacity>
                           </View>
                           <View style={styles.teamChatFooterRight}>
-                            <TouchableOpacity style={styles.teamChatActionBtn} onPress={() => setDisliked({
+                            <TouchableOpacity style={[styles.teamChatActionBtn, isDislikeInteractionDisabled(getTeamMessageLikedState(msg), getTeamMessageDislikedState(msg)) && styles.interactionBtnDisabled]} onPress={() => setDisliked({
                       ...disliked,
-                      [msg.id]: !disliked[msg.id]
-                    })}>
-                              <Ionicons name={disliked[msg.id] ? "thumbs-down" : "thumbs-down-outline"} size={14} color={disliked[msg.id] ? "#6b7280" : "#9ca3af"} />
-                              <Text style={[styles.teamChatActionText, disliked[msg.id] && {
+                      [msg.id]: !getTeamMessageDislikedState(msg)
+                    })} disabled={isDislikeInteractionDisabled(getTeamMessageLikedState(msg), getTeamMessageDislikedState(msg))}>
+                              <Ionicons name={getTeamMessageDislikedState(msg) ? "thumbs-down" : "thumbs-down-outline"} size={14} color={getTeamMessageDislikedState(msg) ? "#6b7280" : isDislikeInteractionDisabled(getTeamMessageLikedState(msg), getTeamMessageDislikedState(msg)) ? "#d1d5db" : "#9ca3af"} />
+                              <Text style={[styles.teamChatActionText, getTeamMessageDislikedState(msg) && {
                         color: '#6b7280'
-                      }]}>
-                                {msg.dislikes + (disliked[msg.id] ? 1 : 0)}
+                      }, isDislikeInteractionDisabled(getTeamMessageLikedState(msg), getTeamMessageDislikedState(msg)) && styles.interactionTextDisabled]}>
+                                {msg.dislikes + (getTeamMessageDislikedState(msg) ? 1 : 0)}
                               </Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.teamChatActionBtn} onPress={() => handleReport(msg)}>
@@ -1394,11 +1404,11 @@ export default function TeamDetailScreen({
                   <View style={styles.commentListContent}>
                     <Text style={styles.commentListText}>{comment.content}</Text>
                     <View style={styles.commentListActions}>
-                      <TouchableOpacity style={styles.commentListActionBtn} onPress={() => toggleDiscussionCommentLike(currentDiscussionMessageId, comment.id)}>
-                        <Ionicons name={comment.liked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={comment.liked ? "#ef4444" : "#9ca3af"} />
+                      <TouchableOpacity style={[styles.commentListActionBtn, isLikeInteractionDisabled(!!comment.liked, !!comment.disliked) && styles.interactionBtnDisabled]} onPress={() => toggleDiscussionCommentLike(currentDiscussionMessageId, comment.id)} disabled={isLikeInteractionDisabled(!!comment.liked, !!comment.disliked)}>
+                        <Ionicons name={comment.liked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={comment.liked ? "#ef4444" : isLikeInteractionDisabled(!!comment.liked, !!comment.disliked) ? "#d1d5db" : "#9ca3af"} />
                         <Text style={[styles.commentListActionText, comment.liked && {
                       color: '#ef4444'
-                    }]}>{Number(comment.likes || 0)}</Text>
+                    }, isLikeInteractionDisabled(!!comment.liked, !!comment.disliked) && styles.interactionTextDisabled]}>{Number(comment.likes || 0)}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.commentListActionBtn} onPress={() => {
                     setCurrentDiscussionCommentId(comment.id);
@@ -1421,11 +1431,11 @@ export default function TeamDetailScreen({
                       <View style={{
                     flex: 1
                   }} />
-                      <TouchableOpacity style={styles.commentListActionBtn} onPress={() => toggleDiscussionCommentDislike(currentDiscussionMessageId, comment.id)}>
-                        <Ionicons name={comment.disliked ? "thumbs-down" : "thumbs-down-outline"} size={14} color={comment.disliked ? "#6b7280" : "#9ca3af"} />
+                      <TouchableOpacity style={[styles.commentListActionBtn, isDislikeInteractionDisabled(!!comment.liked, !!comment.disliked) && styles.interactionBtnDisabled]} onPress={() => toggleDiscussionCommentDislike(currentDiscussionMessageId, comment.id)} disabled={isDislikeInteractionDisabled(!!comment.liked, !!comment.disliked)}>
+                        <Ionicons name={comment.disliked ? "thumbs-down" : "thumbs-down-outline"} size={14} color={comment.disliked ? "#6b7280" : isDislikeInteractionDisabled(!!comment.liked, !!comment.disliked) ? "#d1d5db" : "#9ca3af"} />
                         <Text style={[styles.commentListActionText, comment.disliked && {
                       color: '#6b7280'
-                    }]}>{Number(comment.dislikes || 0)}</Text>
+                    }, isDislikeInteractionDisabled(!!comment.liked, !!comment.disliked) && styles.interactionTextDisabled]}>{Number(comment.dislikes || 0)}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.commentListActionBtn} onPress={handleDiscussionCommentReport}>
                         <Ionicons name="flag-outline" size={14} color="#ef4444" />
@@ -2198,9 +2208,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4
   },
+  interactionBtnDisabled: {
+    opacity: 0.45
+  },
   teamChatActionText: {
     fontSize: scaleFont(12),
     color: '#9ca3af'
+  },
+  interactionTextDisabled: {
+    color: '#d1d5db'
   },
   // 团队聊天输入栏 - 参照团队弹窗样式
   teamChatInputContainer: {

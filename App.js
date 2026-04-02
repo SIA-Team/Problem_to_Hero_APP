@@ -83,6 +83,8 @@ import { modalTokens } from './src/components/modalTokens';
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 const SERVER_SELECTION_STORAGE_KEY = '@app_server_selection';
+const INITIAL_CREDENTIALS_NOTICE_STORAGE_KEY = '@initial_credentials_notice';
+const INITIAL_CREDENTIALS_DEFAULT_PASSWORD = '12345678';
 const APP_LINKING = {
   prefixes: ['problemtohero://'],
   config: {
@@ -701,17 +703,23 @@ export default function App() {
                 console.log('👤 用户信息:');
                 console.log('   用户名:', result.data.userBaseInfo?.username);
                 console.log('   用户ID:', result.data.userBaseInfo?.userId);
-                console.log('   默认密码: 12345678');
+                console.log('   默认密码:', INITIAL_CREDENTIALS_DEFAULT_PASSWORD);
                 console.log('═══════════════════════════════════════════════════════════════');
+
+                const initialUsername = result.data.userBaseInfo?.username;
+                if (initialUsername) {
+                  await AsyncStorage.setItem(
+                    INITIAL_CREDENTIALS_NOTICE_STORAGE_KEY,
+                    JSON.stringify({
+                      username: initialUsername,
+                      password: INITIAL_CREDENTIALS_DEFAULT_PASSWORD,
+                    })
+                  );
+                }
                 
                 // 自动登录进入应用
                 setIsLoggedIn(true);
                 setIsInitializing(false);
-                
-                // 显示欢迎提示
-                setTimeout(() => {
-                  showToast(`欢迎使用！您的用户名是 ${result.data.userBaseInfo?.username}，默认密码是 12345678`, 'success');
-                }, 1000);
               } else {
                 console.error('\n❌ 自动注册失败（已重试3次）');
                 console.error('═══════════════════════════════════════════════════════════════');

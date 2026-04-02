@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -88,6 +88,17 @@ export default function QuestionActivityListScreen({ navigation, route }) {
       images: activityForm.images.filter((_, i) => i !== index)
     });
   };
+
+  useEffect(() => {
+    if (!route?.params?.openCreateModal) {
+      return;
+    }
+
+    setShowActivityModal(true);
+    navigation.setParams({
+      openCreateModal: undefined
+    });
+  }, [navigation, route?.params?.openCreateModal]);
 
   return (
     <SafeAreaView style={styles.container}>

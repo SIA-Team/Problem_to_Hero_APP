@@ -2,16 +2,20 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, Dimensions, TextInput, FlatList, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import Avatar from '../components/Avatar';
 import ShareModal from '../components/ShareModal';
+import EditTextModal from '../components/EditTextModal';
+import InitialCredentialsModal from '../components/InitialCredentialsModal';
 import WriteCommentModal from '../components/WriteCommentModal';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/useTranslation';
 import { getRegionData } from '../data/regionData';
 import { useOptimizedQuestions } from '../hooks/useOptimizedQuestions';
 import { showToast } from '../utils/toast';
+import { buildTwitterShareText, openTwitterShare } from '../utils/shareService';
 import { formatTime } from '../utils/timeFormatter';
 import { navigateToPublicProfile, resolvePublicUserId } from '../utils/publicProfileNavigation';
 import questionApi from '../services/api/questionApi';
@@ -20,6 +24,7 @@ import { loadComboChannels } from '../services/channelSubscriptionService';
 
 import { scaleFont } from '../utils/responsive';
 const { width: screenWidth } = Dimensions.get('window');
+const INITIAL_CREDENTIALS_NOTICE_STORAGE_KEY = '@initial_credentials_notice';
 
 // tabs array will be moved inside component to use translation
 
@@ -107,6 +112,41 @@ export default function HomeScreen({ navigation }) {
     syncComboTabs();
   }, [syncComboTabs]));
 
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+
+      const loadInitialCredentialsNotice = async () => {
+        try {
+          const storedNotice = await AsyncStorage.getItem(INITIAL_CREDENTIALS_NOTICE_STORAGE_KEY);
+          if (!storedNotice || !isActive) {
+            return;
+          }
+
+          const parsedNotice = JSON.parse(storedNotice);
+          const username = typeof parsedNotice?.username === 'string' ? parsedNotice.username.trim() : '';
+          const password = typeof parsedNotice?.password === 'string' ? parsedNotice.password.trim() : '';
+
+          if (!username || !password) {
+            await AsyncStorage.removeItem(INITIAL_CREDENTIALS_NOTICE_STORAGE_KEY);
+            return;
+          }
+
+          setInitialCredentials({ username, password });
+          setShowInitialCredentialsModal(true);
+        } catch (error) {
+          console.error('Failed to load initial credentials notice:', error);
+        }
+      };
+
+      loadInitialCredentialsNotice();
+
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
+
   useEffect(() => {
     if (activeTab && !tabs.includes(activeTab)) {
       setActiveTab(t('home.recommend'));
@@ -125,10 +165,16 @@ export default function HomeScreen({ navigation }) {
   const [showSocialModal, setShowSocialModal] = useState(false);
   const [socialPlatform, setSocialPlatform] = useState('');
   const [socialSearchText, setSocialSearchText] = useState('');
+  const [showTwitterInviteEditor, setShowTwitterInviteEditor] = useState(false);
+  const [twitterInviteDraftText, setTwitterInviteDraftText] = useState('');
+  const [pendingSocialInvitePlatform, setPendingSocialInvitePlatform] = useState(null);
+  const [selectedSocialInviteUser, setSelectedSocialInviteUser] = useState(null);
   const [selectedQuestion, setSelectedQuestion] = useState(null);
   const [currentShareData, setCurrentShareData] = useState(null);
   const [showPaidAlertModal, setShowPaidAlertModal] = useState(false);
   const [paidAlertAmount, setPaidAlertAmount] = useState(null);
+  const [showInitialCredentialsModal, setShowInitialCredentialsModal] = useState(false);
+  const [initialCredentials, setInitialCredentials] = useState({ username: '', password: '' });
   const [regionStep, setRegionStep] = useState(0);
   const [selectedRegion, setSelectedRegion] = useState({ country: '', city: '', state: '', district: '' });
   
@@ -214,6 +260,16 @@ export default function HomeScreen({ navigation }) {
   const [nearbyDistance, setNearbyDistance] = useState('3公里');
   const [citySelectStep, setCitySelectStep] = useState(0); // 0:国家 1:省份 2:城市
   const [selectedCityRegion, setSelectedCityRegion] = useState({ country: '中国', state: '北京市', city: '北京' });
+  const handleConfirmInitialCredentials = React.useCallback(async () => {
+    try {
+      await AsyncStorage.removeItem(INITIAL_CREDENTIALS_NOTICE_STORAGE_KEY);
+    } catch (error) {
+      console.error('Failed to clear initial credentials notice:', error);
+    } finally {
+      setShowInitialCredentialsModal(false);
+      setInitialCredentials({ username: '', password: '' });
+    }
+  }, []);
 
   // 同城地区数据 - 使用与主区域选择器相同的多语言数据
   const cityRegionData = regionData;
@@ -347,7 +403,58 @@ export default function HomeScreen({ navigation }) {
     setShowSocialModal(true);
   };
 
+  const openTwitterInviteEditor = (user) => {
+    const sharePayload = buildQuestionSharePayload(selectedQuestion);
+    const defaultShareText = buildTwitterShareText(sharePayload || {});
+    const normalizedHandle = typeof user?.handle === 'string' ? user.handle.trim() : '';
+    const prefixedHandle = normalizedHandle
+      ? (normalizedHandle.startsWith('@') ? normalizedHandle : `@${normalizedHandle}`)
+      : '';
+
+    setSelectedSocialInviteUser(user);
+    setTwitterInviteDraftText(
+      prefixedHandle ? `${prefixedHandle} ${defaultShareText}` : defaultShareText
+    );
+    setShowTwitterInviteEditor(true);
+  };
+
+  const handleTwitterInviteShare = async (customShareText) => {
+    const sharePayload = buildQuestionSharePayload(selectedQuestion);
+    if (!sharePayload) {
+      showToast('当前问题信息缺失，暂时无法分享到推特', 'warning');
+      return;
+    }
+
+    setPendingSocialInvitePlatform('twitter');
+
+    try {
+      const result = await openTwitterShare({
+        ...sharePayload,
+        shareText: customShareText,
+      });
+
+      if (result?.openedVia === 'browser') {
+        showToast('Twitter app not installed, opened web share', 'info');
+      }
+
+      setShowTwitterInviteEditor(false);
+      setTwitterInviteDraftText('');
+      setSelectedSocialInviteUser(null);
+      setShowSocialModal(false);
+    } catch (error) {
+      console.error('Failed to invite via twitter:', error);
+      showToast('Unable to open Twitter', 'error');
+    } finally {
+      setPendingSocialInvitePlatform(null);
+    }
+  };
+
   const sendSocialMessage = (user) => {
+    if (socialPlatform === 'twitter') {
+      openTwitterInviteEditor(user);
+      return;
+    }
+
     showToast(`已向 ${user.name} 发送私信,邀请回答问题:${selectedQuestion?.title?.substring(0, 30)}...`, 'success');
     setShowSocialModal(false);
   };
@@ -358,8 +465,32 @@ export default function HomeScreen({ navigation }) {
   ) || [];
 
   // 点赞问题
+  const getQuestionById = (id) => questionList.find(item => String(item.id) === String(id));
+
+  const getQuestionLikeState = (id) => {
+    if (likedItems[id] !== undefined) {
+      return likedItems[id];
+    }
+
+    return !!getQuestionById(id)?.liked;
+  };
+
+  const getQuestionDislikeState = (id) => {
+    if (dislikedItems[id] !== undefined) {
+      return dislikedItems[id];
+    }
+
+    return !!getQuestionById(id)?.disliked;
+  };
+
   const toggleLike = async (id) => {
-    const currentState = likedItems[id];
+    const currentState = getQuestionLikeState(id);
+    const currentDislikedState = getQuestionDislikeState(id);
+
+    if (!currentState && currentDislikedState) {
+      return;
+    }
+
     const newState = !currentState;
     
     // 乐观更新UI
@@ -443,7 +574,13 @@ export default function HomeScreen({ navigation }) {
 
   // 点踩问题
   const toggleDislike = async (id) => {
-    const currentState = dislikedItems[id];
+    const currentState = getQuestionDislikeState(id);
+    const currentLikedState = getQuestionLikeState(id);
+
+    if (!currentState && currentLikedState) {
+      return;
+    }
+
     const newState = !currentState;
     
     // 乐观更新UI
@@ -746,7 +883,9 @@ export default function HomeScreen({ navigation }) {
             )}
           ListFooterComponent={renderFooter}
           renderItem={({ item, index }) => {
-            const isLiked = likedItems[item.id];
+            const isLiked = getQuestionLikeState(item.id);
+            const isDisliked = getQuestionDislikeState(item.id);
+            const isLikeDisabled = !isLiked && isDisliked;
             const isFirstItem = index === 0;
             const isLastItem = index === questionList.length - 1;
             return (
@@ -958,9 +1097,13 @@ export default function HomeScreen({ navigation }) {
                       <Text style={styles.locationText}>{getLocationDisplay(item)}</Text>
                     </TouchableOpacity>
                     <View style={styles.cardHeaderRight}>
-                      <TouchableOpacity style={styles.headerActionBtn} onPress={() => toggleLike(item.id)}>
-                        <Ionicons name={isLiked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={isLiked ? "#ef4444" : "#9ca3af"} />
-                        <Text style={[styles.headerActionText, isLiked && { color: '#ef4444' }]}>{formatNumber(item.likeCount || 0)}</Text>
+                      <TouchableOpacity
+                        style={[styles.headerActionBtn, isLikeDisabled && styles.headerActionBtnDisabled]}
+                        onPress={() => toggleLike(item.id)}
+                        disabled={isLikeDisabled}
+                      >
+                        <Ionicons name={isLiked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={isLiked ? "#ef4444" : isLikeDisabled ? "#d1d5db" : "#9ca3af"} />
+                        <Text style={[styles.headerActionText, isLiked && { color: '#ef4444' }, isLikeDisabled && styles.headerActionTextDisabled]}>{formatNumber(item.likeCount || 0)}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity 
                         style={styles.headerActionBtn} 
@@ -1119,10 +1262,17 @@ export default function HomeScreen({ navigation }) {
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowActionModal(false)}>
           <View style={styles.actionModal}>
             <View style={styles.actionModalHandle} />
-            <TouchableOpacity style={styles.actionItem} onPress={() => { if (selectedQuestion) toggleDislike(selectedQuestion.id); }}>
-              <Ionicons name={selectedQuestion && dislikedItems[selectedQuestion.id] ? "thumbs-down" : "thumbs-down-outline"} size={22} color={selectedQuestion && dislikedItems[selectedQuestion.id] ? "#6b7280" : "#6b7280"} />
-              <Text style={styles.actionItemText}>
-                {selectedQuestion && dislikedItems[selectedQuestion.id] ? '已踩' : '踩一下'}
+            <TouchableOpacity
+              style={[
+                styles.actionItem,
+                selectedQuestion && !getQuestionDislikeState(selectedQuestion.id) && getQuestionLikeState(selectedQuestion.id) && styles.actionItemDisabled
+              ]}
+              onPress={() => { if (selectedQuestion) toggleDislike(selectedQuestion.id); }}
+              disabled={selectedQuestion && !getQuestionDislikeState(selectedQuestion.id) && getQuestionLikeState(selectedQuestion.id)}
+            >
+              <Ionicons name={selectedQuestion && getQuestionDislikeState(selectedQuestion.id) ? "thumbs-down" : "thumbs-down-outline"} size={22} color={selectedQuestion && !getQuestionDislikeState(selectedQuestion.id) && getQuestionLikeState(selectedQuestion.id) ? "#d1d5db" : "#6b7280"} />
+              <Text style={[styles.actionItemText, selectedQuestion && !getQuestionDislikeState(selectedQuestion.id) && getQuestionLikeState(selectedQuestion.id) && styles.actionItemTextDisabled]}>
+                {selectedQuestion && getQuestionDislikeState(selectedQuestion.id) ? '已踩' : '踩一下'}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -1147,17 +1297,21 @@ export default function HomeScreen({ navigation }) {
               onPress={() => { 
                 setShowActionModal(false); 
                 // 所有问题都可以跳转
-                navigation.navigate('QuestionDetail', { id: selectedQuestion?.id, openAnswerModal: true });
+                navigation.navigate('QuestionDetail', {
+                  id: selectedQuestion?.id,
+                  openAnswerModal: true,
+                  defaultTab: 'answers'
+                });
               }}
             >
               <Ionicons name="create-outline" size={22} color="#ef4444" />
               <Text style={[styles.actionItemText, { color: '#ef4444' }]}>写回答</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionItem}>
+            <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); navigation.navigate('QuestionDetail', { id: selectedQuestion?.id, defaultTab: 'supplements', openSupplementModal: true }); }}>
               <Ionicons name="add-circle-outline" size={22} color="#1f2937" />
               <Text style={styles.actionItemText}>补充问题</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); navigation.navigate('Activity', { question: selectedQuestion }); }}>
+            <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); navigation.navigate('QuestionActivityList', { questionId: selectedQuestion?.id, questionTitle: selectedQuestion?.title, openCreateModal: true }); }}>
               <Ionicons name="calendar-outline" size={22} color="#22c55e" />
               <Text style={styles.actionItemText}>发起活动</Text>
             </TouchableOpacity>
@@ -1233,6 +1387,22 @@ export default function HomeScreen({ navigation }) {
         </View>
       </Modal>
 
+      <EditTextModal
+        visible={showTwitterInviteEditor}
+        onClose={() => {
+          setShowTwitterInviteEditor(false);
+          setSelectedSocialInviteUser(null);
+        }}
+        title="编辑推特邀请文案"
+        currentValue={twitterInviteDraftText}
+        onSave={handleTwitterInviteShare}
+        placeholder={`请输入要分享到推特的文案，可手动添加 ${selectedSocialInviteUser?.handle || '@用户名'}`}
+        maxLength={220}
+        multiline
+        hint="链接会自动追加到文案后面"
+        loading={pendingSocialInvitePlatform === 'twitter'}
+      />
+
       <Modal
         visible={showPaidAlertModal}
         transparent
@@ -1262,6 +1432,13 @@ export default function HomeScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      <InitialCredentialsModal
+        visible={showInitialCredentialsModal}
+        username={initialCredentials.username}
+        password={initialCredentials.password}
+        onConfirm={handleConfirmInitialCredentials}
+      />
 
       <ShareModal
         visible={showShareModal}
@@ -1351,7 +1528,9 @@ const styles = StyleSheet.create({
   postTime: { fontSize: scaleFont(12), color: '#999999', fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
   locationText: { fontSize: scaleFont(12), color: '#999999', marginLeft: 1, fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
   headerActionBtn: { flexDirection: 'row', alignItems: 'center', marginLeft: 16 },
+  headerActionBtnDisabled: { opacity: 0.45 },
   headerActionText: { fontSize: scaleFont(12), color: '#666666', marginLeft: 4 },
+  headerActionTextDisabled: { color: '#d1d5db' },
   headerMoreBtn: { padding: 2, marginLeft: 16 },
   rewardTagInline: { 
     backgroundColor: 'transparent', 
@@ -1561,7 +1740,9 @@ const styles = StyleSheet.create({
   actionModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, paddingBottom: 30 },
   actionModalHandle: { width: 40, height: 4, backgroundColor: modalTokens.border, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
   actionItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  actionItemDisabled: { opacity: 0.45 },
   actionItemText: { fontSize: scaleFont(15), color: modalTokens.textPrimary, marginLeft: 14 },
+  actionItemTextDisabled: { color: '#d1d5db' },
   reportItem: { borderBottomWidth: 0 },
   cancelBtn: { marginTop: 8, marginHorizontal: 16, backgroundColor: modalTokens.surfaceMuted, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   cancelBtnText: { fontSize: scaleFont(15), color: modalTokens.textSecondary, fontWeight: '500' },

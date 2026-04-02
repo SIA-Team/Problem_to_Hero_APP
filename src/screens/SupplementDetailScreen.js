@@ -1103,6 +1103,10 @@ export default function SupplementDetailScreen({
     localState,
     comment?.__dislikeCountResolved
   );
+  const isLikeInteractionDisabled = (likedState, dislikedState) => !likedState && !!dislikedState;
+  const isDislikeInteractionDisabled = (likedState, dislikedState) => !dislikedState && !!likedState;
+  const getCommentLikedState = comment => commentLiked[comment?.id] !== undefined ? commentLiked[comment.id] : !!comment?.liked;
+  const getCommentDislikedState = comment => commentDisliked[comment?.id] !== undefined ? commentDisliked[comment.id] : !!comment?.disliked;
   const getCommentCollectDisplayCount = (comment, localState) => getResolvedInteractionDisplayCount(
     comment?.collectCount ?? comment?.bookmarkCount ?? comment?.bookmarks ?? 0,
     !!comment?.collected,
@@ -1391,9 +1395,11 @@ export default function SupplementDetailScreen({
     const relationUserName = reply.replyToUserName || relationComment?.userName || relationComment?.userNickname || relationComment?.author || '';
     const shouldHideContextRelation = contextReplyId !== null && String(relationCommentId) === String(contextReplyId);
     const shouldShowReplyRelation = !!relationUserName && !shouldHideContextRelation && rootCommentId !== null && String(relationCommentId) !== String(rootCommentId) && String(relationCommentId) !== String(reply.id);
-    const isLiked = commentLiked[reply.id] ?? reply.liked;
+    const isLiked = getCommentLikedState(reply);
     const isCollected = commentBookmarked[reply.id] ?? reply.collected;
-    const isDisliked = commentDisliked[reply.id] ?? reply.disliked;
+    const isDisliked = getCommentDislikedState(reply);
+    const isLikeDisabled = isLikeInteractionDisabled(isLiked, isDisliked);
+    const isDislikeDisabled = isDislikeInteractionDisabled(isLiked, isDisliked);
 
     return <View key={reply.id} style={styles.replyCard}>
         <TouchableOpacity style={styles.replyHeader} activeOpacity={0.7} onPress={() => openPublicProfile(reply)}>
@@ -1412,9 +1418,9 @@ export default function SupplementDetailScreen({
         </TouchableOpacity>
         <Text style={styles.replyText}>{reply.content}</Text>
         <View style={styles.replyActions}>
-          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentLike(reply.id)} disabled={commentLikeLoading[reply.id]}>
-            <Ionicons name={isLiked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={isLiked ? "#ef4444" : "#9ca3af"} />
-            <Text style={[styles.replyActionText, isLiked && { color: '#ef4444' }]}>{getCommentLikeDisplayCount(reply, commentLiked[reply.id])}</Text>
+          <TouchableOpacity style={[styles.replyActionBtn, isLikeDisabled && styles.interactionBtnDisabled]} onPress={() => handleCommentLike(reply.id)} disabled={commentLikeLoading[reply.id] || isLikeDisabled}>
+            <Ionicons name={isLiked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={isLiked ? "#ef4444" : isLikeDisabled ? "#d1d5db" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, isLiked && { color: '#ef4444' }, isLikeDisabled && styles.interactionTextDisabled]}>{getCommentLikeDisplayCount(reply, commentLiked[reply.id])}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
           beforeOpenReply();
@@ -1434,9 +1440,9 @@ export default function SupplementDetailScreen({
             <Text style={[styles.replyActionText, isCollected && { color: '#f59e0b' }]}>{getCommentCollectDisplayCount(reply, commentBookmarked[reply.id])}</Text>
           </TouchableOpacity>
           <View style={{ flex: 1 }} />
-          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentDislike(reply.id)} disabled={commentDislikeLoading[reply.id]}>
-            <Ionicons name={isDisliked ? "thumbs-down" : "thumbs-down-outline"} size={12} color={isDisliked ? "#6b7280" : "#9ca3af"} />
-            <Text style={[styles.replyActionText, isDisliked && { color: '#6b7280' }]}>{getCommentDislikeDisplayCount(reply, commentDisliked[reply.id])}</Text>
+          <TouchableOpacity style={[styles.replyActionBtn, isDislikeDisabled && styles.interactionBtnDisabled]} onPress={() => handleCommentDislike(reply.id)} disabled={commentDislikeLoading[reply.id] || isDislikeDisabled}>
+            <Ionicons name={isDisliked ? "thumbs-down" : "thumbs-down-outline"} size={12} color={isDisliked ? "#6b7280" : isDislikeDisabled ? "#d1d5db" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, isDisliked && { color: '#6b7280' }, isDislikeDisabled && styles.interactionTextDisabled]}>{getCommentDislikeDisplayCount(reply, commentDisliked[reply.id])}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
           beforeReport();
@@ -1786,7 +1792,11 @@ export default function SupplementDetailScreen({
       return;
     }
 
-    const currentState = commentLiked[commentId] !== undefined ? commentLiked[commentId] : !!comment.liked;
+    const currentState = getCommentLikedState(comment);
+    const currentDislikedState = getCommentDislikedState(comment);
+    if (isLikeInteractionDisabled(currentState, currentDislikedState)) {
+      return;
+    }
     const nextState = !currentState;
     setCommentLiked(prev => ({
       ...prev,
@@ -1891,7 +1901,11 @@ export default function SupplementDetailScreen({
       return;
     }
 
-    const currentState = commentDisliked[commentId] !== undefined ? commentDisliked[commentId] : !!comment.disliked;
+    const currentState = getCommentDislikedState(comment);
+    const currentLikedState = getCommentLikedState(comment);
+    if (isDislikeInteractionDisabled(currentLikedState, currentState)) {
+      return;
+    }
     const nextState = !currentState;
     setCommentDisliked(prev => ({
       ...prev,
@@ -2000,13 +2014,17 @@ export default function SupplementDetailScreen({
       showToast('补充问题ID不存在', 'error');
       return;
     }
+    const currentLiked = liked.main ?? currentSupplement?.liked ?? false;
+    const currentDisliked = disliked ?? currentSupplement?.disliked ?? false;
+    if (isLikeInteractionDisabled(currentLiked, currentDisliked)) {
+      return;
+    }
 
     try {
       setInteractionLoading(prev => ({
         ...prev,
         like: true
       }));
-      const currentLiked = liked.main ?? currentSupplement?.liked ?? false;
       const nextLiked = !currentLiked;
       const fallbackLikeCount = Math.max(supplementLikeDisplayCount + (nextLiked ? 1 : -1), 0);
       const response = currentLiked ? await questionApi.unlikeSupplement(currentSupplementId) : await questionApi.likeSupplement(currentSupplementId);
@@ -2091,13 +2109,17 @@ export default function SupplementDetailScreen({
       showToast('补充问题ID不存在', 'error');
       return;
     }
+    const currentLiked = liked.main ?? currentSupplement?.liked ?? false;
+    const currentDisliked = disliked ?? currentSupplement?.disliked ?? false;
+    if (isDislikeInteractionDisabled(currentLiked, currentDisliked)) {
+      return;
+    }
 
     try {
       setInteractionLoading(prev => ({
         ...prev,
         dislike: true
       }));
-      const currentDisliked = disliked ?? currentSupplement?.disliked ?? false;
       const nextDisliked = !currentDisliked;
       const fallbackDislikeCount = Math.max(supplementDislikeDisplayCount + (nextDisliked ? 1 : -1), 0);
       const response = currentDisliked ? await questionApi.undislikeSupplement(currentSupplementId) : await questionApi.dislikeSupplement(currentSupplementId);
@@ -2648,11 +2670,11 @@ export default function SupplementDetailScreen({
                       <Text style={styles.commentText}>{comment.content}</Text>
                       <View style={styles.commentFooter}>
                         <View style={styles.commentFooterLeft}>
-                          <TouchableOpacity style={styles.commentActionBtn} onPress={() => handleCommentLike(comment.id)} disabled={commentLikeLoading[comment.id]}>
-                            <Ionicons name={isLiked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={isLiked ? "#ef4444" : "#9ca3af"} />
+                          <TouchableOpacity style={[styles.commentActionBtn, isLikeInteractionDisabled(isLiked, isDisliked) && styles.interactionBtnDisabled]} onPress={() => handleCommentLike(comment.id)} disabled={commentLikeLoading[comment.id] || isLikeInteractionDisabled(isLiked, isDisliked)}>
+                            <Ionicons name={isLiked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={isLiked ? "#ef4444" : isLikeInteractionDisabled(isLiked, isDisliked) ? "#d1d5db" : "#9ca3af"} />
                             <Text style={[styles.commentActionText, isLiked && {
                         color: '#ef4444'
-                      }]}>{getCommentLikeDisplayCount(comment, commentLiked[comment.id])}</Text>
+                      }, isLikeInteractionDisabled(isLiked, isDisliked) && styles.interactionTextDisabled]}>{getCommentLikeDisplayCount(comment, commentLiked[comment.id])}</Text>
                           </TouchableOpacity>
                           <TouchableOpacity style={styles.commentActionBtn} onPress={() => {
                         setCurrentCommentId(comment.id);
@@ -2673,9 +2695,9 @@ export default function SupplementDetailScreen({
                           </TouchableOpacity>
                         </View>
                         <View style={styles.commentFooterRight}>
-                          <TouchableOpacity style={styles.commentActionBtn} onPress={() => handleCommentDislike(comment.id)} disabled={commentDislikeLoading[comment.id]}>
-                            <Ionicons name={isDisliked ? "thumbs-down" : "thumbs-down-outline"} size={14} color="#9ca3af" />
-                            <Text style={styles.commentActionText}>{getCommentDislikeDisplayCount(comment, commentDisliked[comment.id])}</Text>
+                          <TouchableOpacity style={[styles.commentActionBtn, isDislikeInteractionDisabled(isLiked, isDisliked) && styles.interactionBtnDisabled]} onPress={() => handleCommentDislike(comment.id)} disabled={commentDislikeLoading[comment.id] || isDislikeInteractionDisabled(isLiked, isDisliked)}>
+                            <Ionicons name={isDisliked ? "thumbs-down" : "thumbs-down-outline"} size={14} color={isDisliked ? "#6b7280" : isDislikeInteractionDisabled(isLiked, isDisliked) ? "#d1d5db" : "#9ca3af"} />
+                            <Text style={[styles.commentActionText, isDisliked && { color: '#6b7280' }, isDislikeInteractionDisabled(isLiked, isDisliked) && styles.interactionTextDisabled]}>{getCommentDislikeDisplayCount(comment, commentDisliked[comment.id])}</Text>
                           </TouchableOpacity>
                             <TouchableOpacity style={styles.commentActionBtn} onPress={() => handleCommentReport(comment.id)}>
                               <Ionicons name="flag-outline" size={14} color="#ef4444" />
@@ -2691,11 +2713,11 @@ export default function SupplementDetailScreen({
 
       <View style={styles.bottomBar}>
         <View style={styles.bottomBarLeft}>
-          <TouchableOpacity style={styles.bottomIconBtn} onPress={handleSupplementLike} disabled={interactionLoading.like}>
-            <Ionicons name={mainLiked ? "thumbs-up" : "thumbs-up-outline"} size={20} color={mainLiked ? "#ef4444" : "#6b7280"} />
+          <TouchableOpacity style={[styles.bottomIconBtn, isLikeInteractionDisabled(mainLiked, mainDisliked) && styles.interactionBtnDisabled]} onPress={handleSupplementLike} disabled={interactionLoading.like || isLikeInteractionDisabled(mainLiked, mainDisliked)}>
+            <Ionicons name={mainLiked ? "thumbs-up" : "thumbs-up-outline"} size={20} color={mainLiked ? "#ef4444" : isLikeInteractionDisabled(mainLiked, mainDisliked) ? "#d1d5db" : "#6b7280"} />
             <Text style={[styles.bottomIconText, mainLiked && {
             color: '#ef4444'
-          }]}>{supplementLikeDisplayCount}</Text>
+          }, isLikeInteractionDisabled(mainLiked, mainDisliked) && styles.interactionTextDisabled]}>{supplementLikeDisplayCount}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.bottomIconBtn} onPress={handleSupplementCollect} disabled={interactionLoading.collect}>
             <Ionicons name={mainCollected ? "star" : "star-outline"} size={20} color={mainCollected ? "#f59e0b" : "#6b7280"} />
@@ -2703,11 +2725,11 @@ export default function SupplementDetailScreen({
             color: '#f59e0b'
           }]}>{supplementCollectDisplayCount}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.bottomIconBtn} onPress={handleSupplementDislike} disabled={interactionLoading.dislike}>
-            <Ionicons name={mainDisliked ? "thumbs-down" : "thumbs-down-outline"} size={20} color="#6b7280" />
+          <TouchableOpacity style={[styles.bottomIconBtn, isDislikeInteractionDisabled(mainLiked, mainDisliked) && styles.interactionBtnDisabled]} onPress={handleSupplementDislike} disabled={interactionLoading.dislike || isDislikeInteractionDisabled(mainLiked, mainDisliked)}>
+            <Ionicons name={mainDisliked ? "thumbs-down" : "thumbs-down-outline"} size={20} color={mainDisliked ? "#6b7280" : isDislikeInteractionDisabled(mainLiked, mainDisliked) ? "#d1d5db" : "#6b7280"} />
             <Text style={[styles.bottomIconText, mainDisliked && {
             color: '#6b7280'
-          }]}>{supplementDislikeDisplayCount}</Text>
+          }, isDislikeInteractionDisabled(mainLiked, mainDisliked) && styles.interactionTextDisabled]}>{supplementDislikeDisplayCount}</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.bottomBarRight}>
@@ -3256,9 +3278,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4
   },
+  interactionBtnDisabled: {
+    opacity: 0.45
+  },
   answerActionText: {
     fontSize: scaleFont(13),
     color: '#6b7280'
+  },
+  interactionTextDisabled: {
+    color: '#d1d5db'
   },
   inviteContainer: {
     backgroundColor: '#fff'

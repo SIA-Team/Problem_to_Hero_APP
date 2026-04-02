@@ -9,6 +9,7 @@ import ModalSafeAreaView from '../components/ModalSafeAreaView';
 import WriteAnswerModal from '../components/WriteAnswerModal';
 import QuestionDetailSkeleton from '../components/QuestionDetailSkeleton';
 import ShareModal from '../components/ShareModal';
+import EditTextModal from '../components/EditTextModal';
 import superLikeCreditService from '../services/SuperLikeCreditService';
 import { useTranslation } from '../i18n/withTranslation';
 import questionApi from '../services/api/questionApi';
@@ -22,6 +23,7 @@ import { formatTime } from '../utils/timeFormatter';
 import { normalizeEntityId } from '../utils/jsonLongId';
 import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
 import { scaleFont } from '../utils/responsive';
+import { buildTwitterShareText, openTwitterShare } from '../utils/shareService';
 const answers = [{
   id: 1,
   author: 'Python老司机',
@@ -556,6 +558,10 @@ export default function QuestionDetailScreen({
   // 转发分享状态
   const [showShareModal, setShowShareModal] = useState(false);
   const [currentShareData, setCurrentShareData] = useState(null);
+  const [showTwitterInviteEditor, setShowTwitterInviteEditor] = useState(false);
+  const [twitterInviteDraftText, setTwitterInviteDraftText] = useState('');
+  const [selectedTwitterInviteUser, setSelectedTwitterInviteUser] = useState(null);
+  const [pendingTwitterInvitePlatform, setPendingTwitterInvitePlatform] = useState(null);
   const [answerSelectedTeams, setAnswerSelectedTeams] = useState([]); // 回答选中的团队
   const [supplementQuestionIdentity, setSupplementQuestionIdentity] = useState('personal'); // 补充问题身份
   const [supplementQuestionSelectedTeams, setSupplementQuestionSelectedTeams] = useState([]); // 补充问题选中的团队
@@ -722,6 +728,17 @@ export default function QuestionDetailScreen({
     return num > 999 ? '999+' : num;
   };
 
+  const recommendedTwitterUsers = React.useMemo(
+    () =>
+      [1, 2, 3, 4, 5].map(i => ({
+        id: i,
+        name: `@user${i}`,
+        followers: `${i}k粉丝`,
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=rectwitter${i}`
+      })),
+    []
+  );
+
   // 使用 useMemo 创建 answerTabs，避免在模块加载时调用 t()
   // 优化：只在初始数据加载完成后才显示数量，彻底避免闪烁
   const answerTabs = React.useMemo(() => {
@@ -737,12 +754,19 @@ export default function QuestionDetailScreen({
     return [`${t('screens.questionDetail.tabs.supplements')} (${formatCount(supplementsList.length)})`, `${t('screens.questionDetail.tabs.answers')} (${formatCount(answersTotal)})`, `${t('screens.questionDetail.tabs.comments')} (${formatCount(commentsTotal || questionData?.commentCount || 0)})`, t('screens.questionDetail.tabs.invite')];
   }, [t, supplementsList.length, answersTotal, commentsTotal, questionData?.commentCount, supplementsCache.featured.loaded, answersCache.featured.loaded]);
 
+  const preferredInitialTabIndex = React.useMemo(() => {
+    if (route?.params?.defaultTab === 'answers') {
+      return 1;
+    }
+    return 0;
+  }, [route?.params?.defaultTab]);
+
   // 设置默认选中的标签页 - 使用 useLayoutEffect 确保在渲染前执行
   React.useLayoutEffect(() => {
     if (!activeTab && answerTabs.length > 0) {
-      setActiveTab(answerTabs[0]); // 默认选中第一个标签（补充）
+      setActiveTab(answerTabs[preferredInitialTabIndex] || answerTabs[0]);
     }
-  }, [answerTabs]);
+  }, [activeTab, answerTabs, preferredInitialTabIndex]);
 
   // 当标签文本变化时，更新 activeTab 以保持同步
   useEffect(() => {
@@ -1134,6 +1158,34 @@ export default function QuestionDetailScreen({
   useEffect(() => {
     setSupplementPublishBlockedMessage('');
   }, [route?.params?.id]);
+
+  useEffect(() => {
+    if (!route?.params?.openSupplementModal) {
+      return;
+    }
+
+    const blockedReason = getSupplementPublishBlockedReason();
+    if (blockedReason) {
+      showToast(blockedReason, 'warning');
+    } else {
+      setShowSupplementModal(true);
+    }
+    navigation.setParams({
+      openSupplementModal: undefined
+    });
+  }, [navigation, route?.params?.openSupplementModal]);
+
+  useEffect(() => {
+    if (!route?.params?.openAnswerModal) {
+      return;
+    }
+
+    setCurrentSupplement(null);
+    setShowAnswerModal(true);
+    navigation.setParams({
+      openAnswerModal: undefined
+    });
+  }, [navigation, route?.params?.openAnswerModal]);
 
   // 获取问题详情数据 - 优化版：等待所有数据加载完成后再渲染
   useEffect(() => {
@@ -2262,6 +2314,16 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     }
     return supplementsCache[supplementsSortBy]?.list?.find(item => String(item?.id) === String(supplementId)) || Object.values(supplementsCache).flatMap(entry => entry?.list || []).find(item => String(item?.id) === String(supplementId)) || null;
   };
+  const isLikeInteractionDisabled = (likedState, dislikedState) => !likedState && !!dislikedState;
+  const isDislikeInteractionDisabled = (likedState, dislikedState) => !dislikedState && !!likedState;
+  const getQuestionLikedState = () => liked.main ?? questionData?.liked ?? false;
+  const getQuestionDislikedState = () => liked.dislike ?? questionData?.disliked ?? false;
+  const getAnswerLikedState = (answerId, answer = null) => answerLiked[answerId] !== undefined ? answerLiked[answerId] : !!(answer ?? findAnswerByAnyId(answerId))?.liked;
+  const getAnswerDislikedState = (answerId, answer = null) => answerDisliked[answerId] !== undefined ? answerDisliked[answerId] : !!(answer ?? findAnswerByAnyId(answerId))?.disliked;
+  const getSupplementLikedState = (supplementId, supplement = null) => suppLiked[supplementId] !== undefined ? suppLiked[supplementId] : !!(supplement ?? getSupplementById(supplementId))?.liked;
+  const getSupplementDislikedState = (supplementId, supplement = null) => suppDisliked[supplementId] !== undefined ? suppDisliked[supplementId] : !!(supplement ?? getSupplementById(supplementId))?.disliked;
+  const getCommentLikedState = comment => commentLiked[comment?.id] !== undefined ? commentLiked[comment.id] : !!comment?.liked;
+  const getCommentDislikedState = comment => commentDisliked[comment?.id] !== undefined ? commentDisliked[comment.id] : !!comment?.disliked;
   const buildSupplementNavigationItem = supplement => {
     if (!supplement || typeof supplement !== 'object') {
       return supplement;
@@ -2430,6 +2492,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     const relationUserName = reply.replyToUserName || relationComment?.userName || relationComment?.userNickname || relationComment?.author || '';
     const shouldHideContextRelation = contextReplyId !== null && String(relationCommentId) === String(contextReplyId);
     const shouldShowReplyRelation = !!relationUserName && !shouldHideContextRelation && rootCommentId !== null && String(relationCommentId) !== String(rootCommentId) && String(relationCommentId) !== String(reply.id);
+    const isReplyLiked = getCommentLikedState(reply);
+    const isReplyDisliked = getCommentDislikedState(reply);
+    const isReplyLikeDisabled = isLikeInteractionDisabled(isReplyLiked, isReplyDisliked);
+    const isReplyDislikeDisabled = isDislikeInteractionDisabled(isReplyLiked, isReplyDisliked);
     return <View key={reply.id} style={styles.replyCard}>
         <TouchableOpacity style={styles.replyHeader} activeOpacity={0.7} onPress={() => openPublicProfile(reply)}>
           <Avatar uri={reply.userAvatar || reply.avatar} name={reply.userName || reply.userNickname || reply.author} size={24} />
@@ -2447,11 +2513,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         </TouchableOpacity>
         <Text style={styles.replyText}>{reply.content}</Text>
         <View style={styles.replyActions}>
-          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentLike(reply.id)} disabled={commentLikeLoading[reply.id]}>
-            <Ionicons name={commentLiked[reply.id] ?? reply.liked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={commentLiked[reply.id] ?? reply.liked ? "#ef4444" : "#9ca3af"} />
-            <Text style={[styles.replyActionText, (commentLiked[reply.id] ?? reply.liked) && {
+          <TouchableOpacity style={[styles.replyActionBtn, isReplyLikeDisabled && styles.interactionBtnDisabled]} onPress={() => handleCommentLike(reply.id)} disabled={commentLikeLoading[reply.id] || isReplyLikeDisabled}>
+            <Ionicons name={isReplyLiked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={isReplyLiked ? "#ef4444" : isReplyLikeDisabled ? "#d1d5db" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, isReplyLiked && {
           color: '#ef4444'
-        }]}>{getCommentLikeDisplayCount(reply, commentLiked[reply.id])}</Text>
+        }, isReplyLikeDisabled && styles.interactionTextDisabled]}>{getCommentLikeDisplayCount(reply, commentLiked[reply.id])}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
           beforeOpenReply();
@@ -2474,11 +2540,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }]}>{getCommentCollectDisplayCount(reply, commentCollected[reply.id])}</Text>
           </TouchableOpacity>
           <View style={{flex: 1}} />
-          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentDislike(reply.id)} disabled={commentDislikeLoading[reply.id]}>
-            <Ionicons name={commentDisliked[reply.id] ?? reply.disliked ? "thumbs-down" : "thumbs-down-outline"} size={12} color={commentDisliked[reply.id] ?? reply.disliked ? "#6b7280" : "#9ca3af"} />
-            <Text style={[styles.replyActionText, (commentDisliked[reply.id] ?? reply.disliked) && {
+          <TouchableOpacity style={[styles.replyActionBtn, isReplyDislikeDisabled && styles.interactionBtnDisabled]} onPress={() => handleCommentDislike(reply.id)} disabled={commentDislikeLoading[reply.id] || isReplyDislikeDisabled}>
+            <Ionicons name={isReplyDisliked ? "thumbs-down" : "thumbs-down-outline"} size={12} color={isReplyDisliked ? "#6b7280" : isReplyDislikeDisabled ? "#d1d5db" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, isReplyDisliked && {
           color: '#6b7280'
-        }]}>{getCommentDislikeDisplayCount(reply, commentDisliked[reply.id])}</Text>
+        }, isReplyDislikeDisabled && styles.interactionTextDisabled]}>{getCommentDislikeDisplayCount(reply, commentDisliked[reply.id])}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
           beforeReport();
@@ -2502,6 +2568,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     const relationUserName = reply.replyToUserName || relationComment?.userName || relationComment?.userNickname || relationComment?.author || '';
     const shouldHideContextRelation = contextReplyId !== null && String(relationCommentId) === String(contextReplyId);
     const shouldShowReplyRelation = !!relationUserName && !shouldHideContextRelation && rootCommentId !== null && String(relationCommentId) !== String(rootCommentId) && String(relationCommentId) !== String(reply.id);
+    const isReplyLiked = getCommentLikedState(reply);
+    const isReplyDisliked = getCommentDislikedState(reply);
+    const isReplyLikeDisabled = isLikeInteractionDisabled(isReplyLiked, isReplyDisliked);
+    const isReplyDislikeDisabled = isDislikeInteractionDisabled(isReplyLiked, isReplyDisliked);
     return <View key={reply.id} style={styles.replyCard}>
         <TouchableOpacity style={styles.replyHeader} activeOpacity={0.7} onPress={() => openPublicProfile(reply)}>
           <Avatar uri={reply.userAvatar || reply.avatar} name={reply.userName || reply.userNickname || reply.author} size={24} />
@@ -2519,11 +2589,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         </TouchableOpacity>
         <Text style={styles.replyText}>{reply.content}</Text>
         <View style={styles.replyActions}>
-          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentLike(reply.id)} disabled={commentLikeLoading[reply.id]}>
-            <Ionicons name={commentLiked[reply.id] ?? reply.liked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={commentLiked[reply.id] ?? reply.liked ? "#ef4444" : "#9ca3af"} />
-            <Text style={[styles.replyActionText, (commentLiked[reply.id] ?? reply.liked) && {
+          <TouchableOpacity style={[styles.replyActionBtn, isReplyLikeDisabled && styles.interactionBtnDisabled]} onPress={() => handleCommentLike(reply.id)} disabled={commentLikeLoading[reply.id] || isReplyLikeDisabled}>
+            <Ionicons name={isReplyLiked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={isReplyLiked ? "#ef4444" : isReplyLikeDisabled ? "#d1d5db" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, isReplyLiked && {
           color: '#ef4444'
-        }]}>{getCommentLikeDisplayCount(reply, commentLiked[reply.id])}</Text>
+        }, isReplyLikeDisabled && styles.interactionTextDisabled]}>{getCommentLikeDisplayCount(reply, commentLiked[reply.id])}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
           openCommentModal(buildCommentReplyTarget(reply, {
@@ -2545,11 +2615,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }]}>{getCommentCollectDisplayCount(reply, commentCollected[reply.id])}</Text>
           </TouchableOpacity>
           <View style={{flex: 1}} />
-          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentDislike(reply.id)} disabled={commentDislikeLoading[reply.id]}>
-            <Ionicons name={commentDisliked[reply.id] ?? reply.disliked ? "thumbs-down" : "thumbs-down-outline"} size={12} color={commentDisliked[reply.id] ?? reply.disliked ? "#6b7280" : "#9ca3af"} />
-            <Text style={[styles.replyActionText, (commentDisliked[reply.id] ?? reply.disliked) && {
+          <TouchableOpacity style={[styles.replyActionBtn, isReplyDislikeDisabled && styles.interactionBtnDisabled]} onPress={() => handleCommentDislike(reply.id)} disabled={commentDislikeLoading[reply.id] || isReplyDislikeDisabled}>
+            <Ionicons name={isReplyDisliked ? "thumbs-down" : "thumbs-down-outline"} size={12} color={isReplyDisliked ? "#6b7280" : isReplyDislikeDisabled ? "#d1d5db" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, isReplyDisliked && {
           color: '#6b7280'
-        }]}>{getCommentDislikeDisplayCount(reply, commentDisliked[reply.id])}</Text>
+        }, isReplyDislikeDisabled && styles.interactionTextDisabled]}>{getCommentDislikeDisplayCount(reply, commentDisliked[reply.id])}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
           navigation.navigate('Report', {
@@ -2618,6 +2688,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     const relationUserName = reply.replyToUserName || relationComment?.userName || relationComment?.userNickname || relationComment?.author || '';
     const shouldHideContextRelation = contextReplyId !== null && String(relationCommentId) === String(contextReplyId);
     const shouldShowReplyRelation = !!relationUserName && !shouldHideContextRelation && rootCommentId !== null && String(relationCommentId) !== String(rootCommentId) && String(relationCommentId) !== String(reply.id);
+    const isReplyLiked = getCommentLikedState(reply);
+    const isReplyDisliked = getCommentDislikedState(reply);
+    const isReplyLikeDisabled = isLikeInteractionDisabled(isReplyLiked, isReplyDisliked);
+    const isReplyDislikeDisabled = isDislikeInteractionDisabled(isReplyLiked, isReplyDisliked);
     return <View key={reply.id} style={styles.replyCard}>
         <TouchableOpacity style={styles.replyHeader} activeOpacity={0.7} onPress={() => openPublicProfile(reply)}>
           <Avatar uri={reply.userAvatar || reply.avatar} name={reply.userName || reply.userNickname || reply.author} size={24} />
@@ -2635,11 +2709,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         </TouchableOpacity>
         <Text style={styles.replyText}>{reply.content}</Text>
         <View style={styles.replyActions}>
-          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentLike(reply.id)} disabled={commentLikeLoading[reply.id]}>
-            <Ionicons name={commentLiked[reply.id] ?? reply.liked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={commentLiked[reply.id] ?? reply.liked ? "#ef4444" : "#9ca3af"} />
-            <Text style={[styles.replyActionText, (commentLiked[reply.id] ?? reply.liked) && {
+          <TouchableOpacity style={[styles.replyActionBtn, isReplyLikeDisabled && styles.interactionBtnDisabled]} onPress={() => handleCommentLike(reply.id)} disabled={commentLikeLoading[reply.id] || isReplyLikeDisabled}>
+            <Ionicons name={isReplyLiked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={isReplyLiked ? "#ef4444" : isReplyLikeDisabled ? "#d1d5db" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, isReplyLiked && {
           color: '#ef4444'
-        }]}>{getCommentLikeDisplayCount(reply, commentLiked[reply.id])}</Text>
+        }, isReplyLikeDisabled && styles.interactionTextDisabled]}>{getCommentLikeDisplayCount(reply, commentLiked[reply.id])}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
           beforeOpenReply();
@@ -2662,11 +2736,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }]}>{getCommentCollectDisplayCount(reply, commentCollected[reply.id])}</Text>
           </TouchableOpacity>
           <View style={{flex: 1}} />
-          <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentDislike(reply.id)} disabled={commentDislikeLoading[reply.id]}>
-            <Ionicons name={commentDisliked[reply.id] ?? reply.disliked ? "thumbs-down" : "thumbs-down-outline"} size={12} color={commentDisliked[reply.id] ?? reply.disliked ? "#6b7280" : "#9ca3af"} />
-            <Text style={[styles.replyActionText, (commentDisliked[reply.id] ?? reply.disliked) && {
+          <TouchableOpacity style={[styles.replyActionBtn, isReplyDislikeDisabled && styles.interactionBtnDisabled]} onPress={() => handleCommentDislike(reply.id)} disabled={commentDislikeLoading[reply.id] || isReplyDislikeDisabled}>
+            <Ionicons name={isReplyDisliked ? "thumbs-down" : "thumbs-down-outline"} size={12} color={isReplyDisliked ? "#6b7280" : isReplyDislikeDisabled ? "#d1d5db" : "#9ca3af"} />
+            <Text style={[styles.replyActionText, isReplyDisliked && {
           color: '#6b7280'
-        }]}>{getCommentDislikeDisplayCount(reply, commentDisliked[reply.id])}</Text>
+        }, isReplyDislikeDisabled && styles.interactionTextDisabled]}>{getCommentDislikeDisplayCount(reply, commentDisliked[reply.id])}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => {
           beforeReport();
@@ -4073,7 +4147,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     if (commentDislikeLoading[commentId]) {
       return;
     }
-    const currentState = commentDisliked[commentId] !== undefined ? commentDisliked[commentId] : !!comment?.disliked;
+    const currentState = getCommentDislikedState(comment);
+    const currentLikedState = getCommentLikedState(comment);
+    if (isDislikeInteractionDisabled(currentLikedState, currentState)) {
+      return;
+    }
     const newState = !currentState;
     setCommentDisliked(prev => ({
       ...prev,
@@ -4140,7 +4218,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     if (commentLikeLoading[commentId]) {
       return;
     }
-    const currentState = commentLiked[commentId] !== undefined ? commentLiked[commentId] : !!comment?.liked;
+    const currentState = getCommentLikedState(comment);
+    const currentDislikedState = getCommentDislikedState(comment);
+    if (isLikeInteractionDisabled(currentState, currentDislikedState)) {
+      return;
+    }
     const newState = !currentState;
     setCommentLiked(prev => ({
       ...prev,
@@ -4449,7 +4531,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     }
 
     // 立即更新UI状态，提供即时反馈
-    const currentState = answerLiked[answerId] !== undefined ? answerLiked[answerId] : !!answer?.liked;
+    const currentState = getAnswerLikedState(answerId, answer);
+    const currentDislikedState = getAnswerDislikedState(answerId, answer);
+    if (isLikeInteractionDisabled(currentState, currentDislikedState)) {
+      return;
+    }
     const newState = !currentState;
     setAnswerLiked(prev => ({
       ...prev,
@@ -4538,7 +4624,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     }
 
     // 立即更新UI状态，提供即时反馈
-    const currentState = answerDisliked[answerId] !== undefined ? answerDisliked[answerId] : !!answer?.disliked;
+    const currentState = getAnswerDislikedState(answerId, answer);
+    const currentLikedState = getAnswerLikedState(answerId, answer);
+    if (isDislikeInteractionDisabled(currentLikedState, currentState)) {
+      return;
+    }
     const newState = !currentState;
     setAnswerDisliked(prev => ({
       ...prev,
@@ -4994,7 +5084,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     try {
       console.log('👎 处理补充问题踩一下: id=', supplementId);
       const currentSupplement = getSupplementById(supplementId);
-      const currentDisliked = suppDisliked[supplementId] ?? currentSupplement?.disliked ?? false;
+      const currentDisliked = getSupplementDislikedState(supplementId, currentSupplement);
+      const currentLiked = getSupplementLikedState(supplementId, currentSupplement);
+      if (isDislikeInteractionDisabled(currentLiked, currentDisliked)) {
+        return;
+      }
       const baseDislikeCount = getSupplementDislikeDisplayCount(currentSupplement, currentDisliked);
       const nextDisliked = !currentDisliked;
       const fallbackDislikeCount = Math.max(baseDislikeCount + (nextDisliked ? 1 : -1), 0);
@@ -5033,7 +5127,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     try {
       console.log('👍 处理补充问题点赞: id=', supplementId);
       const currentSupplement = supplementsCache[supplementsSortBy]?.list?.find(item => String(item?.id) === String(supplementId)) || Object.values(supplementsCache).flatMap(entry => entry?.list || []).find(item => String(item?.id) === String(supplementId));
-      const currentLiked = suppLiked[supplementId] ?? currentSupplement?.liked ?? false;
+      const currentLiked = getSupplementLikedState(supplementId, currentSupplement);
+      const currentDisliked = getSupplementDislikedState(supplementId, currentSupplement);
+      if (isLikeInteractionDisabled(currentLiked, currentDisliked)) {
+        return;
+      }
       const baseLikeCount = getSupplementLikeDisplayCount(currentSupplement, currentLiked);
       const nextLiked = !currentLiked;
       const fallbackLikeCount = Math.max(baseLikeCount + (nextLiked ? 1 : -1), 0);
@@ -5135,6 +5233,45 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     type: 'sharequestion',
     qid: Number(route?.params?.id ?? questionData?.id) || null
   });
+  const openTwitterInviteEditor = user => {
+    const sharePayload = buildQuestionSharePayload();
+    const defaultShareText = buildTwitterShareText(sharePayload);
+    const normalizedHandle = typeof user?.name === 'string' ? user.name.trim() : '';
+    const prefixedHandle = normalizedHandle
+      ? normalizedHandle.startsWith('@')
+        ? normalizedHandle
+        : `@${normalizedHandle}`
+      : '';
+
+    setSelectedTwitterInviteUser(user);
+    setTwitterInviteDraftText(
+      prefixedHandle ? `${prefixedHandle} ${defaultShareText}` : defaultShareText
+    );
+    setShowTwitterInviteEditor(true);
+  };
+  const handleTwitterInviteShare = async customShareText => {
+    setPendingTwitterInvitePlatform('twitter');
+
+    try {
+      const result = await openTwitterShare({
+        ...buildQuestionSharePayload(),
+        shareText: customShareText
+      });
+
+      if (result?.openedVia === 'browser') {
+        showToast('Twitter app not installed, opened web share', 'info');
+      }
+
+      setShowTwitterInviteEditor(false);
+      setTwitterInviteDraftText('');
+      setSelectedTwitterInviteUser(null);
+    } catch (error) {
+      console.error('Failed to invite via twitter:', error);
+      showToast('Unable to open Twitter', 'error');
+    } finally {
+      setPendingTwitterInvitePlatform(null);
+    }
+  };
   const resolveShareTargetId = (...values) => {
     for (const value of values) {
       const normalizedValue = Number(value);
@@ -5209,7 +5346,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       return;
     }
     try {
-      const currentLiked = liked.main ?? questionData.liked ?? false;
+      const currentLiked = getQuestionLikedState();
+      const currentDisliked = getQuestionDislikedState();
+      if (isLikeInteractionDisabled(currentLiked, currentDisliked)) {
+        return;
+      }
       const baseLikeCount = Number(questionData.likeCount ?? questionData.likes) || 0;
       const nextLiked = !currentLiked;
       const fallbackLikeCount = Math.max(baseLikeCount + (nextLiked ? 1 : -1), 0);
@@ -5268,7 +5409,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       return;
     }
     try {
-      const currentDisliked = liked.dislike ?? questionData.disliked ?? false;
+      const currentDisliked = getQuestionDislikedState();
+      const currentLiked = getQuestionLikedState();
+      if (isDislikeInteractionDisabled(currentLiked, currentDisliked)) {
+        return;
+      }
       const baseDislikeCount = Number(questionData.dislikeCount ?? questionData.dislikes) || 0;
       const nextDisliked = !currentDisliked;
       const fallbackDislikeCount = Math.max(baseDislikeCount + (nextDisliked ? 1 : -1), 0);
@@ -5904,14 +6049,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   
                   <View style={styles.suppFooter}>
                     <View style={styles.suppFooterLeft}>
-                      <TouchableOpacity style={styles.suppActionBtn} onPress={e => {
+                      <TouchableOpacity style={[styles.suppActionBtn, isLikeInteractionDisabled(getSupplementLikedState(item.id, item), getSupplementDislikedState(item.id, item)) && styles.interactionBtnDisabled]} onPress={e => {
                     e.stopPropagation();
                     handleSupplementLike(item.id);
-                  }}>
-                        <Ionicons name={suppLiked[item.id] ?? item.liked ? "thumbs-up" : "thumbs-up-outline"} size={16} color={suppLiked[item.id] ?? item.liked ? "#ef4444" : "#6b7280"} />
-                        <Text style={[styles.suppActionText, (suppLiked[item.id] ?? item.liked) && {
+                  }} disabled={isLikeInteractionDisabled(getSupplementLikedState(item.id, item), getSupplementDislikedState(item.id, item))}>
+                        <Ionicons name={getSupplementLikedState(item.id, item) ? "thumbs-up" : "thumbs-up-outline"} size={16} color={getSupplementLikedState(item.id, item) ? "#ef4444" : isLikeInteractionDisabled(getSupplementLikedState(item.id, item), getSupplementDislikedState(item.id, item)) ? "#d1d5db" : "#6b7280"} />
+                        <Text style={[styles.suppActionText, getSupplementLikedState(item.id, item) && {
                       color: '#ef4444'
-                    }]}>
+                    }, isLikeInteractionDisabled(getSupplementLikedState(item.id, item), getSupplementDislikedState(item.id, item)) && styles.interactionTextDisabled]}>
                           {getSupplementLikeDisplayCount(item, suppLiked[item.id])}
                         </Text>
                       </TouchableOpacity>
@@ -6055,11 +6200,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     
                     <View style={styles.commentFooter}>
                       <View style={styles.commentFooterLeft}>
-                        <TouchableOpacity style={styles.commentActionBtn} onPress={() => handleCommentLike(comment.id)} disabled={commentLikeLoading[comment.id]}>
-                          <Ionicons name={isCommentLiked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={isCommentLiked ? "#ef4444" : "#9ca3af"} />
+                        <TouchableOpacity style={[styles.commentActionBtn, isLikeInteractionDisabled(isCommentLiked, isCommentDisliked) && styles.interactionBtnDisabled]} onPress={() => handleCommentLike(comment.id)} disabled={commentLikeLoading[comment.id] || isLikeInteractionDisabled(isCommentLiked, isCommentDisliked)}>
+                          <Ionicons name={isCommentLiked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={isCommentLiked ? "#ef4444" : isLikeInteractionDisabled(isCommentLiked, isCommentDisliked) ? "#d1d5db" : "#9ca3af"} />
                           <Text style={[styles.commentActionText, isCommentLiked && {
                           color: '#ef4444'
-                        }]}>{commentLikeCount}</Text>
+                        }, isLikeInteractionDisabled(isCommentLiked, isCommentDisliked) && styles.interactionTextDisabled]}>{commentLikeCount}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.commentActionBtn} onPress={() => {
                         setCurrentCommentId(comment.id);
@@ -6080,11 +6225,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                         </TouchableOpacity>
                       </View>
                       <View style={styles.commentFooterRight}>
-                        <TouchableOpacity style={styles.commentActionBtn} onPress={() => handleCommentDislike(comment.id)} disabled={commentDislikeLoading[comment.id]}>
-                          <Ionicons name={isCommentDisliked ? "thumbs-down" : "thumbs-down-outline"} size={14} color={isCommentDisliked ? "#6b7280" : "#9ca3af"} />
+                        <TouchableOpacity style={[styles.commentActionBtn, isDislikeInteractionDisabled(isCommentLiked, isCommentDisliked) && styles.interactionBtnDisabled]} onPress={() => handleCommentDislike(comment.id)} disabled={commentDislikeLoading[comment.id] || isDislikeInteractionDisabled(isCommentLiked, isCommentDisliked)}>
+                          <Ionicons name={isCommentDisliked ? "thumbs-down" : "thumbs-down-outline"} size={14} color={isCommentDisliked ? "#6b7280" : isDislikeInteractionDisabled(isCommentLiked, isCommentDisliked) ? "#d1d5db" : "#9ca3af"} />
                           <Text style={[styles.commentActionText, isCommentDisliked && {
                           color: '#6b7280'
-                        }]}>{commentDislikeCount}</Text>
+                        }, isDislikeInteractionDisabled(isCommentLiked, isCommentDisliked) && styles.interactionTextDisabled]}>{commentDislikeCount}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.commentActionBtn} onPress={() => navigation.navigate('Report', {
                         type: 'comment',
@@ -6185,16 +6330,24 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               {inviteTab === '推特' && <View style={styles.inviteTabContent}>
                   {/* 推荐邀请用户 - 横向滚动 */}
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recommendScroll}>
-                    {[1, 2, 3, 4, 5].map(i => <View key={`rec-twitter-${i}`} style={styles.recommendUserCard}>
+                    {recommendedTwitterUsers.map(user => <View key={`rec-twitter-${user.id}`} style={styles.recommendUserCard}>
                         <Image source={{
-                  uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=rectwitter${i}`
+                  uri: user.avatar
                 }} style={styles.recommendUserAvatar} />
                         <View style={styles.recommendUserTextContainer}>
-                          <Text style={styles.recommendUserName} numberOfLines={1}>@user{i}</Text>
-                          <Text style={styles.recommendUserDesc} numberOfLines={1}>{i}k粉丝</Text>
+                          <Text style={styles.recommendUserName} numberOfLines={1}>{user.name}</Text>
+                          <Text style={styles.recommendUserDesc} numberOfLines={1}>{user.followers}</Text>
                         </View>
-                        <TouchableOpacity style={[styles.recommendInviteBtn, styles.recommendInviteBtnTwitter]}>
-                          <Ionicons name="logo-twitter" size={12} color="#fff" />
+                        <TouchableOpacity
+                          style={[styles.recommendInviteBtn, styles.recommendInviteBtnTwitter]}
+                          onPress={() => openTwitterInviteEditor(user)}
+                          disabled={pendingTwitterInvitePlatform === 'twitter'}
+                        >
+                          {pendingTwitterInvitePlatform === 'twitter' && selectedTwitterInviteUser?.id === user.id ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Ionicons name="logo-twitter" size={12} color="#fff" />
+                          )}
                         </TouchableOpacity>
                       </View>)}
                   </ScrollView>
@@ -6447,14 +6600,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               
               <View style={styles.answerFooter}>
                 <View style={styles.answerFooterLeft}>
-                  <TouchableOpacity style={styles.answerActionBtn} onPress={e => {
+                  <TouchableOpacity style={[styles.answerActionBtn, isLikeInteractionDisabled(isLiked, isDisliked) && styles.interactionBtnDisabled]} onPress={e => {
                       e.stopPropagation();
                       handleAnswerLike(answer.id);
-                    }}>
-                    <Ionicons name={isLiked ? "thumbs-up" : "thumbs-up-outline"} size={16} color={isLiked ? "#ef4444" : "#6b7280"} />
+                    }} disabled={isLikeInteractionDisabled(isLiked, isDisliked)}>
+                    <Ionicons name={isLiked ? "thumbs-up" : "thumbs-up-outline"} size={16} color={isLiked ? "#ef4444" : isLikeInteractionDisabled(isLiked, isDisliked) ? "#d1d5db" : "#6b7280"} />
                     <Text style={[styles.answerActionText, isLiked && {
                         color: '#ef4444'
-                      }]}>
+                      }, isLikeInteractionDisabled(isLiked, isDisliked) && styles.interactionTextDisabled]}>
                       {likeCount}
                     </Text>
                   </TouchableOpacity>
@@ -6487,14 +6640,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   </TouchableOpacity>
                 </View>
                 <View style={styles.answerFooterRight}>
-                  <TouchableOpacity style={styles.answerActionBtn} onPress={e => {
+                  <TouchableOpacity style={[styles.answerActionBtn, isDislikeInteractionDisabled(isLiked, isDisliked) && styles.interactionBtnDisabled]} onPress={e => {
                       e.stopPropagation();
                       handleAnswerDislike(answer.id);
-                    }}>
-                    <Ionicons name={isDisliked ? "thumbs-down" : "thumbs-down-outline"} size={16} color="#6b7280" />
+                    }} disabled={isDislikeInteractionDisabled(isLiked, isDisliked)}>
+                    <Ionicons name={isDisliked ? "thumbs-down" : "thumbs-down-outline"} size={16} color={isDisliked ? "#6b7280" : isDislikeInteractionDisabled(isLiked, isDisliked) ? "#d1d5db" : "#6b7280"} />
                     <Text style={[styles.answerActionText, isDisliked && {
                         color: '#6b7280'
-                      }]}>
+                      }, isDislikeInteractionDisabled(isLiked, isDisliked) && styles.interactionTextDisabled]}>
                       {dislikeCount}
                     </Text>
                   </TouchableOpacity>
@@ -6623,11 +6776,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
 
       {/* 底部固定栏 - 主要互动按钮 */}
       <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.bottomActionBtn} onPress={handleQuestionLike}>
-          <Ionicons name={liked.main ?? questionData?.liked ? "thumbs-up" : "thumbs-up-outline"} size={20} color={liked.main ?? questionData?.liked ? "#ef4444" : "#6b7280"} />
-          <Text style={[styles.bottomActionText, (liked.main ?? questionData?.liked) && {
+        <TouchableOpacity style={[styles.bottomActionBtn, isLikeInteractionDisabled(getQuestionLikedState(), getQuestionDislikedState()) && styles.interactionBtnDisabled]} onPress={handleQuestionLike} disabled={isLikeInteractionDisabled(getQuestionLikedState(), getQuestionDislikedState())}>
+          <Ionicons name={getQuestionLikedState() ? "thumbs-up" : "thumbs-up-outline"} size={20} color={getQuestionLikedState() ? "#ef4444" : isLikeInteractionDisabled(getQuestionLikedState(), getQuestionDislikedState()) ? "#d1d5db" : "#6b7280"} />
+          <Text style={[styles.bottomActionText, getQuestionLikedState() && {
           color: '#ef4444'
-        }]}>
+        }, isLikeInteractionDisabled(getQuestionLikedState(), getQuestionDislikedState()) && styles.interactionTextDisabled]}>
             {getQuestionLikeDisplayCount(questionData, liked.main)}
           </Text>
         </TouchableOpacity>
@@ -6639,11 +6792,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             {getQuestionCollectDisplayCount(questionData, bookmarked)}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomActionBtn} onPress={handleQuestionDislike}>
-          <Ionicons name={liked.dislike ?? questionData?.disliked ? "thumbs-down" : "thumbs-down-outline"} size={20} color={liked.dislike ?? questionData?.disliked ? "#6b7280" : "#9ca3af"} />
-          <Text style={[styles.bottomActionText, (liked.dislike ?? questionData?.disliked) && {
+        <TouchableOpacity style={[styles.bottomActionBtn, isDislikeInteractionDisabled(getQuestionLikedState(), getQuestionDislikedState()) && styles.interactionBtnDisabled]} onPress={handleQuestionDislike} disabled={isDislikeInteractionDisabled(getQuestionLikedState(), getQuestionDislikedState())}>
+          <Ionicons name={getQuestionDislikedState() ? "thumbs-down" : "thumbs-down-outline"} size={20} color={getQuestionDislikedState() ? "#6b7280" : isDislikeInteractionDisabled(getQuestionLikedState(), getQuestionDislikedState()) ? "#d1d5db" : "#9ca3af"} />
+          <Text style={[styles.bottomActionText, getQuestionDislikedState() && {
           color: '#6b7280'
-        }]}>
+        }, isDislikeInteractionDisabled(getQuestionLikedState(), getQuestionDislikedState()) && styles.interactionTextDisabled]}>
             {getQuestionDislikeDisplayCount(questionData, liked.dislike)}
           </Text>
         </TouchableOpacity>
@@ -6805,11 +6958,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     <View style={styles.commentListContent}>
                       <Text style={styles.commentListText}>{comment.content}</Text>
                       <View style={styles.commentListActions}>
-                        <TouchableOpacity style={styles.commentListActionBtn} onPress={() => handleCommentLike(comment.id)} disabled={commentLikeLoading[comment.id]}>
-                          <Ionicons name={commentLiked[comment.id] ?? comment.liked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={commentLiked[comment.id] ?? comment.liked ? "#ef4444" : "#9ca3af"} />
-                          <Text style={[styles.commentListActionText, (commentLiked[comment.id] ?? comment.liked) && {
+                        <TouchableOpacity style={[styles.commentListActionBtn, isLikeInteractionDisabled(isCommentLiked, isCommentDisliked) && styles.interactionBtnDisabled]} onPress={() => handleCommentLike(comment.id)} disabled={commentLikeLoading[comment.id] || isLikeInteractionDisabled(isCommentLiked, isCommentDisliked)}>
+                          <Ionicons name={isCommentLiked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={isCommentLiked ? "#ef4444" : isLikeInteractionDisabled(isCommentLiked, isCommentDisliked) ? "#d1d5db" : "#9ca3af"} />
+                          <Text style={[styles.commentListActionText, isCommentLiked && {
                         color: '#ef4444'
-                      }]}>{getCommentLikeDisplayCount(comment, commentLiked[comment.id])}</Text>
+                      }, isLikeInteractionDisabled(isCommentLiked, isCommentDisliked) && styles.interactionTextDisabled]}>{getCommentLikeDisplayCount(comment, commentLiked[comment.id])}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.commentListActionBtn} onPress={() => {
                       setCurrentSuppCommentId(comment.id);
@@ -6830,8 +6983,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       }]}>{getCommentCollectDisplayCount(comment, commentCollected[comment.id])}</Text>
                         </TouchableOpacity>
                         <View style={{flex: 1}} />
-                        <TouchableOpacity style={styles.commentListActionBtn} onPress={() => handleCommentDislike(comment.id)} disabled={commentDislikeLoading[comment.id]}>
-                          <Ionicons name={commentDisliked[comment.id] ?? comment.disliked ? "thumbs-down" : "thumbs-down-outline"} size={14} color={commentDisliked[comment.id] ?? comment.disliked ? "#6b7280" : "#9ca3af"} />
+                        <TouchableOpacity style={[styles.commentListActionBtn, isDislikeInteractionDisabled(isCommentLiked, isCommentDisliked) && styles.interactionBtnDisabled]} onPress={() => handleCommentDislike(comment.id)} disabled={commentDislikeLoading[comment.id] || isDislikeInteractionDisabled(isCommentLiked, isCommentDisliked)}>
+                          <Ionicons name={isCommentDisliked ? "thumbs-down" : "thumbs-down-outline"} size={14} color={isCommentDisliked ? "#6b7280" : isDislikeInteractionDisabled(isCommentLiked, isCommentDisliked) ? "#d1d5db" : "#9ca3af"} />
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.commentListActionBtn} onPress={() => {
                       setShowSuppCommentListModal(false);
@@ -6905,12 +7058,12 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 <Ionicons name="logo-twitter" size={22} color="#1DA1F2" />
                 <Text style={styles.suppMoreActionText}>@推特用户</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.suppMoreActionItem} onPress={() => handleSupplementDislike(currentSuppId)}>
-                <Ionicons name={suppDisliked[currentSuppId] ?? getSupplementById(currentSuppId)?.disliked ? "thumbs-down" : "thumbs-down-outline"} size={22} color={suppDisliked[currentSuppId] ?? getSupplementById(currentSuppId)?.disliked ? "#ef4444" : "#6b7280"} />
-                <Text style={[styles.suppMoreActionText, (suppDisliked[currentSuppId] ?? getSupplementById(currentSuppId)?.disliked) && {
+              <TouchableOpacity style={[styles.suppMoreActionItem, isDislikeInteractionDisabled(getSupplementLikedState(currentSuppId), getSupplementDislikedState(currentSuppId)) && styles.interactionBtnDisabled]} onPress={() => handleSupplementDislike(currentSuppId)} disabled={isDislikeInteractionDisabled(getSupplementLikedState(currentSuppId), getSupplementDislikedState(currentSuppId))}>
+                <Ionicons name={getSupplementDislikedState(currentSuppId) ? "thumbs-down" : "thumbs-down-outline"} size={22} color={getSupplementDislikedState(currentSuppId) ? "#ef4444" : isDislikeInteractionDisabled(getSupplementLikedState(currentSuppId), getSupplementDislikedState(currentSuppId)) ? "#d1d5db" : "#6b7280"} />
+                <Text style={[styles.suppMoreActionText, getSupplementDislikedState(currentSuppId) && {
                 color: '#ef4444'
-              }]}>
-                  {suppDisliked[currentSuppId] ?? getSupplementById(currentSuppId)?.disliked ? '取消踩' : '踩一下'}
+              }, isDislikeInteractionDisabled(getSupplementLikedState(currentSuppId), getSupplementDislikedState(currentSuppId)) && styles.interactionTextDisabled]}>
+                  {getSupplementDislikedState(currentSuppId) ? '取消踩' : '踩一下'}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.suppMoreActionItem} onPress={() => {
@@ -7385,11 +7538,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       <View style={styles.commentListContent}>
                         <Text style={styles.commentListText}>{comment.content}</Text>
                         <View style={styles.commentListActions}>
-                          <TouchableOpacity style={styles.commentListActionBtn} onPress={() => handleCommentLike(comment.id)} disabled={commentLikeLoading[comment.id]}>
-                            <Ionicons name={isCommentLiked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={isCommentLiked ? "#ef4444" : "#9ca3af"} />
+                          <TouchableOpacity style={[styles.commentListActionBtn, isLikeInteractionDisabled(isCommentLiked, isCommentDisliked) && styles.interactionBtnDisabled]} onPress={() => handleCommentLike(comment.id)} disabled={commentLikeLoading[comment.id] || isLikeInteractionDisabled(isCommentLiked, isCommentDisliked)}>
+                            <Ionicons name={isCommentLiked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={isCommentLiked ? "#ef4444" : isLikeInteractionDisabled(isCommentLiked, isCommentDisliked) ? "#d1d5db" : "#9ca3af"} />
                             <Text style={[styles.commentListActionText, isCommentLiked && {
                           color: '#ef4444'
-                        }]}>{commentLikeCount}</Text>
+                        }, isLikeInteractionDisabled(isCommentLiked, isCommentDisliked) && styles.interactionTextDisabled]}>{commentLikeCount}</Text>
                           </TouchableOpacity>
                           <TouchableOpacity style={styles.commentListActionBtn} onPress={() => {
                         setCurrentAnswerCommentId(comment.id);
@@ -7412,11 +7565,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                           <View style={{
                         flex: 1
                       }} />
-                          <TouchableOpacity style={styles.commentListActionBtn} onPress={() => handleCommentDislike(comment.id)} disabled={commentDislikeLoading[comment.id]}>
-                            <Ionicons name={isCommentDisliked ? "thumbs-down" : "thumbs-down-outline"} size={14} color={isCommentDisliked ? "#6b7280" : "#9ca3af"} />
+                          <TouchableOpacity style={[styles.commentListActionBtn, isDislikeInteractionDisabled(isCommentLiked, isCommentDisliked) && styles.interactionBtnDisabled]} onPress={() => handleCommentDislike(comment.id)} disabled={commentDislikeLoading[comment.id] || isDislikeInteractionDisabled(isCommentLiked, isCommentDisliked)}>
+                            <Ionicons name={isCommentDisliked ? "thumbs-down" : "thumbs-down-outline"} size={14} color={isCommentDisliked ? "#6b7280" : isDislikeInteractionDisabled(isCommentLiked, isCommentDisliked) ? "#d1d5db" : "#9ca3af"} />
                             <Text style={[styles.commentListActionText, isCommentDisliked && {
                           color: '#6b7280'
-                        }]}>{commentDislikeCount}</Text>
+                        }, isDislikeInteractionDisabled(isCommentLiked, isCommentDisliked) && styles.interactionTextDisabled]}>{commentDislikeCount}</Text>
                           </TouchableOpacity>
                           <TouchableOpacity style={styles.commentListActionBtn} onPress={() => {
                         Alert.alert('举报', '确定要举报这条评论吗？', [{
@@ -8220,6 +8373,21 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         shareData={currentShareData || buildQuestionSharePayload()}
         onShare={handleShare}
       />
+      <EditTextModal
+        visible={showTwitterInviteEditor}
+        onClose={() => {
+          setShowTwitterInviteEditor(false);
+          setSelectedTwitterInviteUser(null);
+        }}
+        title="编辑推特邀请文案"
+        currentValue={twitterInviteDraftText}
+        onSave={handleTwitterInviteShare}
+        placeholder={`请输入要分享到推特的文案，可手动添加 ${selectedTwitterInviteUser?.name || '@用户名'}`}
+        maxLength={220}
+        multiline
+        hint="链接会自动追加到文案后面"
+        loading={pendingTwitterInvitePlatform === 'twitter'}
+      />
     </SafeAreaView>;
 }
 const styles = StyleSheet.create({
@@ -8779,10 +8947,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4
   },
+  interactionBtnDisabled: {
+    opacity: 0.45
+  },
   bottomActionText: {
     fontSize: scaleFont(11),
     color: '#6b7280',
     fontWeight: '500'
+  },
+  interactionTextDisabled: {
+    color: '#d1d5db'
   },
   bottomInputBox: {
     flex: 0.95,

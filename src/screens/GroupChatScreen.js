@@ -328,6 +328,10 @@ export default function GroupChatScreen({ navigation, route }) {
   const composerInputRef = useRef(null);
   const showWriteMessageModalRef = useRef(false);
   const keepComposerOpenRef = useRef(false);
+  const isLikeInteractionDisabled = (likedState, dislikedState) => !likedState && !!dislikedState;
+  const isDislikeInteractionDisabled = (likedState, dislikedState) => !dislikedState && !!likedState;
+  const getMessageLikedState = message => liked[message?.id] !== undefined ? liked[message.id] : !!message?.liked;
+  const getMessageDislikedState = message => disliked[message?.id] !== undefined ? disliked[message.id] : !!message?.disliked;
 
   const focusComposerInput = () => {
     const triggerFocus = () => {
@@ -864,42 +868,52 @@ export default function GroupChatScreen({ navigation, route }) {
                   {msg.content ? <Text style={styles.msgText}>{msg.content}</Text> : null}
                   {msg.imageUri ? <Image source={{ uri: msg.imageUri }} style={styles.msgImage} /> : null}
                   <View style={styles.msgActions}>
+                    {(() => {
+                      const isMessageLiked = getMessageLikedState(msg);
+                      const isMessageDisliked = getMessageDislikedState(msg);
+                      const isLikeDisabled = isLikeInteractionDisabled(isMessageLiked, isMessageDisliked);
+                      const isDislikeDisabled = isDislikeInteractionDisabled(isMessageLiked, isMessageDisliked);
+                      return <>
                     <TouchableOpacity
-                      style={styles.msgActionBtn}
+                      style={[styles.msgActionBtn, isLikeDisabled && styles.msgActionBtnDisabled]}
                       onPress={() =>
                         setLiked(prev => ({
                           ...prev,
-                          [msg.id]: !prev[msg.id],
+                          [msg.id]: !getMessageLikedState(msg),
                         }))
                       }
+                      disabled={isLikeDisabled}
                     >
                       <Ionicons
-                        name={liked[msg.id] ? 'thumbs-up' : 'thumbs-up-outline'}
+                        name={isMessageLiked ? 'thumbs-up' : 'thumbs-up-outline'}
                         size={14}
-                        color={liked[msg.id] ? '#ef4444' : '#6b7280'}
+                        color={isMessageLiked ? '#ef4444' : isLikeDisabled ? '#d1d5db' : '#6b7280'}
                       />
-                      <Text style={[styles.msgActionText, liked[msg.id] && styles.msgActionTextLiked]}>
-                        {msg.likes + (liked[msg.id] ? 1 : 0)}
+                      <Text style={[styles.msgActionText, isMessageLiked && styles.msgActionTextLiked, isLikeDisabled && styles.msgActionTextDisabled]}>
+                        {msg.likes + (isMessageLiked ? 1 : 0)}
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={styles.msgActionBtn}
+                      style={[styles.msgActionBtn, isDislikeDisabled && styles.msgActionBtnDisabled]}
                       onPress={() =>
                         setDisliked(prev => ({
                           ...prev,
-                          [msg.id]: !prev[msg.id],
+                          [msg.id]: !getMessageDislikedState(msg),
                         }))
                       }
+                      disabled={isDislikeDisabled}
                     >
                       <Ionicons
-                        name={disliked[msg.id] ? 'thumbs-down' : 'thumbs-down-outline'}
+                        name={isMessageDisliked ? 'thumbs-down' : 'thumbs-down-outline'}
                         size={14}
-                        color={disliked[msg.id] ? '#3b82f6' : '#6b7280'}
+                        color={isMessageDisliked ? '#3b82f6' : isDislikeDisabled ? '#d1d5db' : '#6b7280'}
                       />
-                      <Text style={[styles.msgActionText, disliked[msg.id] && styles.msgActionTextDisliked]}>
-                        {msg.dislikes + (disliked[msg.id] ? 1 : 0)}
+                      <Text style={[styles.msgActionText, isMessageDisliked && styles.msgActionTextDisliked, isDislikeDisabled && styles.msgActionTextDisabled]}>
+                        {msg.dislikes + (isMessageDisliked ? 1 : 0)}
                       </Text>
                     </TouchableOpacity>
+                      </>;
+                    })()}
                     <TouchableOpacity style={styles.msgActionBtn}>
                       <Ionicons name="arrow-redo-outline" size={14} color="#6b7280" />
                       <Text style={styles.msgActionText}>{msg.shares}</Text>
@@ -1309,9 +1323,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
+  msgActionBtnDisabled: {
+    opacity: 0.45,
+  },
   msgActionText: {
     fontSize: scaleFont(12),
     color: '#6b7280',
+  },
+  msgActionTextDisabled: {
+    color: '#d1d5db',
   },
   msgActionTextLiked: {
     color: '#ef4444',
