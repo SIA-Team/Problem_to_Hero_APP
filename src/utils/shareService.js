@@ -1,6 +1,7 @@
 import { Linking } from 'react-native';
 
-const SHARE_BASE_URL = 'https://xxxx.xxx.com/share/openapp';
+export const APP_SHARE_SCHEME = 'problemtohero://';
+const TWITTER_APP_SCHEME = 'twitter://';
 
 const pickFirstNumberLike = (...values) => {
   for (const value of values) {
@@ -23,6 +24,17 @@ const appendIfPresent = (params, key, value) => {
   }
 
   params.append(key, String(value));
+};
+
+const buildQueryString = (entries = {}) => {
+  const params = new URLSearchParams();
+
+  Object.entries(entries).forEach(([key, value]) => {
+    appendIfPresent(params, key, value);
+  });
+
+  const query = params.toString();
+  return query ? `?${query}` : '';
 };
 
 export const buildShareParams = (shareData = {}) => {
@@ -86,18 +98,50 @@ export const buildShareUrl = (shareData = {}) => {
   }
 
   const normalized = buildShareParams(safeShareData);
-  const params = new URLSearchParams();
+  const sharedQuery = {
+    traceId: safeShareData.traceId,
+    shareType: normalized.type,
+  };
 
-  appendIfPresent(params, 'type', normalized.type);
-  appendIfPresent(params, 'qid', normalized.qid);
-  appendIfPresent(params, 'aid', normalized.aid);
-  appendIfPresent(params, 'sid', normalized.sid);
-  appendIfPresent(params, 'cid', normalized.cid);
-  appendIfPresent(params, 'rootCid', normalized.rootCid);
-  appendIfPresent(params, 'traceId', safeShareData.traceId);
+  switch (normalized.type) {
+    case 'shareanswer':
+      return `${APP_SHARE_SCHEME}answer/${normalized.aid || ''}${buildQueryString({
+        ...sharedQuery,
+        questionId: normalized.qid,
+      })}`;
+    case 'sharesupplement':
+      return `${APP_SHARE_SCHEME}supplement/${normalized.sid || ''}${buildQueryString({
+        ...sharedQuery,
+        parentQuestionId: normalized.qid,
+      })}`;
+    case 'sharecomment':
+      if (normalized.aid) {
+        return `${APP_SHARE_SCHEME}answer/${normalized.aid}${buildQueryString({
+          ...sharedQuery,
+          questionId: normalized.qid,
+          commentId: normalized.cid,
+          rootCommentId: normalized.rootCid,
+        })}`;
+      }
 
-  const query = params.toString();
-  return query ? `${SHARE_BASE_URL}?${query}` : SHARE_BASE_URL;
+      if (normalized.sid) {
+        return `${APP_SHARE_SCHEME}supplement/${normalized.sid}${buildQueryString({
+          ...sharedQuery,
+          parentQuestionId: normalized.qid,
+          commentId: normalized.cid,
+          rootCommentId: normalized.rootCid,
+        })}`;
+      }
+
+      return `${APP_SHARE_SCHEME}question/${normalized.qid || ''}${buildQueryString({
+        ...sharedQuery,
+        commentId: normalized.cid,
+        rootCommentId: normalized.rootCid,
+      })}`;
+    case 'sharequestion':
+    default:
+      return `${APP_SHARE_SCHEME}question/${normalized.qid || ''}${buildQueryString(sharedQuery)}`;
+  }
 };
 
 export const buildTwitterShareText = (shareData = {}) => {
@@ -113,29 +157,54 @@ export const buildTwitterShareText = (shareData = {}) => {
 
   if (leadText) {
     const shortened = leadText.length > 80 ? `${leadText.slice(0, 77)}...` : leadText;
-    return `Check this out on Kaiwen: ${shortened}`;
+    return `Check this out on Problem to Hero: ${shortened}`;
   }
 
-  return 'Check this out on Kaiwen';
+  return 'Check this out on Problem to Hero';
 };
 
 export const buildTwitterIntentUrl = (shareData = {}) => {
   const shareUrl = buildShareUrl(shareData);
-  const shareText = buildTwitterShareText(shareData);
-  const params = new URLSearchParams({
-    text: shareText,
-    url: shareUrl,
-  });
+  const shareText = `${buildTwitterShareText(shareData)}\n${shareUrl}`;
+  const params = new URLSearchParams({ text: shareText });
 
   return `https://twitter.com/intent/tweet?${params.toString()}`;
 };
 
+export const buildTwitterNativeShareUrl = (shareData = {}) => {
+  const shareUrl = buildShareUrl(shareData);
+  const shareText = `${buildTwitterShareText(shareData)}\n${shareUrl}`;
+
+  return `${TWITTER_APP_SCHEME}post?message=${encodeURIComponent(shareText)}`;
+};
+
 export const openTwitterShare = async (shareData = {}) => {
+  const twitterNativeShareUrl = buildTwitterNativeShareUrl(shareData);
   const twitterIntentUrl = buildTwitterIntentUrl(shareData);
+  const shareUrl = buildShareUrl(shareData);
+
+  try {
+    const canOpenTwitterApp = await Linking.canOpenURL(TWITTER_APP_SCHEME);
+
+    if (canOpenTwitterApp) {
+      await Linking.openURL(twitterNativeShareUrl);
+      return {
+        twitterNativeShareUrl,
+        twitterIntentUrl,
+        shareUrl,
+        openedVia: 'app',
+      };
+    }
+  } catch (error) {
+    console.warn('Unable to verify Twitter app availability, falling back to web share.', error);
+  }
+
   await Linking.openURL(twitterIntentUrl);
 
   return {
+    twitterNativeShareUrl,
     twitterIntentUrl,
-    shareUrl: buildShareUrl(shareData),
+    shareUrl,
+    openedVia: 'browser',
   };
 };

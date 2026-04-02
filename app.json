@@ -2,6 +2,7 @@
   "expo": {
     "name": "Problem to Hero",
     "slug": "qa-native-app",
+    "scheme": "problemtohero",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -30,6 +31,7 @@
         "NSPhotoLibraryAddUsageDescription": "允许保存照片到相册",
         "NSLocationWhenInUseUsageDescription": "允许访问您的位置信息",
         "LSApplicationQueriesSchemes": [
+          "twitter",
           "comgooglemaps",
           "waze",
           "maps"

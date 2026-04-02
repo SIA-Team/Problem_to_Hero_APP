@@ -83,6 +83,42 @@ import { modalTokens } from './src/components/modalTokens';
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 const SERVER_SELECTION_STORAGE_KEY = '@app_server_selection';
+const APP_LINKING = {
+  prefixes: ['problemtohero://'],
+  config: {
+    screens: {
+      Main: '',
+      Search: 'search',
+      QuestionDetail: {
+        path: 'question/:id',
+        parse: {
+          id: Number,
+          commentId: Number,
+          rootCommentId: Number,
+        },
+      },
+      AnswerDetail: {
+        path: 'answer/:id',
+        parse: {
+          id: Number,
+          answerId: Number,
+          questionId: Number,
+          commentId: Number,
+          rootCommentId: Number,
+        },
+      },
+      SupplementDetail: {
+        path: 'supplement/:id',
+        parse: {
+          id: Number,
+          parentQuestionId: Number,
+          commentId: Number,
+          rootCommentId: Number,
+        },
+      },
+    },
+  },
+};
 
 const getCurrentBundleFingerprint = () => {
   const runtimeVersion =
@@ -789,7 +825,7 @@ export default function App() {
     <EmergencyProvider>
       <SafeAreaProvider>
         <UpdateChecker />
-        <NavigationContainer>
+        <NavigationContainer linking={APP_LINKING}>
         <StatusBar style="dark" />
         <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="Main">

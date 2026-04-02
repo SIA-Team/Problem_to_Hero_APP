@@ -1415,9 +1415,15 @@
         "required": "*",
         "startDate": "开始时间",
         "endDate": "结束时间",
-        "startPlaceholder": "2026-01-01",
-        "endPlaceholder": "2026-01-31",
-        "to": "至"
+        "startPlaceholder": "请选择开始时间",
+        "endPlaceholder": "请选择结束时间",
+        "to": "至",
+        "picker": {
+          "startTitle": "选择开始时间",
+          "endTitle": "选择结束时间",
+          "cancel": "取消",
+          "confirm": "确定"
+        }
       },
       "location": {
         "label": "活动地址",
@@ -1442,6 +1448,7 @@
         "titleRequired": "请输入活动标题",
         "descriptionRequired": "请输入活动内容",
         "timeRequired": "请选择活动时间",
+        "endTimeInvalid": "结束时间不能早于开始时间",
         "locationRequired": "线下活动需要填写活动地址",
         "teamRequired": "请选择发起团队"
       },

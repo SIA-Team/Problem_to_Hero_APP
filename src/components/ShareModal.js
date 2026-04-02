@@ -14,9 +14,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { modalTokens } from './modalTokens';
 import ShareToFriendsModal from './ShareToFriendsModal';
+import EditTextModal from './EditTextModal';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import { showToast } from '../utils/toast';
-import { buildShareUrl, openTwitterShare } from '../utils/shareService';
+import { buildShareUrl, buildTwitterShareText, openTwitterShare } from '../utils/shareService';
 
 import { scaleFont } from '../utils/responsive';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -87,6 +88,51 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
   const [backdropOpacity] = React.useState(new Animated.Value(0));
   const [pendingPlatform, setPendingPlatform] = React.useState(null);
   const [showFriendsModal, setShowFriendsModal] = React.useState(false);
+  const [showTwitterEditor, setShowTwitterEditor] = React.useState(false);
+  const [twitterDraftText, setTwitterDraftText] = React.useState('');
+
+  React.useEffect(() => {
+    if (!visible) {
+      setShowTwitterEditor(false);
+      setTwitterDraftText('');
+    }
+  }, [visible]);
+
+  const openTwitterEditor = () => {
+    setTwitterDraftText(buildTwitterShareText(shareData));
+    setShowTwitterEditor(true);
+  };
+
+  const handleTwitterShare = async (customShareText) => {
+    setPendingPlatform('twitter');
+
+    try {
+      const result = await openTwitterShare({
+        ...shareData,
+        shareText: customShareText,
+      });
+
+      if (result?.openedVia === 'browser') {
+        showToast('Twitter app not installed, opened web share', 'info');
+      }
+
+      if (onShare) {
+        onShare('twitter', {
+          ...shareData,
+          shareText: customShareText,
+          url: result.shareUrl,
+        });
+      }
+
+      setShowTwitterEditor(false);
+      handleClose();
+    } catch (error) {
+      console.error('Failed to share via twitter:', error);
+      showToast('Unable to open Twitter', 'error');
+    } finally {
+      setPendingPlatform(null);
+    }
+  };
 
   React.useEffect(() => {
     if (visible) {
@@ -168,11 +214,7 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
       }
 
       if (platform === 'twitter') {
-        const result = await openTwitterShare(shareData);
-        if (onShare) {
-          onShare(platform, { ...shareData, url: result.shareUrl });
-        }
-        handleClose();
+        openTwitterEditor();
         return;
       }
 
@@ -260,6 +302,18 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
         onClose={() => setShowFriendsModal(false)}
         shareData={shareData}
         onShare={onShare}
+      />
+      <EditTextModal
+        visible={showTwitterEditor}
+        onClose={() => setShowTwitterEditor(false)}
+        title="编辑推特邀请文案"
+        currentValue={twitterDraftText}
+        onSave={handleTwitterShare}
+        placeholder="请输入要分享到推特的文案，可手动添加 @用户名"
+        maxLength={220}
+        multiline
+        hint="链接会自动追加到文案后面"
+        loading={pendingPlatform === 'twitter'}
       />
     </>
   );

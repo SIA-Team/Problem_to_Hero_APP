@@ -2463,9 +2463,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
             <Text style={styles.replyActionText}>{reply.replies || 0}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.replyActionBtn}>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => openShareModalWithData(buildAnswerCommentSharePayload(reply))}>
             <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
-            <Text style={styles.replyActionText}>{reply.shares || 0}</Text>
+            <Text style={styles.replyActionText}>{Number(reply.shareCount ?? reply.shares ?? 0)}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentCollect(reply.id)} disabled={commentCollectLoading[reply.id]}>
             <Ionicons name={commentCollected[reply.id] ?? reply.collected ? "star" : "star-outline"} size={12} color={commentCollected[reply.id] ?? reply.collected ? "#f59e0b" : "#9ca3af"} />
@@ -2534,9 +2534,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
             <Text style={styles.replyActionText}>{reply.replies || 0}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.replyActionBtn}>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => openShareModalWithData(buildQuestionCommentSharePayload(reply))}>
             <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
-            <Text style={styles.replyActionText}>{reply.shares || 0}</Text>
+            <Text style={styles.replyActionText}>{Number(reply.shareCount ?? reply.shares ?? 0)}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentCollect(reply.id)} disabled={commentCollectLoading[reply.id]}>
             <Ionicons name={commentCollected[reply.id] ?? reply.collected ? "star" : "star-outline"} size={12} color={commentCollected[reply.id] ?? reply.collected ? "#f59e0b" : "#9ca3af"} />
@@ -2651,9 +2651,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
             <Text style={styles.replyActionText}>{reply.replies || 0}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.replyActionBtn}>
+          <TouchableOpacity style={styles.replyActionBtn} onPress={() => openShareModalWithData(buildSupplementCommentSharePayload(reply))}>
             <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
-            <Text style={styles.replyActionText}>{reply.shares || 0}</Text>
+            <Text style={styles.replyActionText}>{Number(reply.shareCount ?? reply.shares ?? 0)}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.replyActionBtn} onPress={() => handleCommentCollect(reply.id)} disabled={commentCollectLoading[reply.id]}>
             <Ionicons name={commentCollected[reply.id] ?? reply.collected ? "star" : "star-outline"} size={12} color={commentCollected[reply.id] ?? reply.collected ? "#f59e0b" : "#9ca3af"} />
@@ -5135,6 +5135,29 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     type: 'sharequestion',
     qid: Number(route?.params?.id ?? questionData?.id) || null
   });
+  const resolveShareTargetId = (...values) => {
+    for (const value of values) {
+      const normalizedValue = Number(value);
+      if (normalizedValue) {
+        return normalizedValue;
+      }
+    }
+    return null;
+  };
+  const buildAnswerSharePayload = answer => ({
+    title: questionData?.title || '',
+    content: answer?.content || questionData?.content || '',
+    type: 'shareanswer',
+    qid: Number(route?.params?.id ?? questionData?.id) || null,
+    aid: resolveShareTargetId(getAnswerPrimaryId(answer), answer?.id, answer?.answerId, answer?.answer_id)
+  });
+  const buildSupplementSharePayload = supplement => ({
+    title: questionData?.title || '',
+    content: supplement?.content || questionData?.content || '',
+    type: 'sharesupplement',
+    qid: Number(route?.params?.id ?? questionData?.id) || null,
+    sid: resolveShareTargetId(getSupplementTargetId(supplement), supplement?.id, supplement?.supplementId, supplement?.supplement_id)
+  });
   const buildQuestionCommentSharePayload = comment => {
     const commentId = Number(comment?.id ?? comment?.commentId ?? comment?.comment_id ?? 0) || null;
     const rootCid = commentId ? Number(getQuestionCommentThreadRootId(commentId) ?? commentId) || commentId : null;
@@ -5143,6 +5166,38 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       content: comment?.content || questionData?.content || '',
       type: 'sharecomment',
       qid: Number(route?.params?.id ?? questionData?.id) || null,
+      cid: commentId,
+      rootCid
+    };
+  };
+  const buildAnswerCommentSharePayload = comment => {
+    const commentId = Number(comment?.id ?? comment?.commentId ?? comment?.comment_id ?? 0) || null;
+    const rootCid = commentId ? Number(getAnswerCommentThreadRootId(commentId) ?? commentId) || commentId : null;
+    const relationCommentId = Number(comment?.replyToCommentId ?? comment?.parentId ?? 0) || null;
+    const relationComment = relationCommentId ? findAnswerCommentById(relationCommentId) : null;
+    const answerId = resolveShareTargetId(comment?.targetId, comment?.target_id, comment?.answerId, comment?.answer_id, relationComment?.targetId, relationComment?.target_id, currentAnswerId);
+    return {
+      title: questionData?.title || '',
+      content: comment?.content || questionData?.content || '',
+      type: 'sharecomment',
+      qid: Number(route?.params?.id ?? questionData?.id) || null,
+      aid: answerId,
+      cid: commentId,
+      rootCid
+    };
+  };
+  const buildSupplementCommentSharePayload = comment => {
+    const commentId = Number(comment?.id ?? comment?.commentId ?? comment?.comment_id ?? 0) || null;
+    const rootCid = commentId ? Number(getSupplementCommentThreadRootId(commentId) ?? commentId) || commentId : null;
+    const relationCommentId = Number(comment?.replyToCommentId ?? comment?.parentId ?? 0) || null;
+    const relationComment = relationCommentId ? findSupplementCommentById(relationCommentId) : null;
+    const supplementId = resolveShareTargetId(comment?.targetId, comment?.target_id, comment?.supplementId, comment?.supplement_id, relationComment?.targetId, relationComment?.target_id, currentSuppId);
+    return {
+      title: questionData?.title || '',
+      content: comment?.content || questionData?.content || '',
+      type: 'sharecomment',
+      qid: Number(route?.params?.id ?? questionData?.id) || null,
+      sid: supplementId,
       cid: commentId,
       rootCid
     };
@@ -5868,7 +5923,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                         <Ionicons name="chatbubble-outline" size={16} color="#6b7280" />
                     <Text style={styles.suppActionText}>{formatNumber(Number(item.commentCount ?? item.comments ?? item.comment_count ?? 0))}</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.suppActionBtn} onPress={e => e.stopPropagation()}>
+                      <TouchableOpacity style={styles.suppActionBtn} onPress={e => {
+                    e.stopPropagation();
+                    openShareModalWithData(buildSupplementSharePayload(item));
+                  }}>
                         <Ionicons name="arrow-redo-outline" size={16} color="#6b7280" />
                         <Text style={styles.suppActionText}>{formatNumber(Number(item.shareCount ?? item.shares ?? 0))}</Text>
                       </TouchableOpacity>
@@ -6408,7 +6466,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     <Ionicons name="chatbubble-outline" size={16} color="#6b7280" />
                     <Text style={styles.answerActionText}>{formatNumber(answer.commentCount || answer.comment_count || answer.comments || 0)}</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.answerActionBtn} onPress={e => e.stopPropagation()}>
+                  <TouchableOpacity style={styles.answerActionBtn} onPress={e => {
+                      e.stopPropagation();
+                      openShareModalWithData(buildAnswerSharePayload(answer));
+                    }}>
                     <Ionicons name="arrow-redo-outline" size={16} color="#6b7280" />
                     <Text style={styles.answerActionText}>{formatNumber(answer.shareCount || answer.share_count || answer.shares || 0)}</Text>
                   </TouchableOpacity>
@@ -6757,6 +6818,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     }}>
                           <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
                           <Text style={styles.commentListActionText}>{Number(comment.replyCount ?? comment.replies ?? 0)}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.commentListActionBtn} onPress={() => openShareModalWithData(buildSupplementCommentSharePayload(comment))}>
+                          <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
+                          <Text style={styles.commentListActionText}>{Number(comment.shareCount ?? comment.shares ?? 0)}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.commentListActionBtn} onPress={() => handleCommentCollect(comment.id)} disabled={commentCollectLoading[comment.id]}>
                           <Ionicons name={commentCollected[comment.id] ?? comment.collected ? "star" : "star-outline"} size={14} color={commentCollected[comment.id] ?? comment.collected ? "#f59e0b" : "#9ca3af"} />
@@ -7334,7 +7399,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                             <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
                             <Text style={styles.commentListActionText}>{Number(comment.replyCount ?? comment.replies ?? 0)}</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity style={styles.commentListActionBtn} onPress={() => openShareModalWithData(buildQuestionCommentSharePayload(comment))}>
+                          <TouchableOpacity style={styles.commentListActionBtn} onPress={() => openShareModalWithData(buildAnswerCommentSharePayload(comment))}>
                             <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
                             <Text style={styles.commentListActionText}>{Number(comment.shareCount ?? comment.shares ?? 0)}</Text>
                           </TouchableOpacity>

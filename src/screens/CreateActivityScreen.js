@@ -1,10 +1,23 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, TextInput, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, TextInput } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
+import DateTimePickerModal from '../components/DateTimePickerModal';
 import { showAppAlert } from '../utils/appAlert';
 import { scaleFont } from '../utils/responsive';
+
+const parseActivityDateTime = value => {
+  if (!value) {
+    return null;
+  }
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+  const [, year, month, day] = match;
+  return new Date(Number(year), Number(month) - 1, Number(day), 0, 0, 0, 0);
+};
 export default function CreateActivityScreen({
   navigation,
   route
@@ -17,6 +30,7 @@ export default function CreateActivityScreen({
   const teamName = route?.params?.teamName;
   const fromTeamDetail = route?.params?.fromTeamDetail === true;
   const [showTeamSelector, setShowTeamSelector] = useState(false);
+  const [activeTimeField, setActiveTimeField] = useState(null);
   const [newActivity, setNewActivity] = useState({
     title: '',
     desc: '',
@@ -44,6 +58,20 @@ export default function CreateActivityScreen({
     name: '数据分析爱好者',
     members: 8
   }];
+  const updateNewActivity = updates => {
+    setNewActivity(current => ({
+      ...current,
+      ...updates
+    }));
+  };
+  const handleSelectDateTime = (field, value) => {
+    if (!field) {
+      return;
+    }
+    updateNewActivity({
+      [field]: value
+    });
+  };
   const handleCreateActivity = () => {
     if (!newActivity.title.trim()) {
       showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.titleRequired'));
@@ -55,6 +83,12 @@ export default function CreateActivityScreen({
     }
     if (!newActivity.startTime || !newActivity.endTime) {
       showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.timeRequired'));
+      return;
+    }
+    const startDate = parseActivityDateTime(newActivity.startTime);
+    const endDate = parseActivityDateTime(newActivity.endTime);
+    if (!startDate || !endDate || endDate < startDate) {
+      showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.endTimeInvalid'));
       return;
     }
     if (newActivity.type === 'offline' && !newActivity.address.trim()) {
@@ -89,8 +123,7 @@ export default function CreateActivityScreen({
     });
   };
   const handleSelectTeam = team => {
-    setNewActivity({
-      ...newActivity,
+    updateNewActivity({
       teamId: team.id,
       teamName: team.name
     });
@@ -100,8 +133,7 @@ export default function CreateActivityScreen({
     if (type === 'team' && !teamId) {
       setShowTeamSelector(true);
     } else {
-      setNewActivity({
-        ...newActivity,
+      updateNewActivity({
         organizerType: type,
         teamId: null,
         teamName: ''
@@ -178,15 +210,13 @@ export default function CreateActivityScreen({
         {/* 活动类型 */}
         <Text style={styles.inputLabel}>{t('screens.createActivity.activityType.label')}</Text>
         <View style={styles.typeSelector}>
-          <TouchableOpacity style={[styles.typeOption, newActivity.type === 'online' && styles.typeOptionActive]} onPress={() => setNewActivity({
-          ...newActivity,
+          <TouchableOpacity style={[styles.typeOption, newActivity.type === 'online' && styles.typeOptionActive]} onPress={() => updateNewActivity({
           type: 'online'
         })}>
             <Ionicons name="globe-outline" size={20} color={newActivity.type === 'online' ? '#fff' : '#666'} />
             <Text style={[styles.typeOptionText, newActivity.type === 'online' && styles.typeOptionTextActive]}>{t('screens.createActivity.activityType.online')}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.typeOption, newActivity.type === 'offline' && styles.typeOptionActive]} onPress={() => setNewActivity({
-          ...newActivity,
+          <TouchableOpacity style={[styles.typeOption, newActivity.type === 'offline' && styles.typeOptionActive]} onPress={() => updateNewActivity({
           type: 'offline'
         })}>
             <Ionicons name="location-outline" size={20} color={newActivity.type === 'offline' ? '#fff' : '#666'} />
@@ -196,15 +226,13 @@ export default function CreateActivityScreen({
 
         {/* 活动标题 */}
         <Text style={styles.inputLabel}>{t('screens.createActivity.activityTitle.label')} <Text style={styles.required}>{t('screens.createActivity.activityTitle.required')}</Text></Text>
-        <TextInput style={styles.input} placeholder={t('screens.createActivity.activityTitle.placeholder')} value={newActivity.title} onChangeText={text => setNewActivity({
-        ...newActivity,
+        <TextInput style={styles.input} placeholder={t('screens.createActivity.activityTitle.placeholder')} value={newActivity.title} onChangeText={text => updateNewActivity({
         title: text
       })} maxLength={50} />
 
         {/* 活动内容 */}
         <Text style={styles.inputLabel}>{t('screens.createActivity.description.label')} <Text style={styles.required}>{t('screens.createActivity.description.required')}</Text></Text>
-        <TextInput style={[styles.input, styles.textArea]} placeholder={t('screens.createActivity.description.placeholder')} value={newActivity.desc} onChangeText={text => setNewActivity({
-        ...newActivity,
+        <TextInput style={[styles.input, styles.textArea]} placeholder={t('screens.createActivity.description.placeholder')} value={newActivity.desc} onChangeText={text => updateNewActivity({
         desc: text
       })} multiline maxLength={500} />
 
@@ -213,28 +241,31 @@ export default function CreateActivityScreen({
         <View style={styles.timeContainer}>
           <View style={styles.timeInputWrapper}>
             <Text style={styles.timeInputLabel}>{t('screens.createActivity.time.startDate')}</Text>
-            <TextInput style={styles.timeInputField} placeholder={t('screens.createActivity.time.startPlaceholder')} placeholderTextColor="#9ca3af" value={newActivity.startTime} onChangeText={text => setNewActivity({
-            ...newActivity,
-            startTime: text
-          })} />
+            <TouchableOpacity style={styles.timePickerButton} activeOpacity={0.75} onPress={() => setActiveTimeField('startTime')}>
+              <Text style={[styles.timePickerValue, !newActivity.startTime && styles.timePickerPlaceholder]}>
+                {newActivity.startTime || t('screens.createActivity.time.startPlaceholder')}
+              </Text>
+              <Ionicons name="calendar-outline" size={18} color="#9ca3af" />
+            </TouchableOpacity>
           </View>
           <View style={styles.timeSeparatorWrapper}>
             <Text style={styles.timeSeparator}>{t('screens.createActivity.time.to')}</Text>
           </View>
           <View style={styles.timeInputWrapper}>
             <Text style={styles.timeInputLabel}>{t('screens.createActivity.time.endDate')}</Text>
-            <TextInput style={styles.timeInputField} placeholder={t('screens.createActivity.time.endPlaceholder')} placeholderTextColor="#9ca3af" value={newActivity.endTime} onChangeText={text => setNewActivity({
-            ...newActivity,
-            endTime: text
-          })} />
+            <TouchableOpacity style={styles.timePickerButton} activeOpacity={0.75} onPress={() => setActiveTimeField('endTime')}>
+              <Text style={[styles.timePickerValue, !newActivity.endTime && styles.timePickerPlaceholder]}>
+                {newActivity.endTime || t('screens.createActivity.time.endPlaceholder')}
+              </Text>
+              <Ionicons name="calendar-outline" size={18} color="#9ca3af" />
+            </TouchableOpacity>
           </View>
         </View>
 
         {/* 活动地址（线下活动） */}
         {newActivity.type === 'offline' && <>
             <Text style={styles.inputLabel}>{t('screens.createActivity.location.label')} <Text style={styles.required}>{t('screens.createActivity.location.required')}</Text></Text>
-            <TextInput style={styles.input} placeholder={t('screens.createActivity.location.placeholder')} value={newActivity.address} onChangeText={text => setNewActivity({
-          ...newActivity,
+            <TextInput style={styles.input} placeholder={t('screens.createActivity.location.placeholder')} value={newActivity.address} onChangeText={text => updateNewActivity({
           address: text
         })} />
           </>}
@@ -258,8 +289,7 @@ export default function CreateActivityScreen({
 
         {/* 联系方式 */}
         <Text style={styles.inputLabel}>{t('screens.createActivity.contact.label')}</Text>
-        <TextInput style={styles.input} placeholder={t('screens.createActivity.contact.placeholder')} value={newActivity.contact} onChangeText={text => setNewActivity({
-        ...newActivity,
+        <TextInput style={styles.input} placeholder={t('screens.createActivity.contact.placeholder')} value={newActivity.contact} onChangeText={text => updateNewActivity({
         contact: text
       })} />
         
@@ -293,6 +323,7 @@ export default function CreateActivityScreen({
             </ScrollView>
           </View>
         </View>}
+      <DateTimePickerModal visible={Boolean(activeTimeField)} onClose={() => setActiveTimeField(null)} currentDateTime={activeTimeField ? newActivity[activeTimeField] : ''} onSelect={value => handleSelectDateTime(activeTimeField, value)} title={activeTimeField === 'endTime' ? t('screens.createActivity.time.picker.endTitle') : t('screens.createActivity.time.picker.startTitle')} cancelText={t('screens.createActivity.time.picker.cancel')} confirmText={t('screens.createActivity.time.picker.confirm')} />
     </SafeAreaView>;
 }
 const styles = StyleSheet.create({
@@ -592,6 +623,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
     color: '#1f2937'
+  },
+  timePickerButton: {
+    minHeight: 46,
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8
+  },
+  timePickerValue: {
+    flex: 1,
+    fontSize: scaleFont(14),
+    color: '#1f2937'
+  },
+  timePickerPlaceholder: {
+    color: '#9ca3af'
   },
   timeSeparatorWrapper: {
     paddingBottom: 12

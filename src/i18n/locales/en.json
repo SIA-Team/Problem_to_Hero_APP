@@ -1228,11 +1228,17 @@
       "time": {
         "label": "Activity Time",
         "required": "*",
-        "startDate": "Start Date",
-        "endDate": "End Date",
-        "startPlaceholder": "2026-01-01",
-        "endPlaceholder": "2026-01-31",
-        "to": "to"
+        "startDate": "Start Time",
+        "endDate": "End Time",
+        "startPlaceholder": "Select start time",
+        "endPlaceholder": "Select end time",
+        "to": "to",
+        "picker": {
+          "startTitle": "Select Start Time",
+          "endTitle": "Select End Time",
+          "cancel": "Cancel",
+          "confirm": "Confirm"
+        }
       },
       "location": {
         "label": "Location",
@@ -1257,6 +1263,7 @@
         "titleRequired": "Please enter activity title",
         "descriptionRequired": "Please enter activity description",
         "timeRequired": "Please select activity time",
+        "endTimeInvalid": "End time cannot be earlier than start time",
         "locationRequired": "Offline activity requires location",
         "teamRequired": "Please select a team"
       },

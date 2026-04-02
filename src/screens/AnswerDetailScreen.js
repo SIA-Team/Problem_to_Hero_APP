@@ -369,7 +369,22 @@ export default function AnswerDetailScreen({
   };
 
   // 获取完整的回答数据（包含统计信息）
-  const answer = normalizeAnswerDetail(answerData || route?.params?.updatedAnswer || route?.params?.answer) || DEFAULT_ANSWER_DETAIL;
+  const routeFallbackAnswer = React.useMemo(() => {
+    const routeAnswerId = Number(route?.params?.id ?? route?.params?.answerId ?? 0) || null;
+    const routeQuestionId = Number(route?.params?.questionId ?? route?.params?.question?.id ?? 0) || null;
+
+    if (!routeAnswerId) {
+      return null;
+    }
+
+    return {
+      id: routeAnswerId,
+      questionId: routeQuestionId,
+    };
+  }, [route?.params?.answerId, route?.params?.id, route?.params?.question?.id, route?.params?.questionId]);
+  const answer =
+    normalizeAnswerDetail(answerData || route?.params?.updatedAnswer || route?.params?.answer || routeFallbackAnswer) ||
+    DEFAULT_ANSWER_DETAIL;
   const answerQuestionId = Number(route?.params?.questionId ?? answer?.questionId ?? route?.params?.question?.id ?? 0) || null;
   const openPublicProfile = (target, options = {}) => navigateToPublicProfile(navigation, target, options);
   const openShareModalWithData = payload => {
