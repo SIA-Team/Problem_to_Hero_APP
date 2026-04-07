@@ -407,6 +407,21 @@ export default function TeamDetailScreen({
     status: 'pending'
   }]);
   const tabs = getTabsForRole(team.isAdmin, t);
+  const activeTabType = React.useMemo(() => {
+    if (!activeTab) {
+      return '';
+    }
+    if (activeTab === t('screens.teamDetail.tabs.discussion')) {
+      return 'discussion';
+    }
+    if (activeTab === t('screens.teamDetail.tabs.announcement')) {
+      return 'announcement';
+    }
+    if (activeTab === t('screens.teamDetail.tabs.approval')) {
+      return 'approval';
+    }
+    return '';
+  }, [activeTab, t]);
 
   // 可邀请的用户列表
   const platformUsers = [{
@@ -1148,7 +1163,7 @@ export default function TeamDetailScreen({
                     <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
                     {activeTab === tab && <View style={styles.tabIndicator} />}
                     {/* 审批消息显示未读数量 */}
-                    {tab === '审批消息' && joinRequests.length + adminRequests.length > 0 && <View style={styles.tabBadge}>
+                    {tab === t('screens.teamDetail.tabs.approval') && joinRequests.length + adminRequests.length > 0 && <View style={styles.tabBadge}>
                         <Text style={styles.tabBadgeText}>{joinRequests.length + adminRequests.length}</Text>
                       </View>}
                   </TouchableOpacity>)}
@@ -1156,7 +1171,7 @@ export default function TeamDetailScreen({
             </View>
 
             {/* 内容区域 */}
-            {activeTab === '团队讨论' ? (
+            {activeTabType === 'discussion' ? (
               <>
                 {/* 团队讨论排序过滤器 */}
                 <View style={styles.sortFilterContainer}>
@@ -1241,7 +1256,7 @@ export default function TeamDetailScreen({
                   </View>)}
               </View>
               </>
-            ) : activeTab === '团队公告' ? (/* 团队公告列表 */
+            ) : activeTabType === 'announcement' ? (/* 团队公告列表 */
         <View style={styles.announcementList}>
                 {announcements.map(announcement => <View key={announcement.id} style={styles.announcementItem}>
                     {Boolean(announcement.isPinned) && <View style={styles.pinnedBadge}>
@@ -1335,7 +1350,7 @@ export default function TeamDetailScreen({
       </ScrollView>
 
       {/* 底部输入栏 - 限制访问模式下不显示 */}
-      {Boolean(!restrictedView && isJoined && activeTab === '团队讨论') && <View style={styles.teamChatInputContainer}>
+      {Boolean(!restrictedView && isJoined && activeTabType === 'discussion') && <View style={styles.teamChatInputContainer}>
           <TouchableOpacity style={styles.teamChatInput} activeOpacity={0.85} onPress={handleSend}>
             <Text style={styles.teamChatInputPlaceholder}>{t('screens.teamDetail.chat.inputPlaceholder')}</Text>
           </TouchableOpacity>

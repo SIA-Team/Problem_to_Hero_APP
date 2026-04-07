@@ -238,19 +238,107 @@ export const normalizeFollowingResponse = (response) => {
 };
 
 const candidateRecipientKeys = [
+  'peerUserId',
   'receiverUserId',
   'receiveUserId',
   'toUserId',
-  'peerUserId',
   'targetUserId',
 ];
 
-const buildRequestCandidates = ({ recipientUserId, content, payload, mode = 'share' }) => {
+const conversationIdCandidateKeys = [
+  'conversationId',
+  'conversationID',
+  'conversation_id',
+  'convId',
+];
+
+const normalizeConversationId = (value) => {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  const normalizedValue = `${value}`.trim();
+  return normalizedValue;
+};
+
+const normalizeRecipientUserId = (value) => {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  return `${value}`.trim();
+};
+
+const extractConversationIdFromValue = (value, depth = 0) => {
+  if (depth > 5 || value === null || value === undefined) {
+    return '';
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nestedConversationId = extractConversationIdFromValue(item, depth + 1);
+      if (nestedConversationId) {
+        return nestedConversationId;
+      }
+    }
+    return '';
+  }
+
+  if (typeof value !== 'object') {
+    return '';
+  }
+
+  for (const key of conversationIdCandidateKeys) {
+    const nestedConversationId = normalizeConversationId(value[key]);
+    if (nestedConversationId) {
+      return nestedConversationId;
+    }
+  }
+
+  const nestedCandidateKeys = ['data', 'result', 'record', 'message', 'payload'];
+  for (const key of nestedCandidateKeys) {
+    const nestedConversationId = extractConversationIdFromValue(value[key], depth + 1);
+    if (nestedConversationId) {
+      return nestedConversationId;
+    }
+  }
+
+  return '';
+};
+
+export const extractConversationIdFromPrivateMessageResponse = (response) =>
+  extractConversationIdFromValue(response);
+
+const buildRequestCandidates = ({ recipientUserId, conversationId, content, payload, mode = 'share' }) => {
   const serializedPayload = payload ? JSON.stringify(payload) : undefined;
+  const normalizedRecipientUserId = normalizeRecipientUserId(recipientUserId);
+  const normalizedConversationId = normalizeConversationId(conversationId);
+
+  if (normalizedConversationId) {
+    const basePayload = {
+      conversationId: normalizedConversationId,
+      content,
+    };
+
+    const richPayload =
+      mode === 'share'
+        ? {
+            ...basePayload,
+            messageType: 'SHARE',
+            bizType: 'CONTENT_SHARE',
+            payload: serializedPayload,
+          }
+        : {
+            ...basePayload,
+            messageType: 'TEXT',
+          };
+
+    return [richPayload, basePayload];
+  }
 
   return candidateRecipientKeys.flatMap((recipientKey) => {
     const basePayload = {
-      [recipientKey]: recipientUserId,
+      [recipientKey]: normalizedRecipientUserId,
       content,
     };
 
@@ -301,22 +389,35 @@ export const sendPrivateShareMessage = async ({ recipientUserId, shareData }) =>
   });
 
   const response = await sendWithCandidates(candidates);
-  return { response, content, payload };
+  const conversationId = extractConversationIdFromPrivateMessageResponse(response);
+  return { response, content, payload, conversationId };
 };
 
-export const sendPlainPrivateMessage = async ({ recipientUserId, content }) => {
+export const sendPlainPrivateMessage = async ({ recipientUserId, conversationId, content }) => {
   const normalizedContent = `${content || ''}`.trim();
+  const normalizedRecipientUserId = normalizeRecipientUserId(recipientUserId);
+  const normalizedConversationId = normalizeConversationId(conversationId);
   if (!normalizedContent) {
     throw new Error('Message content cannot be empty');
   }
+  if (!normalizedRecipientUserId && !normalizedConversationId) {
+    throw new Error('Recipient user id is required');
+  }
 
-  const candidates = buildRequestCandidates({
-    recipientUserId,
+  const requestBody = {
     content: normalizedContent,
-    payload: null,
-    mode: 'text',
-  });
+  };
 
-  const response = await sendWithCandidates(candidates);
-  return { response, content: normalizedContent };
+  if (normalizedConversationId) {
+    requestBody.conversationId = normalizedConversationId;
+  } else {
+    requestBody.peerUserId = normalizedRecipientUserId;
+  }
+
+  const response = await notificationApi.sendPrivateMessage(requestBody);
+  if (!isSuccessResponse(response)) {
+    throw new Error(response?.msg || response?.message || 'Failed to send private message');
+  }
+  const resolvedConversationId = extractConversationIdFromPrivateMessageResponse(response);
+  return { response, content: normalizedContent, conversationId: resolvedConversationId };
 };

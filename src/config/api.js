@@ -107,6 +107,8 @@ export const API_ENDPOINTS = {
     HOT: '/questions/hot',
     RANKING: '/questions/ranking',
     SEARCH: '/questions/search',
+    COMMUNITY_SOLVE_VOTE_SUMMARY: buildApiPath(SERVICES.CONTENT, '/app/content/question/:id/communitySolveVote/summary'),
+    COMMUNITY_SOLVE_VOTE: buildApiPath(SERVICES.CONTENT, '/app/content/question/:id/communitySolveVote'),
   },
   
   // 分类相关

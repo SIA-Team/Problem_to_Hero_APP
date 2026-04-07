@@ -24,7 +24,8 @@ const INITIAL_SUPPLEMENT_PAGINATION = {
   pageNum: 1,
   pageSize: 10,
   hasMore: true,
-  total: 0
+  total: 0,
+  loaded: false
 };
 const INITIAL_COMMENT_LIST_STATE = {
   list: [],
@@ -387,6 +388,18 @@ export default function AnswerDetailScreen({
     DEFAULT_ANSWER_DETAIL;
   const answerQuestionId = Number(route?.params?.questionId ?? answer?.questionId ?? route?.params?.question?.id ?? 0) || null;
   const openPublicProfile = (target, options = {}) => navigateToPublicProfile(navigation, target, options);
+  useEffect(() => {
+    setSupplementAnswers([]);
+    setSupplementError(null);
+    setSupplementPagination(INITIAL_SUPPLEMENT_PAGINATION);
+    setAnswerCommentListState(INITIAL_COMMENT_LIST_STATE);
+    setAnswerCommentRepliesMap({});
+    setCurrentAnswerCommentId(null);
+    setSupplementCommentListState(INITIAL_COMMENT_LIST_STATE);
+    setSupplementCommentRepliesMap({});
+    setCurrentSupplementCommentTargetId(null);
+    setCurrentSupplementCommentId(null);
+  }, [answer.id]);
   const openShareModalWithData = payload => {
     if (!payload) {
       return;
@@ -1304,6 +1317,12 @@ export default function AnswerDetailScreen({
       isLoadMore: true
     });
   };
+  const handleSupplementAnswersLoadMore = () => {
+    if (!answer.id || supplementLoading || !supplementPagination.loaded || !supplementPagination.hasMore) {
+      return;
+    }
+    fetchSupplementAnswers(false);
+  };
   const handleAnswerCommentLike = async commentId => {
     const comment = findAnswerCommentById(commentId);
     if (!commentId) {
@@ -1639,7 +1658,8 @@ export default function AnswerDetailScreen({
           pageNum: list.length < nextPageSize ? pageNum : pageNum + 1,
           pageSize: nextPageSize,
           hasMore,
-          total
+          total,
+          loaded: true
         });
       } else {
         throw new Error(response?.msg || t('screens.answerDetail.alerts.fetchSupplementsFailed'));
@@ -2419,21 +2439,31 @@ export default function AnswerDetailScreen({
     }
   };
 
-  // 鍒濆鍖栧姞杞借ˉ鍏呭洖绛?
   useEffect(() => {
     if (isFocused && answer.id) {
-      // 鑾峰彇鍥炵瓟璇︽儏(鍖呭惈鏈€鏂扮殑浜や簰鐘舵€?
       fetchAnswerDetail();
-      loadAnswerComments({
-        isRefresh: true
-      });
-
-      // 濡傛灉褰撳墠鍦ㄨˉ鍏呭洖绛攖ab,鍔犺浇琛ュ厖鍥炵瓟鍒楄〃
-      if (activeTab === 0) {
-        fetchSupplementAnswers(true);
-      }
     }
-  }, [isFocused, answer.id, activeTab]);
+  }, [isFocused, answer.id]);
+  useEffect(() => {
+    if (!isFocused || !answer.id || activeTab !== 1) {
+      return;
+    }
+    if (answerCommentListState.loaded || answerCommentListState.loading || answerCommentListState.refreshing || answerCommentListState.loadingMore) {
+      return;
+    }
+    loadAnswerComments({
+      isRefresh: true
+    });
+  }, [isFocused, answer.id, activeTab, answerCommentListState.loaded, answerCommentListState.loading, answerCommentListState.refreshing, answerCommentListState.loadingMore]);
+  useEffect(() => {
+    if (!isFocused || !answer.id || activeTab !== 0) {
+      return;
+    }
+    if (supplementPagination.loaded || supplementLoading) {
+      return;
+    }
+    fetchSupplementAnswers(true);
+  }, [isFocused, answer.id, activeTab, supplementPagination.loaded, supplementLoading]);
   useEffect(() => {
     if (!showSupplementCommentListModal || !currentSupplementCommentTargetId) {
       return;
@@ -2699,6 +2729,13 @@ export default function AnswerDetailScreen({
               {/* 鍔犺浇鏇村鎸囩ず鍣?*/}
               {Boolean(supplementLoading && supplementAnswers.length > 0) && <View style={styles.loadingMore}>
                   <Text style={styles.loadingMoreText}>{t('screens.answerDetail.states.loadingMore')}</Text>
+                </View>}
+              {Boolean(supplementPagination.hasMore && !supplementLoading && supplementAnswers.length > 0) && <TouchableOpacity style={styles.loadMoreBtn} onPress={handleSupplementAnswersLoadMore}>
+                  <Text style={styles.loadMoreText}>加载更多补充回答</Text>
+                  <Ionicons name="chevron-down" size={16} color="#ef4444" />
+                </TouchableOpacity>}
+              {!supplementPagination.hasMore && supplementAnswers.length > 0 && <View style={styles.loadingIndicator}>
+                  <Text style={styles.loadingText}>没有更多补充回答了</Text>
                 </View>}
             </>
           : (

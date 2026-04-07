@@ -23,7 +23,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.problemtohero.app",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "infoPlist": {
         "UIViewControllerBasedStatusBarAppearance": false,
         "NSPhotoLibraryUsageDescription": "允许访问您的相册以更换头像",

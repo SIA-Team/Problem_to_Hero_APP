@@ -517,6 +517,29 @@
     "failed": "未通过"
   },
   "screens": {
+    "search": {
+      "searchPlaceholder": "搜索感兴趣的内容",
+      "searchButton": "搜索",
+      "history": {
+        "title": "搜索历史"
+      },
+      "hotSearches": {
+        "title": "热门搜索",
+        "refresh": "换一换",
+        "hotTag": "热",
+        "risingTag": "上升"
+      },
+      "hotTopics": {
+        "title": "热门话题",
+        "viewMore": "查看更多"
+      },
+      "alerts": {
+        "clearHistoryTitle": "清空历史",
+        "clearHistoryMessage": "确定要清空搜索历史吗？",
+        "viewMoreTitle": "查看更多",
+        "viewMoreMessage": "更多热门话题功能开发中..."
+      }
+    },
     "teamDetail": {
       "title": "团队详情页",
       "teamMembers": "团队成员",
@@ -953,6 +976,12 @@
       "tips": {
         "text": "追加的悬赏将与原悬赏合并，吸引更多优质回答"
       },
+        "insufficientBalance": {
+          "title": "钱包余额不足",
+          "message": "当前钱包余额为 {balance}，不足以支付本次追加悬赏 {amount}，是否前往充值？"
+        },
+        "expenseRecordType": "追加悬赏",
+        "deductionFailed": "扣减钱包余额失败，请稍后重试",
       "confirmButton": "确认追加 ${amount}",
       "cancelButton": "取消",
       "validation": {

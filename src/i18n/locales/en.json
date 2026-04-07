@@ -515,6 +515,29 @@
     "failed": "Failed"
   },
   "screens": {
+    "search": {
+      "searchPlaceholder": "Search for interesting content",
+      "searchButton": "Search",
+      "history": {
+        "title": "Search History"
+      },
+      "hotSearches": {
+        "title": "Hot Searches",
+        "refresh": "Refresh",
+        "hotTag": "Hot",
+        "risingTag": "Rising"
+      },
+      "hotTopics": {
+        "title": "Hot Topics",
+        "viewMore": "View More"
+      },
+      "alerts": {
+        "clearHistoryTitle": "Clear History",
+        "clearHistoryMessage": "Are you sure you want to clear search history?",
+        "viewMoreTitle": "View More",
+        "viewMoreMessage": "More hot topics feature coming soon..."
+      }
+    },
     "teamDetail": {
       "title": "Team Details",
       "teamMembers": "Team Members",
@@ -926,6 +949,12 @@
       "tips": {
         "text": "Added rewards will be combined with the original reward to attract more quality answers"
       },
+        "insufficientBalance": {
+          "title": "Insufficient Wallet Balance",
+          "message": "Your current wallet balance is {balance}, which is not enough to cover this added reward of {amount}. Would you like to recharge now?"
+        },
+        "expenseRecordType": "Add Reward",
+        "deductionFailed": "Failed to deduct wallet balance. Please try again later.",
       "confirmButton": "Confirm Add ${amount}",
       "cancelButton": "Cancel",
       "validation": {

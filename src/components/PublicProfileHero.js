@@ -15,6 +15,7 @@ export default function PublicProfileHero({
   isFollowing,
   onFollowPress,
   isOwnProfile,
+  onMessagePress,
 }) {
   if (!userData) {
     return null;
@@ -40,19 +41,6 @@ export default function PublicProfileHero({
         <View style={styles.avatarWrapper}>
           <View style={styles.avatarContainer}>
             <Avatar uri={userData.avatar} name={userData.username} size={scaleSpacing(66)} />
-            {!isOwnProfile ? (
-              <TouchableOpacity
-                style={[styles.followButtonSmall, isFollowing && styles.followingButtonSmall]}
-                onPress={() => onFollowPress && onFollowPress(!isFollowing)}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name={isFollowing ? 'checkmark' : 'add'}
-                  size={scale(18)}
-                  color={isFollowing ? '#ef4444' : '#fff'}
-                />
-              </TouchableOpacity>
-            ) : null}
           </View>
         </View>
       </ImageBackground>
@@ -79,6 +67,32 @@ export default function PublicProfileHero({
               </Text>
             </View>
           ) : null}
+
+          {!isOwnProfile && (
+            <View style={styles.actionButtonsRow}>
+              <TouchableOpacity
+                style={[styles.followButton, isFollowing && styles.followingButton]}
+                onPress={() => onFollowPress && onFollowPress(!isFollowing)}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name={isFollowing ? 'checkmark' : 'add'}
+                  size={scale(16)}
+                  color={isFollowing ? '#ef4444' : '#fff'}
+                />
+                <Text style={[styles.followButtonText, isFollowing && styles.followingButtonText]}>
+                  {isFollowing ? '已关注' : '关注'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.messageButton}
+                onPress={onMessagePress}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="chatbubble-outline" size={scale(18)} color="#1f2937" />
+              </TouchableOpacity>
+            </View>
+          )}
 
           <View style={styles.metaRow}>
             {userData.occupation ? (
@@ -153,22 +167,6 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#fff',
     borderRadius: scaleSpacing(36),
-    backgroundColor: '#fff',
-  },
-  followButtonSmall: {
-    position: 'absolute',
-    bottom: -scaleSpacing(4),
-    right: -scaleSpacing(4),
-    width: scaleSpacing(28),
-    height: scaleSpacing(28),
-    borderRadius: scaleSpacing(14),
-    backgroundColor: '#ef4444',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  followingButtonSmall: {
     backgroundColor: '#fff',
   },
   statsAndAvatarRow: {
@@ -246,5 +244,44 @@ const styles = StyleSheet.create({
   avatarPlaceholder: {
     width: scaleSpacing(40),
     height: scaleSpacing(66),
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: scaleSpacing(8),
+    marginTop: scaleSpacing(8),
+    marginBottom: scaleSpacing(4),
+  },
+  followButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: scaleSpacing(6),
+    backgroundColor: '#ef4444',
+    paddingHorizontal: scaleSpacing(16),
+    paddingVertical: scaleSpacing(8),
+    borderRadius: scaleSpacing(6),
+  },
+  followingButton: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ef4444',
+  },
+  followButtonText: {
+    fontSize: scale(14),
+    fontWeight: '600',
+    color: '#fff',
+  },
+  followingButtonText: {
+    color: '#ef4444',
+  },
+  messageButton: {
+    width: scaleSpacing(40),
+    height: scaleSpacing(40),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#d1d5db',
+    borderRadius: scaleSpacing(6),
   },
 });

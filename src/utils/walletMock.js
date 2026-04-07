@@ -1,11 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const WALLET_MOCK_STATE_KEY = '@wallet_mock_state';
-const MAX_RECHARGE_RECORDS = 20;
+const MAX_WALLET_RECORDS = 20;
 
 const createDefaultState = () => ({
   addedBalance: 0,
   rechargeRecords: [],
+  expenseRecords: [],
 });
 
 const formatRecordTime = (date = new Date()) => {
@@ -27,10 +28,14 @@ const normalizeState = state => {
   const rechargeRecords = Array.isArray(state.rechargeRecords)
     ? state.rechargeRecords.filter(item => item && typeof item === 'object')
     : [];
+  const expenseRecords = Array.isArray(state.expenseRecords)
+    ? state.expenseRecords.filter(item => item && typeof item === 'object')
+    : [];
 
   return {
     addedBalance: Number.isFinite(addedBalance) ? addedBalance : 0,
     rechargeRecords,
+    expenseRecords,
   };
 };
 
@@ -65,6 +70,11 @@ export const getMockRechargeRecords = async () => {
   return state.rechargeRecords;
 };
 
+export const getMockWalletExpenseRecords = async () => {
+  const state = await getWalletMockState();
+  return state.expenseRecords;
+};
+
 export const applyMockRecharge = async ({ amount, currency = 'usd' }) => {
   const numericAmount = Number(amount);
 
@@ -85,7 +95,41 @@ export const applyMockRecharge = async ({ amount, currency = 'usd' }) => {
 
   const nextState = {
     addedBalance: previousState.addedBalance + numericAmount,
-    rechargeRecords: [nextRecord, ...previousState.rechargeRecords].slice(0, MAX_RECHARGE_RECORDS),
+    rechargeRecords: [nextRecord, ...previousState.rechargeRecords].slice(0, MAX_WALLET_RECORDS),
+    expenseRecords: previousState.expenseRecords,
+  };
+
+  await AsyncStorage.setItem(WALLET_MOCK_STATE_KEY, JSON.stringify(nextState));
+
+  return nextState;
+};
+
+export const applyMockWalletExpense = async ({
+  amount,
+  currency = 'usd',
+  type = '追加悬赏',
+}) => {
+  const numericAmount = Number(amount);
+
+  if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+    throw new Error('Invalid expense amount');
+  }
+
+  const previousState = await getWalletMockState();
+  const nextRecord = {
+    id: `mock_expense_${Date.now()}`,
+    type,
+    amount: numericAmount,
+    time: formatRecordTime(),
+    status: 'completed',
+    currency: String(currency || 'usd').toLowerCase(),
+    isMock: true,
+  };
+
+  const nextState = {
+    addedBalance: previousState.addedBalance - numericAmount,
+    rechargeRecords: previousState.rechargeRecords,
+    expenseRecords: [nextRecord, ...previousState.expenseRecords].slice(0, MAX_WALLET_RECORDS),
   };
 
   await AsyncStorage.setItem(WALLET_MOCK_STATE_KEY, JSON.stringify(nextState));

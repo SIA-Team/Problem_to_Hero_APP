@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, Dimensions, TextInput, FlatList, Platform, ActivityIndicator, RefreshControl } from 'react-native';
+import { AppState, View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, Dimensions, TextInput, FlatList, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
@@ -10,21 +10,28 @@ import ShareModal from '../components/ShareModal';
 import EditTextModal from '../components/EditTextModal';
 import InitialCredentialsModal from '../components/InitialCredentialsModal';
 import WriteCommentModal from '../components/WriteCommentModal';
+import RegionSelector from '../components/RegionSelector';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/useTranslation';
 import { getRegionData } from '../data/regionData';
 import { useOptimizedQuestions } from '../hooks/useOptimizedQuestions';
 import { showToast } from '../utils/toast';
+import { showAppAlert } from '../utils/appAlert';
 import { buildTwitterShareText, openTwitterShare } from '../utils/shareService';
 import { formatTime } from '../utils/timeFormatter';
+import { openOfficialRechargePage } from '../utils/externalLinks';
+import { applyMockRecharge, applyMockWalletExpense, getWalletBalanceWithMock } from '../utils/walletMock';
+import { markQuestionAsPaid } from '../utils/paidQuestionAccess';
 import { navigateToPublicProfile, resolvePublicUserId } from '../utils/publicProfileNavigation';
 import questionApi from '../services/api/questionApi';
+import userApi from '../services/api/userApi';
 import { getBlockedUserIds, subscribeBlockedUsers } from '../services/blacklistState';
 import { loadComboChannels } from '../services/channelSubscriptionService';
 
 import { scaleFont } from '../utils/responsive';
 const { width: screenWidth } = Dimensions.get('window');
 const INITIAL_CREDENTIALS_NOTICE_STORAGE_KEY = '@initial_credentials_notice';
+const MOCK_RECHARGE_RETURN_AMOUNT = 100;
 
 // tabs array will be moved inside component to use translation
 
@@ -173,9 +180,22 @@ export default function HomeScreen({ navigation }) {
   const [currentShareData, setCurrentShareData] = useState(null);
   const [showPaidAlertModal, setShowPaidAlertModal] = useState(false);
   const [paidAlertAmount, setPaidAlertAmount] = useState(null);
+  const [selectedPaidQuestion, setSelectedPaidQuestion] = useState(null);
+  const [pendingPaidQuestionRouteParams, setPendingPaidQuestionRouteParams] = useState({});
+  const [isUnlockingPaidQuestion, setIsUnlockingPaidQuestion] = useState(false);
+  const [walletData, setWalletData] = useState({
+    balance: 0,
+    currency: 'usd',
+  });
+  const [currentUserProfile, setCurrentUserProfile] = useState({
+    userId: '',
+    username: '',
+  });
+  const pendingRechargeSimulationRef = useRef(false);
+  const appStateRef = useRef(AppState.currentState);
+  const handleRechargeReturnRef = useRef(async () => {});
   const [showInitialCredentialsModal, setShowInitialCredentialsModal] = useState(false);
   const [initialCredentials, setInitialCredentials] = useState({ username: '', password: '' });
-  const [regionStep, setRegionStep] = useState(0);
   const [selectedRegion, setSelectedRegion] = useState({ country: '', city: '', state: '', district: '' });
   
   // 话题关注状态
@@ -195,16 +215,9 @@ export default function HomeScreen({ navigation }) {
     hasNewContent,
     onRefresh,
     onLoadMore,
-    onTabChange: handleOptimizedTabChange,
     setQuestionList,
   } = useOptimizedQuestions(activeTab, tabs);
 
-  // Run after the hook initializes its callback to avoid web TDZ errors.
-  useEffect(() => {
-    if (activeTab && handleOptimizedTabChange) {
-      handleOptimizedTabChange(activeTab);
-    }
-  }, [activeTab, handleOptimizedTabChange]);
   
   // 问题标题展开/折叠状态
   const [expandedTitles, setExpandedTitles] = useState({});
@@ -663,55 +676,271 @@ export default function HomeScreen({ navigation }) {
   const handleShare = (platform, payload) => {
     console.log('Home question shared:', platform, payload);
   };
-  const openPaidAlertModal = (amount) => {
-    setPaidAlertAmount(amount);
+  const formatPaidAmount = useCallback((amount) => {
+    const numericAmount = Number(amount) || 0;
+    return Number.isInteger(numericAmount) ? `${numericAmount}` : numericAmount.toFixed(2);
+  }, []);
+
+  const loadWalletBalance = useCallback(async () => {
+    const fallbackWalletBalance = await getWalletBalanceWithMock(0);
+
+    setWalletData(prev => ({
+      balance: fallbackWalletBalance.balance,
+      currency: prev?.currency || 'usd',
+    }));
+
+    try {
+      const response = await userApi.getWalletBalance();
+
+      if (response.code === 0 || response.code === 200) {
+        const nextCurrency = response?.data?.currency || 'usd';
+        const walletBalance = await getWalletBalanceWithMock(response?.data?.balance);
+
+        setWalletData({
+          balance: walletBalance.balance,
+          currency: nextCurrency,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load wallet balance in HomeScreen:', error);
+    }
+  }, []);
+
+  const loadCurrentUserProfile = useCallback(async () => {
+    try {
+      const response = await userApi.getProfile();
+      const profileData = response?.data || {};
+
+      setCurrentUserProfile({
+        userId: profileData.userId || '',
+        username: profileData.username || '',
+      });
+    } catch (error) {
+      console.error('Failed to load current user profile in HomeScreen:', error);
+    }
+  }, []);
+
+  const handleMockRecharge = useCallback(async amount => {
+    const numericAmount = Number(amount);
+
+    await applyMockRecharge({
+      amount: numericAmount,
+      currency: walletData.currency,
+    });
+
+    setWalletData(prev => ({
+      ...prev,
+      balance: (Number(prev.balance) || 0) + (Number.isFinite(numericAmount) ? numericAmount : 0),
+    }));
+
+    await loadWalletBalance();
+    showAppAlert(
+      t('profile.rechargeSuccess'),
+      `${t('profile.rechargeSuccess')} $${numericAmount.toFixed(2)} (${t('profile.mockRechargeTag')})`
+    );
+  }, [loadWalletBalance, t, walletData.currency]);
+
+  const closePaidAlertModal = useCallback(() => {
+    setShowPaidAlertModal(false);
+    setPaidAlertAmount(null);
+    setSelectedPaidQuestion(null);
+    setPendingPaidQuestionRouteParams({});
+    setIsUnlockingPaidQuestion(false);
+  }, []);
+
+  const navigateToQuestionDetail = useCallback((question, extraParams = {}) => {
+    if (!question?.id) {
+      return;
+    }
+
+    navigation.navigate('QuestionDetail', {
+      id: question.id,
+      ...extraParams,
+    });
+  }, [navigation]);
+
+  const openPaidAlertModal = useCallback((question, extraParams = {}) => {
+    if (!question) {
+      return;
+    }
+
+    setSelectedPaidQuestion(question);
+    setPendingPaidQuestionRouteParams(extraParams);
+    setPaidAlertAmount(formatPaidAmount(question.paidAmount));
     setShowPaidAlertModal(true);
-  };
+  }, [formatPaidAmount]);
 
-  const getRegionOptions = () => {
-    if (regionStep === 0) return regionData.countries;
-    if (regionStep === 1) return regionData.cities[selectedRegion.country] || [];
-    if (regionStep === 2) return regionData.states[selectedRegion.city] || [];
-    if (regionStep === 3) return regionData.districts[selectedRegion.state] || [];
-    return [];
-  };
+  useEffect(() => {
+    handleRechargeReturnRef.current = async () => {
+      await handleMockRecharge(MOCK_RECHARGE_RETURN_AMOUNT);
+    };
+  }, [handleMockRecharge]);
 
-  const selectRegion = (value) => {
-    if (regionStep === 0) { 
-      setSelectedRegion({ ...selectedRegion, country: value, city: '', state: '', district: '' }); 
-      // 自动跳转到下一层
-      if (regionData.cities[value] && regionData.cities[value].length > 0) {
-        setRegionStep(1);
-      }
-    }
-    else if (regionStep === 1) { 
-      setSelectedRegion({ ...selectedRegion, city: value, state: '', district: '' }); 
-      // 自动跳转到下一层
-      if (regionData.states[value] && regionData.states[value].length > 0) {
-        setRegionStep(2);
-      }
-    }
-    else if (regionStep === 2) { 
-      setSelectedRegion({ ...selectedRegion, state: value, district: '' }); 
-      // 自动跳转到下一层
-      if (regionData.districts[value] && regionData.districts[value].length > 0) {
-        setRegionStep(3);
-      }
-    }
-    else { 
-      setSelectedRegion({ ...selectedRegion, district: value }); 
-    }
-  };
+  useEffect(() => {
+    loadWalletBalance();
+    loadCurrentUserProfile();
+  }, [loadCurrentUserProfile, loadWalletBalance]);
 
-  const getRegionTitle = () => [t('home.selectCountry'), t('home.selectCity'), t('home.selectState'), t('home.selectDistrict')][regionStep];
+  useFocusEffect(useCallback(() => {
+    loadWalletBalance();
+  }, [loadWalletBalance]));
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      const isReturningToForeground =
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === 'active';
+
+      if (isReturningToForeground && pendingRechargeSimulationRef.current) {
+        pendingRechargeSimulationRef.current = false;
+        handleRechargeReturnRef.current().catch(error => {
+          console.error('Failed to simulate recharge after returning to HomeScreen:', error);
+        });
+      }
+
+      appStateRef.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  const handleRechargeForPaidQuestion = useCallback(async () => {
+    const result = await openOfficialRechargePage({
+      userId: currentUserProfile.userId,
+      username: currentUserProfile.username,
+    });
+
+    if (result?.ok) {
+      pendingRechargeSimulationRef.current = true;
+      return;
+    }
+
+    const reasonKey = `profile.${result?.reason}`;
+    const reasonMessage = t(reasonKey);
+
+    showAppAlert(
+      t('profile.rechargeUnavailableTitle'),
+      reasonMessage === reasonKey ? t('profile.rechargeUnavailableMessage') : reasonMessage
+    );
+  }, [currentUserProfile.userId, currentUserProfile.username, t]);
+
+  const handlePaidQuestionPress = useCallback((question, extraParams = {}) => {
+    if (!question) {
+      return;
+    }
+
+    if (question.type === 'paid' && !question.isPaid) {
+      openPaidAlertModal(question, extraParams);
+      return;
+    }
+
+    navigateToQuestionDetail(question, extraParams);
+  }, [navigateToQuestionDetail, openPaidAlertModal]);
+
+  const handlePaidQuestionUnlock = useCallback(async () => {
+    if (!selectedPaidQuestion?.id || isUnlockingPaidQuestion) {
+      return;
+    }
+
+    const amount = Number(selectedPaidQuestion.paidAmount) || 0;
+
+    if (amount <= 0) {
+      closePaidAlertModal();
+      navigateToQuestionDetail(selectedPaidQuestion, pendingPaidQuestionRouteParams);
+      return;
+    }
+
+    setIsUnlockingPaidQuestion(true);
+
+    let walletBalance = 0;
+    let walletCurrency = 'usd';
+
+    try {
+      const response = await userApi.getWalletBalance();
+      const walletInfo = await getWalletBalanceWithMock(response?.data?.balance);
+      walletBalance = Number(walletInfo?.balance) || 0;
+      walletCurrency = String(response?.data?.currency || 'usd').toLowerCase();
+    } catch (error) {
+      console.error('Failed to load wallet balance for paid question unlock:', error);
+      const fallbackWalletInfo = await getWalletBalanceWithMock(0);
+      walletBalance = Number(fallbackWalletInfo?.balance) || 0;
+    }
+
+    if (walletBalance < amount) {
+      setIsUnlockingPaidQuestion(false);
+      showAppAlert(
+        '钱包余额不足',
+        `当前余额 $${formatPaidAmount(walletBalance)}，不足以支付本次查看费用 $${formatPaidAmount(amount)}，是否前往充值？`,
+        [
+          {
+            text: t('common.cancel'),
+            style: 'cancel',
+          },
+          {
+            text: t('profile.recharge'),
+            onPress: () => {
+              handleRechargeForPaidQuestion().catch(error => {
+                console.error('Failed to open recharge page for paid question:', error);
+              });
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    try {
+      await applyMockWalletExpense({
+        amount,
+        currency: walletCurrency,
+        type: '付费查看',
+      });
+      await markQuestionAsPaid({
+        questionId: selectedPaidQuestion.id,
+        paidAmount: amount,
+      });
+
+      setQuestionList(prev =>
+        prev.map(item =>
+          item?.id === selectedPaidQuestion.id
+            ? { ...item, isPaid: true }
+            : item
+        )
+      );
+
+      const unlockedQuestion = {
+        ...selectedPaidQuestion,
+        isPaid: true,
+      };
+
+      closePaidAlertModal();
+      showToast(`已支付 $${formatPaidAmount(amount)}，现在可以查看完整内容`, 'success');
+      navigateToQuestionDetail(unlockedQuestion, pendingPaidQuestionRouteParams);
+    } catch (error) {
+      console.error('Failed to unlock paid question:', error);
+      setIsUnlockingPaidQuestion(false);
+      showAppAlert('支付失败', '本次付费查看处理失败，请稍后重试。');
+    }
+  }, [
+    closePaidAlertModal,
+    formatPaidAmount,
+    handleRechargeForPaidQuestion,
+    isUnlockingPaidQuestion,
+    navigateToQuestionDetail,
+    pendingPaidQuestionRouteParams,
+    selectedPaidQuestion,
+    setQuestionList,
+    t,
+  ]);
+
   const getDisplayRegion = () => {
     const parts = [selectedRegion.country, selectedRegion.city, selectedRegion.state, selectedRegion.district].filter(Boolean);
     // 只显示最后一级，如果没有选择则显示"全球"
     if (parts.length === 0) return t('home.global');
     return parts[parts.length - 1];
   };
-
-
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -893,7 +1122,7 @@ export default function HomeScreen({ navigation }) {
                 style={[styles.questionCard, isFirstItem && styles.firstQuestionCard]} 
                 onPress={() => {
                   // 所有问题都可以跳转
-                  navigation.navigate('QuestionDetail', { id: item.id });
+                  handlePaidQuestionPress(item);
                 }}
               >
                 <View style={[styles.questionCardInner, isLastItem && styles.lastQuestionCardInner]}>
@@ -972,7 +1201,7 @@ export default function HomeScreen({ navigation }) {
                         style={styles.fullTextBtnBottom}
                         onPress={(e) => {
                           e.stopPropagation();
-                          navigation.navigate('QuestionDetail', { id: item.id });
+                          handlePaidQuestionPress(item);
                         }}
                         activeOpacity={0.7}
                       >
@@ -987,7 +1216,7 @@ export default function HomeScreen({ navigation }) {
                       style={styles.paidViewButton}
                       onPress={(e) => {
                         e.stopPropagation();
-                        openPaidAlertModal(item.paidAmount);
+                        openPaidAlertModal(item);
                       }}
                     >
                       <View style={styles.paidViewContent}>
@@ -1162,100 +1391,13 @@ export default function HomeScreen({ navigation }) {
       )}
 
       {/* 区域选择弹窗 */}
-      <Modal visible={showRegionModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity 
-            style={styles.modalBackdrop}
-            activeOpacity={1} 
-            onPress={() => { setShowRegionModal(false); setRegionStep(0); }}
-          />
-          <View style={[styles.regionModal, { paddingBottom: 30 }]}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => { setShowRegionModal(false); setRegionStep(0); }}>
-                <Ionicons name="close" size={24} color="#1f2937" />
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>{t('home.selectRegion')}</Text>
-              <TouchableOpacity onPress={() => { 
-                setShowRegionModal(false);
-                setRegionStep(0);
-              }}>
-                <Text style={styles.confirmText}>{t('home.confirm')}</Text>
-              </TouchableOpacity>
-            </View>
-            
-            {/* 面包屑导航 */}
-            <View style={styles.breadcrumbContainer}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.breadcrumbScrollContent}>
-                <TouchableOpacity 
-                  style={styles.breadcrumbItem}
-                  onPress={() => setRegionStep(0)}
-                >
-                  <Text style={[styles.breadcrumbText, regionStep === 0 && styles.breadcrumbTextActive]}>
-                    {selectedRegion.country || t('home.country')}
-                  </Text>
-                </TouchableOpacity>
-                
-                {selectedRegion.country && (
-                  <>
-                    <View style={styles.breadcrumbSeparatorWrapper}>
-                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
-                    </View>
-                    <TouchableOpacity 
-                      style={styles.breadcrumbItem}
-                      onPress={() => setRegionStep(1)}
-                    >
-                      <Text style={[styles.breadcrumbText, regionStep === 1 && styles.breadcrumbTextActive]}>
-                        {selectedRegion.city}
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-                
-                {selectedRegion.city && selectedRegion.state && (
-                  <>
-                    <View style={styles.breadcrumbSeparatorWrapper}>
-                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
-                    </View>
-                    <TouchableOpacity 
-                      style={styles.breadcrumbItem}
-                      onPress={() => setRegionStep(2)}
-                    >
-                      <Text style={[styles.breadcrumbText, regionStep === 2 && styles.breadcrumbTextActive]}>
-                        {selectedRegion.state}
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-                
-                {selectedRegion.state && selectedRegion.district && (
-                  <>
-                    <View style={styles.breadcrumbSeparatorWrapper}>
-                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
-                    </View>
-                    <TouchableOpacity 
-                      style={styles.breadcrumbItem}
-                      onPress={() => setRegionStep(3)}
-                    >
-                      <Text style={[styles.breadcrumbText, regionStep === 3 && styles.breadcrumbTextActive]}>
-                        {selectedRegion.district}
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </ScrollView>
-            </View>
-            
-            <ScrollView style={styles.regionList}>
-              {getRegionOptions().map((option, idx) => (
-                <TouchableOpacity key={idx} style={styles.regionOption} onPress={() => selectRegion(option)}>
-                  <Text style={styles.regionOptionText}>{option}</Text>
-                  <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      <RegionSelector
+        visible={showRegionModal}
+        onClose={() => setShowRegionModal(false)}
+        selectedRegion={selectedRegion}
+        onRegionChange={setSelectedRegion}
+        t={t}
+      />
 
       {/* 三个点操作弹窗 */}
       <Modal visible={showActionModal} transparent animationType="slide">
@@ -1297,8 +1439,7 @@ export default function HomeScreen({ navigation }) {
               onPress={() => { 
                 setShowActionModal(false); 
                 // 所有问题都可以跳转
-                navigation.navigate('QuestionDetail', {
-                  id: selectedQuestion?.id,
+                handlePaidQuestionPress(selectedQuestion, {
                   openAnswerModal: true,
                   defaultTab: 'answers'
                 });
@@ -1307,7 +1448,7 @@ export default function HomeScreen({ navigation }) {
               <Ionicons name="create-outline" size={22} color="#ef4444" />
               <Text style={[styles.actionItemText, { color: '#ef4444' }]}>写回答</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); navigation.navigate('QuestionDetail', { id: selectedQuestion?.id, defaultTab: 'supplements', openSupplementModal: true }); }}>
+            <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); handlePaidQuestionPress(selectedQuestion, { defaultTab: 'supplements', openSupplementModal: true }); }}>
               <Ionicons name="add-circle-outline" size={22} color="#1f2937" />
               <Text style={styles.actionItemText}>补充问题</Text>
             </TouchableOpacity>
@@ -1407,13 +1548,13 @@ export default function HomeScreen({ navigation }) {
         visible={showPaidAlertModal}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowPaidAlertModal(false)}
+        onRequestClose={closePaidAlertModal}
       >
         <View style={styles.paidAlertOverlay}>
           <TouchableOpacity
             style={styles.modalBackdrop}
             activeOpacity={1}
-            onPress={() => setShowPaidAlertModal(false)}
+            onPress={closePaidAlertModal}
           />
           <View style={styles.paidAlertModal}>
             <View style={styles.paidAlertHeader}>
@@ -1423,12 +1564,26 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.paidAlertDesc}>
               {t('home.payToView').replace('${amount}', paidAlertAmount)}
             </Text>
-            <TouchableOpacity
-              style={styles.paidAlertConfirmBtn}
-              onPress={() => setShowPaidAlertModal(false)}
-            >
-              <Text style={styles.paidAlertConfirmText}>{t('home.confirm')}</Text>
-            </TouchableOpacity>
+            <View style={styles.paidAlertActions}>
+              <TouchableOpacity
+                style={styles.paidAlertCancelBtn}
+                onPress={closePaidAlertModal}
+                disabled={isUnlockingPaidQuestion}
+              >
+                <Text style={styles.paidAlertCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.paidAlertConfirmBtn}
+                onPress={handlePaidQuestionUnlock}
+                disabled={isUnlockingPaidQuestion}
+              >
+                {isUnlockingPaidQuestion ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.paidAlertConfirmText}>支付</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1818,8 +1973,18 @@ const styles = StyleSheet.create({
   paidAlertHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   paidAlertTitle: { fontSize: scaleFont(20), fontWeight: '700', color: modalTokens.textPrimary },
   paidAlertDesc: { fontSize: scaleFont(17), color: modalTokens.textSecondary, lineHeight: scaleFont(26), marginBottom: 20 },
-  paidAlertConfirmBtn: {
+  paidAlertActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 12 },
+  paidAlertCancelBtn: {
     alignSelf: 'flex-end',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingHorizontal: modalTokens.actionPaddingX,
+    paddingVertical: modalTokens.actionPaddingY,
+    borderRadius: modalTokens.actionRadius,
+  },
+  paidAlertCancelText: { fontSize: scaleFont(15), color: '#6b7280', fontWeight: '600' },
+  paidAlertConfirmBtn: {
     backgroundColor: modalTokens.danger,
     paddingHorizontal: modalTokens.actionPaddingX,
     paddingVertical: modalTokens.actionPaddingY,

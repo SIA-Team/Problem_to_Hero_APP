@@ -342,6 +342,7 @@ export default function QuestionDetailScreen({
   const [questionData, setQuestionData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [detailReloadVersion, setDetailReloadVersion] = useState(0);
 
   // 补充列表状态 - 优化为分排序方式缓存
   const [supplementsCache, setSupplementsCache] = useState({
@@ -546,6 +547,15 @@ export default function QuestionDetailScreen({
   const [isTeamMember, setIsTeamMember] = useState(false); // 是否已加入团队
   const [showProgressBar, setShowProgressBar] = useState(false); // 是否显示进度条
   const [solvedPercentage, setSolvedPercentage] = useState(65); // 已解决的百分比
+  const [communitySolveVoteSummary, setCommunitySolveVoteSummary] = useState({
+    applicable: false,
+    solvedCount: 0,
+    unsolvedCount: 0,
+    myChoice: null
+  });
+  const [communitySolveVoteSubmitting, setCommunitySolveVoteSubmitting] = useState(false);
+  const isSolvedChoiceSelected = communitySolveVoteSummary.myChoice === 'SOLVED';
+  const isUnsolvedChoiceSelected = communitySolveVoteSummary.myChoice === 'UNSOLVED';
   const [currentSupplement, setCurrentSupplement] = useState(null); // 当前要回答的补充问题
   const [showSupplementAnswerModal, setShowSupplementAnswerModal] = useState(false); // 补充回答弹窗
   const [showSupplementAnswerSuccessModal, setShowSupplementAnswerSuccessModal] = useState(false);
@@ -600,7 +610,73 @@ export default function QuestionDetailScreen({
   const [showRewardContributorsModal, setShowRewardContributorsModal] = useState(false); // 显示追加悬赏人员名单
 
   // 当前悬赏金额 - 从问题数据中获取
-  const currentReward = questionData ? Math.floor((questionData.bountyAmount || 0) / 100) : 0;
+  const currentReward = questionData ? (Number(questionData.bountyAmount || 0) / 100) : 0;
+  const formatCompactRewardAmount = React.useCallback(amount => {
+    const numericAmount = Number(amount);
+
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      return '$0';
+    }
+
+    if (numericAmount < 1000) {
+      return `$${numericAmount.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')}`;
+    }
+
+    if (numericAmount >= 1000000000) {
+      return `$${(numericAmount / 1000000000).toFixed(1).replace(/\.0$/, '')}B`;
+    }
+
+    if (numericAmount >= 1000000) {
+      return `$${(numericAmount / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
+    }
+
+    return `$${(numericAmount / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+  }, []);
+  const rewardAmountDisplayText = formatCompactRewardAmount(currentReward);
+  const syncCommunitySolveVoteSummary = React.useCallback(summaryResponse => {
+    const normalizedSummary = summaryResponse?.code === 200 ? normalizeCommunitySolveVoteSummary(summaryResponse.data) : normalizeCommunitySolveVoteSummary(null);
+    setCommunitySolveVoteSummary(normalizedSummary);
+    setSolvedPercentage(getCommunitySolveVoteSolvedPercentage(normalizedSummary));
+    setShowProgressBar(Boolean(normalizedSummary.applicable));
+    return normalizedSummary;
+  }, []);
+  const refreshCommunitySolveVoteSummary = React.useCallback(async questionId => {
+    if (!questionId) {
+      return normalizeCommunitySolveVoteSummary(null);
+    }
+    const summaryResponse = await questionApi.getCommunitySolveVoteSummary(questionId);
+    return syncCommunitySolveVoteSummary(summaryResponse);
+  }, [syncCommunitySolveVoteSummary]);
+  const handleCommunitySolveVote = React.useCallback(async choice => {
+    const questionId = route?.params?.id ?? questionData?.id ?? questionData?.questionId;
+    if (!questionId) {
+      showToast('问题ID不存在', 'error');
+      return;
+    }
+    if (!communitySolveVoteSummary.applicable) {
+      showToast('当前问题不适用社区投票', 'warning');
+      return;
+    }
+    if (communitySolveVoteSubmitting) {
+      return;
+    }
+    try {
+      setCommunitySolveVoteSubmitting(true);
+      const normalizedChoice = `${choice || ''}`.trim().toUpperCase();
+      const response = await questionApi.submitCommunitySolveVote(questionId, normalizedChoice);
+      if (response?.code !== 200) {
+        showToast(response?.msg || '投票失败', 'error');
+        return;
+      }
+      await refreshCommunitySolveVoteSummary(questionId);
+      setShowProgressBar(true);
+    } catch (error) {
+      console.error('❌ 社区已解决投票失败:', error);
+      showToast(error?.response?.data?.msg || error?.message || '投票失败，请稍后重试', 'error');
+    } finally {
+      setCommunitySolveVoteSubmitting(false);
+    }
+  }, [communitySolveVoteSubmitting, communitySolveVoteSummary.applicable, route?.params?.id, questionData?.id, questionData?.questionId, refreshCommunitySolveVoteSummary]);
 
   // 超级赞相关状态
   const [showSuperLikeModal, setShowSuperLikeModal] = useState(false); // 显示购买超级赞弹窗
@@ -754,6 +830,35 @@ export default function QuestionDetailScreen({
     return [`${t('screens.questionDetail.tabs.supplements')} (${formatCount(supplementsList.length)})`, `${t('screens.questionDetail.tabs.answers')} (${formatCount(answersTotal)})`, `${t('screens.questionDetail.tabs.comments')} (${formatCount(commentsTotal || questionData?.commentCount || 0)})`, t('screens.questionDetail.tabs.invite')];
   }, [t, supplementsList.length, answersTotal, commentsTotal, questionData?.commentCount, supplementsCache.featured.loaded, answersCache.featured.loaded]);
 
+  const getTabBaseLabel = React.useCallback(tabLabel => {
+    if (!tabLabel) {
+      return '';
+    }
+    return `${tabLabel}`.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  }, []);
+
+  const activeTabType = React.useMemo(() => {
+    const normalizedActiveTab = getTabBaseLabel(activeTab);
+    if (!normalizedActiveTab) {
+      return '';
+    }
+
+    if (normalizedActiveTab === getTabBaseLabel(t('screens.questionDetail.tabs.supplements'))) {
+      return 'supplements';
+    }
+    if (normalizedActiveTab === getTabBaseLabel(t('screens.questionDetail.tabs.answers'))) {
+      return 'answers';
+    }
+    if (normalizedActiveTab === getTabBaseLabel(t('screens.questionDetail.tabs.comments'))) {
+      return 'comments';
+    }
+    if (normalizedActiveTab === getTabBaseLabel(t('screens.questionDetail.tabs.invite'))) {
+      return 'invite';
+    }
+
+    return '';
+  }, [activeTab, getTabBaseLabel, t]);
+
   const preferredInitialTabIndex = React.useMemo(() => {
     if (route?.params?.defaultTab === 'answers') {
       return 1;
@@ -790,7 +895,29 @@ export default function QuestionDetailScreen({
   }, [answerTabs]);
   useEffect(() => {
     const questionId = route?.params?.id;
-    const isCommentsTab = activeTab && activeTab.includes('评论');
+    const isSupplementsTab = activeTabType === 'supplements';
+    if (!questionId || !isSupplementsTab || supplementsLoading || supplementsRefreshing || supplementsLoadingMore) {
+      return;
+    }
+    const currentCache = supplementsCache[supplementsSortBy];
+    if (!currentCache.loaded || isCacheExpired(currentCache)) {
+      loadSupplementsList(questionId, true, supplementsSortBy);
+    }
+  }, [activeTabType, supplementsSortBy, supplementsCache, supplementsLoading, supplementsRefreshing, supplementsLoadingMore, route?.params?.id]);
+  useEffect(() => {
+    const questionId = route?.params?.id;
+    const isAnswersTab = activeTabType === 'answers';
+    if (!questionId || !isAnswersTab || answersLoading || answersRefreshing || answersLoadingMore) {
+      return;
+    }
+    const currentCache = answersCache[answersSortBy];
+    if (!currentCache.loaded || isCacheExpired(currentCache)) {
+      loadAnswersList(questionId, true, answersSortBy);
+    }
+  }, [activeTabType, answersSortBy, answersCache, answersLoading, answersRefreshing, answersLoadingMore, route?.params?.id]);
+  useEffect(() => {
+    const questionId = route?.params?.id;
+    const isCommentsTab = activeTabType === 'comments';
     if (!questionId || !isCommentsTab) {
       return;
     }
@@ -798,7 +925,7 @@ export default function QuestionDetailScreen({
     if (!currentCache.loaded || isCacheExpired(currentCache)) {
       loadCommentsList(questionId, true, commentsSortBy);
     }
-  }, [activeTab, commentsSortBy, commentsCache, route?.params?.id]);
+  }, [activeTabType, commentsSortBy, commentsCache, route?.params?.id]);
   useEffect(() => {
     if (!showAnswerCommentListModal || !currentAnswerId) {
       return;
@@ -1034,6 +1161,26 @@ export default function QuestionDetailScreen({
       isResolved: question.isResolved ?? question.resolved ?? normalizedStatus === 2
     };
   };
+  const normalizeCommunitySolveVoteSummary = summary => {
+    const normalizedSolvedCount = Math.max(Number(summary?.solvedCount ?? 0) || 0, 0);
+    const normalizedUnsolvedCount = Math.max(Number(summary?.unsolvedCount ?? 0) || 0, 0);
+    const normalizedChoice = summary?.myChoice === null || summary?.myChoice === undefined ? null : `${summary.myChoice}`.trim().toUpperCase();
+    return {
+      applicable: !!summary?.applicable,
+      solvedCount: normalizedSolvedCount,
+      unsolvedCount: normalizedUnsolvedCount,
+      myChoice: normalizedChoice === 'SOLVED' || normalizedChoice === 'UNSOLVED' ? normalizedChoice : null
+    };
+  };
+  const getCommunitySolveVoteSolvedPercentage = summary => {
+    const solvedCount = Math.max(Number(summary?.solvedCount ?? 0) || 0, 0);
+    const unsolvedCount = Math.max(Number(summary?.unsolvedCount ?? 0) || 0, 0);
+    const totalCount = solvedCount + unsolvedCount;
+    if (totalCount <= 0) {
+      return 0;
+    }
+    return Math.round(solvedCount / totalCount * 100);
+  };
   const handleCreateActivity = () => {
     if (!activityForm.title.trim()) {
       alert('请输入活动标题');
@@ -1187,136 +1334,73 @@ export default function QuestionDetailScreen({
     });
   }, [navigation, route?.params?.openAnswerModal]);
 
-  // 获取问题详情数据 - 优化版：等待所有数据加载完成后再渲染
+  // 获取问题详情数据
   useEffect(() => {
+    let isCancelled = false;
     const fetchQuestionDetail = async () => {
+      const questionId = route?.params?.id;
       try {
+        fadeAnim.setValue(0);
         setLoading(true);
         setError(null);
-        const questionId = route?.params?.id;
         if (!questionId) {
+          setQuestionData(null);
           setError('问题ID不存在');
           return;
         }
-        console.log('📋 开始加载问题详情和相关数据，ID:', questionId);
-        try {
-          // 步骤1: 并行加载所有数据
-          const [detailResponse, supplementsResponse, answersResponse] = await Promise.all([questionApi.getQuestionDetail(questionId), loadQuestionSupplements(questionId, 'featured', 1, true), answerApi.getAnswers(questionId, {
-            sortBy: 'featured',
-            pageNum: 1,
-            pageSize: 10
-          })]);
-          console.log('✅ 所有数据加载完成');
+        console.log('📋 开始加载问题详情，ID:', questionId);
 
-          // 步骤2: 验证问题详情数据
-          if (detailResponse && detailResponse.code === 200 && detailResponse.data) {
-            console.log('✅ 问题详情接口响应完整数据:');
-            console.log('==================== 开始 ====================');
-            console.log(JSON.stringify(detailResponse, null, 2));
-            console.log('==================== 结束 ====================');
-            console.log('✅ 问题详情 data 字段:', detailResponse.data);
+        const detailResponse = await questionApi.getQuestionDetail(questionId);
+        if (isCancelled) {
+          return;
+        }
 
-            // 步骤3: 准备所有数据
-            const supplements = normalizeSupplementCacheList(supplementsResponse?.data || []);
-            const answers = normalizeAnswers(extractAnswerRows(answersResponse));
-            const answersTotal = extractAnswerTotal(answersResponse, answers.length);
-            let newestAnswers = [];
-            let newestAnswersTotal = 0;
-            let shouldSwitchAnswersToNewest = false;
-            if (shouldFallbackToNewestAnswers('featured', answers, answersTotal)) {
-              console.log('ℹ️ 精选回答为空但总数大于 0，尝试回退到最新排序');
-              const newestAnswersResponse = await answerApi.getAnswers(questionId, {
-                sortBy: 'newest',
-                pageNum: 1,
-                pageSize: 10
-              });
-              newestAnswers = normalizeAnswers(extractAnswerRows(newestAnswersResponse));
-              newestAnswersTotal = extractAnswerTotal(newestAnswersResponse, newestAnswers.length);
-              shouldSwitchAnswersToNewest = newestAnswers.length > 0;
-            }
-            console.log('✅ 补充列表:', supplements.length, '条');
-            console.log('✅ 回答列表:', answers.length, '条，总数:', answersTotal);
-            if (shouldSwitchAnswersToNewest) {
-              console.log('✅ 最新回答回退成功，数量:', newestAnswers.length, '条，总数:', newestAnswersTotal);
-            }
+        if (!detailResponse || detailResponse.code !== 200 || !detailResponse.data) {
+          console.error('❌ 问题详情获取失败:', detailResponse);
+          setQuestionData(null);
+          setError('获取问题详情失败');
+          return;
+        }
 
-            // 步骤4: 批量更新所有状态（React 18+ 会自动批处理）
-            // 使用 startTransition 确保低优先级更新不会阻塞UI
-            const normalizedQuestionDetail = normalizeQuestionDetail(detailResponse.data);
-            setQuestionData(normalizedQuestionDetail);
-            setLiked(prev => ({
-              ...prev,
-              main: !!normalizedQuestionDetail.liked,
-              dislike: !!normalizedQuestionDetail.disliked
-            }));
-            setBookmarked(!!normalizedQuestionDetail.collected);
+        const normalizedQuestionDetail = normalizeQuestionDetail(detailResponse.data);
+        setQuestionData(normalizedQuestionDetail);
+        setLiked(prev => ({
+          ...prev,
+          main: !!normalizedQuestionDetail.liked,
+          dislike: !!normalizedQuestionDetail.disliked
+        }));
+        setBookmarked(!!normalizedQuestionDetail.collected);
+        setLoading(false);
 
-            // 同时更新补充和回答缓存，确保 loaded 标志同时设置为 true
-            setSupplementsCache(prevCache => ({
-              ...prevCache,
-              featured: {
-                list: supplements,
-                total: supplements.length,
-                pageNum: supplements.length < 10 ? 1 : 2,
-                hasMore: supplements.length >= 10,
-                loaded: true,
-                lastUpdated: Date.now()
-              }
-            }));
-            syncSupplementInteractionStates(supplements);
-            hydrateSupplementCommentCounts(supplements);
-            setAnswersCache(prevCache => ({
-              ...prevCache,
-              featured: {
-                list: answers,
-                total: answersTotal,
-                pageNum: answers.length < 10 ? 1 : 2,
-                hasMore: answers.length >= 10 && answers.length < answersTotal,
-                loaded: true,
-                lastUpdated: Date.now()
-              },
-              ...(shouldSwitchAnswersToNewest ? {
-                newest: {
-                  list: newestAnswers,
-                  total: newestAnswersTotal,
-                  pageNum: newestAnswers.length < 10 ? 1 : 2,
-                  hasMore: newestAnswers.length >= 10 && newestAnswers.length < newestAnswersTotal,
-                  loaded: true,
-                  lastUpdated: Date.now()
-                }
-              } : {})
-            }));
-            syncAnswerInteractionStates(shouldSwitchAnswersToNewest ? [...answers, ...newestAnswers] : answers);
-            if (shouldSwitchAnswersToNewest) {
-              setAnswersSortBy('newest');
-            }
-
-            // 步骤5: 所有数据都设置完成后，启动淡入动画
-            // 使用 setTimeout 确保状态更新已经完成
-            setTimeout(() => {
-              Animated.timing(fadeAnim, {
-                toValue: 1,
-                duration: 300,
-                useNativeDriver: true
-              }).start();
-            }, 0);
-          } else {
-            console.error('❌ 问题详情获取失败:', detailResponse);
-            setError('获取问题详情失败');
+        setTimeout(() => {
+          if (isCancelled) {
+            return;
           }
-        } catch (error) {
-          console.error('❌ 数据加载异常:', error);
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true
+          }).start();
+        }, 0);
+
+        void refreshCommunitySolveVoteSummary(questionId);
+      } catch (error) {
+        if (!isCancelled) {
+          console.error('❌ 问题详情获取异常:', error);
+          setQuestionData(null);
           setError('网络错误，请稍后重试');
         }
-      } catch (error) {
-        console.error('❌ 问题详情获取异常:', error);
-        setError('网络错误，请稍后重试');
       } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          setLoading(false);
+        }
       }
     };
     fetchQuestionDetail();
-  }, [route?.params?.id]);
+    return () => {
+      isCancelled = true;
+    };
+  }, [route?.params?.id, detailReloadVersion, refreshCommunitySolveVoteSummary]);
 
   // 补充列表静默刷新缓存
   const silentRefreshSupplementsCache = async (questionId, sortBy) => {
@@ -1416,6 +1500,9 @@ export default function QuestionDetailScreen({
     }
     try {
       if (isRefresh) {
+        if (cacheData.list.length === 0) {
+          setSupplementsLoading(true);
+        }
         setSupplementsRefreshing(true);
       } else {
         setSupplementsLoadingMore(true);
@@ -1476,6 +1563,7 @@ export default function QuestionDetailScreen({
         Alert.alert('加载失败', '获取补充列表失败，请稍后重试');
       }
     } finally {
+      setSupplementsLoading(false);
       setSupplementsRefreshing(false);
       setSupplementsLoadingMore(false);
     }
@@ -1790,6 +1878,38 @@ export default function QuestionDetailScreen({
       updatedSupplement: undefined
     });
   }, [route?.params?.updatedSupplement]);
+  useEffect(() => {
+    const addedRewardResult = route?.params?.addedRewardResult;
+    if (!addedRewardResult) {
+      return;
+    }
+
+    const totalReward = Number(addedRewardResult.totalReward);
+    const nextRewardContributors = Number(addedRewardResult.rewardContributors);
+
+    if (Number.isFinite(totalReward) && totalReward >= 0) {
+      const normalizedTotalReward = Math.round(totalReward * 100) / 100;
+      setQuestionData(prevQuestion => {
+        if (!prevQuestion) {
+          return prevQuestion;
+        }
+
+        return {
+          ...prevQuestion,
+          bountyAmount: Math.round(normalizedTotalReward * 100),
+          reward: normalizedTotalReward,
+        };
+      });
+    }
+
+    if (Number.isFinite(nextRewardContributors) && nextRewardContributors >= 0) {
+      setRewardContributors(nextRewardContributors);
+    }
+
+    navigation.setParams({
+      addedRewardResult: undefined
+    });
+  }, [navigation, route?.params?.addedRewardResult]);
   const resolveCommentUserId = comment => normalizeEntityId(comment?.userId ?? comment?.user_id ?? comment?.authorId ?? comment?.author_id ?? comment?.createBy ?? comment?.create_by ?? comment?.creatorId ?? comment?.creator_id ?? comment?.uid ?? comment?.user?.id);
   const openPublicProfile = (target, options = {}) => navigateToPublicProfile(navigation, target, options);
   const normalizeCommentItem = (comment, defaults = {}) => {
@@ -3056,6 +3176,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     }
     try {
       if (isRefresh) {
+        if (cacheData.list.length === 0) {
+          setAnswersLoading(true);
+        }
         setAnswersRefreshing(true);
       } else {
         setAnswersLoadingMore(true);
@@ -3148,6 +3271,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         Alert.alert('加载失败', '获取回答列表失败，请稍后重试');
       }
     } finally {
+      setAnswersLoading(false);
       setAnswersRefreshing(false);
       setAnswersLoadingMore(false);
     }
@@ -5588,13 +5712,13 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     const paddingToBottom = 20;
     const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
     if (isCloseToBottom && activeTab) {
-      if (activeTab === '邀请 (8)' && showAllInvited) {
+      if (activeTabType === 'invite' && showAllInvited) {
         loadMoreInvited();
-      } else if (activeTab.includes('补充') && showAllSupplements) {
+      } else if (activeTabType === 'supplements' && showAllSupplements) {
         loadMoreSupplements();
-      } else if (activeTab.includes('回答') && showAllAnswers) {
+      } else if (activeTabType === 'answers' && showAllAnswers) {
         loadMoreAnswers();
-      } else if (activeTab.includes('评论')) {
+      } else if (activeTabType === 'comments') {
         loadMoreComments();
       }
     }
@@ -5629,7 +5753,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false} onScroll={handleScroll} scrollEventThrottle={400} contentContainerStyle={{
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{
       paddingBottom: 20
     }}>
         {/* 骨架屏加载状态 */}
@@ -5643,8 +5767,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           const questionId = route?.params?.id;
           if (questionId) {
             setError(null);
-            setLoading(true);
-            // 重新获取数据的逻辑会在useEffect中自动触发
+            setQuestionData(null);
+            setDetailReloadVersion(prev => prev + 1);
           }
         }}>
               <Text style={styles.retryBtnText}>重试</Text>
@@ -5739,12 +5863,15 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           {questionData.bountyAmount > 0 && <View style={styles.rewardInfoCard}>
             <View style={styles.rewardInfoLeft}>
               {/* 金额 */}
-              <Text style={styles.rewardAmountText}>${Math.floor(questionData.bountyAmount / 100)}</Text>
+              <Text style={styles.rewardAmountText} numberOfLines={1}>
+                {rewardAmountDisplayText}
+              </Text>
               
               {/* 追加按钮 */}
               <TouchableOpacity style={styles.addRewardBtn} onPress={() => navigation.navigate('AddReward', {
-                currentReward: Math.floor(questionData.bountyAmount / 100),
-                rewardContributors: 3
+                currentReward,
+                rewardContributors,
+                sourceRouteKey: route.key
               })}>
                 <Ionicons name="add" size={16} color="#fff" />
                 <Text style={styles.addRewardBtnText}>{t('screens.questionDetail.reward.add')}</Text>
@@ -5760,11 +5887,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
 
             {/* 追加人数 - 移到右侧 */}
             <TouchableOpacity style={styles.rewardContributorsRow} onPress={() => navigation.navigate('Contributors', {
-              currentReward: Math.floor(questionData.bountyAmount / 100),
-              rewardContributors: 3
+              currentReward,
+              rewardContributors
             })}>
               <Ionicons name="people-outline" size={12} color="#9ca3af" />
-              <Text style={styles.rewardContributorsText}>3 {t('screens.questionDetail.reward.contributors')}</Text>
+              <Text style={styles.rewardContributorsText}>{rewardContributors} {t('screens.questionDetail.reward.contributors')}</Text>
               <Ionicons name="chevron-forward" size={12} color="#9ca3af" />
             </TouchableOpacity>
           </View>}
@@ -5807,17 +5934,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             <View style={styles.pkRow}>
                 <View style={styles.pkBarWrapper}>
                   <View style={styles.pkBar}>
-                    <TouchableOpacity style={styles.pkSolvedBar} onPress={() => {
-                    setShowProgressBar(true);
-                    setSolvedPercentage(65);
-                  }} activeOpacity={0.8}>
-                      <Text style={styles.pkSolvedText}>{t('screens.questionDetail.pk.solved')}</Text>
+                    <TouchableOpacity style={[styles.pkSolvedBar, isSolvedChoiceSelected && styles.pkSolvedBarSelected]} onPress={() => handleCommunitySolveVote('SOLVED')} activeOpacity={0.8}>
+                      <Text style={[styles.pkSolvedText, isSolvedChoiceSelected && styles.pkChoiceTextSelected]}>{t('screens.questionDetail.pk.solved')}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.pkUnsolvedBar} onPress={() => {
-                    setShowProgressBar(true);
-                    setSolvedPercentage(35);
-                  }} activeOpacity={0.8}>
-                      <Text style={styles.pkUnsolvedText}>{t('screens.questionDetail.pk.unsolved')}</Text>
+                    <TouchableOpacity style={[styles.pkUnsolvedBar, isUnsolvedChoiceSelected && styles.pkUnsolvedBarSelected]} onPress={() => handleCommunitySolveVote('UNSOLVED')} activeOpacity={0.8}>
+                      <Text style={[styles.pkUnsolvedText, isUnsolvedChoiceSelected && styles.pkChoiceTextSelected]}>{t('screens.questionDetail.pk.unsolved')}</Text>
                     </TouchableOpacity>
                   </View>
                   <View style={styles.pkCenterBadge}>
@@ -5827,8 +5948,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               </View> :
             // 点击后显示进度条样式
             <View style={styles.pkProgressRow}>
-                <View style={styles.progressSolvedLabel}>
-                  <Text style={styles.progressLabelText}>已解决</Text>
+                <View style={[styles.progressSolvedLabel, isSolvedChoiceSelected && styles.progressSolvedLabelActive]}>
+                  <Text style={[styles.progressLabelText, isSolvedChoiceSelected && styles.progressSolvedLabelTextActive]}>已解决</Text>
                 </View>
                 <View style={styles.progressBarWrapper}>
                   <View style={styles.progressBar}>
@@ -5845,8 +5966,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     <Text style={styles.progressPercentText}>{solvedPercentage}%</Text>
                   </View>
                 </View>
-                <View style={styles.progressUnsolvedLabel}>
-                  <Text style={styles.progressLabelText}>未解决</Text>
+                <View style={[styles.progressUnsolvedLabel, isUnsolvedChoiceSelected && styles.progressUnsolvedLabelActive]}>
+                  <Text style={[styles.progressLabelText, isUnsolvedChoiceSelected && styles.progressUnsolvedLabelTextActive]}>未解决</Text>
                 </View>
               </View>}
           </View>
@@ -5867,10 +5988,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
 
           {/* 筛选条 - 仅在补充、回答、评论时显示 */}
           <View style={[styles.sortFilterBar, {
-          display: activeTab && activeTab !== '邀请' ? 'flex' : 'none'
+          display: activeTabType && activeTabType !== 'invite' ? 'flex' : 'none'
         }]}>
             <View style={styles.sortFilterLeft}>
-              {activeTab && activeTab.includes('补充') ? (
+              {activeTabType === 'supplements' ? (
             // 补充问题的排序按钮
             <>
                   <TouchableOpacity style={[styles.sortFilterBtn, supplementsSortBy === 'featured' && styles.sortFilterBtnActive]} onPress={() => handleSupplementsSortChange('featured')}>
@@ -5882,7 +6003,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     <Text style={[styles.sortFilterText, supplementsSortBy === 'newest' && styles.sortFilterTextActive]}>最新</Text>
                   </TouchableOpacity>
                 </>
-          ) : activeTab && activeTab.includes('回答') ? (
+          ) : activeTabType === 'answers' ? (
             // 回答列表的排序按钮
             <>
                   <TouchableOpacity style={[styles.sortFilterBtn, answersSortBy === 'featured' && styles.sortFilterBtnActive]} onPress={() => handleAnswersSortChange('featured')}>
@@ -5909,12 +6030,12 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           )}
             </View>
             <Text style={styles.sortFilterCount}>
-              {activeTab && activeTab.includes('补充') ? `共 ${supplementsList.length} 条补充` : activeTab && activeTab.includes('回答') ? `共 ${answersTotal} 条回答` : `共 ${commentsTotal || questionData?.commentCount || 0} 条评论`}
+              {activeTabType === 'supplements' ? `共 ${supplementsList.length} 条补充` : activeTabType === 'answers' ? `共 ${answersTotal} 条回答` : `共 ${commentsTotal || questionData?.commentCount || 0} 条评论`}
             </Text>
           </View>
 
           {/* 超级赞购买横幅 - 在补充、回答、评论标签页显示 */}
-          {Boolean(activeTab && (activeTab.includes('补充') || activeTab.includes('回答') || activeTab.includes('评论'))) && <TouchableOpacity style={styles.superLikePurchaseBanner} onPress={() => navigation.navigate('SuperLikePurchase')} activeOpacity={0.8}>
+          {Boolean(activeTabType && ['supplements', 'answers', 'comments'].includes(activeTabType)) && <TouchableOpacity style={styles.superLikePurchaseBanner} onPress={() => navigation.navigate('SuperLikePurchase')} activeOpacity={0.8}>
               <View style={styles.superLikePurchaseBannerLeft}>
                 <Ionicons name="star" size={18} color="#f59e0b" />
                 <Text style={styles.superLikePurchaseBannerText}>购买超级赞提升排名</Text>
@@ -5922,7 +6043,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <Ionicons name="chevron-forward" size={16} color="#f59e0b" />
             </TouchableOpacity>}
 
-          {activeTab && activeTab.includes('补充') ? (
+          {activeTabType === 'supplements' ? (
         // 补充问题列表
         <ScrollView style={styles.supplementsScrollView} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={supplementsRefreshing} onRefresh={onSupplementsRefresh} colors={['#ef4444']} tintColor="#ef4444" />} onScroll={({
           nativeEvent
@@ -6125,13 +6246,18 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       <Text style={styles.supplementsLoadingMoreText}>加载更多...</Text>
                     </View>}
                   
+                  {Boolean(supplementsHasMore && !supplementsLoadingMore && supplementsList.length > 0) && <TouchableOpacity style={styles.loadMoreBtn} onPress={onSupplementsLoadMore}>
+                      <Text style={styles.loadMoreText}>加载更多补充</Text>
+                      <Ionicons name="chevron-down" size={16} color="#ef4444" />
+                    </TouchableOpacity>}
+                  
                   {/* 没有更多数据提示 */}
                   {!supplementsHasMore && supplementsList.length > 0 && <View style={styles.supplementsNoMore}>
                       <Text style={styles.supplementsNoMoreText}>没有更多补充了</Text>
                     </View>}
                 </>}
             </ScrollView>
-          ) : activeTab && activeTab.includes('评论') ? (
+          ) : activeTabType === 'comments' ? (
         // 评论列表
         <>
               {loadingComments && commentsList.length === 0 ? <View style={styles.supplementsLoadingContainer}>
@@ -6255,7 +6381,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 </View>}
                 </>}
             </>
-          ) : activeTab === '邀请' ? (
+          ) : activeTabType === 'invite' ? (
         // 邀请列表 - 二级tab标签
         <View style={styles.inviteContainer}>
               {/* 二级tab标签 */}
@@ -6381,7 +6507,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     </TouchableOpacity>}
                 </View>}
             </View>
-          ) : activeTab && activeTab.includes('回答') ? (
+          ) : activeTabType === 'answers' ? (
         // 回答列表
         <>
               {answersLoading && answersList.length === 0 ?
@@ -6671,6 +6797,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       <ActivityIndicator size="small" color="#ef4444" />
                       <Text style={styles.supplementsLoadingMoreText}>加载更多...</Text>
                     </View>}
+                  
+                  {Boolean(answersHasMore && !answersLoadingMore && answersList.length > 0) && <TouchableOpacity style={styles.loadMoreBtn} onPress={onAnswersLoadMore}>
+                      <Text style={styles.loadMoreText}>加载更多回答</Text>
+                      <Ionicons name="chevron-down" size={16} color="#ef4444" />
+                    </TouchableOpacity>}
                   
                   {/* 没有更多数据提示 */}
                   {!answersHasMore && answersList.length > 0 && <View style={styles.supplementsNoMore}>
@@ -8559,7 +8690,8 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(24),
     fontWeight: '800',
     color: '#ef4444',
-    letterSpacing: 0.5
+    letterSpacing: 0.5,
+    maxWidth: 84
   },
   addRewardBtn: {
     flexDirection: 'row',
@@ -8786,12 +8918,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingRight: 15
   },
+  pkSolvedBarSelected: {
+    backgroundColor: '#2563eb'
+  },
   pkUnsolvedBar: {
     backgroundColor: '#ef4444',
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingLeft: 15
+  },
+  pkUnsolvedBarSelected: {
+    backgroundColor: '#dc2626'
   },
   pkSolvedText: {
     fontSize: scaleFont(13),
@@ -8802,6 +8940,9 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(13),
     color: '#fff',
     fontWeight: '600'
+  },
+  pkChoiceTextSelected: {
+    fontWeight: '700'
   },
   pkCenterBadge: {
     position: 'absolute',
@@ -8839,6 +8980,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#bfdbfe'
   },
+  progressSolvedLabelActive: {
+    backgroundColor: '#dbeafe',
+    borderColor: '#60a5fa'
+  },
   progressUnsolvedLabel: {
     backgroundColor: '#fef2f2',
     paddingHorizontal: 10,
@@ -8847,10 +8992,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#fecaca'
   },
+  progressUnsolvedLabelActive: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#f87171'
+  },
   progressLabelText: {
     fontSize: scaleFont(10),
     color: '#6b7280',
     fontWeight: '600'
+  },
+  progressSolvedLabelTextActive: {
+    color: '#1d4ed8'
+  },
+  progressUnsolvedLabelTextActive: {
+    color: '#dc2626'
   },
   progressBarWrapper: {
     flex: 1,

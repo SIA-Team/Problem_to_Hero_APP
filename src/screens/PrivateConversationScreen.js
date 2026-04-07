@@ -22,6 +22,14 @@ import { sendPlainPrivateMessage } from '../utils/privateShareService';
 import { scaleFont } from '../utils/responsive';
 const isSuccessResponse = (response) => response && (response.code === 200 || response.code === 0);
 
+const normalizeRouteParamString = (value) => {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  return `${value}`.trim();
+};
+
 const toSafeNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -225,16 +233,37 @@ export default function PrivateConversationScreen({ navigation, route }) {
   const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState('');
 
-  const {
-    conversationId = '',
-    peerUserId = '',
-    peerNickName = '',
-    peerAvatar = '',
-  } = route?.params || {};
+  const routeConversationId = normalizeRouteParamString(route?.params?.conversationId);
+  const peerUserId = normalizeRouteParamString(
+    route?.params?.peerUserId ?? route?.params?.userId ?? route?.params?.id
+  );
+  const peerNickName =
+    route?.params?.peerNickName ??
+    route?.params?.username ??
+    route?.params?.name ??
+    '';
+  const peerAvatar = route?.params?.peerAvatar ?? route?.params?.avatar ?? '';
+  const [activeConversationId, setActiveConversationId] = useState(routeConversationId ? String(routeConversationId) : '');
 
-  const displayName = peerNickName || `User ${peerUserId || conversationId || ''}`.trim();
+  useEffect(() => {
+    setActiveConversationId(routeConversationId ? String(routeConversationId) : '');
+  }, [routeConversationId]);
 
-  const loadConversationMessages = async ({ silent = false } = {}) => {
+  useEffect(() => {
+    if (__DEV__) {
+      console.log('[PrivateConversation] route params:', route?.params || {});
+      console.log('[PrivateConversation] resolved peer info:', {
+        peerUserId,
+        peerNickName,
+        peerAvatar,
+        routeConversationId,
+      });
+    }
+  }, [peerAvatar, peerNickName, peerUserId, route?.params, routeConversationId]);
+
+  const displayName = peerNickName || `User ${peerUserId || activeConversationId || ''}`.trim();
+
+  const loadConversationMessages = async ({ silent = false, conversationIdOverride = '' } = {}) => {
     if (!silent) {
       setLoading(true);
     } else {
@@ -242,12 +271,22 @@ export default function PrivateConversationScreen({ navigation, route }) {
     }
 
     try {
-      const response = await notificationApi.getConversationMessages({
-        conversationId: conversationId || undefined,
-        peerUserId: peerUserId || undefined,
+      // 构建请求参数：优先使用 conversationId，否则使用 peerUserId
+      const resolvedConversationId = `${conversationIdOverride || activeConversationId || ''}`.trim();
+      const requestParams = {
         pageNum: 1,
         pageSize: 100,
-      });
+      };
+
+      if (resolvedConversationId) {
+        requestParams.conversationId = resolvedConversationId;
+      } else if (peerUserId) {
+        requestParams.peerUserId = peerUserId;
+      } else {
+        throw new Error('缺少会话ID或用户ID');
+      }
+
+      const response = await notificationApi.getConversationMessages(requestParams);
 
       if (!isSuccessResponse(response)) {
         throw new Error(response?.msg || t('screens.privateConversation.loadFailed'));
@@ -260,20 +299,25 @@ export default function PrivateConversationScreen({ navigation, route }) {
       setMessages(nextMessages);
     } catch (error) {
       console.error('Failed to load private conversation messages:', error);
-      showAppAlert(t('screens.messagesScreen.alerts.hint'), error?.message || t('screens.privateConversation.loadFailed'));
+      if (!activeConversationId && peerUserId) {
+        setMessages([]);
+      } else {
+        showAppAlert(t('screens.messagesScreen.alerts.hint'), error?.message || t('screens.privateConversation.loadFailed'));
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const markConversationRead = async () => {
-    if (!conversationId) {
+  const markConversationRead = async (conversationIdOverride = '') => {
+    const resolvedConversationId = `${conversationIdOverride || activeConversationId || ''}`.trim();
+    if (!resolvedConversationId) {
       return;
     }
 
     try {
-      await notificationApi.markConversationRead(conversationId);
+      await notificationApi.markConversationRead(resolvedConversationId);
     } catch (error) {
       console.error('Failed to mark private conversation read:', error);
     }
@@ -282,7 +326,7 @@ export default function PrivateConversationScreen({ navigation, route }) {
   useEffect(() => {
     loadConversationMessages();
     markConversationRead();
-  }, [conversationId, peerUserId]);
+  }, [activeConversationId, peerUserId]);
 
   useEffect(() => {
     if (!messages.length) {
@@ -305,20 +349,54 @@ export default function PrivateConversationScreen({ navigation, route }) {
       return;
     }
 
-    if (!draft.trim() || sending) {
+    const normalizedDraft = `${draft || ''}`.trim();
+    if (!normalizedDraft || sending) {
       return;
     }
 
     setSending(true);
 
     try {
-      await sendPlainPrivateMessage({
+      const { response, conversationId: returnedConversationId } = await sendPlainPrivateMessage({
         recipientUserId: peerUserId,
-        content: draft,
+        conversationId: activeConversationId,
+        content: normalizedDraft,
       });
+      console.log('[PrivateConversation] send response:', JSON.stringify(response, null, 2));
+
+      const resolvedConversationId = `${returnedConversationId || activeConversationId || ''}`.trim();
+      if (resolvedConversationId && resolvedConversationId !== activeConversationId) {
+        setActiveConversationId(resolvedConversationId);
+        navigation.setParams({
+          conversationId: resolvedConversationId,
+        });
+      }
+
       setDraft('');
-      await loadConversationMessages({ silent: true });
-      await markConversationRead();
+
+      if (resolvedConversationId) {
+        await loadConversationMessages({
+          silent: true,
+          conversationIdOverride: resolvedConversationId,
+        });
+        await markConversationRead(resolvedConversationId);
+      } else {
+        const now = Date.now();
+        setMessages(prevMessages => [
+          ...prevMessages,
+          {
+            id: `local-private-message-${now}`,
+            content: normalizedDraft,
+            payload: null,
+            isSelf: true,
+            senderId: '',
+            senderName: '',
+            senderAvatar: '',
+            rawTime: new Date(now).toISOString(),
+            timestamp: now,
+          },
+        ]);
+      }
     } catch (error) {
       console.error('Failed to send private conversation message:', error);
       showAppAlert(t('screens.messagesScreen.alerts.hint'), error?.message || t('screens.privateConversation.sendFailed'));

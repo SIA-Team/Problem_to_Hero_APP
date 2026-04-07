@@ -105,3 +105,21 @@ export const isPotentiallyUnsafeLongId = value => {
   const normalizedValue = normalizeEntityId(value);
   return !!normalizedValue && /^-?\d+$/.test(normalizedValue) && normalizedValue.replace('-', '').length >= LONG_INTEGER_LENGTH;
 };
+
+export const serializeJsonPreservingLongIdNumbers = (payload, forceNumericKeys = []) => {
+  const serializedPayload = JSON.stringify(payload);
+
+  if (!serializedPayload || !Array.isArray(forceNumericKeys) || forceNumericKeys.length === 0) {
+    return serializedPayload;
+  }
+
+  return forceNumericKeys.reduce((result, key) => {
+    if (!key || typeof key !== 'string') {
+      return result;
+    }
+
+    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`"${escapedKey}"\\s*:\\s*"(-?\\d+)"`, 'g');
+    return result.replace(pattern, `"${key}":$1`);
+  }, serializedPayload);
+};

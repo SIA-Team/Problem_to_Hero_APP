@@ -10,6 +10,7 @@
 
 import { getCache, setCache } from './cacheManager';
 import { formatTime as formatDisplayTime } from './timeFormatter';
+import { applyPaidQuestionAccessState } from './paidQuestionAccess';
 import questionApi from '../services/api/questionApi';
 
 /**
@@ -234,7 +235,7 @@ const transformApiDataToHomeFormat = (apiData) => {
       transformedItem.type = 'paid';
       transformedItem.paidAmount = Math.floor(item.payViewAmount / 100);
       // 付费功能暂未完成，统一设置为未付费
-      transformedItem.isPaid = false;
+      transformedItem.isPaid = Boolean(item.isPaid ?? item.hasPaid ?? item.isUnlocked ?? false);
       // 保存原始问题类型，用户付费后可以看到
       transformedItem.originalType = item.type;
       if (item.bountyAmount > 0) {
@@ -497,13 +498,14 @@ export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onD
       if (forceRefresh) {
         console.log(`⚡ 强制刷新: ${tabType} - 第${page}页 (跳过缓存检查)`);
         const response = await fetchQuestionsByTab(tabType, page, onDebugUpdate);
+        const decoratedResponse = await applyPaidQuestionAccessState(response);
         
         // 保存到缓存
         if (response && response.length > 0) {
           await setCache('questions', { tabType, page }, response);
         }
         
-        return { data: response, fromCache: false };
+        return { data: decoratedResponse, fromCache: false };
       }
       
       // 1. 如果不是强制刷新，先尝试从缓存获取
@@ -511,24 +513,25 @@ export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onD
       if (cached) {
         // 返回缓存数据，同时在后台更新
         backgroundUpdate(tabType, page, onDebugUpdate);
-        return { data: cached, fromCache: true };
+        return { data: await applyPaidQuestionAccessState(cached), fromCache: true };
       }
       
       // 2. 从网络加载数据
       const response = await fetchQuestionsByTab(tabType, page, onDebugUpdate);
+      const decoratedResponse = await applyPaidQuestionAccessState(response);
       
       // 3. 保存到缓存
       if (response && response.length > 0) {
         await setCache('questions', { tabType, page }, response);
       }
       
-      return { data: response, fromCache: false };
+      return { data: decoratedResponse, fromCache: false };
     } catch (error) {
       // 如果网络请求失败，尝试返回缓存数据
       const cached = await getCache('questions', { tabType, page });
       if (cached) {
         console.log(`⚠️ 网络请求失败，使用缓存数据: ${tabType} - 第${page}页`);
-        return { data: cached, fromCache: true };
+        return { data: await applyPaidQuestionAccessState(cached), fromCache: true };
       }
       
       throw error;

@@ -386,6 +386,34 @@ export default function PublicProfileScreen({ navigation, route }) {
     showToast(follow ? '已关注' : '已取消关注', 'success');
   }, []);
 
+  const handleMessagePress = React.useCallback(() => {
+    const resolvedPeerUserId = String(userData?.userId ?? userData?.id ?? userId ?? '').trim();
+
+    if (__DEV__) {
+      console.log('[PublicProfile] navigate to private conversation with:', {
+        routeUserId: userId,
+        userDataUserId: userData?.userId,
+        userDataId: userData?.id,
+        resolvedPeerUserId,
+      });
+    }
+
+    if (!resolvedPeerUserId) {
+      showToast('无法发送私信', 'error');
+      return;
+    }
+
+    navigation.navigate('PrivateConversation', {
+      peerUserId: resolvedPeerUserId,
+      userId: resolvedPeerUserId,
+      id: resolvedPeerUserId,
+      peerNickName: userData.username,
+      username: userData.username,
+      name: userData.username,
+      peerAvatar: userData.avatar,
+    });
+  }, [navigation, userData, userId]);
+
   const loadContentData = async (tab = activeTab, page = 1) => {
     if (isBlacklisted) {
       return;
@@ -612,6 +640,7 @@ export default function PublicProfileScreen({ navigation, route }) {
               userData={userData}
               isFollowing={isFollowing}
               onFollowPress={handleFollowPress}
+              onMessagePress={handleMessagePress}
               isOwnProfile={isOwnProfile}
               onStatPress={handleStatPress}
             />

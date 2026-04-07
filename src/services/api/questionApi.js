@@ -62,6 +62,18 @@ const questionApi = {
     return contentApiClient.get(url);
   },
 
+  getCommunitySolveVoteSummary: (questionId) => {
+    const url = replaceUrlParams(API_ENDPOINTS.QUESTION.COMMUNITY_SOLVE_VOTE_SUMMARY, { id: questionId });
+    return contentApiClient.get(url);
+  },
+
+  submitCommunitySolveVote: (questionId, choice) => {
+    const url = replaceUrlParams(API_ENDPOINTS.QUESTION.COMMUNITY_SOLVE_VOTE, { id: questionId });
+    return contentApiClient.post(url, {
+      choice
+    });
+  },
+
   /**
    * 获取问题团队列表
    * @param {string|number} questionId - 问题ID

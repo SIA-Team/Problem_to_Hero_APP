@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import RegionSelector from '../components/RegionSelector';
 import { modalTokens } from '../components/modalTokens';
 import { showAppAlert } from '../utils/appAlert';
 import { scaleFont } from '../utils/responsive';
@@ -107,11 +108,39 @@ export default function EmergencyListScreen({ navigation }) {
   const [showRespondersModal, setShowRespondersModal] = useState(false);
   const [selectedEmergency, setSelectedEmergency] = useState(null);
   const { isResponded } = useEmergency();
+  
+  // 区域选择状态
+  const [showRegionModal, setShowRegionModal] = useState(false);
+  const [selectedRegion, setSelectedRegion] = useState({ country: '', city: '', state: '', district: '' });
+  
+  // 搜索状态
+  const [searchText, setSearchText] = useState('');
 
   const handleShowResponders = (emergency) => {
     setSelectedEmergency(emergency);
     setShowRespondersModal(true);
   };
+
+  const getDisplayRegion = () => {
+    const parts = [selectedRegion.country, selectedRegion.city, selectedRegion.state, selectedRegion.district].filter(Boolean);
+    if (parts.length === 0) return '全球';
+    return parts[parts.length - 1];
+  };
+
+  // 搜索过滤函数
+  const filterEmergencies = (emergencies) => {
+    if (!searchText.trim()) return emergencies;
+    
+    const lowerSearchText = searchText.toLowerCase();
+    return emergencies.filter(item => 
+      item.name.toLowerCase().includes(lowerSearchText) ||
+      item.title.toLowerCase().includes(lowerSearchText) ||
+      item.location.toLowerCase().includes(lowerSearchText)
+    );
+  };
+
+  const filteredReceivedEmergencies = filterEmergencies(receivedEmergencies);
+  const filteredMyEmergencies = filterEmergencies(myEmergencies);
 
   const renderEmergencyCard = (item, showResponseCount = false) => {
     const isCompleted = item.respondedCount >= item.rescuerCount; // 判断是否已满员
@@ -213,7 +242,15 @@ export default function EmergencyListScreen({ navigation }) {
           <Ionicons name="alert-circle" size={20} color="#ef4444" />
           <Text style={styles.headerTitle}>紧急求助</Text>
         </View>
-        <View style={styles.headerSpacer} />
+        <TouchableOpacity
+          style={styles.regionBtn}
+          onPress={() => setShowRegionModal(true)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="location-outline" size={16} color="#ef4444" />
+          <Text style={styles.regionText}>{getDisplayRegion()}</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Tabs */}
@@ -238,6 +275,26 @@ export default function EmergencyListScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* 搜索框 */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={16} color="#9ca3af" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="搜索求助标题、姓名或地点"
+            placeholderTextColor="#9ca3af"
+            value={searchText}
+            onChangeText={setSearchText}
+            returnKeyType="search"
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchText('')}>
+              <Ionicons name="close-circle" size={16} color="#9ca3af" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
       {/* Content */}
       <ScrollView 
         style={styles.content}
@@ -245,11 +302,25 @@ export default function EmergencyListScreen({ navigation }) {
       >
         {activeTab === 'received' ? (
           <View style={styles.listContainer}>
-            {receivedEmergencies.map(item => renderEmergencyCard(item, false))}
+            {filteredReceivedEmergencies.length > 0 ? (
+              filteredReceivedEmergencies.map(item => renderEmergencyCard(item, false))
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="search-outline" size={48} color="#d1d5db" />
+                <Text style={styles.emptyText}>未找到相关求助信息</Text>
+              </View>
+            )}
           </View>
         ) : (
           <View style={styles.listContainer}>
-            {myEmergencies.map(item => renderEmergencyCard(item, true))}
+            {filteredMyEmergencies.length > 0 ? (
+              filteredMyEmergencies.map(item => renderEmergencyCard(item, true))
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="search-outline" size={48} color="#d1d5db" />
+                <Text style={styles.emptyText}>未找到相关求助信息</Text>
+              </View>
+            )}
           </View>
         )}
       </ScrollView>
@@ -295,6 +366,14 @@ export default function EmergencyListScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* 区域选择弹窗 */}
+      <RegionSelector
+        visible={showRegionModal}
+        onClose={() => setShowRegionModal(false)}
+        selectedRegion={selectedRegion}
+        onRegionChange={setSelectedRegion}
+      />
     </SafeAreaView>
   );
 }
@@ -332,6 +411,23 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 44
+  },
+  regionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: '#fef2f2',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#fecaca'
+  },
+  regionText: {
+    fontSize: scaleFont(13),
+    color: '#ef4444',
+    fontWeight: '500',
+    maxWidth: 60
   },
   tabBar: {
     flexDirection: 'row',
@@ -618,5 +714,37 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(15),
     color: '#1f2937',
     fontWeight: '500'
+  },
+  searchContainer: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb'
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: scaleFont(13),
+    color: '#1f2937',
+    padding: 0
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60
+  },
+  emptyText: {
+    fontSize: scaleFont(14),
+    color: '#9ca3af',
+    marginTop: 12
   }
 });
