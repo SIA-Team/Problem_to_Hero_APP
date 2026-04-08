@@ -61,10 +61,15 @@ export const API_ENDPOINTS = {
     UPDATE_PROFILE: buildApiPath(SERVICES.USER, '/app/user/profile'),
     UPDATE_USERNAME: buildApiPath(SERVICES.USER, '/app/user/profile/username'),  // 修改用户名
     AVATAR: buildApiPath(SERVICES.USER, '/app/user/profile/avatar'),  // 上传头像
-    FOLLOW: '/user/follow',
-    UNFOLLOW: '/user/unfollow',
-    FOLLOWERS: '/user/followers',
-    FOLLOWING: '/user/following',
+    FOLLOW: buildApiPath(SERVICES.USER, '/app/user/follow/follow'),
+    UNFOLLOW: buildApiPath(SERVICES.USER, '/app/user/follow/unfollow'),
+    FOLLOW_STATUS: buildApiPath(SERVICES.USER, '/app/user/follow/status'),
+    MY_FOLLOWING: buildApiPath(SERVICES.USER, '/app/user/follow/my/following'),
+    MY_FOLLOWERS: buildApiPath(SERVICES.USER, '/app/user/follow/my/followers'),
+    USER_FOLLOWERS: buildApiPath(SERVICES.USER, '/app/user/follow/followers'),
+    USER_FOLLOWING: buildApiPath(SERVICES.USER, '/app/user/follow/following'),
+    FOLLOWERS: buildApiPath(SERVICES.USER, '/app/user/follow/my/followers'),
+    FOLLOWING: buildApiPath(SERVICES.USER, '/app/user/follow/following'),
   },
 
   WALLET: {
@@ -74,6 +79,7 @@ export const API_ENDPOINTS = {
   GROUP: {
     PUBLIC_QUESTION: buildApiPath(SERVICES.USER, '/app/group/public/question/:questionId'),
     PUBLIC_QUESTION_IDS: buildApiPath(SERVICES.USER, '/app/group/public/ids/question/:questionId'),
+    MESSAGE_PUBLIC_LIST: buildApiPath(SERVICES.USER, '/app/group-message/public/list'),
     MESSAGE_LIST: buildApiPath(SERVICES.USER, '/app/group-message/list'),
     MESSAGE_CREATE: buildApiPath(SERVICES.USER, '/app/group-message/create'),
   },

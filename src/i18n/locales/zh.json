@@ -2000,6 +2000,31 @@
     "minutesAgo": "分钟前",
     "hoursAgo": "小时前"
   },
+  "fans": {
+    "title": "粉丝列表",
+    "loading": "加载中...",
+    "loadingMore": "加载更多...",
+    "empty": "还没有粉丝",
+    "emptyHint": "发布优质内容，吸引更多粉丝关注你",
+    "total": "共 {count} 位粉丝",
+    "noMore": "没有更多了",
+    "followers": "粉丝",
+    "questions": "问题",
+    "answers": "回答"
+  },
+  "userFollowing": {
+    "title": "关注列表",
+    "titleWithName": "{name} 的关注",
+    "loading": "加载中...",
+    "loadingMore": "加载更多...",
+    "empty": "还没有关注任何人",
+    "emptyHint": "关注感兴趣的用户，获取更多精彩内容",
+    "total": "共关注 {count} 人",
+    "noMore": "没有更多了",
+    "followers": "粉丝",
+    "questions": "问题",
+    "answers": "回答"
+  },
   "superLike": {
     "title": "超级赞",
     "balance": "余额",

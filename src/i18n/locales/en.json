@@ -1667,6 +1667,31 @@
     "minutesAgo": "minutes ago",
     "hoursAgo": "hours ago"
   },
+  "fans": {
+    "title": "Fans",
+    "loading": "Loading...",
+    "loadingMore": "Loading more...",
+    "empty": "No fans yet",
+    "emptyHint": "Share quality content to attract more fans",
+    "total": "{count} fans in total",
+    "noMore": "No more",
+    "followers": "followers",
+    "questions": "questions",
+    "answers": "answers"
+  },
+  "userFollowing": {
+    "title": "Following",
+    "titleWithName": "{name}'s Following",
+    "loading": "Loading...",
+    "loadingMore": "Loading more...",
+    "empty": "Not following anyone yet",
+    "emptyHint": "Follow interesting users to get more content",
+    "total": "Following {count} users",
+    "noMore": "No more",
+    "followers": "followers",
+    "questions": "questions",
+    "answers": "answers"
+  },
   "superLike": {
     "title": "Super Like",
     "balance": "Balance",

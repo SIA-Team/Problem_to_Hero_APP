@@ -3,13 +3,13 @@ import {
   ActivityIndicator,
   FlatList,
   RefreshControl,
-  SafeAreaView,
   Share,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from '../i18n/useTranslation';
@@ -23,6 +23,12 @@ import PublicProfileHero from '../components/PublicProfileHero';
 import userApi from '../services/api/userApi';
 import blacklistApi from '../services/api/blacklistApi';
 import { addBlockedUser, removeBlockedUser } from '../services/blacklistState';
+import { getFollowState, setFollowState } from '../services/followState';
+import {
+  getMyFollowingCount,
+  refreshMyFollowingCount,
+  subscribeMyFollowingCount,
+} from '../services/myFollowingCountState';
 import UserCacheService from '../services/UserCacheService';
 import { showAppAlert } from '../utils/appAlert';
 import { showToast } from '../utils/toast';
@@ -148,6 +154,146 @@ const normalizeBlockedUserId = value => {
   return /^\d+$/.test(normalizedValue) ? normalizedValue : '';
 };
 
+const normalizeFollowRequestUserId = value => {
+  const normalizedValue = String(value ?? '').trim();
+
+  if (!normalizedValue) {
+    return '';
+  }
+
+  return normalizedValue;
+};
+
+const resolveFollowStateValue = value => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    return value > 0;
+  }
+
+  if (typeof value === 'string') {
+    const normalizedValue = value.trim().toLowerCase();
+
+    if (['1', 'true', 'yes', 'follow', 'followed', 'following'].includes(normalizedValue)) {
+      return true;
+    }
+
+    if (['0', 'false', 'no', 'unfollow', 'unfollowed', 'none'].includes(normalizedValue)) {
+      return false;
+    }
+  }
+
+  return null;
+};
+
+const resolveInitialFollowState = (...sources) => {
+  const candidateKeys = [
+    'isFollowing',
+    'following',
+    'isFollowed',
+    'followed',
+    'hasFollowed',
+    'hasFollow',
+    'followStatus',
+    'relationStatus',
+    'relationType',
+  ];
+
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') {
+      continue;
+    }
+
+    for (const key of candidateKeys) {
+      const resolvedValue = resolveFollowStateValue(source[key]);
+      if (resolvedValue !== null) {
+        return resolvedValue;
+      }
+    }
+
+    if (source.data && typeof source.data === 'object') {
+      const nestedResolvedValue = resolveInitialFollowState(source.data);
+      if (nestedResolvedValue !== null) {
+        return nestedResolvedValue;
+      }
+    }
+
+    if (source.userBaseInfo && typeof source.userBaseInfo === 'object') {
+      const nestedResolvedValue = resolveInitialFollowState(source.userBaseInfo);
+      if (nestedResolvedValue !== null) {
+        return nestedResolvedValue;
+      }
+    }
+  }
+
+  return null;
+};
+
+const resolveFollowerCountFromResponse = response => {
+  const candidates = [
+    response?.data?.followersCount,
+    response?.data?.fanCount,
+    response?.data?.fansCount,
+    response?.data?.followerCount,
+    response?.data?.followedCount,
+  ];
+
+  for (const candidate of candidates) {
+    const numericValue = Number(candidate);
+    if (Number.isFinite(numericValue)) {
+      return numericValue;
+    }
+  }
+
+  return null;
+};
+
+const updateFollowerStat = (profile, nextFollowState, response) => {
+  if (!profile || !Array.isArray(profile.statsItems)) {
+    return profile;
+  }
+
+  const nextFollowerCountFromResponse = resolveFollowerCountFromResponse(response);
+  const currentFollowerCount =
+    Number(profile.statsItems.find(item => item.key === 'followers')?.value ?? 0) || 0;
+  const nextFollowerCount =
+    nextFollowerCountFromResponse !== null
+      ? nextFollowerCountFromResponse
+      : Math.max(0, currentFollowerCount + (nextFollowState ? 1 : -1));
+
+  return {
+    ...profile,
+    statsItems: profile.statsItems.map(item =>
+      item.key === 'followers'
+        ? {
+            ...item,
+            value: nextFollowerCount,
+          }
+        : item
+    ),
+  };
+};
+
+const overrideStatsItemValue = (profile, statKey, nextValue) => {
+  if (!profile || !Array.isArray(profile.statsItems)) {
+    return profile;
+  }
+
+  return {
+    ...profile,
+    statsItems: profile.statsItems.map(item =>
+      item.key === statKey
+        ? {
+            ...item,
+            value: nextValue,
+          }
+        : item
+    ),
+  };
+};
+
 export default function PublicProfileScreen({ navigation, route }) {
   const { t } = useTranslation();
   const { userId } = route.params;
@@ -163,6 +309,7 @@ export default function PublicProfileScreen({ navigation, route }) {
   const [tabHasMore, setTabHasMore] = useState(EMPTY_HAS_MORE);
   const [error, setError] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowSubmitting, setIsFollowSubmitting] = useState(false);
   const [isBlacklisted, setIsBlacklisted] = useState(false);
   const [isBlacklistSubmitting, setIsBlacklistSubmitting] = useState(false);
   const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
@@ -204,17 +351,54 @@ export default function PublicProfileScreen({ navigation, route }) {
       const currentProfile =
         cachedProfile || (await UserCacheService.fetchAndCacheUserProfile(true));
       const profilePayload = resolveProfilePayload(profileResponse);
-      const nextUserData = buildProfileViewModel(profilePayload, userId);
+      let nextUserData = buildProfileViewModel(profilePayload, userId);
       const nextCurrentUserId = currentProfile?.userId ? String(currentProfile.userId) : null;
       const nextIsOwnProfile =
         String(nextCurrentUserId || '') !== '' &&
         String(nextCurrentUserId) === String(nextUserData.userId || userId);
+      if (nextIsOwnProfile) {
+        try {
+          const myFollowingCount = await refreshMyFollowingCount();
+          nextUserData = overrideStatsItemValue(
+            nextUserData,
+            'following',
+            Number.isFinite(myFollowingCount) ? myFollowingCount : 0
+          );
+        } catch (followingCountError) {
+          console.error('Load own following count failed:', followingCountError);
+          nextUserData = overrideStatsItemValue(nextUserData, 'following', getMyFollowingCount());
+        }
+      }
       const nextIsBlacklisted = nextIsOwnProfile
         ? false
         : resolveBlacklistStatus(blacklistItems, nextUserData.userId || userId);
+      let followStatusResponse = null;
+
+      if (!nextIsOwnProfile) {
+        followStatusResponse = await userApi
+          .getFollowStatus(normalizeFollowRequestUserId(nextUserData.userId || userId))
+          .catch(followStatusError => {
+            console.error('Load follow status failed:', followStatusError);
+            return null;
+          });
+      }
+
+      const cachedFollowState = nextIsOwnProfile ? false : getFollowState(nextUserData.userId || userId);
+      const resolvedFollowStatusFromApi = resolveInitialFollowState(
+        followStatusResponse?.data,
+        followStatusResponse,
+        profileResponse,
+        profilePayload
+      );
+
+      const nextIsFollowing = nextIsOwnProfile
+        ? false
+        : (resolvedFollowStatusFromApi ?? cachedFollowState) ?? false;
 
       if (__DEV__) {
         console.log('[PublicProfile] raw response:', profileResponse);
+        console.log('[PublicProfile] follow status response:', followStatusResponse);
+        console.log('[PublicProfile] cached follow state:', cachedFollowState);
         console.log('[PublicProfile] resolved payload:', profilePayload);
         console.log('[PublicProfile] mapped fields:', {
           username: nextUserData.username,
@@ -223,6 +407,7 @@ export default function PublicProfileScreen({ navigation, route }) {
           location: nextUserData.location,
           verification: nextUserData.verification,
           statsItems: nextUserData.statsItems,
+          isFollowing: nextIsFollowing,
           isBlacklisted: nextIsBlacklisted,
           blacklistTargetUserId: nextUserData.userId || userId,
           blacklistBlockedUserIds: Array.isArray(blacklistItems)
@@ -233,6 +418,7 @@ export default function PublicProfileScreen({ navigation, route }) {
 
       setCurrentUserId(nextCurrentUserId);
       setUserData(nextUserData);
+      setIsFollowing(nextIsFollowing);
       setQuestionsData([]);
       setAnswersData([]);
       setFavoritesData([]);
@@ -254,6 +440,24 @@ export default function PublicProfileScreen({ navigation, route }) {
     }, [userId])
   );
 
+  useEffect(() => {
+    if (!isOwnProfile) {
+      return undefined;
+    }
+
+    setUserData(prevUserData =>
+      overrideStatsItemValue(prevUserData, 'following', getMyFollowingCount())
+    );
+
+    const unsubscribe = subscribeMyFollowingCount(nextCount => {
+      setUserData(prevUserData =>
+        overrideStatsItemValue(prevUserData, 'following', nextCount)
+      );
+    });
+
+    return unsubscribe;
+  }, [isOwnProfile]);
+
   const handleRetry = () => {
     loadUserData();
   };
@@ -263,6 +467,37 @@ export default function PublicProfileScreen({ navigation, route }) {
   };
 
   const handleStatPress = type => {
+    if (type === 'followers' && isOwnProfile) {
+      navigation.navigate('Fans', {
+        isOwnList: true,
+        userId: String(currentUserId || userData?.userId || userId || ''),
+      });
+      return;
+    }
+
+    if (type === 'following' && isOwnProfile) {
+      navigation.navigate('Follow');
+      return;
+    }
+
+    // 处理查看其他用户的关注列表
+    if (type === 'following' && !isOwnProfile) {
+      navigation.navigate('UserFollowing', {
+        userId: String(userData?.userId || userId || ''),
+        username: userData?.username || '用户',
+      });
+      return;
+    }
+
+    if (type === 'followers' && !isOwnProfile) {
+      navigation.navigate('Fans', {
+        isOwnList: false,
+        userId: String(userData?.userId || userId || ''),
+        profileName: userData?.username || '用户',
+      });
+      return;
+    }
+
     const labelMap = {
       likes: '点赞',
       followers: '粉丝',
@@ -381,10 +616,81 @@ export default function PublicProfileScreen({ navigation, route }) {
     confirmAddToBlacklist(blockedUserId);
   };
 
-  const handleFollowPress = React.useCallback(async follow => {
-    setIsFollowing(follow);
-    showToast(follow ? '已关注' : '已取消关注', 'success');
-  }, []);
+  const executeFollowAction = React.useCallback(
+    async follow => {
+      const targetUserId = String(userData?.userId ?? userData?.id ?? userId ?? '').trim();
+      const requestUserId = normalizeFollowRequestUserId(targetUserId);
+
+      if (isFollowSubmitting) {
+        return;
+      }
+
+      if (!requestUserId) {
+        showToast('关注失败，用户ID无效', 'error');
+        return;
+      }
+
+      try {
+        setIsFollowSubmitting(true);
+
+        const response = follow
+          ? await userApi.followUser(requestUserId)
+          : await userApi.unfollowUser(requestUserId);
+
+        if (response?.code !== 200) {
+          showToast(
+            response?.msg || (follow ? '关注失败，请稍后重试' : '取消关注失败，请稍后重试'),
+            'error'
+          );
+          return;
+        }
+
+        const responseFollowState = resolveInitialFollowState(response?.data);
+        const resolvedFollowState =
+          typeof responseFollowState === 'boolean' ? responseFollowState : follow;
+
+        setIsFollowing(resolvedFollowState);
+        setFollowState(targetUserId, resolvedFollowState);
+        setUserData(prevUserData => updateFollowerStat(prevUserData, resolvedFollowState, response));
+        refreshMyFollowingCount().catch(countError => {
+          console.error('Refresh following count after follow action failed:', countError);
+        });
+        showToast(response?.msg || (resolvedFollowState ? '已关注' : '已取消关注'), 'success');
+      } catch (followError) {
+        showToast(
+          followError?.message || (follow ? '关注失败，请稍后重试' : '取消关注失败，请稍后重试'),
+          'error'
+        );
+      } finally {
+        setIsFollowSubmitting(false);
+      }
+    },
+    [isFollowSubmitting, userData, userId]
+  );
+
+  const handleFollowPress = React.useCallback(
+    async follow => {
+      if (!follow) {
+        showAppAlert(
+          t('profile.unfollowConfirmTitle'),
+          t('profile.unfollowConfirmMessage'),
+          [
+            { text: t('common.cancel'), style: 'cancel' },
+            {
+              text: t('common.confirm'),
+              onPress: () => {
+                executeFollowAction(false);
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      await executeFollowAction(true);
+    },
+    [executeFollowAction, t]
+  );
 
   const handleMessagePress = React.useCallback(() => {
     const resolvedPeerUserId = String(userData?.userId ?? userData?.id ?? userId ?? '').trim();
@@ -567,7 +873,7 @@ export default function PublicProfileScreen({ navigation, route }) {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ef4444" />
           <Text style={styles.loadingText}>{t('common.loading')}</Text>
@@ -578,7 +884,7 @@ export default function PublicProfileScreen({ navigation, route }) {
 
   if (error) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
           <Text style={styles.errorMessage}>{error}</Text>
@@ -592,7 +898,7 @@ export default function PublicProfileScreen({ navigation, route }) {
 
   if (!userData) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.errorContainer}>
           <Ionicons name="person-outline" size={48} color="#9ca3af" />
           <Text style={styles.errorMessage}>{t('profile.userNotFound')}</Text>
@@ -605,7 +911,7 @@ export default function PublicProfileScreen({ navigation, route }) {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <PublicProfileHeader
         bio={userData.bio}
         onBack={handleGoBack}
@@ -639,6 +945,7 @@ export default function PublicProfileScreen({ navigation, route }) {
             <PublicProfileHero
               userData={userData}
               isFollowing={isFollowing}
+              isFollowSubmitting={isFollowSubmitting}
               onFollowPress={handleFollowPress}
               onMessagePress={handleMessagePress}
               isOwnProfile={isOwnProfile}

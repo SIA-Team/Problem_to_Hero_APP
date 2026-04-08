@@ -1,5 +1,28 @@
 import apiClient from './apiClient';
 import { API_ENDPOINTS, replaceUrlParams } from '../../config/api';
+import { normalizeEntityId, serializeJsonPreservingLongIdNumbers } from '../../utils/jsonLongId';
+
+const serializeFollowPayload = userId =>
+  serializeJsonPreservingLongIdNumbers(
+    {
+      userId: normalizeEntityId(userId),
+    },
+    ['userId']
+  );
+
+const buildPaginationParams = ({ pageNum, pageSize } = {}) => {
+  const params = {};
+
+  if (Number.isFinite(Number(pageNum)) && Number(pageNum) > 0) {
+    params.pageNum = Number(pageNum);
+  }
+
+  if (Number.isFinite(Number(pageSize)) && Number(pageSize) > 0) {
+    params.pageSize = Number(pageSize);
+  }
+
+  return params;
+};
 
 /**
  * 用户相关 API
@@ -181,7 +204,12 @@ const userApi = {
    * @returns {Promise<Object>}
    */
   followUser: (userId) => {
-    return apiClient.post(API_ENDPOINTS.USER.FOLLOW, { userId });
+    return apiClient.post(API_ENDPOINTS.USER.FOLLOW, serializeFollowPayload(userId), {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      transformRequest: requestData => requestData,
+    });
   },
 
   /**
@@ -190,7 +218,66 @@ const userApi = {
    * @returns {Promise<Object>}
    */
   unfollowUser: (userId) => {
-    return apiClient.post(API_ENDPOINTS.USER.UNFOLLOW, { userId });
+    return apiClient.post(API_ENDPOINTS.USER.UNFOLLOW, serializeFollowPayload(userId), {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      transformRequest: requestData => requestData,
+    });
+  },
+
+  getFollowStatus: (userId) => {
+    return apiClient.get(API_ENDPOINTS.USER.FOLLOW_STATUS, {
+      params: {
+        userId: normalizeEntityId(userId),
+      },
+    });
+  },
+
+  getMyFollowing: ({ pageNum, pageSize } = {}) => {
+    return apiClient.get(API_ENDPOINTS.USER.MY_FOLLOWING, {
+      params: buildPaginationParams({ pageNum, pageSize }),
+    });
+  },
+
+  getMyFollowers: ({ pageNum, pageSize } = {}) => {
+    return apiClient.get(API_ENDPOINTS.USER.MY_FOLLOWERS, {
+      params: buildPaginationParams({ pageNum, pageSize }),
+    });
+  },
+
+  getUserFollowers: ({ userId, pageNum, pageSize } = {}) => {
+    if (!userId) {
+      return Promise.reject(new Error('userId is required'));
+    }
+
+    return apiClient.get(API_ENDPOINTS.USER.USER_FOLLOWERS, {
+      params: {
+        userId: normalizeEntityId(userId),
+        ...buildPaginationParams({ pageNum, pageSize }),
+      },
+    });
+  },
+
+  /**
+   * 获取指定用户的关注列表
+   * @param {Object} params - 查询参数
+   * @param {string} params.userId - 用户ID
+   * @param {number} params.pageNum - 页码
+   * @param {number} params.pageSize - 每页数量
+   * @returns {Promise<Object>}
+   */
+  getUserFollowing: ({ userId, pageNum, pageSize } = {}) => {
+    if (!userId) {
+      return Promise.reject(new Error('userId is required'));
+    }
+
+    return apiClient.get(API_ENDPOINTS.USER.USER_FOLLOWING, {
+      params: {
+        userId: normalizeEntityId(userId),
+        ...buildPaginationParams({ pageNum, pageSize }),
+      },
+    });
   },
 
   /**
@@ -201,7 +288,11 @@ const userApi = {
    * @returns {Promise<Object>}
    */
   getFollowers: (params) => {
-    return apiClient.get(API_ENDPOINTS.USER.FOLLOWERS, { params });
+    if (params?.userId !== undefined && params?.userId !== null && params?.userId !== '') {
+      return userApi.getUserFollowers(params);
+    }
+
+    return userApi.getMyFollowers(params);
   },
 
   /**
@@ -212,7 +303,15 @@ const userApi = {
    * @returns {Promise<Object>}
    */
   getFollowing: (params) => {
-    return apiClient.get(API_ENDPOINTS.USER.FOLLOWING, { params });
+    const normalizedParams = {
+      ...params,
+    };
+
+    if (normalizedParams.userId !== undefined && normalizedParams.userId !== null && normalizedParams.userId !== '') {
+      normalizedParams.userId = normalizeEntityId(normalizedParams.userId);
+    }
+
+    return apiClient.get(API_ENDPOINTS.USER.FOLLOWING, { params: normalizedParams });
   },
 
   getWalletBalance: () => {

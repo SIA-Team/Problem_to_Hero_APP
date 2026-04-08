@@ -4,8 +4,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { View, Text, Modal, TouchableOpacity, TextInput, StyleSheet, ScrollView, SafeAreaView, Platform, ActivityIndicator } from 'react-native';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, Text, Modal, TouchableOpacity, TextInput, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as Font from 'expo-font';
@@ -33,6 +33,8 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import QuestionDetailScreen from './src/screens/QuestionDetailScreen';
 import PaidUsersListScreen from './src/screens/PaidUsersListScreen';
 import FollowScreen from './src/screens/FollowScreen';
+import FansScreen from './src/screens/FansScreen';
+import UserFollowingScreen from './src/screens/UserFollowingScreen';
 import HotListScreen from './src/screens/HotListScreen';
 import IncomeRankingScreen from './src/screens/IncomeRankingScreen';
 import RewardRankingScreen from './src/screens/RewardRankingScreen';
@@ -178,48 +180,60 @@ function EmergencyModal({ visible, onClose, onSubmit }) {
   };
 
   return (
-    <Modal visible={visible} animationType="slide">
-      <SafeAreaView style={modalStyles.emergencyModal} edges={['top']}>
-        <View style={modalStyles.emergencyHeader}>
-          <TouchableOpacity onPress={onClose}>
-            <Ionicons name="close" size={26} color="#333" />
-          </TouchableOpacity>
-          <View style={modalStyles.emergencyHeaderCenter}>
-            <Ionicons name="alert-circle" size={20} color="#ef4444" />
-            <Text style={modalStyles.emergencyHeaderTitle}>{t('emergency.title')}</Text>
-          </View>
-          <TouchableOpacity 
-            style={[modalStyles.emergencySubmitBtn, !emergencyForm.title.trim() && modalStyles.emergencySubmitBtnDisabled]}
-            onPress={handleSubmit}
-            disabled={!emergencyForm.title.trim()}
-          >
-            <Text style={[modalStyles.emergencySubmitText, !emergencyForm.title.trim() && modalStyles.emergencySubmitTextDisabled]}>{t('emergency.publish')}</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={modalStyles.emergencyWarning}>
-          <Ionicons name="warning" size={18} color="#f59e0b" />
-          <Text style={modalStyles.emergencyWarningText}>{t('emergency.warning')}</Text>
-        </View>
-
-        <View style={modalStyles.freeCountBanner}>
-          <View style={modalStyles.freeCountLeft}>
-            <Ionicons name="gift" size={20} color={remainingFree > 0 ? "#22c55e" : "#9ca3af"} />
-            <Text style={modalStyles.freeCountText}>{t('emergency.freeCount')}</Text>
-            <Text style={[modalStyles.freeCountNumber, remainingFree <= 0 && { color: '#9ca3af' }]}>{remainingFree}/{freeCount}</Text>
-          </View>
-          {remainingFree <= 0 && (
-            <TouchableOpacity 
-              style={modalStyles.monthlyPayButton}
-              onPress={() => showToast(t('emergency.monthlyUnlock'), 'info')}
-            >
-              <Text style={modalStyles.monthlyPayButtonText}>{t('emergency.payAmount')}</Text>
-              <Ionicons name="arrow-forward" size={14} color="#fff" />
+    <Modal visible={visible} animationType="slide" statusBarTranslucent>
+      <KeyboardAvoidingView
+        style={modalStyles.emergencyKeyboardWrapper}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <SafeAreaView style={modalStyles.emergencyModal} edges={['top']}>
+          <View style={modalStyles.emergencyHeader}>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={26} color="#333" />
             </TouchableOpacity>
-          )}
-        </View>
+            <View style={modalStyles.emergencyHeaderCenter}>
+              <Ionicons name="alert-circle" size={20} color="#ef4444" />
+              <Text style={modalStyles.emergencyHeaderTitle}>{t('emergency.title')}</Text>
+            </View>
+            <TouchableOpacity 
+              style={[modalStyles.emergencySubmitBtn, !emergencyForm.title.trim() && modalStyles.emergencySubmitBtnDisabled]}
+              onPress={handleSubmit}
+              disabled={!emergencyForm.title.trim()}
+            >
+              <Text style={[modalStyles.emergencySubmitText, !emergencyForm.title.trim() && modalStyles.emergencySubmitTextDisabled]}>{t('emergency.publish')}</Text>
+            </TouchableOpacity>
+          </View>
 
-        <ScrollView style={modalStyles.emergencyFormArea} keyboardShouldPersistTaps="handled">
+          <View style={modalStyles.emergencyWarning}>
+            <Ionicons name="warning" size={18} color="#f59e0b" />
+            <Text style={modalStyles.emergencyWarningText}>{t('emergency.warning')}</Text>
+          </View>
+
+          <View style={modalStyles.freeCountBanner}>
+            <View style={modalStyles.freeCountLeft}>
+              <Ionicons name="gift" size={20} color={remainingFree > 0 ? "#22c55e" : "#9ca3af"} />
+              <Text style={modalStyles.freeCountText}>{t('emergency.freeCount')}</Text>
+              <Text style={[modalStyles.freeCountNumber, remainingFree <= 0 && { color: '#9ca3af' }]}>{remainingFree}/{freeCount}</Text>
+            </View>
+            {remainingFree <= 0 && (
+              <TouchableOpacity 
+                style={modalStyles.monthlyPayButton}
+                onPress={() => showToast(t('emergency.monthlyUnlock'), 'info')}
+              >
+                <Text style={modalStyles.monthlyPayButtonText}>{t('emergency.payAmount')}</Text>
+                <Ionicons name="arrow-forward" size={14} color="#fff" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <ScrollView
+            style={modalStyles.emergencyFormArea}
+            contentContainerStyle={[
+              modalStyles.emergencyFormContent,
+              { paddingBottom: Math.max(insets.bottom, 16) + 16 },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+          >
           <View style={modalStyles.emergencyFormGroup}>
             <Text style={modalStyles.emergencyFormLabel}>{t('emergency.formTitle')} <Text style={{ color: '#ef4444' }}>*</Text></Text>
             <TextInput
@@ -370,13 +384,15 @@ function EmergencyModal({ visible, onClose, onSubmit }) {
           </View>
 
           <View style={{ height: insets.bottom + 20 }} />
-        </ScrollView>
-      </SafeAreaView>
+          </ScrollView>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const modalStyles = StyleSheet.create({
+  emergencyKeyboardWrapper: { flex: 1 },
   emergencyModal: { flex: 1, backgroundColor: modalTokens.surface },
   emergencyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   emergencyHeaderCenter: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -395,7 +411,8 @@ const modalStyles = StyleSheet.create({
   monthlyPayButtonText: { fontSize: 13, color: '#fff', fontWeight: '600' },
   needPayTag: { backgroundColor: '#fef3c7', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   needPayText: { fontSize: 12, color: '#92400e', fontWeight: '500' },
-  emergencyFormArea: { flex: 1, padding: 16 },
+  emergencyFormArea: { flex: 1 },
+  emergencyFormContent: { padding: 16 },
   emergencyFormGroup: { marginBottom: 16 },
   emergencyFormLabel: { fontSize: 14, fontWeight: '500', color: '#374151', marginBottom: 8 },
   emergencyFormInput: { backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, fontSize: 15, color: modalTokens.textPrimary },
@@ -846,6 +863,8 @@ export default function App() {
           <Stack.Screen name="QuestionActivityList" component={QuestionActivityListScreen} />
           <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
         <Stack.Screen name="Follow" component={FollowScreen} />
+        <Stack.Screen name="Fans" component={FansScreen} />
+        <Stack.Screen name="UserFollowing" component={UserFollowingScreen} />
         <Stack.Screen name="HotList" component={HotListScreen} />
         <Stack.Screen name="IncomeRanking" component={IncomeRankingScreen} />
         <Stack.Screen name="RewardRanking" component={RewardRankingScreen} />

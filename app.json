@@ -15,7 +15,7 @@
     ],
     "updates": {
       "enabled": true,
-      "checkAutomatically": "ON_ERROR_RECOVERY",
+      "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0,
       "url": "https://u.expo.dev/2e6de8bb-4642-4ad3-9a2b-f914db1c07cc"
     },
@@ -26,10 +26,10 @@
       "buildNumber": "3",
       "infoPlist": {
         "UIViewControllerBasedStatusBarAppearance": false,
-        "NSPhotoLibraryUsageDescription": "允许访问您的相册以更换头像",
-        "NSCameraUsageDescription": "允许使用相机拍摄头像",
-        "NSPhotoLibraryAddUsageDescription": "允许保存照片到相册",
-        "NSLocationWhenInUseUsageDescription": "允许访问您的位置信息",
+        "NSPhotoLibraryUsageDescription": "允许访问您的相册以上传图片和更换头像",
+        "NSCameraUsageDescription": "允许使用相机拍摄照片和头像",
+        "NSPhotoLibraryAddUsageDescription": "允许保存图片到您的相册",
+        "NSLocationWhenInUseUsageDescription": "允许访问您的位置信息，用于提供附近内容和定位功能",
         "LSApplicationQueriesSchemes": [
           "twitter",
           "comgooglemaps",
@@ -53,16 +53,6 @@
       },
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.READ_MEDIA_VIDEO",
-        "android.permission.READ_MEDIA_AUDIO",
-        "android.permission.POST_NOTIFICATIONS",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
@@ -97,8 +87,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "允许访问您的相册以更换头像",
-          "cameraPermission": "允许使用相机拍摄头像"
+          "photosPermission": "允许访问您的相册以上传图片和更换头像",
+          "cameraPermission": "允许使用相机拍摄照片和头像"
         }
       ],
       [

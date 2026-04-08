@@ -1667,13 +1667,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   questionTitleWrapper: {
-    marginBottom: 8,
+    marginBottom: 12,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 4
+    marginTop: 0
   },
   cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   cardHeaderRight: { flexDirection: 'row', alignItems: 'center' },
