@@ -14,6 +14,7 @@ import Toast from '../components/Toast';
 import ServerSwitcher from '../components/ServerSwitcher';
 import LogoutConfirmModal from '../components/LogoutConfirmModal';
 import OccupationPickerModal, { warmOccupationPickerData } from '../components/OccupationPickerModal';
+import ExpertisePickerModal from '../components/ExpertisePickerModal';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import UserCacheService from '../services/UserCacheService';
@@ -22,6 +23,7 @@ import authApi from '../services/api/authApi';
 import { showAppAlert } from '../utils/appAlert';
 import { getRegionData } from '../data/regionData';
 import { scaleFont } from '../utils/responsive';
+import { getUserExpertisePreferences, saveUserExpertisePreferences, buildExpertiseSummary } from '../utils/expertisePreferences';
 export default function SettingsScreen({
   navigation
 }) {
@@ -77,6 +79,7 @@ export default function SettingsScreen({
   // 生日选择弹窗状态
   const [showDateModal, setShowDateModal] = useState(false);
   const [showOccupationModal, setShowOccupationModal] = useState(false);
+  const [showExpertiseModal, setShowExpertiseModal] = useState(false);
 
   // 用户名编辑弹窗状态
   const [showUsernameModal, setShowUsernameModal] = useState(false);
@@ -118,6 +121,11 @@ export default function SettingsScreen({
   });
 
   // 上传头像加载状态
+  const [expertisePreferences, setExpertisePreferences] = useState({
+    level1: [],
+    level2: []
+  });
+
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   // 显示 Toast
@@ -221,6 +229,40 @@ export default function SettingsScreen({
       interactionTask?.cancel?.();
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadExpertisePreferences = async () => {
+      if (!userProfile.userId) {
+        if (active) {
+          setExpertisePreferences({ level1: [], level2: [] });
+        }
+        return;
+      }
+
+      try {
+        const storedPreferences = await getUserExpertisePreferences(userProfile.userId);
+
+        if (!active) {
+          return;
+        }
+
+        setExpertisePreferences({
+          level1: Array.isArray(storedPreferences?.level1) ? storedPreferences.level1 : [],
+          level2: Array.isArray(storedPreferences?.level2) ? storedPreferences.level2 : []
+        });
+      } catch (loadError) {
+        console.error('Failed to load expertise preferences:', loadError);
+      }
+    };
+
+    loadExpertisePreferences();
+
+    return () => {
+      active = false;
+    };
+  }, [userProfile.userId]);
 
   /**
    * 更新消息通知设置
@@ -439,6 +481,31 @@ export default function SettingsScreen({
     } catch (error) {
       console.error('❌ 更新职业失败:', error);
       showToast(error.message || '更新失败，请重试', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSaveExpertise = async payload => {
+    if (!userProfile.userId) {
+      showToast('用户信息加载中，请稍后重试', 'error');
+      return;
+    }
+
+    const normalizedPayload = {
+      level1: Array.isArray(payload?.level1) ? payload.level1 : [],
+      level2: Array.isArray(payload?.level2) ? payload.level2 : []
+    };
+
+    setIsLoading(true);
+    try {
+      await saveUserExpertisePreferences(userProfile.userId, normalizedPayload);
+      setExpertisePreferences(normalizedPayload);
+      setShowExpertiseModal(false);
+      showToast('擅长领域已更新', 'success');
+    } catch (saveError) {
+      console.error('Failed to save expertise preferences:', saveError);
+      showToast('保存失败，请稍后重试', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -991,6 +1058,8 @@ export default function SettingsScreen({
       setUploadingAvatar(false);
     }
   };
+  const expertiseSummary = useMemo(() => buildExpertiseSummary(expertisePreferences), [expertisePreferences]);
+
   return <SafeAreaView style={styles.container} edges={['top']}>
       {/* 头部 */}
       <View style={styles.header}>
@@ -1107,6 +1176,18 @@ export default function SettingsScreen({
               </View>
               <View style={styles.menuRight}>
                 <Text style={styles.menuValue}>{getLocationDisplay(userProfile.location)}</Text>
+                <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
+              </View>
+            </TouchableOpacity>
+
+
+            <TouchableOpacity style={styles.menuItem} onPress={() => setShowExpertiseModal(true)}>
+              <View style={styles.menuLeft}>
+                <Ionicons name="layers-outline" size={22} color="#6b7280" />
+                <Text style={styles.menuLabel}>{t('screens.settings.profile.expertise')}</Text>
+              </View>
+              <View style={styles.menuRight}>
+                <Text style={[styles.menuValue, styles.menuValueLimited]} numberOfLines={1}>{expertiseSummary}</Text>
                 <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
               </View>
             </TouchableOpacity>
@@ -1466,6 +1547,8 @@ export default function SettingsScreen({
 
       <OccupationPickerModal visible={showOccupationModal} currentValue={userProfile.occupation} onClose={() => setShowOccupationModal(false)} onConfirm={handleOccupationSelect} />
 
+      <ExpertisePickerModal visible={showExpertiseModal} currentValue={expertisePreferences} onClose={() => setShowExpertiseModal(false)} onConfirm={handleSaveExpertise} />
+
       {/* 头像操作弹窗 */}
       <AvatarActionSheet visible={showAvatarSheet} onClose={() => setShowAvatarSheet(false)} onImageSelected={uploadImageToServer} title="更换头像" />
 
@@ -1700,6 +1783,9 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(14),
     color: '#9ca3af',
     marginRight: 8
+  },
+  menuValueLimited: {
+    maxWidth: 170
   },
   // 开关项
   switchItem: {

@@ -1,0 +1,743 @@
+﻿import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import categoryApi from '../services/api/categoryApi';
+import { showToast } from '../utils/toast';
+
+const MIN_LEVEL1_SELECTION = 1;
+const MIN_LEVEL2_SELECTION = 3;
+const MAX_LEVEL2_SELECTION = 30;
+
+const normalizeText = (value) => (value || '').toString().trim().toLowerCase();
+
+const loadAllPages = async (requestPage) => {
+  const first = await requestPage(1);
+  if (!first || first.code !== 200 || !first.data) {
+    throw new Error(first?.msg || 'Failed to load categories');
+  }
+
+  const firstRows = first.data.rows || [];
+  const total = Number(first.data.total || firstRows.length || 0);
+  const pageSize = Number(first.data.pageSize || firstRows.length || 100);
+
+  if (firstRows.length >= total || total <= pageSize) {
+    return firstRows;
+  }
+
+  const totalPages = Math.ceil(total / pageSize);
+  const remainRequests = [];
+
+  for (let page = 2; page <= totalPages; page += 1) {
+    remainRequests.push(requestPage(page));
+  }
+
+  const remainResponses = await Promise.all(remainRequests);
+  const remainRows = remainResponses.flatMap((res) => {
+    if (res?.code !== 200 || !res?.data?.rows) {
+      return [];
+    }
+    return res.data.rows;
+  });
+
+  return [...firstRows, ...remainRows];
+};
+
+export default function InterestOnboardingScreen({ userId, onComplete, onSkip }) {
+  const [step, setStep] = useState(1);
+  const [loadingLevel1, setLoadingLevel1] = useState(true);
+  const [level1Categories, setLevel1Categories] = useState([]);
+  const [selectedLevel1Ids, setSelectedLevel1Ids] = useState([]);
+  const [activeLevel1Id, setActiveLevel1Id] = useState(null);
+  const [level2ByParent, setLevel2ByParent] = useState({});
+  const [loadingLevel2Map, setLoadingLevel2Map] = useState({});
+  const [selectedLevel2Map, setSelectedLevel2Map] = useState({});
+  const [level1Search, setLevel1Search] = useState('');
+  const [level2Search, setLevel2Search] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchLevel1 = async () => {
+      setLoadingLevel1(true);
+
+      try {
+        const rows = await loadAllPages((pageNum) =>
+          categoryApi.getCategoryList({
+            pageNum,
+            pageSize: 100,
+            parentId: 0,
+          })
+        );
+
+        const normalized = rows.map((item) => ({
+          id: Number(item.id),
+          name: item.name,
+          icon: item.icon,
+        }));
+
+        if (!mounted) return;
+
+        setLevel1Categories(normalized);
+      } catch (error) {
+        console.error('Failed to load level1 categories:', error);
+        if (mounted) {
+          showToast('Failed to load categories. Please retry later.', 'error');
+        }
+      } finally {
+        if (mounted) {
+          setLoadingLevel1(false);
+        }
+      }
+    };
+
+    fetchLevel1();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const selectedLevel1List = useMemo(() => {
+    const selectedSet = new Set(selectedLevel1Ids);
+    return level1Categories.filter((item) => selectedSet.has(item.id));
+  }, [level1Categories, selectedLevel1Ids]);
+
+  const selectedLevel2List = useMemo(() => Object.values(selectedLevel2Map), [selectedLevel2Map]);
+
+  const filteredLevel1Categories = useMemo(() => {
+    const keyword = normalizeText(level1Search);
+    if (!keyword) return level1Categories;
+
+    return level1Categories.filter((item) => normalizeText(item.name).includes(keyword));
+  }, [level1Categories, level1Search]);
+
+  const activeLevel2List = useMemo(() => {
+    if (!activeLevel1Id) return [];
+
+    const source = level2ByParent[activeLevel1Id] || [];
+    const keyword = normalizeText(level2Search);
+
+    if (!keyword) return source;
+
+    return source.filter((item) => normalizeText(item.name).includes(keyword));
+  }, [activeLevel1Id, level2ByParent, level2Search]);
+
+  const loadLevel2 = async (parentId) => {
+    if (!parentId) return;
+    if (level2ByParent[parentId]) return;
+
+    setLoadingLevel2Map((prev) => ({
+      ...prev,
+      [parentId]: true,
+    }));
+
+    try {
+      const rows = await loadAllPages((pageNum) =>
+        categoryApi.getCategoryList({
+          pageNum,
+          pageSize: 100,
+          parentId,
+        })
+      );
+
+      const parentName = level1Categories.find((item) => item.id === parentId)?.name || '';
+      const normalized = rows.map((item) => ({
+        id: Number(item.id),
+        name: item.name,
+        parentId,
+        parentName,
+      }));
+
+      setLevel2ByParent((prev) => ({
+        ...prev,
+        [parentId]: normalized,
+      }));
+    } catch (error) {
+      console.error('Failed to load level2 categories:', error);
+      showToast('Failed to load subcategories.', 'error');
+      setLevel2ByParent((prev) => ({
+        ...prev,
+        [parentId]: [],
+      }));
+    } finally {
+      setLoadingLevel2Map((prev) => ({
+        ...prev,
+        [parentId]: false,
+      }));
+    }
+  };
+
+  const handleToggleLevel1 = async (category) => {
+    const categoryId = category.id;
+
+    setSelectedLevel1Ids((prev) => {
+      const exists = prev.includes(categoryId);
+
+      if (exists) {
+        const next = prev.filter((id) => id !== categoryId);
+
+        setSelectedLevel2Map((prevLevel2) => {
+          const nextLevel2 = { ...prevLevel2 };
+
+          Object.keys(nextLevel2).forEach((id) => {
+            const selected = nextLevel2[id];
+            if (selected?.parentId === categoryId) {
+              delete nextLevel2[id];
+            }
+          });
+
+          return nextLevel2;
+        });
+
+        if (activeLevel1Id === categoryId) {
+          setActiveLevel1Id(next[0] || null);
+        }
+
+        return next;
+      }
+
+      const next = [...prev, categoryId];
+
+      if (!activeLevel1Id) {
+        setActiveLevel1Id(categoryId);
+      }
+
+      return next;
+    });
+
+    await loadLevel2(categoryId);
+  };
+
+  const handleStep1Next = () => {
+    if (selectedLevel1Ids.length < MIN_LEVEL1_SELECTION) {
+      showToast(`Please select at least ${MIN_LEVEL1_SELECTION} major category.`, 'warning');
+      return;
+    }
+
+    const nextActive = activeLevel1Id || selectedLevel1Ids[0];
+    setActiveLevel1Id(nextActive);
+    if (nextActive) {
+      loadLevel2(nextActive);
+    }
+    setStep(2);
+  };
+
+  const handleSwitchActiveLevel1 = (parentId) => {
+    setActiveLevel1Id(parentId);
+    loadLevel2(parentId);
+  };
+
+  const handleToggleLevel2 = (category) => {
+    const key = String(category.id);
+
+    setSelectedLevel2Map((prev) => {
+      if (prev[key]) {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+
+      if (Object.keys(prev).length >= MAX_LEVEL2_SELECTION) {
+        showToast(`You can select up to ${MAX_LEVEL2_SELECTION} subcategories.`, 'warning');
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [key]: {
+          id: category.id,
+          name: category.name,
+          parentId: category.parentId,
+          parentName: category.parentName,
+        },
+      };
+    });
+  };
+
+  const handleComplete = async () => {
+    if (selectedLevel2List.length < MIN_LEVEL2_SELECTION) {
+      showToast(`Please select at least ${MIN_LEVEL2_SELECTION} subcategories.`, 'warning');
+      return;
+    }
+
+    if (!userId) {
+      showToast('Unable to identify current user.', 'error');
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const payload = {
+        userId,
+        level1: selectedLevel1List.map((item) => ({
+          id: item.id,
+          name: item.name,
+        })),
+        level2: selectedLevel2List.map((item) => ({
+          id: item.id,
+          name: item.name,
+          parentId: item.parentId,
+          parentName: item.parentName,
+        })),
+      };
+
+      await onComplete?.(payload);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSkip = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+
+    try {
+      await onSkip?.();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const renderLevel1Card = ({ item }) => {
+    const selected = selectedLevel1Ids.includes(item.id);
+
+    return (
+      <TouchableOpacity
+        style={[styles.level1Card, selected && styles.level1CardSelected]}
+        onPress={() => handleToggleLevel1(item)}
+        activeOpacity={0.8}
+      >
+        <View style={styles.level1CardTitleRow}>
+          <Text style={[styles.level1CardTitle, selected && styles.level1CardTitleSelected]} numberOfLines={2}>
+            {item.name}
+          </Text>
+          {selected ? <Ionicons name="checkmark-circle" size={20} color="#ef4444" /> : null}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Choose your interests</Text>
+        <Text style={styles.subtitle}>
+          We will use your selections to personalize question recommendations.
+        </Text>
+        <View style={styles.progressRow}>
+          <View style={[styles.progressDot, styles.progressDotActive]} />
+          <View style={[styles.progressLine, step === 2 && styles.progressLineActive]} />
+          <View style={[styles.progressDot, step === 2 && styles.progressDotActive]} />
+        </View>
+        <Text style={styles.stepText}>{step === 1 ? 'Step 1/2: Major categories' : 'Step 2/2: Subcategories'}</Text>
+      </View>
+
+      {loadingLevel1 ? (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator size="large" color="#ef4444" />
+          <Text style={styles.loadingText}>Loading categories...</Text>
+        </View>
+      ) : null}
+
+      {!loadingLevel1 && step === 1 ? (
+        <View style={styles.body}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search major categories"
+            placeholderTextColor="#9ca3af"
+            value={level1Search}
+            onChangeText={setLevel1Search}
+          />
+
+          <View style={styles.selectedSummaryBox}>
+            <Text style={styles.selectedSummaryText}>Selected {selectedLevel1Ids.length} major categories</Text>
+          </View>
+
+          <FlatList
+            data={filteredLevel1Categories}
+            renderItem={renderLevel1Card}
+            keyExtractor={(item) => String(item.id)}
+            numColumns={2}
+            columnWrapperStyle={styles.level1Row}
+            contentContainerStyle={styles.level1List}
+            showsVerticalScrollIndicator={false}
+          />
+        </View>
+      ) : null}
+
+      {!loadingLevel1 && step === 2 ? (
+        <View style={styles.body}>
+          <ScrollView
+            horizontal
+            style={styles.level1TabsScroll}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.level1Tabs}
+          >
+            {selectedLevel1List.map((item) => {
+              const active = item.id === activeLevel1Id;
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[styles.level1Tab, active && styles.level1TabActive]}
+                  onPress={() => handleSwitchActiveLevel1(item.id)}
+                >
+                  <Text style={[styles.level1TabText, active && styles.level1TabTextActive]}>{item.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search subcategories"
+            placeholderTextColor="#9ca3af"
+            value={level2Search}
+            onChangeText={setLevel2Search}
+          />
+
+          <View style={styles.selectedSummaryBox}>
+            <Text style={styles.selectedSummaryText}>
+              Selected {selectedLevel2List.length} subcategories
+            </Text>
+          </View>
+
+          {selectedLevel2List.length > 0 ? (
+            <ScrollView
+              style={styles.selectedLevel2Scroll}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+              contentContainerStyle={styles.selectedLevel2Chips}
+            >
+              {selectedLevel2List.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.selectedLevel2Chip}
+                  onPress={() => handleToggleLevel2(item)}
+                >
+                  <Text style={styles.selectedLevel2ChipText}>{item.name}</Text>
+                  <Ionicons name="close" size={14} color="#ef4444" />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : null}
+
+          {activeLevel1Id && loadingLevel2Map[activeLevel1Id] ? (
+            <View style={styles.loadingBoxSmall}>
+              <ActivityIndicator size="small" color="#ef4444" />
+              <Text style={styles.loadingTextSmall}>Loading subcategories...</Text>
+            </View>
+          ) : null}
+
+          <ScrollView style={styles.level2List} contentContainerStyle={styles.level2ListContent}>
+            {activeLevel2List.map((item) => {
+              const selected = Boolean(selectedLevel2Map[String(item.id)]);
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[styles.level2Chip, selected && styles.level2ChipSelected]}
+                  onPress={() => handleToggleLevel2(item)}
+                >
+                  <Text style={[styles.level2ChipText, selected && styles.level2ChipTextSelected]}>{item.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
+
+            {!loadingLevel2Map[activeLevel1Id] && activeLevel2List.length === 0 ? (
+              <Text style={styles.emptyText}>No subcategories found.</Text>
+            ) : null}
+          </ScrollView>
+        </View>
+      ) : null}
+
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={styles.skipButton}
+          onPress={handleSkip}
+          disabled={submitting}
+        >
+          <Text style={styles.skipButtonText}>Skip for now</Text>
+        </TouchableOpacity>
+
+        {step === 1 ? (
+          <TouchableOpacity style={styles.primaryButton} onPress={handleStep1Next}>
+            <Text style={styles.primaryButtonText}>Next</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.primaryButton} onPress={handleComplete} disabled={submitting}>
+            {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryButtonText}>Start using app</Text>}
+          </TouchableOpacity>
+        )}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  subtitle: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#6b7280',
+  },
+  progressRow: {
+    marginTop: 14,
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  progressDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#d1d5db',
+  },
+  progressDotActive: {
+    backgroundColor: '#ef4444',
+  },
+  progressLine: {
+    marginHorizontal: 6,
+    height: 2,
+    width: 56,
+    backgroundColor: '#e5e7eb',
+  },
+  progressLineActive: {
+    backgroundColor: '#ef4444',
+  },
+  stepText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  body: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  searchInput: {
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingHorizontal: 14,
+    fontSize: 14,
+    color: '#111827',
+    marginBottom: 12,
+  },
+  selectedSummaryBox: {
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: '#fef2f2',
+  },
+  selectedSummaryText: {
+    color: '#991b1b',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  level1List: {
+    paddingBottom: 16,
+  },
+  level1Row: {
+    justifyContent: 'space-between',
+  },
+  level1Card: {
+    width: '48.4%',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 14,
+    marginBottom: 12,
+    backgroundColor: '#fff',
+    minHeight: 84,
+    justifyContent: 'space-between',
+  },
+  level1CardSelected: {
+    borderColor: '#ef4444',
+    backgroundColor: '#fef2f2',
+  },
+  level1CardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  level1CardTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  level1CardTitleSelected: {
+    color: '#991b1b',
+  },
+  level1Tabs: {
+    gap: 10,
+    marginBottom: 12,
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  level1TabsScroll: {
+    flexGrow: 0,
+  },
+  level1Tab: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    alignSelf: 'flex-start',
+  },
+  level1TabActive: {
+    borderColor: '#ef4444',
+    backgroundColor: '#fef2f2',
+  },
+  level1TabText: {
+    fontSize: 13,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  level1TabTextActive: {
+    color: '#991b1b',
+  },
+  selectedLevel2Scroll: {
+    flexGrow: 0,
+    maxHeight: 132,
+    marginBottom: 10,
+  },
+  selectedLevel2Chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+    paddingBottom: 4,
+  },
+  selectedLevel2Chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    alignSelf: 'flex-start',
+  },
+  selectedLevel2ChipText: {
+    color: '#991b1b',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  level2List: {
+    flex: 1,
+  },
+  level2ListContent: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingBottom: 12,
+  },
+  level2Chip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+  },
+  level2ChipSelected: {
+    borderColor: '#ef4444',
+    backgroundColor: '#fef2f2',
+  },
+  level2ChipText: {
+    fontSize: 13,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  level2ChipTextSelected: {
+    color: '#991b1b',
+    fontWeight: '600',
+  },
+  loadingBox: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  loadingBoxSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    gap: 8,
+  },
+  loadingTextSmall: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  emptyText: {
+    color: '#9ca3af',
+    fontSize: 13,
+  },
+  footer: {
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#e5e7eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  skipButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+  },
+  skipButtonText: {
+    color: '#6b7280',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  primaryButton: {
+    flex: 1,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+});

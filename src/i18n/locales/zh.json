@@ -1218,6 +1218,7 @@
         "birthday": "生日",
         "location": "所在地",
         "occupation": "职业",
+        "expertise": "\u64c5\u957f\u9886\u57df",
         "userId": "用户ID"
       },
       "account": {
