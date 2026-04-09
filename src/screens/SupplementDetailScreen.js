@@ -15,6 +15,7 @@ import { formatNumber } from '../utils/numberFormatter';
 import { formatTime } from '../utils/timeFormatter';
 import { normalizeEntityId } from '../utils/jsonLongId';
 import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import answerApi from '../services/api/answerApi';
 import commentApi from '../services/api/commentApi';
 import questionApi from '../services/api/questionApi';
@@ -836,6 +837,8 @@ export default function SupplementDetailScreen({
   const [currentCommentId, setCurrentCommentId] = useState(null);
   const [currentAnswerId, setCurrentAnswerId] = useState(null);
   const [showAnswerCommentModal, setShowAnswerCommentModal] = useState(false);
+  const bottomSafeInset = useBottomSafeInset(20);
+  const commentReplyBottomSpacing = bottomSafeInset + 12;
   const [answerCommentText, setAnswerCommentText] = useState('');
   const [inviteTab, setInviteTab] = useState(INVITE_TAB_KEYS.LOCAL);
   const [searchLocalUser, setSearchLocalUser] = useState('');
@@ -2314,7 +2317,7 @@ export default function SupplementDetailScreen({
     }
   };
 
-  return <SafeAreaView style={styles.container}>
+  return <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{
         top: 10,
@@ -2341,7 +2344,13 @@ export default function SupplementDetailScreen({
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={{
+          paddingBottom: bottomSafeInset + 76
+        }}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.supplementSection}>
           <View style={styles.supplementHeader}>
             <TouchableOpacity style={styles.supplementHeaderMain} activeOpacity={0.7} onPress={() => openPublicProfile(resolvedSupplementQuestion || routeSupplement)}>
@@ -2711,7 +2720,9 @@ export default function SupplementDetailScreen({
         </View>
       </ScrollView>
 
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, {
+        paddingBottom: bottomSafeInset
+      }]}>
         <View style={styles.bottomBarLeft}>
           <TouchableOpacity style={[styles.bottomIconBtn, isLikeInteractionDisabled(mainLiked, mainDisliked) && styles.interactionBtnDisabled]} onPress={handleSupplementLike} disabled={interactionLoading.like || isLikeInteractionDisabled(mainLiked, mainDisliked)}>
             <Ionicons name={mainLiked ? "thumbs-up" : "thumbs-up-outline"} size={20} color={mainLiked ? "#ef4444" : isLikeInteractionDisabled(mainLiked, mainDisliked) ? "#d1d5db" : "#6b7280"} />
@@ -2910,7 +2921,7 @@ export default function SupplementDetailScreen({
                 </View>}
             </ScrollView>
 
-            <View style={styles.commentReplyBottomBar}>
+            <View style={[styles.commentReplyBottomBar, { paddingBottom: commentReplyBottomSpacing }]}>
               <TouchableOpacity style={styles.commentReplyWriteBtn} onPress={() => {
               if (!currentReplyComment) {
                 return;
@@ -2934,8 +2945,9 @@ export default function SupplementDetailScreen({
         onPublish={handleSubmitSupplementComment}
         originalComment={commentComposerTarget.originalComment}
         placeholder={commentComposerTarget.parentId ? '写下你的回复...' : '写下你的评论...'}
-        title={commentComposerTarget.parentId ? '写回复' : '写评论'}
+        title={commentComposerTarget.parentId ? `写回复${commentComposerTarget.replyToUserName ? ` @${commentComposerTarget.replyToUserName}` : ''}` : '写评论'}
         publishInFooter={true}
+        closeOnRight
       />
       <ShareModal
         visible={showShareModal}
@@ -3555,7 +3567,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '85%'
+    maxHeight: '85%',
+    overflow: 'hidden'
   },
   commentReplyModalHandle: {
     width: 40,
@@ -3627,7 +3640,7 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   },
   commentReplyScroll: {
-    maxHeight: 500,
+    flexShrink: 1,
     backgroundColor: '#fff'
   },
   loadingIndicator: {

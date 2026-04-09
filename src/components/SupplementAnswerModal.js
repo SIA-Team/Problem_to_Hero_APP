@@ -1,9 +1,21 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Modal, Image } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  Modal,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from './Avatar';
 import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
+import KeyboardDismissView from './KeyboardDismissView';
 import ModalSafeAreaView from './ModalSafeAreaView';
 import { modalTokens } from './modalTokens';
 import { toast } from '../utils/toast';
@@ -163,6 +175,11 @@ export default function SupplementAnswerModal({
       statusBarTranslucent
       navigationBarTranslucent
     >
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+      <KeyboardDismissView>
       <ModalSafeAreaView style={styles.container} edges={['top']}>
         {/* 头部 */}
         <View style={styles.header}>
@@ -197,7 +214,11 @@ export default function SupplementAnswerModal({
         </View>
 
         {/* 内容输入区 */}
-        <ScrollView style={styles.contentArea} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={styles.contentArea}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+        >
           <TextInput style={styles.textInput} placeholder="补充你的回答，提供更多信息..." placeholderTextColor="#bbb" value={supplementAnswerText} onChangeText={setSupplementAnswerText} multiline autoFocus textAlignVertical="top" />
           
           {/* 图片预览区 */}
@@ -247,9 +268,14 @@ export default function SupplementAnswerModal({
         {/* 图片选择器 */}
         <ImagePickerSheet visible={showImagePicker} onClose={() => setShowImagePicker(false)} onImageSelected={handleImageSelected} title="选择图片" />
       </ModalSafeAreaView>
+      </KeyboardDismissView>
+      </KeyboardAvoidingView>
     </Modal>;
 }
 const styles = StyleSheet.create({
+  keyboardAvoidingView: {
+    flex: 1
+  },
   container: {
     flex: 1,
     backgroundColor: modalTokens.surface

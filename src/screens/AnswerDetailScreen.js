@@ -16,6 +16,7 @@ import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
 import { normalizeEntityId } from '../utils/jsonLongId';
 import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import answerApi from '../services/api/answerApi';
 import commentApi from '../services/api/commentApi';
 
@@ -142,6 +143,8 @@ export default function AnswerDetailScreen({
     t
   } = useTranslation();
   const isFocused = useIsFocused();
+  const bottomSafeInset = useBottomSafeInset(20);
+  const commentSheetBottomSpacing = bottomSafeInset + 12;
 
   // Generate tabs with translations
   const getTabLabel = (index, count) => {
@@ -740,6 +743,23 @@ export default function AnswerDetailScreen({
       }) : null
     });
     setShowWriteCommentModal(true);
+  };
+  const closeAnswerCommentComposer = () => {
+    const parentId = Number(answerCommentTarget?.parentId ?? 0) || 0;
+    const resolvedTargetId = Number(answerCommentTarget?.targetId ?? answer?.id ?? 0) || 0;
+    const targetId = resolvedTargetId || answer?.id || null;
+    const threadRootId = parentId > 0 ? getAnswerCommentThreadRootId(parentId) || parentId : null;
+
+    setShowWriteCommentModal(false);
+    setAnswerCommentTarget({
+      ...INITIAL_COMMENT_COMPOSER_TARGET,
+      targetId
+    });
+
+    if (threadRootId) {
+      setCurrentAnswerCommentId(threadRootId);
+      setShowAnswerCommentReplyModal(true);
+    }
   };
   const buildAnswerCommentReplyTarget = comment => {
     if (!comment || typeof comment !== 'object') {
@@ -2009,6 +2029,27 @@ export default function AnswerDetailScreen({
     });
     setShowSupplementCommentComposerModal(true);
   };
+  const closeSupplementCommentComposer = () => {
+    const targetId = Number(supplementCommentTarget?.targetId ?? currentSupplementCommentTargetId ?? 0) || 0;
+    const parentId = Number(supplementCommentTarget?.parentId ?? 0) || 0;
+    const threadRootId = parentId > 0 ? getSupplementCommentThreadRootId(parentId) || parentId : null;
+
+    setShowSupplementCommentComposerModal(false);
+    setSupplementCommentTarget({
+      ...INITIAL_COMMENT_COMPOSER_TARGET,
+      targetId: targetId || currentSupplementCommentTargetId
+    });
+
+    if (threadRootId) {
+      setCurrentSupplementCommentId(threadRootId);
+      setShowSupplementCommentReplyModal(true);
+      return;
+    }
+
+    if (targetId) {
+      setShowSupplementCommentListModal(true);
+    }
+  };
   const handleSubmitSupplementComment = async (commentText, isTeam, selectedImages = []) => {
     const normalizedText = typeof commentText === 'string' ? commentText.trim() : '';
     if (!normalizedText && selectedImages.length === 0) {
@@ -2519,7 +2560,7 @@ export default function AnswerDetailScreen({
   const answerCommentsTotalCount = answerCommentListState.loaded ? Math.max(normalizeCount(answerCommentListState.total), answerCommentsList.length) : 0;
   const currentAnswerReplyComment = answerCommentsList.find(comment => String(comment.id) === String(currentAnswerCommentId)) || Object.values(answerCommentRepliesMap).flatMap(entry => entry?.list || []).find(comment => String(comment.id) === String(currentAnswerCommentId)) || null;
   const currentSupplementReplyComment = supplementCommentsList.find(comment => String(comment.id) === String(currentSupplementCommentId)) || Object.values(supplementCommentRepliesMap).flatMap(entry => entry?.list || []).find(comment => String(comment.id) === String(currentSupplementCommentId)) || null;
-  return <SafeAreaView style={styles.container}>
+  return <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -2536,7 +2577,13 @@ export default function AnswerDetailScreen({
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={{
+          paddingBottom: bottomSafeInset + 76
+        }}
+        showsVerticalScrollIndicator={false}
+      >
         {/* 鍥炵瓟鍐呭 */}
         <View style={styles.answerSection}>
           <View style={styles.answerHeader}>
@@ -2829,7 +2876,9 @@ export default function AnswerDetailScreen({
       </ScrollView>
 
       {/* 搴曢儴鏍?*/}
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, {
+        paddingBottom: bottomSafeInset
+      }]}>
         <View style={styles.bottomBarLeft}>
           <TouchableOpacity style={[styles.bottomIconBtn, isLikeInteractionDisabled(answerLiked, answerDisliked) && styles.interactionBtnDisabled]} onPress={handleAnswerLike} disabled={isLikeInteractionDisabled(answerLiked, answerDisliked)}>
             <Ionicons name={answerLiked ? "thumbs-up" : "thumbs-up-outline"} size={20} color={answerLiked ? "#ef4444" : isLikeInteractionDisabled(answerLiked, answerDisliked) ? "#d1d5db" : "#6b7280"} />
@@ -2905,7 +2954,7 @@ export default function AnswerDetailScreen({
                 </View>}
             </ScrollView>
 
-            <View style={styles.commentListBottomBar}>
+            <View style={[styles.commentListBottomBar, { paddingBottom: commentSheetBottomSpacing }]}>
               <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
               setShowAnswerCommentReplyModal(false);
               openAnswerCommentComposer(buildAnswerCommentReplyTarget(currentAnswerReplyComment));
@@ -2998,7 +3047,7 @@ export default function AnswerDetailScreen({
                 </View>}
             </ScrollView>
 
-            <View style={styles.commentListBottomBar}>
+            <View style={[styles.commentListBottomBar, { paddingBottom: commentSheetBottomSpacing }]}>
               <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
               setShowSupplementCommentListModal(false);
               openSupplementCommentComposer({
@@ -3061,7 +3110,7 @@ export default function AnswerDetailScreen({
                 </View>}
             </ScrollView>
 
-            <View style={styles.commentListBottomBar}>
+            <View style={[styles.commentListBottomBar, { paddingBottom: commentSheetBottomSpacing }]}>
               <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
               setShowSupplementCommentReplyModal(false);
               openSupplementCommentComposer(buildSupplementCommentReplyTarget(currentSupplementReplyComment, currentSupplementCommentTargetId));
@@ -3080,14 +3129,8 @@ export default function AnswerDetailScreen({
       fetchSupplementAnswers(true);
     }} />
       <ShareModal visible={showShareModal} onClose={closeShareModal} shareData={currentShareData || buildAnswerSharePayload()} onShare={handleShare} />
-      <WriteCommentModal visible={showSupplementCommentComposerModal} onClose={() => setShowSupplementCommentComposerModal(false)} onPublish={handleSubmitSupplementComment} originalComment={supplementCommentTarget.originalComment} publishInFooter closeOnRight title={supplementCommentTarget.parentId ? '写回复' : '写评论'} placeholder={supplementCommentTarget.parentId ? '写下你的回复...' : '写下你的评论...'} />
-      <WriteCommentModal visible={showWriteCommentModal} onClose={() => {
-      setShowWriteCommentModal(false);
-      setAnswerCommentTarget({
-        ...INITIAL_COMMENT_COMPOSER_TARGET,
-        targetId: answer.id ?? null
-      });
-    }} onPublish={handlePublishComment} originalComment={answerCommentTarget.originalComment} publishInFooter closeOnRight title={answerCommentTarget.parentId ? t('screens.answerDetail.modals.replyTitle').replace('{author}', answerCommentTarget.replyToUserName || '') : t('screens.answerDetail.modals.writeCommentTitle')} placeholder={answerCommentTarget.parentId ? t('screens.answerDetail.placeholders.writeReply') : t('screens.answerDetail.placeholders.writeCommentContent')} />
+      <WriteCommentModal visible={showSupplementCommentComposerModal} onClose={closeSupplementCommentComposer} onPublish={handleSubmitSupplementComment} originalComment={supplementCommentTarget.originalComment} publishInFooter closeOnRight title={supplementCommentTarget.parentId ? `写回复${supplementCommentTarget.replyToUserName ? ` @${supplementCommentTarget.replyToUserName}` : ''}` : '写评论'} placeholder={supplementCommentTarget.parentId ? '写下你的回复...' : '写下你的评论...'} />
+      <WriteCommentModal visible={showWriteCommentModal} onClose={closeAnswerCommentComposer} onPublish={handlePublishComment} originalComment={answerCommentTarget.originalComment} publishInFooter closeOnRight title={answerCommentTarget.parentId ? t('screens.answerDetail.modals.replyTitle').replace('{author}', answerCommentTarget.replyToUserName || '') : t('screens.answerDetail.modals.writeCommentTitle')} placeholder={answerCommentTarget.parentId ? t('screens.answerDetail.placeholders.writeReply') : t('screens.answerDetail.placeholders.writeCommentContent')} />
     </SafeAreaView>;
 }
 const styles = StyleSheet.create({

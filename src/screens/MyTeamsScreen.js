@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import KeyboardDismissView from '../components/KeyboardDismissView';
 import { createMyTeamsData } from '../data/profileMenuMockData';
 import { modalTokens } from '../components/modalTokens';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import { showAppAlert } from '../utils/appAlert';
 
 import { scaleFont } from '../utils/responsive';
@@ -45,6 +47,7 @@ const myTeams = [{
 export default function MyTeamsScreen({
   navigation
 }) {
+  const bottomSafeInset = useBottomSafeInset(20);
   const [teams, setTeams] = useState(() => createMyTeamsData());
   const [selectedQuestions, setSelectedQuestions] = useState([]);
   const [teamName, setTeamName] = useState('');
@@ -122,7 +125,7 @@ export default function MyTeamsScreen({
       }
     }]);
   };
-  return <SafeAreaView style={styles.container}>
+  return <SafeAreaView style={styles.container} edges={['top']}>
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -242,8 +245,13 @@ export default function MyTeamsScreen({
       </ScrollView>
 
       {/* 创建团队弹窗 */}
-      <Modal visible={showCreateModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleCloseCreateModal}>
-        <SafeAreaView style={styles.modalContainer}>
+      <Modal visible={showCreateModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleCloseCreateModal} statusBarTranslucent>
+        <KeyboardAvoidingView
+          style={styles.modalKeyboardView}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <KeyboardDismissView>
+            <SafeAreaView style={styles.modalContainer} edges={['top']}>
           <View style={styles.sheetHeader}>
             <Text style={styles.sheetTitle}>创建团队</Text>
             <TouchableOpacity onPress={handleCloseCreateModal} style={styles.sheetCloseBtn}>
@@ -251,7 +259,9 @@ export default function MyTeamsScreen({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.sheetContent} contentContainerStyle={styles.sheetContentContainer} keyboardShouldPersistTaps="handled">
+          <ScrollView style={styles.sheetContent} contentContainerStyle={[styles.sheetContentContainer, {
+          paddingBottom: bottomSafeInset + 96
+        }]} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
           {/* 选择问题 */}
           <View style={styles.formGroup}>
             <Text style={styles.formLabel}>选择问题</Text>
@@ -300,12 +310,16 @@ export default function MyTeamsScreen({
           }} />
           </ScrollView>
 
-          <View style={styles.sheetFooter}>
+          <View style={[styles.sheetFooter, {
+          paddingBottom: bottomSafeInset
+        }]}>
             <TouchableOpacity style={[styles.submitBtn, (!teamName.trim() || !teamDescription.trim()) && styles.submitBtnDisabled]} onPress={handleSubmitCreate} disabled={!teamName.trim() || !teamDescription.trim()}>
               <Text style={styles.submitBtnText}>创建团队</Text>
             </TouchableOpacity>
           </View>
-        </SafeAreaView>
+            </SafeAreaView>
+          </KeyboardDismissView>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>;
 }
@@ -505,6 +519,9 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     backgroundColor: modalTokens.surface
+  },
+  modalKeyboardView: {
+    flex: 1
   },
   sheetHeader: {
     flexDirection: 'row',

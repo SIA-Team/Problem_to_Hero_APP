@@ -1,27 +1,39 @@
 import React, { useState } from 'react';
-import { View, Text, Modal, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  Modal,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import IdentitySelector from './IdentitySelector';
+import KeyboardDismissView from './KeyboardDismissView';
 import ModalSafeAreaView from './ModalSafeAreaView';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 
-const CommentModal = ({ 
-  visible, 
-  onClose, 
-  onPublish, 
-  placeholder = "写下你的评论...", 
-  title = "写评论" 
+const CommentModal = ({
+  visible,
+  onClose,
+  onPublish,
+  placeholder = '写下你的评论...',
+  title = '写评论',
 }) => {
   const bottomSafeInset = useBottomSafeInset();
   const [text, setText] = useState('');
   const [selectedIdentity, setSelectedIdentity] = useState('personal');
 
   const handlePublish = () => {
-    if (text.trim()) {
-      onPublish(text.trim(), selectedIdentity === 'team');
-      setText('');
-      setSelectedIdentity('personal');
+    if (!text.trim()) {
+      return;
     }
+
+    onPublish(text.trim(), selectedIdentity === 'team');
+    setText('');
+    setSelectedIdentity('personal');
   };
 
   return (
@@ -32,66 +44,79 @@ const CommentModal = ({
       statusBarTranslucent
       navigationBarTranslucent
     >
-      <ModalSafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Ionicons name="close" size={24} color="#1f2937" />
-          </TouchableOpacity>
-          <Text style={styles.title}>{title}</Text>
-          <TouchableOpacity 
-            onPress={handlePublish}
-            style={[styles.publishBtn, !text.trim() && styles.publishBtnDisabled]}
-            disabled={!text.trim()}
-          >
-            <Text style={[styles.publishBtnText, !text.trim() && styles.publishBtnTextDisabled]}>
-              发布
-            </Text>
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.content}>
-          <TextInput
-            style={styles.textInput}
-            placeholder={placeholder}
-            value={text}
-            onChangeText={setText}
-            multiline
-            autoFocus
-            maxLength={500}
-          />
-          
-          <IdentitySelector
-            selectedIdentity={selectedIdentity}
-            onIdentityChange={setSelectedIdentity}
-          />
-          
-          <View
-            style={[
-              styles.bottomToolbar,
-              {
-                paddingBottom: bottomSafeInset + 8,
-              },
-            ]}
-          >
-            <View style={styles.toolbarLeft}>
-              <TouchableOpacity style={styles.toolbarBtn}>
-                <Ionicons name="image-outline" size={24} color="#6b7280" />
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <KeyboardDismissView>
+          <ModalSafeAreaView style={styles.container} edges={['top']}>
+            <View style={styles.header}>
+              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                <Ionicons name="close" size={24} color="#1f2937" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.toolbarBtn}>
-                <Ionicons name="at" size={24} color="#6b7280" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.toolbarBtn}>
-                <Ionicons name="happy-outline" size={24} color="#6b7280" />
+              <Text style={styles.title}>{title}</Text>
+              <TouchableOpacity
+                onPress={handlePublish}
+                style={[styles.publishBtn, !text.trim() && styles.publishBtnDisabled]}
+                disabled={!text.trim()}
+              >
+                <Text style={[styles.publishBtnText, !text.trim() && styles.publishBtnTextDisabled]}>
+                  发布
+                </Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.charCount}>{text.length}/500</Text>
-          </View>
-        </View>
-      </ModalSafeAreaView>
+
+            <View style={styles.content}>
+              <TextInput
+                style={styles.textInput}
+                placeholder={placeholder}
+                placeholderTextColor="#9ca3af"
+                value={text}
+                onChangeText={setText}
+                multiline
+                autoFocus
+                maxLength={500}
+                textAlignVertical="top"
+              />
+
+              <IdentitySelector
+                selectedIdentity={selectedIdentity}
+                onIdentityChange={setSelectedIdentity}
+              />
+
+              <View
+                style={[
+                  styles.bottomToolbar,
+                  {
+                    paddingBottom: bottomSafeInset + 8,
+                  },
+                ]}
+              >
+                <View style={styles.toolbarLeft}>
+                  <TouchableOpacity style={styles.toolbarBtn}>
+                    <Ionicons name="image-outline" size={24} color="#6b7280" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.toolbarBtn}>
+                    <Ionicons name="at" size={24} color="#6b7280" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.toolbarBtn}>
+                    <Ionicons name="happy-outline" size={24} color="#6b7280" />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.charCount}>{text.length}/500</Text>
+              </View>
+            </View>
+          </ModalSafeAreaView>
+        </KeyboardDismissView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
+
 const styles = StyleSheet.create({
+  keyboardAvoidingView: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: '#ffffff',
@@ -138,7 +163,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#1f2937',
-    textAlignVertical: 'top',
     marginBottom: 20,
   },
   bottomToolbar: {

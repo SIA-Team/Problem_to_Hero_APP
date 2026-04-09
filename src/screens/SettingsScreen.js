@@ -991,7 +991,7 @@ export default function SettingsScreen({
       setUploadingAvatar(false);
     }
   };
-  return <SafeAreaView style={styles.container}>
+  return <SafeAreaView style={styles.container} edges={['top']}>
       {/* 头部 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{

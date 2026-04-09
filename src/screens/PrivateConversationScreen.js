@@ -10,10 +10,12 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import KeyboardDismissView from '../components/KeyboardDismissView';
 import { modalTokens } from '../components/modalTokens';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
 import notificationApi from '../services/api/notificationApi';
@@ -226,6 +228,8 @@ const normalizeConversationMessage = (item, index, peerUserId) => {
 
 export default function PrivateConversationScreen({ navigation, route }) {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const bottomSafeInset = useBottomSafeInset();
   const scrollViewRef = useRef(null);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -406,8 +410,9 @@ export default function PrivateConversationScreen({ navigation, route }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <KeyboardDismissView>
+        <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.backButton}
@@ -436,7 +441,7 @@ export default function PrivateConversationScreen({ navigation, route }) {
       <KeyboardAvoidingView
         style={styles.content}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? Math.max(insets.top, 8) : 0}
       >
         {loading ? (
           <View style={styles.centerState}>
@@ -454,6 +459,7 @@ export default function PrivateConversationScreen({ navigation, route }) {
             style={styles.messagesScroll}
             contentContainerStyle={styles.messagesContent}
             showsVerticalScrollIndicator={false}
+            keyboardDismissMode="interactive"
           >
             {messages.map((message) => {
               const shareCard = message.payload?.kind === 'content_share' ? message.payload : null;
@@ -504,7 +510,14 @@ export default function PrivateConversationScreen({ navigation, route }) {
           </ScrollView>
         )}
 
-        <View style={styles.inputBar}>
+        <View
+          style={[
+            styles.inputBar,
+            {
+              paddingBottom: bottomSafeInset,
+            },
+          ]}
+        >
           <TextInput
             style={styles.input}
             placeholder={t('screens.privateConversation.inputPlaceholder')}
@@ -523,6 +536,7 @@ export default function PrivateConversationScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+      </KeyboardDismissView>
     </SafeAreaView>
   );
 }

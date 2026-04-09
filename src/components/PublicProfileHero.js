@@ -13,6 +13,7 @@ export default function PublicProfileHero({
   userData,
   onStatPress,
   isFollowing,
+  isFollowSubmitting,
   onFollowPress,
   isOwnProfile,
   onMessagePress,
@@ -73,6 +74,7 @@ export default function PublicProfileHero({
               <TouchableOpacity
                 style={[styles.followButton, isFollowing && styles.followingButton]}
                 onPress={() => onFollowPress && onFollowPress(!isFollowing)}
+                disabled={isFollowSubmitting}
                 activeOpacity={0.8}
               >
                 <Ionicons

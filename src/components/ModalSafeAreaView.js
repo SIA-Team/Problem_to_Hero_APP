@@ -1,8 +1,6 @@
 import React from 'react';
 import {
-  SafeAreaProvider,
   SafeAreaView,
-  initialWindowMetrics,
 } from 'react-native-safe-area-context';
 
 export default function ModalSafeAreaView({
@@ -11,10 +9,8 @@ export default function ModalSafeAreaView({
   edges = ['top', 'bottom'],
 }) {
   return (
-    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-      <SafeAreaView style={style} edges={edges}>
-        {children}
-      </SafeAreaView>
-    </SafeAreaProvider>
+    <SafeAreaView style={style} edges={edges}>
+      {children}
+    </SafeAreaView>
   );
 }

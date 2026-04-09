@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Alert, Share, Modal, TextInput, ActivityIndicator, AppState } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Alert, Share, Modal, TextInput, ActivityIndicator, AppState, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import Avatar from '../components/Avatar';
+import KeyboardDismissView from '../components/KeyboardDismissView';
 import SuperLikeBalance from '../components/SuperLikeBalance';
 import LogoutConfirmModal from '../components/LogoutConfirmModal';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import UserCacheService from '../services/UserCacheService';
 import { DEFAULT_MY_ACTIVITIES, DEFAULT_MY_GROUPS, DEFAULT_MY_TEAMS } from '../data/profileMenuMockData';
 import authApi from '../services/api/authApi';
@@ -20,6 +22,11 @@ import { openOfficialRechargePage } from '../utils/externalLinks';
 import { applyMockRecharge, getWalletBalanceWithMock } from '../utils/walletMock';
 import { formatTime } from '../utils/timeFormatter';
 import { formatNumber } from '../utils/numberFormatter';
+import {
+  getMyFollowingCount,
+  refreshMyFollowingCount,
+  subscribeMyFollowingCount,
+} from '../services/myFollowingCountState';
 import ServerSwitcher from '../components/ServerSwitcher';
 
 import { scaleFont } from '../utils/responsive';
@@ -27,6 +34,17 @@ const HISTORY_PAGE_SIZE = 10;
 const MOCK_RECHARGE_RETURN_AMOUNT = 100;
 
 const getFirstNonEmptyValue = (...values) => values.find(value => value !== undefined && value !== null && value !== '');
+
+const normalizeProfileCount = (...values) => {
+  for (const value of values) {
+    const normalizedValue = Number(value);
+    if (Number.isFinite(normalizedValue) && normalizedValue >= 0) {
+      return normalizedValue;
+    }
+  }
+
+  return 0;
+};
 
 const extractBrowseHistoryRows = response => {
   const rawData = response?.data;
@@ -95,6 +113,7 @@ export default function ProfileScreen({
   const {
     t
   } = useTranslation();
+  const bottomSafeInset = useBottomSafeInset(20);
   
   /**
    * 获取所在地的显示文本（只显示最后一级）
@@ -151,9 +170,11 @@ export default function ProfileScreen({
     bio: '',
     location: '',
     occupation: '',
+    followersCount: 0,
     passwordChanged: false // 是否修改过密码（默认 false，表示未修改，会显示默认密码�?
   });
   const [draftsTotalCount, setDraftsTotalCount] = useState(0);
+  const [myFollowingCount, setMyFollowingCount] = useState(getMyFollowingCount());
 
   // 加载用户信息
   const loadUserProfile = React.useCallback(async () => {
@@ -173,6 +194,12 @@ export default function ProfileScreen({
         bio: cachedProfile.signature || '',
         location: cachedProfile.location || '',
         occupation: cachedProfile.profession || '',
+        followersCount: normalizeProfileCount(
+          cachedProfile.fanCount,
+          cachedProfile.fansCount,
+          cachedProfile.followersCount,
+          cachedProfile.followerCount
+        ),
         passwordChanged: cachedProfile.passwordChanged === true || hasChangedPassword
       }));
     },
@@ -188,12 +215,31 @@ export default function ProfileScreen({
         bio: freshProfile.signature || '',
         location: freshProfile.location || '',
         occupation: freshProfile.profession || '',
+        followersCount: normalizeProfileCount(
+          freshProfile.fanCount,
+          freshProfile.fansCount,
+          freshProfile.followersCount,
+          freshProfile.followerCount
+        ),
         passwordChanged: freshProfile.passwordChanged === true || hasChangedPassword
       }));
     });
   }, []);
 
   // 首次加载
+  const loadMyFollowingCount = React.useCallback(async () => {
+    try {
+      await refreshMyFollowingCount();
+    } catch (error) {
+      console.error('Failed to load my following count:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeMyFollowingCount(setMyFollowingCount);
+    return unsubscribe;
+  }, []);
+
   const loadWalletBalance = React.useCallback(async () => {
     const fallbackWalletBalance = await getWalletBalanceWithMock(0);
 
@@ -241,8 +287,9 @@ export default function ProfileScreen({
 
   useEffect(() => {
     loadUserProfile();
+    loadMyFollowingCount();
     loadWalletBalance();
-  }, [loadUserProfile, loadWalletBalance]);
+  }, [loadMyFollowingCount, loadUserProfile, loadWalletBalance]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
@@ -269,25 +316,26 @@ export default function ProfileScreen({
   useFocusEffect(React.useCallback(() => {
     console.log('ProfileScreen: screen focused, reloading user profile');
     loadUserProfile();
+    loadMyFollowingCount();
     loadWalletBalance();
-  }, [loadUserProfile, loadWalletBalance]));
+  }, [loadMyFollowingCount, loadUserProfile, loadWalletBalance]));
   const stats = React.useMemo(() => [{
     label: t('profile.likes'),
     value: '3.5k',
     screen: 'Likes'
   }, {
     label: t('profile.followers'),
-    value: '1.2k',
+    value: formatNumber(userProfile.followersCount),
     screen: 'Fans'
   }, {
     label: t('profile.following'),
-    value: '128',
+    value: formatNumber(myFollowingCount),
     screen: 'Follow'
   }, {
     label: t('profile.friends'),
     value: '56',
     screen: 'Friends'
-  }], [t]);
+  }], [myFollowingCount, t, userProfile.followersCount]);
   const menuItems = React.useMemo(() => [{
     icon: 'document-text',
     label: t('profile.myDrafts'),
@@ -741,7 +789,10 @@ export default function ProfileScreen({
   const handleStatPress = stat => {
     switch (stat.label) {
       case t('profile.followers'):
-        navigation.navigate('Fans');
+        navigation.navigate('Fans', {
+          isOwnList: true,
+          userId: String(userProfile.userId || ''),
+        });
         break;
       case t('profile.following'):
         navigation.navigate('Follow');
@@ -1775,8 +1826,8 @@ export default function ProfileScreen({
       </ScrollView>
 
       {/* 我的收藏弹窗 */}
-      <Modal visible={showFavoritesModal} animationType="slide">
-        <SafeAreaView style={styles.listModal}>
+      <Modal visible={showFavoritesModal} animationType="slide" statusBarTranslucent>
+        <SafeAreaView style={styles.listModal} edges={['top']}>
           <View style={styles.listModalHeader}>
             <TouchableOpacity onPress={() => setShowFavoritesModal(false)}>
               <Ionicons name="arrow-back" size={24} color="#1f2937" />
@@ -1798,7 +1849,9 @@ export default function ProfileScreen({
               <Text style={[styles.favoriteTabText, favoritesTab === 'comments' && styles.favoriteTabTextActive]}>{t('profile.favoriteComments')}</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView style={styles.listModalContent}>
+          <ScrollView style={styles.listModalContent} contentContainerStyle={[styles.listModalContentContainer, {
+          paddingBottom: bottomSafeInset
+        }]}>
             {getFavoritesData().map(item => <TouchableOpacity key={item.id} style={styles.listItem} onPress={() => handleFavoritePress(item)}>
                 <View style={styles.listItemContent}>
                   <Text style={styles.listItemTitle}>{item.title}</Text>
@@ -1814,8 +1867,8 @@ export default function ProfileScreen({
       </Modal>
 
       {/* 浏览历史弹窗 */}
-      <Modal visible={showHistoryModal} animationType="slide">
-        <SafeAreaView style={styles.listModal}>
+      <Modal visible={showHistoryModal} animationType="slide" statusBarTranslucent>
+        <SafeAreaView style={styles.listModal} edges={['top']}>
           <View style={styles.listModalHeader}>
             <TouchableOpacity onPress={() => setShowHistoryModal(false)}>
               <Ionicons name="arrow-back" size={24} color="#1f2937" />
@@ -1831,7 +1884,9 @@ export default function ProfileScreen({
               <Text style={styles.clearText}>{t('profile.clear')}</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView style={styles.listModalContent}>
+          <ScrollView style={styles.listModalContent} contentContainerStyle={[styles.listModalContentContainer, {
+          paddingBottom: bottomSafeInset
+        }]}>
             {historyList.map(item => <TouchableOpacity key={item.id} style={styles.listItem} onPress={() => handleHistoryPress(item)}>
                 <View style={styles.listItemContent}>
                   <Text style={styles.listItemTitle}>{item.title}</Text>
@@ -1847,8 +1902,8 @@ export default function ProfileScreen({
       </Modal>
 
       {/* 我的草稿弹窗 */}
-      <Modal visible={showDraftsModal} animationType="slide">
-        <SafeAreaView style={styles.listModal}>
+      <Modal visible={showDraftsModal} animationType="slide" statusBarTranslucent>
+        <SafeAreaView style={styles.listModal} edges={['top']}>
           <View style={styles.listModalHeader}>
             <TouchableOpacity onPress={() => setShowDraftsModal(false)}>
               <Ionicons name="arrow-back" size={24} color="#1f2937" />
@@ -1858,7 +1913,9 @@ export default function ProfileScreen({
             width: 24
           }} />
           </View>
-          <ScrollView style={styles.listModalContent}>
+          <ScrollView style={styles.listModalContent} contentContainerStyle={[styles.listModalContentContainer, {
+          paddingBottom: bottomSafeInset
+        }]}>
             {draftsLoading && draftsList.length === 0 ? <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#ef4444" />
                 <Text style={styles.loadingText}>加载�?..</Text>
@@ -1891,8 +1948,13 @@ export default function ProfileScreen({
       </Modal>
 
       {/* 认证弹窗 */}
-      <Modal visible={showVerificationModal} animationType="slide">
-        <SafeAreaView style={styles.verificationModal}>
+      <Modal visible={showVerificationModal} animationType="slide" statusBarTranslucent>
+        <KeyboardAvoidingView
+          style={styles.verificationKeyboardView}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <KeyboardDismissView>
+            <SafeAreaView style={styles.verificationModal} edges={['top']}>
           {/* 头部 */}
           <View style={styles.verificationHeader}>
             <TouchableOpacity onPress={handleVerificationBack}>
@@ -1908,7 +1970,9 @@ export default function ProfileScreen({
 
           {/* 进度�?- 移除，不再需�?*/}
 
-          <ScrollView style={styles.verificationContent} showsVerticalScrollIndicator={false}>
+          <ScrollView style={styles.verificationContent} contentContainerStyle={[styles.verificationContentContainer, {
+          paddingBottom: bottomSafeInset + 28
+        }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
             {/* 步骤0: 选择认证类型 */}
             {verificationStep === 0 && <View style={styles.typeSelectionContainer}>
                 <Text style={styles.typeSelectionTitle}>{t('profile.verificationModal.selectType')}</Text>
@@ -2242,12 +2306,16 @@ export default function ProfileScreen({
           </ScrollView>
 
           {/* 底部按钮 */}
-          {verificationStep > 0 && <View style={styles.verificationFooter}>
+          {verificationStep > 0 && <View style={[styles.verificationFooter, {
+          paddingBottom: bottomSafeInset
+        }]}>
               <TouchableOpacity style={styles.verificationSubmitBtn} onPress={handleVerificationSubmit}>
                 <Text style={styles.verificationSubmitText}>{t('profile.verificationModal.submit')}</Text>
               </TouchableOpacity>
             </View>}
-        </SafeAreaView>
+            </SafeAreaView>
+          </KeyboardDismissView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* 退出登录确认弹�?*/}
@@ -2770,6 +2838,9 @@ const styles = StyleSheet.create({
   listModalContent: {
     flex: 1
   },
+  listModalContentContainer: {
+    flexGrow: 1
+  },
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3026,6 +3097,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: modalTokens.surfaceSoft
   },
+  verificationKeyboardView: {
+    flex: 1
+  },
   verificationHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3067,6 +3141,9 @@ const styles = StyleSheet.create({
   verificationContent: {
     flex: 1,
     backgroundColor: modalTokens.surface
+  },
+  verificationContentContainer: {
+    flexGrow: 1
   },
   // 类型选择
   typeSelectionContainer: {

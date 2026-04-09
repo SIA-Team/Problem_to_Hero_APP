@@ -1,8 +1,20 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Modal, Image } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  Modal,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
+import KeyboardDismissView from './KeyboardDismissView';
 import ModalSafeAreaView from './ModalSafeAreaView';
 import { showToast } from '../utils/toast';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
@@ -66,6 +78,11 @@ export default function WriteAnswerModal({
         statusBarTranslucent
         navigationBarTranslucent
       >
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoidingView}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+        <KeyboardDismissView>
         <ModalSafeAreaView style={styles.answerModal} edges={['top']}>
           <View style={styles.answerModalHeader}>
             <TouchableOpacity onPress={onClose} style={styles.answerCloseBtn}>
@@ -105,7 +122,11 @@ export default function WriteAnswerModal({
             </View>
           </View>
 
-          <ScrollView style={styles.answerContentArea} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            style={styles.answerContentArea}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+          >
             <TextInput
               style={styles.answerTextInput}
               placeholder={placeholder}
@@ -164,6 +185,8 @@ export default function WriteAnswerModal({
             </Text>
           </View>
         </ModalSafeAreaView>
+        </KeyboardDismissView>
+        </KeyboardAvoidingView>
       </Modal>
 
       <ImagePickerSheet
@@ -176,6 +199,9 @@ export default function WriteAnswerModal({
 }
 
 const styles = StyleSheet.create({
+  keyboardAvoidingView: {
+    flex: 1,
+  },
   answerModal: {
     flex: 1,
     backgroundColor: '#fff',

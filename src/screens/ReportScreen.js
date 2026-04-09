@@ -13,6 +13,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
+import KeyboardDismissView from '../components/KeyboardDismissView';
 import { showAppAlert } from '../utils/appAlert';
 import { showToast } from '../utils/toast';
 import reportApi from '../services/api/reportApi';
@@ -132,7 +133,8 @@ export default function ReportScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
+      <KeyboardDismissView>
+        <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.closeBtn}
@@ -153,6 +155,7 @@ export default function ReportScreen({ navigation, route }) {
           style={styles.content}
           contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) }}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
         >
           <Text style={styles.subtitle}>{t('screens.report.subtitle')}</Text>
 
@@ -217,6 +220,7 @@ export default function ReportScreen({ navigation, route }) {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+      </KeyboardDismissView>
     </SafeAreaView>
   );
 }

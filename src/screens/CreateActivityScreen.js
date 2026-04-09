@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import DateTimePickerModal from '../components/DateTimePickerModal';
+import KeyboardDismissView from '../components/KeyboardDismissView';
 import { showAppAlert } from '../utils/appAlert';
 import { scaleFont } from '../utils/responsive';
 
@@ -141,6 +142,7 @@ export default function CreateActivityScreen({
     }
   };
   return <SafeAreaView style={styles.container} edges={['top']}>
+      <KeyboardDismissView>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn} hitSlop={{
         top: 15,
@@ -161,7 +163,11 @@ export default function CreateActivityScreen({
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView
+        style={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
         {/* 发起身份选择 - 仅在非团队详情页进入时显示 */}
         {!teamId && <>
             <Text style={styles.inputLabel}>{t('screens.createActivity.organizerType.label')} <Text style={styles.required}>{t('screens.createActivity.organizerType.required')}</Text></Text>
@@ -324,6 +330,7 @@ export default function CreateActivityScreen({
           </View>
         </View>}
       <DateTimePickerModal visible={Boolean(activeTimeField)} onClose={() => setActiveTimeField(null)} currentDateTime={activeTimeField ? newActivity[activeTimeField] : ''} onSelect={value => handleSelectDateTime(activeTimeField, value)} title={activeTimeField === 'endTime' ? t('screens.createActivity.time.picker.endTitle') : t('screens.createActivity.time.picker.startTitle')} cancelText={t('screens.createActivity.time.picker.cancel')} confirmText={t('screens.createActivity.time.picker.confirm')} />
+      </KeyboardDismissView>
     </SafeAreaView>;
 }
 const styles = StyleSheet.create({

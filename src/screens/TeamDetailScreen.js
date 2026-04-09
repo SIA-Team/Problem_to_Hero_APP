@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import IdentitySelector from '../components/IdentitySelector';
+import KeyboardDismissView from '../components/KeyboardDismissView';
+import ModalSafeAreaView from '../components/ModalSafeAreaView';
+import WriteCommentModal from '../components/WriteCommentModal';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import { scaleFont } from '../utils/responsive';
 const initialMessages = [{
   id: 1,
@@ -191,8 +195,6 @@ const flattenDiscussionReplyTree = (nodes = [], accumulator = []) => {
 };
 
 // 团队公告数据
-const WriteCommentModal = () => null;
-
 const announcements = [{
   id: 1,
   title: '本周学习主题：Python装饰器',
@@ -322,6 +324,9 @@ export default function TeamDetailScreen({
       setActiveTab(t('screens.teamDetail.tabs.discussion'));
     }
   }, [t, activeTab]);
+  const bottomSafeInset = useBottomSafeInset(20);
+  const commentSheetBottomSpacing = bottomSafeInset + 12;
+  const replyModalBottomSpacing = bottomSafeInset + 16;
   const [messages, setMessages] = useState(initialMessages);
   const [discussionCommentsMap, setDiscussionCommentsMap] = useState(initialDiscussionComments);
   const [inputText, setInputText] = useState('');
@@ -631,7 +636,11 @@ export default function TeamDetailScreen({
     setDiscussionComposerKey(prev => prev + 1);
     setShowDiscussionComposerModal(true);
   };
-  const closeDiscussionComposer = () => {
+  const restoreDiscussionComposerContext = (target = discussionCommentTarget, mode = discussionComposerMode) => {
+    const messageId = target?.messageId ?? currentDiscussionMessageId ?? null;
+    const parentId = Number(target?.parentId ?? 0) || 0;
+    const threadRootId = parentId > 0 && messageId ? getDiscussionThreadRootId(messageId, parentId) || parentId : null;
+
     setShowDiscussionComposerModal(false);
     setDiscussionComposerMode('comment');
     setDiscussionCommentText('');
@@ -644,18 +653,42 @@ export default function TeamDetailScreen({
       replyToUserName: '',
       originalComment: null
     });
+
+    if (mode === 'message') {
+      return;
+    }
+
+    if (threadRootId) {
+      setCurrentDiscussionMessageId(messageId);
+      setCurrentDiscussionCommentId(threadRootId);
+      setShowDiscussionReplyModal(true);
+      return;
+    }
+
+    if (messageId) {
+      setCurrentDiscussionMessageId(messageId);
+      setCurrentDiscussionCommentId(null);
+      setShowDiscussionCommentListModal(true);
+    }
   };
-  const handleSubmitDiscussionComment = () => {
-    const messageId = discussionCommentTarget.messageId ?? currentDiscussionMessageId;
-    const normalizedText = discussionCommentText.trim();
+  const closeDiscussionComposer = () => {
+    restoreDiscussionComposerContext(discussionCommentTarget, discussionComposerMode);
+  };
+  const handleSubmitDiscussionComment = (submittedText = '', isTeam = false, _selectedImages = []) => {
+    const composerTarget = {
+      ...discussionCommentTarget
+    };
+    const composerMode = discussionComposerMode;
+    const messageId = composerTarget.messageId ?? currentDiscussionMessageId;
+    const normalizedText = typeof submittedText === 'string' ? submittedText.trim() : discussionCommentText.trim();
     const content = normalizedText;
     if (!content) {
       return;
     }
-    const isTeamIdentity = discussionCommentIdentity === 'team';
+    const isTeamIdentity = typeof isTeam === 'boolean' ? isTeam : discussionCommentIdentity === 'team';
     const authorName = isTeamIdentity ? team.name : '我';
     const authorAvatar = isTeamIdentity ? team.avatar : 'https://api.dicebear.com/7.x/avataaars/svg?seed=me';
-    if (discussionComposerMode === 'message') {
+    if (composerMode === 'message') {
       const newMessage = {
         id: Date.now(),
         author: authorName,
@@ -668,14 +701,14 @@ export default function TeamDetailScreen({
         bookmarks: 0
       };
       setMessages(prevMessages => [newMessage, ...prevMessages]);
-      closeDiscussionComposer();
+      restoreDiscussionComposerContext(composerTarget, composerMode);
       return;
     }
     if (!messageId) {
-      closeDiscussionComposer();
+      restoreDiscussionComposerContext(composerTarget, composerMode);
       return;
     }
-    const directParentId = Number(discussionCommentTarget.replyToCommentId || discussionCommentTarget.parentId || 0) || 0;
+    const directParentId = Number(composerTarget.replyToCommentId || composerTarget.parentId || 0) || 0;
     const rootCommentId = directParentId ? getDiscussionThreadRootId(messageId, directParentId) : null;
     const newCommentId = Date.now();
     const newComment = {
@@ -683,7 +716,7 @@ export default function TeamDetailScreen({
       parentId: directParentId,
       rootCommentId: rootCommentId || newCommentId,
       replyToCommentId: directParentId,
-      replyToUserName: discussionCommentTarget.replyToUserName || '',
+      replyToUserName: composerTarget.replyToUserName || '',
       author: authorName,
       userName: authorName,
       avatar: authorAvatar,
@@ -719,15 +752,7 @@ export default function TeamDetailScreen({
         [messageId]: nextList
       };
     });
-    closeDiscussionComposer();
-    if (rootCommentId) {
-      setCurrentDiscussionMessageId(messageId);
-      setCurrentDiscussionCommentId(rootCommentId);
-      setShowDiscussionReplyModal(true);
-    } else {
-      setCurrentDiscussionMessageId(messageId);
-      setShowDiscussionCommentListModal(true);
-    }
+    restoreDiscussionComposerContext(composerTarget, composerMode);
   };
   const handleDiscussionCommentReport = () => {
     showAppAlert(t('screens.teamDetail.report.title'), t('screens.teamDetail.report.message'), [{
@@ -1036,7 +1061,7 @@ export default function TeamDetailScreen({
     setIsPinned(false);
     setShowPublishAnnouncementModal(false);
   };
-  return <SafeAreaView style={styles.container}>
+  return <SafeAreaView style={styles.container} edges={['top']}>
       {/* 头部 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{
@@ -1350,7 +1375,9 @@ export default function TeamDetailScreen({
       </ScrollView>
 
       {/* 底部输入栏 - 限制访问模式下不显示 */}
-      {Boolean(!restrictedView && isJoined && activeTabType === 'discussion') && <View style={styles.teamChatInputContainer}>
+      {Boolean(!restrictedView && isJoined && activeTabType === 'discussion') && <View style={[styles.teamChatInputContainer, {
+      paddingBottom: bottomSafeInset
+    }]}>
           <TouchableOpacity style={styles.teamChatInput} activeOpacity={0.85} onPress={handleSend}>
             <Text style={styles.teamChatInputPlaceholder}>{t('screens.teamDetail.chat.inputPlaceholder')}</Text>
           </TouchableOpacity>
@@ -1371,9 +1398,13 @@ export default function TeamDetailScreen({
         </View>}
 
       {/* 回复弹窗 */}
-      <Modal visible={showReplyModal} animationType="slide" transparent>
+      <Modal visible={showReplyModal} animationType="slide" transparent statusBarTranslucent>
         <View style={styles.modalOverlay}>
-          <View style={styles.replyModal}>
+          <KeyboardAvoidingView style={styles.modalKeyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <KeyboardDismissView>
+          <ModalSafeAreaView style={[styles.replyModal, {
+          paddingBottom: replyModalBottomSpacing
+        }]} edges={['top']}>
             <View style={styles.replyModalHeader}>
               <Text style={styles.replyModalTitle}>{t('screens.teamDetail.reply.title')} {replyTarget?.author}</Text>
               <TouchableOpacity onPress={() => setShowReplyModal(false)}>
@@ -1384,7 +1415,9 @@ export default function TeamDetailScreen({
             <TouchableOpacity style={[styles.replySubmitBtn, !replyText.trim() && styles.replySubmitBtnDisabled]} onPress={handleReply} disabled={!replyText.trim()}>
               <Text style={styles.replySubmitText}>{t('screens.teamDetail.reply.submitButton')}</Text>
             </TouchableOpacity>
-          </View>
+          </ModalSafeAreaView>
+          </KeyboardDismissView>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -1461,7 +1494,9 @@ export default function TeamDetailScreen({
                 </View>)}
             </ScrollView>
 
-            <View style={styles.commentListBottomBar}>
+            <View style={[styles.commentListBottomBar, {
+            paddingBottom: commentSheetBottomSpacing
+          }]}>
               <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
               setCurrentDiscussionCommentId(null);
               setShowDiscussionCommentListModal(false);
@@ -1532,7 +1567,9 @@ export default function TeamDetailScreen({
                 </View>}
             </ScrollView>
 
-            <View style={styles.commentListBottomBar}>
+            <View style={[styles.commentListBottomBar, {
+            paddingBottom: commentSheetBottomSpacing
+          }]}>
               <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
               setShowDiscussionReplyModal(false);
               openDiscussionComposer(buildDiscussionCommentReplyTarget(currentDiscussionRootComment, currentDiscussionMessageId));
@@ -1545,43 +1582,35 @@ export default function TeamDetailScreen({
         </View>
       </Modal>
 
-      <WriteCommentModal visible={showDiscussionComposerModal} onClose={closeDiscussionComposer} onPublish={handleSubmitDiscussionComment} originalComment={discussionCommentTarget.originalComment} publishInFooter placeholder={discussionComposerMode === 'message' ? '说点什么...' : '写下你的评论...'} title={discussionComposerMode === 'message' ? '' : '写评论'} />
+      <WriteCommentModal visible={showDiscussionComposerModal && discussionComposerMode !== 'message'} onClose={closeDiscussionComposer} onPublish={handleSubmitDiscussionComment} originalComment={discussionCommentTarget.originalComment} publishInFooter closeOnRight placeholder={discussionCommentTarget.parentId ? '写下你的回复...' : '写下你的评论...'} title={discussionCommentTarget.parentId ? `写回复${discussionCommentTarget.replyToUserName ? ` @${discussionCommentTarget.replyToUserName}` : ''}` : '写评论'} />
 
-      <Modal visible={showDiscussionComposerModal} transparent animationType="slide" onRequestClose={closeDiscussionComposer}>
+      <Modal visible={showDiscussionComposerModal && discussionComposerMode === 'message'} transparent animationType="slide" onRequestClose={closeDiscussionComposer} statusBarTranslucent>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={closeDiscussionComposer} />
-          <View style={styles.commentListModal}>
+          <KeyboardAvoidingView style={styles.modalKeyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <KeyboardDismissView>
+          <ModalSafeAreaView style={styles.commentListModal} edges={['top']}>
             <View style={styles.commentListModalHandle} />
             <View style={styles.commentListModalHeader}>
               <TouchableOpacity onPress={closeDiscussionComposer} style={styles.commentListCloseBtn}>
                 <Ionicons name="close" size={26} color="#1f2937" />
               </TouchableOpacity>
-              {discussionComposerMode !== 'message' && <Text style={styles.commentListModalTitle}>写评论</Text>}
+              <Text style={styles.commentListModalTitle}>说点什么</Text>
               <View style={styles.commentListHeaderRight} />
             </View>
 
-            {Boolean(discussionCommentTarget.originalComment) && <View style={styles.originalCommentCard}>
-                <TouchableOpacity style={styles.originalCommentHeader} activeOpacity={0.7}>
-                  <Avatar uri={discussionCommentTarget.originalComment.userAvatar || discussionCommentTarget.originalComment.avatar} name={discussionCommentTarget.originalComment.userName || discussionCommentTarget.originalComment.author} size={32} />
-                  <Text style={styles.originalCommentAuthor}>{discussionCommentTarget.originalComment.userName || discussionCommentTarget.originalComment.author}</Text>
-                  <View style={{
-                flex: 1
-              }} />
-                  <Text style={styles.originalCommentTime}>{discussionCommentTarget.originalComment.time}</Text>
-                </TouchableOpacity>
-                <Text style={styles.originalCommentText}>{discussionCommentTarget.originalComment.content}</Text>
-              </View>}
-
-            <ScrollView style={styles.commentListScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <ScrollView style={styles.commentListScroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" showsVerticalScrollIndicator={false}>
               <View>
-                <TextInput style={styles.commentTextInput} placeholder={discussionComposerMode === 'message' ? '说点什么...' : '写下你的评论...'} placeholderTextColor="#bbb" value={discussionCommentText} onChangeText={setDiscussionCommentText} multiline autoFocus textAlignVertical="top" />
-                {discussionComposerMode !== 'message' && <View style={styles.commentIdentitySection}>
-                    <IdentitySelector key={`discussion-composer-${discussionComposerKey}`} selectedIdentity={discussionCommentIdentity} selectedTeams={discussionCommentSelectedTeams} onIdentityChange={setDiscussionCommentIdentity} onTeamsChange={setDiscussionCommentSelectedTeams} />
-                  </View>}
+                <TextInput style={styles.commentTextInput} placeholder="说点什么..." placeholderTextColor="#bbb" value={discussionCommentText} onChangeText={setDiscussionCommentText} multiline autoFocus textAlignVertical="top" />
+                <View style={styles.commentIdentitySection}>
+                  <IdentitySelector key={`discussion-composer-${discussionComposerKey}`} selectedIdentity={discussionCommentIdentity} selectedTeams={discussionCommentSelectedTeams} onIdentityChange={setDiscussionCommentIdentity} onTeamsChange={setDiscussionCommentSelectedTeams} />
+                </View>
               </View>
             </ScrollView>
 
-            <View style={styles.commentListBottomBar}>
+            <View style={[styles.commentListBottomBar, {
+            paddingBottom: commentSheetBottomSpacing
+          }]}>
               <View style={styles.commentToolbar}>
                 <View style={styles.commentToolsLeft}>
                   <TouchableOpacity style={styles.commentToolItem}>
@@ -1599,7 +1628,9 @@ export default function TeamDetailScreen({
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
+          </ModalSafeAreaView>
+          </KeyboardDismissView>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -2586,11 +2617,15 @@ const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1
   },
+  modalKeyboardView: {
+    flex: 1
+  },
   commentListModal: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '85%'
+    maxHeight: '85%',
+    overflow: 'hidden'
   },
   commentListModalHandle: {
     width: 40,
@@ -2665,7 +2700,7 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   },
   commentListScroll: {
-    maxHeight: 500,
+    flexShrink: 1,
     backgroundColor: '#fff'
   },
   commentListCard: {

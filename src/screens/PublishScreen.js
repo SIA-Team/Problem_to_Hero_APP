@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Switch, Alert, Modal, Platform, ActivityIndicator, Image, FlatList } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Switch, Alert, Modal, Platform, ActivityIndicator, Image, FlatList, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import CategoryIcon from '../components/CategoryIcon';
 import IdentitySelector from '../components/IdentitySelector';
 import ImagePickerSheet from '../components/ImagePickerSheet';
+import KeyboardDismissView from '../components/KeyboardDismissView';
 import categoryApi from '../services/api/categoryApi';
 import questionApi from '../services/api/questionApi';
 import uploadApi from '../services/api/uploadApi';
@@ -13,6 +14,7 @@ import { showToast } from '../utils/toast';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/useTranslation';
 import { getRegionData } from '../data/regionData';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import { scaleFont, scaleWidth } from '../utils/responsive';
 const questionTypes = [{
   id: 0,
@@ -39,6 +41,7 @@ export default function PublishScreen({
   route
 }) {
   const { t } = useTranslation();
+  const bottomSafeInset = useBottomSafeInset(20);
   
   // 获取多语言区域数据
   const regionData = React.useMemo(() => getRegionData(), []);
@@ -1046,6 +1049,11 @@ export default function PublishScreen({
     return t('publish.selectCategory');
   };
   return <SafeAreaView style={styles.container} edges={['top']}>
+      <KeyboardDismissView>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn} hitSlop={{
         top: 10,
@@ -1066,7 +1074,15 @@ export default function PublishScreen({
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={[styles.contentContainer, {
+        paddingBottom: bottomSafeInset + 16
+      }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
         {/* 问题类型选择 */}
         <View style={[styles.section, {
         marginBottom: 16
@@ -1469,7 +1485,7 @@ export default function PublishScreen({
               }} />
                   <Text style={styles.retryBtnText}>{t('publish.retry')}</Text>
                 </TouchableOpacity>
-              </View> : <ScrollView style={styles.categoryContent} showsVerticalScrollIndicator={false}>
+              </View> : <ScrollView style={styles.categoryContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
                 {categoryModalView === 'level1' ? (/* 视图1：一级分类列表 */
             <View style={styles.level1Container}>
                     <Text style={styles.levelTitle}>{t('publish.selectLevel1')}</Text>
@@ -1657,7 +1673,7 @@ export default function PublishScreen({
               </ScrollView>
             </View>
 
-            <ScrollView style={styles.regionList}>
+            <ScrollView style={styles.regionList} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
               {getLocationRegionOptions().map((option, idx) => (
                 <TouchableOpacity key={idx} style={styles.regionOption} onPress={() => selectLocationRegion(option)}>
                   <Text style={styles.regionOptionText}>{option}</Text>
@@ -1670,13 +1686,18 @@ export default function PublishScreen({
       </Modal>
 
       {/* 图片选择器 */}
-      <ImagePickerSheet visible={showImagePicker} onClose={() => setShowImagePicker(false)} onImageSelected={handleImageSelected} title={t('publish.addImage')} />
+        <ImagePickerSheet visible={showImagePicker} onClose={() => setShowImagePicker(false)} onImageSelected={handleImageSelected} title={t('publish.addImage')} />
+      </KeyboardAvoidingView>
+      </KeyboardDismissView>
     </SafeAreaView>;
-}
+  }
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f3f4f6'
+  },
+  keyboardView: {
+    flex: 1
   },
   header: {
     flexDirection: 'row',
@@ -1712,6 +1733,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 12
+  },
+  contentContainer: {
+    paddingBottom: 12
   },
   section: {
     backgroundColor: '#fff',

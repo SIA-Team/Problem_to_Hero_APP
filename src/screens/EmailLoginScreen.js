@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingVi
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import KeyboardDismissView from '../components/KeyboardDismissView';
 import { authApi } from '../services/api';
 import { showToast } from '../utils/toast';
 import { showAppAlert } from '../utils/appAlert';
@@ -130,9 +131,14 @@ export default function LoginScreen({ navigation, onLogin }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <KeyboardDismissView>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+        >
           {/* Logo */}
           <View style={styles.logoSection}>
             <View style={styles.logoCircle}>
@@ -249,6 +255,7 @@ export default function LoginScreen({ navigation, onLogin }) {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      </KeyboardDismissView>
     </SafeAreaView>
   );
 }

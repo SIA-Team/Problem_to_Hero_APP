@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Modal, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import KeyboardDismissView from '../components/KeyboardDismissView';
 import ModalSafeAreaView from '../components/ModalSafeAreaView';
 import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import { showAppAlert } from '../utils/appAlert';
 import { openMapChooser } from '../utils/mapChooser';
 import notificationApi from '../services/api/notificationApi';
@@ -410,6 +412,7 @@ export default function MessagesScreen({
     t
   } = useTranslation();
   const isFocused = useIsFocused();
+  const bottomSafeInset = useBottomSafeInset(16);
   const followingLoadRequestIdRef = React.useRef(0);
   const { respondedEmergencies, ignoredEmergencies, respondToEmergency, ignoreEmergency } = useEmergency();
   const [showPrivateModal, setShowPrivateModal] = useState(false);
@@ -873,7 +876,7 @@ export default function MessagesScreen({
     loadNotifications(notificationFilter, notificationPage + 1, true);
   };
   const filteredUsers = filterFriendUsers(followingUsers, searchText);
-  return <SafeAreaView style={styles.container}>
+  return <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{
         top: 10,
@@ -1214,8 +1217,13 @@ export default function MessagesScreen({
       </ScrollView>
 
       {/* 发送私信弹窗 */}
-      <Modal visible={showPrivateModal} animationType="slide">
-        <ModalSafeAreaView style={styles.privateModal} edges={['top']}>
+      <Modal visible={showPrivateModal} animationType="slide" statusBarTranslucent>
+        <KeyboardAvoidingView
+          style={styles.privateModalKeyboardView}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <KeyboardDismissView>
+            <ModalSafeAreaView style={styles.privateModal} edges={['top']}>
           <View style={styles.privateModalHeader}>
             <TouchableOpacity onPress={resetPrivateComposer}>
               <Ionicons name="close" size={26} color="#333" />
@@ -1256,7 +1264,7 @@ export default function MessagesScreen({
           display: selectedUser ? 'none' : 'flex'
         }]}>
             <Text style={styles.userListTitle}>{t('screens.messagesScreen.privateModal.selectUser')}</Text>
-            <ScrollView style={styles.userList}>
+            <ScrollView style={styles.userList} contentContainerStyle={styles.userListContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
               {followingUsersLoading ? <View style={styles.userListFeedback}>
                   <ActivityIndicator color="#ef4444" />
                   <Text style={styles.userListFeedbackText}>{t('common.loading')}</Text>
@@ -1282,22 +1290,31 @@ export default function MessagesScreen({
 
           {/* 私信内容 */}
           <View style={[styles.messageInputSection, {
-          display: selectedUser ? 'flex' : 'none'
+          display: selectedUser ? 'flex' : 'none',
+          paddingBottom: bottomSafeInset
         }]}>
             <Text style={styles.messageInputLabel}>{t('screens.messagesScreen.privateModal.messageContent')}</Text>
             <TextInput style={styles.messageTextInput} placeholder={t('screens.messagesScreen.privateModal.messagePlaceholder')} placeholderTextColor="#bbb" value={messageContent} onChangeText={setMessageContent} multiline textAlignVertical="top" />
           </View>
-        </ModalSafeAreaView>
+            </ModalSafeAreaView>
+          </KeyboardDismissView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* 专家投票弹窗 */}
-      <Modal visible={showVoteModal} animationType="slide" transparent>
-        <View style={styles.voteModalOverlay}>
-          <View style={styles.voteModal}>
+      <Modal visible={showVoteModal} animationType="slide" transparent statusBarTranslucent>
+        <KeyboardAvoidingView
+          style={styles.voteModalKeyboardView}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={styles.voteModalOverlay}>
+          <View style={[styles.voteModal, {
+            paddingBottom: bottomSafeInset
+          }]}>
             <View style={styles.voteModalHandle} />
             <Text style={styles.voteModalTitle}>{t('screens.messagesScreen.voteModal.title')}</Text>
 
-            {Boolean(currentArbitration) && <ScrollView style={styles.voteModalContent} showsVerticalScrollIndicator={false}>
+            {Boolean(currentArbitration) && <ScrollView style={styles.voteModalContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
                 {/* 问题信息 */}
                 <View style={styles.voteQuestionCard}>
                   <Text style={styles.voteQuestionLabel}>{t('screens.messagesScreen.voteModal.questionLabel')}</Text>
@@ -1356,7 +1373,9 @@ export default function MessagesScreen({
             }} />
               </ScrollView>}
 
-            <View style={styles.voteModalFooter}>
+            <View style={[styles.voteModalFooter, {
+            paddingBottom: bottomSafeInset
+          }]}>
               <TouchableOpacity style={[styles.submitVoteBtn, (!voteChoice || !voteReason.trim()) && styles.submitVoteBtnDisabled]} onPress={handleSubmitVote} disabled={!voteChoice || !voteReason.trim()}>
                 <Text style={styles.submitVoteBtnText}>{t('screens.messagesScreen.voteModal.submitVote')}</Text>
               </TouchableOpacity>
@@ -1371,6 +1390,7 @@ export default function MessagesScreen({
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>;
 }
@@ -1968,6 +1988,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: modalTokens.surface
   },
+  privateModalKeyboardView: {
+    flex: 1
+  },
   privateModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2059,6 +2082,9 @@ const styles = StyleSheet.create({
   },
   userList: {
     flex: 1
+  },
+  userListContent: {
+    paddingBottom: 16
   },
   userListFeedback: {
     alignItems: 'center',
@@ -2229,13 +2255,17 @@ const styles = StyleSheet.create({
     backgroundColor: modalTokens.overlay,
     justifyContent: 'flex-end'
   },
+  voteModalKeyboardView: {
+    flex: 1
+  },
   voteModal: {
     backgroundColor: modalTokens.surface,
     borderTopLeftRadius: modalTokens.sheetRadius,
     borderTopRightRadius: modalTokens.sheetRadius,
     borderTopWidth: 1,
     borderColor: modalTokens.border,
-    maxHeight: '90%'
+    maxHeight: '90%',
+    overflow: 'hidden'
   },
   voteModalHandle: {
     width: 44,
@@ -2254,7 +2284,7 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   voteModalContent: {
-    maxHeight: 500,
+    flexShrink: 1,
     paddingHorizontal: 20
   },
   voteQuestionCard: {

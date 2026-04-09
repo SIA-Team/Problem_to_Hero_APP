@@ -1,12 +1,14 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, TextInput, StyleSheet, Modal, Alert, RefreshControl, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, TextInput, StyleSheet, Modal, Alert, RefreshControl, ActivityIndicator, Animated, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import IdentitySelector from '../components/IdentitySelector';
 import ImagePickerSheet from '../components/ImagePickerSheet';
+import KeyboardDismissView from '../components/KeyboardDismissView';
 import ModalSafeAreaView from '../components/ModalSafeAreaView';
 import WriteAnswerModal from '../components/WriteAnswerModal';
+import WriteCommentModal from '../components/WriteCommentModal';
 import QuestionDetailSkeleton from '../components/QuestionDetailSkeleton';
 import ShareModal from '../components/ShareModal';
 import EditTextModal from '../components/EditTextModal';
@@ -22,6 +24,7 @@ import { formatNumber } from '../utils/numberFormatter';
 import { formatTime } from '../utils/timeFormatter';
 import { normalizeEntityId } from '../utils/jsonLongId';
 import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import { scaleFont } from '../utils/responsive';
 import { buildTwitterShareText, openTwitterShare } from '../utils/shareService';
 const answers = [{
@@ -596,6 +599,8 @@ export default function QuestionDetailScreen({
 
   // 获取安全区域
   const insets = useSafeAreaInsets();
+  const bottomSafeInset = useBottomSafeInset(20);
+  const commentSheetBottomSpacing = Math.max(insets.bottom, 16) + 12;
   const [commentsPage, setCommentsPage] = useState(1);
   const [loadingInvited, setLoadingInvited] = useState(false);
   const [loadingSupplements, setLoadingSupplements] = useState(false);
@@ -4005,12 +4010,50 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     });
     setShowCommentModal(true);
   };
-  const handleSubmitComment = async () => {
-    const normalizedCommentText = typeof commentText === 'string' ? commentText.trim() : '';
+  const restoreCommentComposerContext = (target = commentTarget) => {
+    const normalizedTargetType = Number(target?.targetType ?? 1) || 1;
+    const normalizedParentId = Number(target?.parentId ?? 0) || 0;
+    const isQuestionComment = normalizedTargetType === 1;
+    const isSupplementComment = normalizedTargetType === 3;
+    const isAnswerComment = normalizedTargetType === 2;
+    const isReplyToQuestionComment = isQuestionComment && normalizedParentId !== 0;
+    const isReplyToSupplementComment = isSupplementComment && normalizedParentId !== 0;
+    const isReplyToAnswerComment = isAnswerComment && normalizedParentId !== 0;
+
+    closeCommentModal();
+
+    if (isReplyToQuestionComment) {
+      setShowCommentReplyModal(true);
+      return;
+    }
+    if (isReplyToSupplementComment) {
+      setShowSuppCommentReplyModal(true);
+      return;
+    }
+    if (isReplyToAnswerComment) {
+      setShowAnswerCommentReplyModal(true);
+      return;
+    }
+    if (isSupplementComment) {
+      setShowSuppCommentListModal(true);
+      return;
+    }
+    if (isAnswerComment) {
+      setShowAnswerCommentListModal(true);
+    }
+  };
+  const handleCloseCommentComposer = () => {
+    restoreCommentComposerContext(commentTarget);
+  };
+  const handleSubmitComment = async (submittedText = '', _isTeam = false, _selectedImages = []) => {
+    const normalizedCommentText = typeof submittedText === 'string' ? submittedText.trim() : typeof commentText === 'string' ? commentText.trim() : '';
     const questionId = route?.params?.id;
-    let targetType = Number(commentTarget?.targetType ?? 1) || 1;
-    let targetId = Number(commentTarget?.targetId ?? questionId) || 0;
-    let parentId = Number(commentTarget?.parentId ?? 0) || 0;
+    const composerTarget = {
+      ...commentTarget
+    };
+    let targetType = Number(composerTarget?.targetType ?? 1) || 1;
+    let targetId = Number(composerTarget?.targetId ?? questionId) || 0;
+    let parentId = Number(composerTarget?.parentId ?? 0) || 0;
     if (targetType === 3 && parentId > 0) {
       const supplementParentComment = findSupplementCommentById(parentId);
       if (supplementParentComment) {
@@ -4039,8 +4082,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         parentId,
         content: normalizedCommentText
       };
-      if (commentTarget?.replyToCommentId) {
-        payload.replyToCommentId = Number(commentTarget.replyToCommentId) || 0;
+      if (composerTarget?.replyToCommentId) {
+        payload.replyToCommentId = Number(composerTarget.replyToCommentId) || 0;
       }
       if (resolvedReplyToUserId) {
         payload.replyToUserId = resolvedReplyToUserId;
@@ -4052,51 +4095,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       console.log('📥 评论发布响应:', response);
       if (response && response.code === 200) {
         showToast('评论发布成功', 'success');
-        
-        // 根据 targetType 判断是否需要返回上一级
-        const isQuestionComment = commentTarget.targetType === 1;
-        const isSupplementComment = commentTarget.targetType === 3;
-        const isAnswerComment = commentTarget.targetType === 2;
-        const isReplyToQuestionComment = isQuestionComment && commentTarget.parentId && commentTarget.parentId !== 0;
-        const isReplyToSupplementComment = isSupplementComment && commentTarget.parentId && commentTarget.parentId !== 0;
-        const isReplyToAnswerComment = isAnswerComment && commentTarget.parentId && commentTarget.parentId !== 0;
-
-        if (isReplyToQuestionComment) {
-          setShowCommentModal(false);
-          setCommentText('');
-          setCommentIdentity('personal');
-          setCommentSelectedTeams([]);
-          setShowCommentReplyModal(true);
-        } else if (isReplyToSupplementComment) {
-          // 如果是回复补充评论，返回到补充评论回复列表
-          setShowCommentModal(false);
-          setCommentText('');
-          setCommentIdentity('personal');
-          setCommentSelectedTeams([]);
-          setShowSuppCommentReplyModal(true);
-        } else if (isReplyToAnswerComment) {
-          setShowCommentModal(false);
-          setCommentText('');
-          setCommentIdentity('personal');
-          setCommentSelectedTeams([]);
-          setShowAnswerCommentReplyModal(true);
-        } else if (isSupplementComment) {
-          // 如果是直接给补充写评论，返回到补充评论列表
-          setShowCommentModal(false);
-          setCommentText('');
-          setCommentIdentity('personal');
-          setCommentSelectedTeams([]);
-          setShowSuppCommentListModal(true);
-        } else if (isAnswerComment) {
-          // 如果是给回答写评论，返回到回答评论列表
-          setShowCommentModal(false);
-          setCommentText('');
-          setCommentIdentity('personal');
-          setCommentSelectedTeams([]);
-          setShowAnswerCommentListModal(true);
-        } else {
-          closeCommentModal();
-        }
+        restoreCommentComposerContext(composerTarget);
         
         if (isQuestionRootComment) {
           setQuestionData(prevQuestion => {
@@ -4168,90 +4167,12 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }
       } else {
         showToast(response?.msg || '评论发布失败', 'error');
-
-        // 失败时也返回上一级
-        const isQuestionComment = commentTarget.targetType === 1;
-        const isSupplementComment = commentTarget.targetType === 3;
-        const isAnswerComment = commentTarget.targetType === 2;
-        const isReplyToQuestionComment = isQuestionComment && commentTarget.parentId && commentTarget.parentId !== 0;
-        const isReplyToSupplementComment = isSupplementComment && commentTarget.parentId && commentTarget.parentId !== 0;
-        const isReplyToAnswerComment = isAnswerComment && commentTarget.parentId && commentTarget.parentId !== 0;
-
-        if (isReplyToQuestionComment) {
-          setShowCommentModal(false);
-          setCommentText('');
-          setCommentIdentity('personal');
-          setCommentSelectedTeams([]);
-          setShowCommentReplyModal(true);
-        } else if (isReplyToSupplementComment) {
-          setShowCommentModal(false);
-          setCommentText('');
-          setCommentIdentity('personal');
-          setCommentSelectedTeams([]);
-          setShowSuppCommentReplyModal(true);
-        } else if (isReplyToAnswerComment) {
-          setShowCommentModal(false);
-          setCommentText('');
-          setCommentIdentity('personal');
-          setCommentSelectedTeams([]);
-          setShowAnswerCommentReplyModal(true);
-        } else if (isSupplementComment) {
-          setShowCommentModal(false);
-          setCommentText('');
-          setCommentIdentity('personal');
-          setCommentSelectedTeams([]);
-          setShowSuppCommentListModal(true);
-        } else if (isAnswerComment) {
-          setShowCommentModal(false);
-          setCommentText('');
-          setCommentIdentity('personal');
-          setCommentSelectedTeams([]);
-          setShowAnswerCommentListModal(true);
-        }
+        restoreCommentComposerContext(composerTarget);
       }
     } catch (error) {
       console.error('❌ 评论发布失败:', error);
       showToast(error?.message || '网络错误，请稍后重试', 'error');
-      
-      // 异常时也返回上一级
-      const isQuestionComment = commentTarget.targetType === 1;
-      const isSupplementComment = commentTarget.targetType === 3;
-      const isAnswerComment = commentTarget.targetType === 2;
-      const isReplyToQuestionComment = isQuestionComment && commentTarget.parentId && commentTarget.parentId !== 0;
-      const isReplyToSupplementComment = isSupplementComment && commentTarget.parentId && commentTarget.parentId !== 0;
-      const isReplyToAnswerComment = isAnswerComment && commentTarget.parentId && commentTarget.parentId !== 0;
-
-      if (isReplyToQuestionComment) {
-        setShowCommentModal(false);
-        setCommentText('');
-        setCommentIdentity('personal');
-        setCommentSelectedTeams([]);
-        setShowCommentReplyModal(true);
-      } else if (isReplyToSupplementComment) {
-        setShowCommentModal(false);
-        setCommentText('');
-        setCommentIdentity('personal');
-        setCommentSelectedTeams([]);
-        setShowSuppCommentReplyModal(true);
-      } else if (isReplyToAnswerComment) {
-        setShowCommentModal(false);
-        setCommentText('');
-        setCommentIdentity('personal');
-        setCommentSelectedTeams([]);
-        setShowAnswerCommentReplyModal(true);
-      } else if (isSupplementComment) {
-        setShowCommentModal(false);
-        setCommentText('');
-        setCommentIdentity('personal');
-        setCommentSelectedTeams([]);
-        setShowSuppCommentListModal(true);
-      } else if (isAnswerComment) {
-        setShowCommentModal(false);
-        setCommentText('');
-        setCommentIdentity('personal');
-        setCommentSelectedTeams([]);
-        setShowAnswerCommentListModal(true);
-      }
+      restoreCommentComposerContext(composerTarget);
     } finally {
       setCommentSubmitting(false);
     }
@@ -5723,7 +5644,58 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       }
     }
   };
-  return <SafeAreaView style={styles.container}>
+  const openQuestionGroupChat = React.useCallback(() => {
+    const normalizedQuestionId = normalizeEntityId(
+      route?.params?.id ?? questionData?.id ?? questionData?.questionId
+    );
+
+    if (!normalizedQuestionId) {
+      showToast('问题ID不存在', 'error');
+      return;
+    }
+
+    navigation.navigate('GroupChat', {
+      questionId: normalizedQuestionId,
+      groupId: normalizeEntityId(
+        questionData?.groupId ??
+          questionData?.publicGroupId ??
+          questionData?.questionGroupId ??
+          null
+      ),
+      question: {
+        id: normalizedQuestionId,
+        userId: normalizeEntityId(questionData?.userId),
+        title: questionData?.title || '',
+        author:
+          questionData?.isAnonymous === 1
+            ? '匿名用户'
+            : questionData?.userName || questionData?.userNickname || '匿名用户',
+        avatar:
+          questionData?.userAvatar ||
+          questionData?.authorAvatar ||
+          `https://api.dicebear.com/7.x/avataaars/svg?seed=user${questionData?.userId || 'question'}`,
+        groupId: normalizeEntityId(questionData?.groupId),
+        publicGroupId: normalizeEntityId(questionData?.publicGroupId),
+        questionGroupId: normalizeEntityId(questionData?.questionGroupId),
+      },
+    });
+  }, [
+    navigation,
+    questionData?.authorAvatar,
+    questionData?.groupId,
+    questionData?.id,
+    questionData?.isAnonymous,
+    questionData?.publicGroupId,
+    questionData?.questionGroupId,
+    questionData?.questionId,
+    questionData?.title,
+    questionData?.userAvatar,
+    questionData?.userId,
+    questionData?.userName,
+    questionData?.userNickname,
+    route?.params?.id,
+  ]);
+  return <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{
         top: 10,
@@ -5754,7 +5726,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{
-      paddingBottom: 20
+      paddingBottom: bottomSafeInset + 76
     }}>
         {/* 骨架屏加载状态 */}
         {Boolean(loading && !questionData) && <QuestionDetailSkeleton />}
@@ -5818,20 +5790,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <TouchableOpacity style={styles.smallActionBtn} onPress={() => navigation.navigate('InviteAnswer')}>
                 <Ionicons name="at" size={18} color="#3b82f6" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.smallActionBtn} onPress={() => navigation.navigate('GroupChat', {
-                questionId: questionData.id,
-                groupId: questionData.groupId ?? questionData.publicGroupId ?? questionData.questionGroupId ?? null,
-                question: {
-                  id: questionData.id,
-                  userId: questionData.userId,
-                  title: questionData.title,
-                  author: questionData.isAnonymous === 1 ? '匿名用户' : questionData.userName || questionData.userNickname || '匿名用户',
-                  avatar: questionData.userAvatar || questionData.authorAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${questionData.userId}`,
-                  groupId: questionData.groupId ?? null,
-                  publicGroupId: questionData.publicGroupId ?? null,
-                  questionGroupId: questionData.questionGroupId ?? null,
-                }
-              })}>
+              <TouchableOpacity style={styles.smallActionBtn} onPress={openQuestionGroupChat}>
                 <Ionicons name="chatbubbles-outline" size={18} color="#8b5cf6" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.smallActionBtn} onPress={() => navigation.navigate('QuestionTeams', {
@@ -6209,20 +6168,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.suppActionBtn} onPress={e => {
                     e.stopPropagation();
-                    navigation.navigate('GroupChat', {
-                      questionId: questionData.id,
-                      groupId: questionData.groupId ?? questionData.publicGroupId ?? questionData.questionGroupId ?? null,
-                      question: {
-                        id: questionData.id,
-                        userId: questionData.userId,
-                        title: questionData.title,
-                        author: questionData.isAnonymous === 1 ? '匿名用户' : questionData.userName || questionData.userNickname || '匿名用户',
-                        avatar: questionData.userAvatar || questionData.authorAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${questionData.userId}`,
-                        groupId: questionData.groupId ?? null,
-                        publicGroupId: questionData.publicGroupId ?? null,
-                        questionGroupId: questionData.questionGroupId ?? null,
-                      }
-                    });
+                    openQuestionGroupChat();
                   }}>
                         <Ionicons name="chatbubbles-outline" size={16} color="#6b7280" />
                       </TouchableOpacity>
@@ -6906,7 +6852,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       </ScrollView>
 
       {/* 底部固定栏 - 主要互动按钮 */}
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, {
+      paddingBottom: bottomSafeInset
+    }]}>
         <TouchableOpacity style={[styles.bottomActionBtn, isLikeInteractionDisabled(getQuestionLikedState(), getQuestionDislikedState()) && styles.interactionBtnDisabled]} onPress={handleQuestionLike} disabled={isLikeInteractionDisabled(getQuestionLikedState(), getQuestionDislikedState())}>
           <Ionicons name={getQuestionLikedState() ? "thumbs-up" : "thumbs-up-outline"} size={20} color={getQuestionLikedState() ? "#ef4444" : isLikeInteractionDisabled(getQuestionLikedState(), getQuestionDislikedState()) ? "#d1d5db" : "#6b7280"} />
           <Text style={[styles.bottomActionText, getQuestionLikedState() && {
@@ -7158,7 +7106,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 </View>}
             </ScrollView>
 
-            <View style={styles.commentListBottomBar}>
+            <View style={[styles.commentListBottomBar, { paddingBottom: commentSheetBottomSpacing }]}>
               <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
               setShowSuppCommentListModal(false);
               openCommentModal({
@@ -7219,97 +7167,16 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         </View>
       </Modal>
 
-      {/* 评论弹窗 */}
-      <Modal visible={showCommentModal} transparent animationType="slide" onRequestClose={() => {
-      console.log('评论弹窗请求关闭');
-      // 根据 targetType 返回到对应的上一页
-      if (commentTarget.targetType === 3 && commentTarget.parentId && commentTarget.parentId !== 0) {
-        // 如果是回复补充评论，返回到补充评论回复列表
-        setShowCommentModal(false);
-        setShowSuppCommentReplyModal(true);
-      } else {
-        closeCommentModal();
-      }
-    }}>
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => {
-            // 根据 targetType 返回到对应的上一页
-            if (commentTarget.targetType === 3 && commentTarget.parentId && commentTarget.parentId !== 0) {
-              // 如果是回复补充评论，返回到补充评论回复列表
-              setShowCommentModal(false);
-              setShowSuppCommentReplyModal(true);
-            } else {
-              closeCommentModal();
-            }
-          }} />
-          
-          <View style={styles.commentListModal}>
-            <View style={styles.commentListModalHandle} />
-            
-            {/* Header */}
-            <View style={styles.commentListModalHeader}>
-              <TouchableOpacity onPress={() => {
-                // 根据 targetType 返回到对应的上一页
-                if (commentTarget.targetType === 3 && commentTarget.parentId && commentTarget.parentId !== 0) {
-                  // 如果是回复补充评论，返回到补充评论回复列表
-                  setShowCommentModal(false);
-                  setShowSuppCommentReplyModal(true);
-                } else {
-                  closeCommentModal();
-                }
-              }} style={styles.commentListCloseBtn}>
-                <Ionicons name="close" size={26} color="#1f2937" />
-              </TouchableOpacity>
-              <Text style={styles.commentListModalTitle}>写评论</Text>
-              <View style={styles.commentListHeaderRight} />
-            </View>
-            
-            {/* 原评论卡片 - 如果是回复评论则显示 */}
-            {Boolean(currentComposerOriginalComment) && <View style={styles.originalCommentCard}>
-                <TouchableOpacity style={styles.originalCommentHeader} activeOpacity={0.7} onPress={() => openPublicProfile(currentComposerOriginalComment)}>
-                  <Avatar uri={currentComposerOriginalComment.userAvatar || currentComposerOriginalComment.avatar} name={currentComposerOriginalComment.userName || currentComposerOriginalComment.userNickname || currentComposerOriginalComment.author} size={32} />
-                  <Text style={styles.originalCommentAuthor}>
-                    {currentComposerOriginalComment.userName || currentComposerOriginalComment.userNickname || currentComposerOriginalComment.author}
-                  </Text>
-                  <View style={{flex: 1}} />
-                  <Text style={styles.originalCommentTime}>{currentComposerOriginalComment.time}</Text>
-                </TouchableOpacity>
-                <Text style={styles.originalCommentText}>{currentComposerOriginalComment.content}</Text>
-              </View>}
-            
-            <ScrollView style={styles.commentListScroll} keyboardShouldPersistTaps="handled">
-              {/* 输入区域 */}
-              <View style={styles.commentInputSection}>
-                <TextInput style={styles.commentTextInput} placeholder="写下你的评论..." placeholderTextColor="#bbb" value={commentText} onChangeText={setCommentText} multiline autoFocus textAlignVertical="top" />
-                
-                {/* 身份选择器 */}
-                <View style={styles.commentIdentitySection}>
-                  <IdentitySelector selectedIdentity={commentIdentity} selectedTeams={commentSelectedTeams} onIdentityChange={setCommentIdentity} onTeamsChange={setCommentSelectedTeams} />
-                </View>
-              </View>
-            </ScrollView>
-
-            <View style={styles.commentListBottomBar}>
-              <View style={styles.commentToolbar}>
-                <View style={styles.commentToolsLeft}>
-                  <TouchableOpacity style={styles.commentToolItem}>
-                    <Ionicons name="image-outline" size={24} color="#666" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.commentToolItem}>
-                    <Ionicons name="at-outline" size={24} color="#666" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.commentToolItem}>
-                    <Ionicons name="happy-outline" size={24} color="#666" />
-                  </TouchableOpacity>
-                </View>
-                <TouchableOpacity style={[styles.commentPublishBtn, (!commentText.trim() || commentSubmitting) && styles.commentPublishBtnDisabled]} onPress={handleSubmitComment} disabled={!commentText.trim() || commentSubmitting}>
-                  <Text style={[styles.commentPublishText, (!commentText.trim() || commentSubmitting) && styles.commentPublishTextDisabled]}>{commentSubmitting ? '发布中...' : '发布'}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <WriteCommentModal
+        visible={showCommentModal}
+        onClose={handleCloseCommentComposer}
+        onPublish={handleSubmitComment}
+        originalComment={currentComposerOriginalComment}
+        publishInFooter
+        closeOnRight
+        title={commentTarget.parentId ? `写回复${commentTarget.replyToUserName ? ` @${commentTarget.replyToUserName}` : ''}` : '写评论'}
+        placeholder={commentTarget.parentId ? '写下你的回复...' : '写下你的评论...'}
+      />
 
       {/* 评论回复列表弹窗 - 今日头条风格 */}
       <Modal visible={showCommentReplyModal} transparent animationType="slide">
@@ -7362,7 +7229,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 </View>}
             </ScrollView>
 
-            <View style={styles.commentListBottomBar}>
+            <View style={[styles.commentListBottomBar, { paddingBottom: commentSheetBottomSpacing }]}>
               <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
               openCommentModal(buildCommentReplyTarget(currentReplyComment, {
                 targetType: 1,
@@ -7435,7 +7302,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 </View>}
             </ScrollView>
 
-            <View style={styles.commentListBottomBar}>
+            <View style={[styles.commentListBottomBar, { paddingBottom: commentSheetBottomSpacing }]}>
               <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
               const currentComment = answerCommentsList.find(c => String(c.id) === String(currentAnswerCommentId));
               setShowAnswerCommentReplyModal(false);
@@ -7510,7 +7377,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 </View>}
             </ScrollView>
 
-            <View style={styles.commentListBottomBar}>
+            <View style={[styles.commentListBottomBar, { paddingBottom: commentSheetBottomSpacing }]}>
               <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
               const currentComment = suppCommentsList.find(c => String(c.id) === String(currentSuppCommentId));
               setShowSuppCommentReplyModal(false);
@@ -7551,8 +7418,13 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       />
 
       {/* 发布补充问题弹窗 */}
-      <Modal visible={showSupplementModal} animationType="slide">
-        <ModalSafeAreaView style={styles.answerModal} edges={['top']}>
+      <Modal visible={showSupplementModal} animationType="slide" statusBarTranslucent>
+        <KeyboardAvoidingView
+          style={styles.modalKeyboardView}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <KeyboardDismissView>
+            <ModalSafeAreaView style={styles.answerModal} edges={['top']}>
           <View style={styles.answerModalHeader}>
             <TouchableOpacity onPress={() => setShowSupplementModal(false)} style={styles.answerCloseBtn}>
               <Ionicons name="close" size={26} color="#333" />
@@ -7578,7 +7450,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             </View>
           </View>
 
-          <ScrollView style={styles.answerContentArea} keyboardShouldPersistTaps="handled">
+          <ScrollView style={styles.answerContentArea} contentContainerStyle={[styles.answerContentContainer, {
+          paddingBottom: bottomSafeInset + 16
+        }]} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
             <TextInput style={styles.answerTextInput} placeholder="对这个问题还有疑问？写下你的补充问题..." placeholderTextColor="#bbb" value={supplementText} onChangeText={setSupplementText} multiline autoFocus textAlignVertical="top" />
             
             {/* 图片预览区域 */}
@@ -7601,7 +7475,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             </View>
           </ScrollView>
 
-          <View style={styles.answerToolbar}>
+          <View style={[styles.answerToolbar, {
+          paddingBottom: bottomSafeInset
+        }]}>
             <View style={styles.answerToolsLeft}>
               <TouchableOpacity style={styles.answerToolItem} onPress={() => {
               if (supplementImages.length >= 9) {
@@ -7618,7 +7494,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             </View>
             <Text style={styles.answerWordCount}>{supplementText.length}/500</Text>
           </View>
-        </ModalSafeAreaView>
+            </ModalSafeAreaView>
+          </KeyboardDismissView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* 补充问题图片选择器 */}
@@ -7738,7 +7616,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 </View>}
             </ScrollView>
 
-            <View style={styles.commentListBottomBar}>
+            <View style={[styles.commentListBottomBar, { paddingBottom: commentSheetBottomSpacing }]}>
               <TouchableOpacity style={styles.commentListWriteBtn} onPress={() => {
               setShowAnswerCommentListModal(false);
               openCommentModal({
@@ -7756,8 +7634,13 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       </Modal>
 
       {/* 发起活动弹窗 */}
-      <Modal visible={showActivityModal} animationType="slide">
-        <SafeAreaView style={styles.activityModal}>
+      <Modal visible={showActivityModal} animationType="slide" statusBarTranslucent>
+        <KeyboardAvoidingView
+          style={styles.modalKeyboardView}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <KeyboardDismissView>
+            <SafeAreaView style={styles.activityModal} edges={['top']}>
           <View style={styles.activityModalHeader}>
             <TouchableOpacity onPress={() => setShowActivityModal(false)} style={styles.activityCloseBtn}>
               <Ionicons name="close" size={26} color="#333" />
@@ -7770,7 +7653,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.activityFormArea} keyboardShouldPersistTaps="handled">
+          <ScrollView style={styles.activityFormArea} contentContainerStyle={[styles.activityFormContent, {
+          paddingBottom: bottomSafeInset + 28
+        }]} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
             {/* 绑定问题显示 */}
             <View style={styles.boundQuestionCard}>
               <View style={styles.boundQuestionHeader}>
@@ -7905,12 +7790,19 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             height: 40
           }} />
           </ScrollView>
-        </SafeAreaView>
+            </SafeAreaView>
+          </KeyboardDismissView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* 补充回答弹窗 */}
-      <Modal visible={showSupplementAnswerModal} animationType="slide">
-        <SafeAreaView style={styles.answerModal}>
+      <Modal visible={showSupplementAnswerModal} animationType="slide" statusBarTranslucent>
+        <KeyboardAvoidingView
+          style={styles.modalKeyboardView}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <KeyboardDismissView>
+            <SafeAreaView style={styles.answerModal} edges={['top']}>
           <View style={styles.answerModalHeader}>
             <TouchableOpacity onPress={() => {
             setShowSupplementAnswerModal(false);
@@ -7939,7 +7831,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <Text style={styles.supplementAnswerContent} numberOfLines={3}>{currentAnswer.content}</Text>
             </View>}
 
-          <ScrollView style={styles.answerContentArea} keyboardShouldPersistTaps="handled">
+          <ScrollView style={styles.answerContentArea} contentContainerStyle={[styles.answerContentContainer, {
+          paddingBottom: bottomSafeInset + 16
+        }]} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
             <TextInput style={styles.answerTextInput} placeholder="补充你的回答，提供更多信息..." placeholderTextColor="#bbb" value={supplementAnswerText} onChangeText={setSupplementAnswerText} multiline autoFocus textAlignVertical="top" />
             
             {/* 身份选择器 */}
@@ -7948,7 +7842,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             </View>
           </ScrollView>
 
-          <View style={styles.answerToolbar}>
+          <View style={[styles.answerToolbar, {
+          paddingBottom: bottomSafeInset
+        }]}>
             <View style={styles.answerToolsLeft}>
               <TouchableOpacity style={styles.answerToolItem}>
                 <Ionicons name="image-outline" size={24} color="#666" />
@@ -7959,7 +7855,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             </View>
             <Text style={styles.answerWordCount}>{supplementAnswerText.length}/2000</Text>
           </View>
-        </SafeAreaView>
+            </SafeAreaView>
+          </KeyboardDismissView>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={showSupplementAnswerSuccessModal} transparent animationType="fade" onRequestClose={() => setShowSupplementAnswerSuccessModal(false)}>
@@ -10013,7 +9911,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '85%'
+    maxHeight: '85%',
+    overflow: 'hidden'
   },
   commentListModalHandle: {
     width: 40,
@@ -10102,7 +10001,7 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   },
   commentListScroll: {
-    maxHeight: 500,
+    flexShrink: 1,
     backgroundColor: '#fff'
   },
   commentListCard: {
@@ -10175,6 +10074,9 @@ const styles = StyleSheet.create({
   answerModal: {
     flex: 1,
     backgroundColor: '#fff'
+  },
+  modalKeyboardView: {
+    flex: 1
   },
   answerModalHeader: {
     flexDirection: 'row',
@@ -10291,6 +10193,9 @@ const styles = StyleSheet.create({
   answerContentArea: {
     flex: 1,
     backgroundColor: '#fff'
+  },
+  answerContentContainer: {
+    flexGrow: 1
   },
   answerTextInput: {
     padding: 16,
@@ -10456,6 +10361,9 @@ const styles = StyleSheet.create({
   activityFormArea: {
     flex: 1,
     padding: 16
+  },
+  activityFormContent: {
+    flexGrow: 1
   },
   formGroup: {
     marginBottom: 16

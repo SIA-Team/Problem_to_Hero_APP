@@ -24,7 +24,8 @@ import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
 import { showToast } from '../utils/toast';
 import apiClient from '../services/api/apiClient';
-import { API_ENDPOINTS, replaceUrlParams } from '../config/api';
+import questionApi from '../services/api/questionApi';
+import { API_ENDPOINTS } from '../config/api';
 
 import { scaleFont } from '../utils/responsive';
 const DEFAULT_QUESTION = {
@@ -57,7 +58,10 @@ const pickPreferredGroup = groups =>
 
 const normalizeGroupItem = (item, index) => ({
   ...item,
+  id: String(item?.id ?? item?.groupId ?? `group-${index}`),
+  questionId: String(item?.questionId ?? item?.question_id ?? ''),
   resolvedGroupId: getGroupIdValue(item),
+  avatar: item?.avatar || item?.groupAvatar || item?.icon || '',
   memberCount:
     toSafeNumber(
       item?.memberCount ??
@@ -74,6 +78,9 @@ const normalizeGroupItem = (item, index) => ({
     ) || 0,
   name: item?.name || item?.groupName || item?.title || item?.groupTitle || '',
   description: item?.description || item?.desc || item?.groupDescription || '',
+  status: toSafeNumber(item?.status ?? item?.groupStatus ?? 0),
+  isJoined: Boolean(item?.isJoined),
+  userRole: toSafeNumber(item?.userRole ?? item?.role ?? 0),
 });
 
 const normalizeQuestionGroupsResponse = response => {
@@ -119,6 +126,13 @@ const normalizeQuestionGroupIdsResponse = response => {
     .filter(item => Number.isInteger(item) && item >= 0);
 };
 
+const extractGroupIdsFromGroups = groups =>
+  groups
+    .map(group => getGroupIdValue(group))
+    .filter(hasGroupIdValue)
+    .map(groupId => String(groupId).trim())
+    .filter(Boolean);
+
 const arePrimitiveArraysEqual = (prev = [], next = []) =>
   prev.length === next.length && prev.every((item, index) => item === next[index]);
 
@@ -130,10 +144,13 @@ const areQuestionGroupsEqual = (prev = [], next = []) =>
       getGroupIdValue(item) === getGroupIdValue(nextItem) &&
       item?.memberCount === nextItem?.memberCount &&
       item?.maxMembers === nextItem?.maxMembers &&
+      item?.avatar === nextItem?.avatar &&
+      item?.questionId === nextItem?.questionId &&
       item?.name === nextItem?.name &&
       item?.description === nextItem?.description &&
       Boolean(item?.isJoined) === Boolean(nextItem?.isJoined) &&
-      Number(item?.status) === Number(nextItem?.status)
+      Number(item?.status) === Number(nextItem?.status) &&
+      Number(item?.userRole) === Number(nextItem?.userRole)
     );
   });
 
@@ -147,9 +164,8 @@ const areMessageItemsEqual = (prev = [], next = []) =>
       item?.content === nextItem?.content &&
       item?.timeLabel === nextItem?.timeLabel &&
       item?.likes === nextItem?.likes &&
-      item?.dislikes === nextItem?.dislikes &&
-      item?.shares === nextItem?.shares &&
-      item?.bookmarks === nextItem?.bookmarks &&
+      item?.replyCount === nextItem?.replyCount &&
+      item?.liked === nextItem?.liked &&
       item?.isFeatured === nextItem?.isFeatured
     );
   });
@@ -267,13 +283,13 @@ const normalizeMessageItem = (item, index, t) => {
   return {
     id,
     author,
+    authorId,
     avatar,
     content,
     timeLabel,
     likes: toSafeNumber(item?.likeCount ?? item?.likes ?? item?.upCount),
-    dislikes: toSafeNumber(item?.dislikeCount ?? item?.dislikes ?? item?.downCount),
-    shares: toSafeNumber(item?.shareCount ?? item?.shares ?? item?.forwardCount),
-    bookmarks: toSafeNumber(item?.collectCount ?? item?.bookmarks ?? item?.favoriteCount),
+    replyCount: toSafeNumber(item?.replyCount ?? item?.commentCount ?? item?.comments),
+    liked: Boolean(item?.isLiked ?? item?.liked),
     isFeatured,
     raw: item,
   };
@@ -297,13 +313,49 @@ const normalizeGroupMessagesResponse = (response, t) => {
   };
 };
 
+const getGroupRoleMeta = userRole => {
+  if (Number(userRole) === 2) {
+    return {
+      label: '管理员',
+      backgroundColor: '#eff6ff',
+      color: '#2563eb',
+    };
+  }
+
+  if (Number(userRole) === 1) {
+    return {
+      label: '成员',
+      backgroundColor: '#f3f4f6',
+      color: '#6b7280',
+    };
+  }
+
+  return null;
+};
+
+const getGroupStatusMeta = status => {
+  if (Number(status) === 2) {
+    return {
+      label: '群组已解散',
+      color: '#ef4444',
+    };
+  }
+
+  if (Number(status) === 1) {
+    return {
+      label: '群组状态正常',
+      color: '#22c55e',
+    };
+  }
+
+  return null;
+};
+
 export default function GroupChatScreen({ navigation, route }) {
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState([]);
   const [liked, setLiked] = useState({});
-  const [disliked, setDisliked] = useState({});
-  const [bookmarked, setBookmarked] = useState({});
   const [isJoined, setIsJoined] = useState(false);
   const [showReplyModal, setShowReplyModal] = useState(false);
   const [showWriteMessageModal, setShowWriteMessageModal] = useState(false);
@@ -324,14 +376,13 @@ export default function GroupChatScreen({ navigation, route }) {
     featuredCount: 0,
   });
   const [messageReloadKey, setMessageReloadKey] = useState(0);
+  const [publishingMessage, setPublishingMessage] = useState(false);
+  const [publishingReply, setPublishingReply] = useState(false);
   const locale = i18n?.locale || 'en';
   const composerInputRef = useRef(null);
   const showWriteMessageModalRef = useRef(false);
   const keepComposerOpenRef = useRef(false);
-  const isLikeInteractionDisabled = (likedState, dislikedState) => !likedState && !!dislikedState;
-  const isDislikeInteractionDisabled = (likedState, dislikedState) => !dislikedState && !!likedState;
   const getMessageLikedState = message => liked[message?.id] !== undefined ? liked[message.id] : !!message?.liked;
-  const getMessageDislikedState = message => disliked[message?.id] !== undefined ? disliked[message.id] : !!message?.disliked;
 
   const focusComposerInput = () => {
     const triggerFocus = () => {
@@ -362,11 +413,22 @@ export default function GroupChatScreen({ navigation, route }) {
   const currentGroup = useMemo(() => pickPreferredGroup(questionGroups), [questionGroups]);
   const currentGroupId = getGroupIdValue(currentGroup) ?? routeGroupId ?? questionGroupIds[0] ?? null;
   const displayMemberCount = currentGroup?.memberCount ?? question.memberCount ?? 0;
-  const displayAvatar = question.avatar || (question.userId ? `https://api.dicebear.com/7.x/avataaars/svg?seed=user${question.userId}` : DEFAULT_QUESTION.avatar);
+  const displayMaxMembers = currentGroup?.maxMembers ?? 0;
+  const displayAvatar =
+    currentGroup?.avatar ||
+    question.avatar ||
+    (question.userId
+      ? `https://api.dicebear.com/7.x/avataaars/svg?seed=user${question.userId}`
+      : DEFAULT_QUESTION.avatar);
   const displayName = question.author || t('screens.groupChat.questioner');
   const displayDescription = currentGroup?.description || '';
-  const displayQuestionTitle = question.title || currentGroup?.name || t('screens.groupChat.title');
-  const displayCapacity = currentGroup ? `${currentGroup.memberCount || 0}/${currentGroup.maxMembers || 0}` : '';
+  const displayQuestionTitle = currentGroup?.name || question.title || t('screens.groupChat.title');
+  const displayCapacity =
+    currentGroup && displayMaxMembers > 0 ? `${displayMemberCount}/${displayMaxMembers}` : '';
+  const groupRoleMeta = getGroupRoleMeta(currentGroup?.userRole);
+  const groupStatusMeta = getGroupStatusMeta(currentGroup?.status);
+  const groupStatusText =
+    !currentGroup && !groupLoading && !groupLoadError ? '当前问题暂无关联群组' : groupStatusMeta?.label || '';
 
   useEffect(() => {
     const routeGroup = route?.params?.group;
@@ -394,41 +456,77 @@ export default function GroupChatScreen({ navigation, route }) {
     let isMounted = true;
 
     if (!questionId) {
+      setQuestionGroups(prev => (prev.length ? [] : prev));
       setQuestionGroupIds(prev => (prev.length ? [] : prev));
       setGroupLoadError(prev => (prev ? '' : prev));
+      setGroupLoading(false);
       return undefined;
     }
 
-    const loadQuestionGroupIds = async () => {
+    const loadQuestionGroups = async () => {
+      setGroupLoading(true);
+      setGroupLoadError('');
+
       try {
+        const groups = await fetchQuestionGroups();
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (groups.length > 0) {
+          return;
+        }
+
         await fetchQuestionGroupIds();
       } catch (error) {
         if (isMounted) {
           const nextError = getGroupChatErrorMessage(error, t('screens.groupChat.groupInfoUnavailable'));
+          setQuestionGroups(prev => (prev.length ? [] : prev));
           setQuestionGroupIds(prev => (prev.length ? [] : prev));
           setGroupLoadError(prev => (prev === nextError ? prev : nextError));
+        }
+      } finally {
+        if (isMounted) {
+          setGroupLoading(false);
         }
       }
     };
 
-    loadQuestionGroupIds();
+    loadQuestionGroups();
 
     return () => {
       isMounted = false;
     };
   }, [questionId]);
 
+  const fetchQuestionGroups = async () => {
+    if (!questionId) {
+      throw new Error(t('screens.groupChat.groupInfoUnavailable'));
+    }
+
+    const response = await questionApi.getQuestionGroups(questionId);
+
+    if (!isSuccessResponse(response)) {
+      throw new Error(getGroupChatErrorMessage(response, t('screens.groupChat.groupInfoUnavailable')));
+    }
+
+    const groups = normalizeQuestionGroupsResponse(response);
+    const nextGroupIds = extractGroupIdsFromGroups(groups);
+
+    setQuestionGroups(prev => (areQuestionGroupsEqual(prev, groups) ? prev : groups));
+    setQuestionGroupIds(prev => (arePrimitiveArraysEqual(prev, nextGroupIds) ? prev : nextGroupIds));
+    setGroupLoadError(prev => (prev ? '' : prev));
+
+    return groups;
+  };
+
   const fetchQuestionGroupIds = async () => {
     if (!questionId) {
       throw new Error(t('screens.groupChat.groupInfoUnavailable'));
     }
 
-    const response = await apiClient.get(
-      replaceUrlParams(API_ENDPOINTS.GROUP.PUBLIC_QUESTION_IDS, {
-        questionId,
-      }),
-      GROUP_API_REQUEST_CONFIG
-    );
+    const response = await questionApi.getQuestionGroupIds(questionId);
 
     if (!isSuccessResponse(response)) {
       throw new Error(getGroupChatErrorMessage(response, t('screens.groupChat.groupInfoUnavailable')));
@@ -481,10 +579,11 @@ export default function GroupChatScreen({ navigation, route }) {
       setMessageLoading(true);
       setMessageError('');
       try {
-        const response = await apiClient.get(API_ENDPOINTS.GROUP.MESSAGE_LIST, {
+        const response = await apiClient.get(API_ENDPOINTS.GROUP.MESSAGE_PUBLIC_LIST, {
           ...GROUP_API_REQUEST_CONFIG,
           params: {
-            groupId: currentGroupId,
+            groupId: Number(currentGroupId),
+            isBoutique: activeTab === 'featured' ? 1 : 0,
           },
         });
         if (!isSuccessResponse(response)) {
@@ -493,9 +592,15 @@ export default function GroupChatScreen({ navigation, route }) {
         const normalizedResult = normalizeGroupMessagesResponse(response, t);
 
         if (isMounted) {
+          const nextLikedState = normalizedResult.messages.reduce((result, item) => {
+            result[item.id] = Boolean(item.liked);
+            return result;
+          }, {});
+
           setMessages(prev =>
             areMessageItemsEqual(prev, normalizedResult.messages) ? prev : normalizedResult.messages
           );
+          setLiked(nextLikedState);
           setMessageSummary(prev =>
             isSameMessageSummary(prev, {
               total: normalizedResult.total,
@@ -537,7 +642,7 @@ export default function GroupChatScreen({ navigation, route }) {
     return () => {
       isMounted = false;
     };
-  }, [currentGroupId, messageReloadKey]);
+  }, [activeTab, currentGroupId, messageReloadKey]);
 
   useEffect(() => {
     if (!showWriteMessageModal) {
@@ -601,7 +706,7 @@ export default function GroupChatScreen({ navigation, route }) {
       API_ENDPOINTS.GROUP.MESSAGE_CREATE,
       {
         groupId: Number(resolvedGroupId) || 0,
-        content,
+        content: String(content ?? '').trim(),
         parentId: Number(parentId) || 0,
         isBoutique: 0,
       },
@@ -622,9 +727,40 @@ export default function GroupChatScreen({ navigation, route }) {
     return normalizeMessageItem(response.data, 0, t);
   };
 
+  const appendCreatedMessage = (createdMessage, parentMessageId = null) => {
+    setMessages(prev => {
+      const nextMessages = [createdMessage, ...prev];
+
+      if (!parentMessageId) {
+        return nextMessages;
+      }
+
+      return nextMessages.map(message =>
+        String(message.id) === String(parentMessageId)
+          ? {
+              ...message,
+              replyCount: (message.replyCount || 0) + 1,
+            }
+          : message
+      );
+    });
+
+    setLiked(prev => ({
+      ...prev,
+      [createdMessage.id]: Boolean(createdMessage.liked),
+    }));
+
+    setMessageSummary(prev => ({
+      ...prev,
+      total: Math.max((prev?.total ?? 0) + 1, 1),
+      featuredCount:
+        (prev?.featuredCount ?? 0) + (createdMessage.isFeatured ? 1 : 0),
+    }));
+  };
+
   const handlePublishMessage = async (content = '') => {
     const trimmedContent = content.trim();
-    if (!trimmedContent && !selectedMessageImage) return;
+    if ((!trimmedContent && !selectedMessageImage) || publishingMessage) return;
 
     if (selectedMessageImage) {
       showToast(t('screens.groupChat.imageUploadUnsupported'), 'warning');
@@ -632,16 +768,13 @@ export default function GroupChatScreen({ navigation, route }) {
     }
 
     try {
+      setPublishingMessage(true);
       const createdMessage = await createGroupMessage({
         content: trimmedContent,
         parentId: 0,
       });
 
-      setMessages(prev => [createdMessage, ...prev]);
-      setMessageSummary(prev => ({
-        ...prev,
-        total: (prev?.total ?? messages.length) + 1,
-      }));
+      appendCreatedMessage(createdMessage);
       setActiveTab('all');
       setWriteMessageText('');
       setSelectedMessageImage('');
@@ -650,6 +783,8 @@ export default function GroupChatScreen({ navigation, route }) {
     } catch (error) {
       console.error('[GroupChat] Failed to publish message:', error);
       showToast(getGroupChatErrorMessage(error, t('screens.groupChat.publishFailed')), 'error');
+    } finally {
+      setPublishingMessage(false);
     }
   };
 
@@ -716,19 +851,17 @@ export default function GroupChatScreen({ navigation, route }) {
 
   const handleReply = async () => {
     const trimmedReply = replyText.trim();
-    if (!trimmedReply) return;
+    if (!trimmedReply || publishingReply) return;
 
     try {
+      setPublishingReply(true);
+      const parentMessageId = replyTarget?.raw?.id ?? replyTarget?.id ?? 0;
       const createdMessage = await createGroupMessage({
         content: trimmedReply,
-        parentId: replyTarget?.raw?.id ?? replyTarget?.id ?? 0,
+        parentId: parentMessageId,
       });
 
-      setMessages(prev => [createdMessage, ...prev]);
-      setMessageSummary(prev => ({
-        ...prev,
-        total: (prev?.total ?? messages.length) + 1,
-      }));
+      appendCreatedMessage(createdMessage, parentMessageId);
       setActiveTab('all');
       setReplyText('');
       setShowReplyModal(false);
@@ -737,6 +870,8 @@ export default function GroupChatScreen({ navigation, route }) {
     } catch (error) {
       console.error('[GroupChat] Failed to publish reply:', error);
       showToast(getGroupChatErrorMessage(error, t('screens.groupChat.replyFailed')), 'error');
+    } finally {
+      setPublishingReply(false);
     }
   };
 
@@ -757,14 +892,10 @@ export default function GroupChatScreen({ navigation, route }) {
     setMessageReloadKey(prev => prev + 1);
   };
 
-  const filteredMessages =
-    activeTab === 'featured'
-      ? messages.filter(message => message.isFeatured)
-      : [...messages.filter(message => message.isFeatured), ...messages.filter(message => !message.isFeatured)];
   const displayMessageCount = messageSummary.total || messages.length;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#374151" />
@@ -792,14 +923,39 @@ export default function GroupChatScreen({ navigation, route }) {
             <View style={styles.questionTag}>
               <Text style={styles.questionTagText}>{t('screens.groupChat.questioner')}</Text>
             </View>
+            {groupRoleMeta ? (
+              <View
+                style={[
+                  styles.groupMetaTag,
+                  { backgroundColor: groupRoleMeta.backgroundColor },
+                ]}
+              >
+                <Text style={[styles.groupMetaTagText, { color: groupRoleMeta.color }]}>
+                  {groupRoleMeta.label}
+                </Text>
+              </View>
+            ) : null}
           </View>
           <Text style={styles.questionTitle}>{displayQuestionTitle}</Text>
           {Boolean(displayDescription) && <Text style={styles.groupDescription}>{displayDescription}</Text>}
           {Boolean(displayCapacity) && <Text style={styles.groupCapacityText}>{displayCapacity}</Text>}
+          {Boolean(groupStatusText) && (
+            <Text
+              style={[
+                styles.groupStatusText,
+                groupStatusMeta?.color ? { color: groupStatusMeta.color } : null,
+              ]}
+            >
+              {groupStatusText}
+            </Text>
+          )}
           {groupLoading && !currentGroup && (
             <View style={styles.groupLoadingRow}>
               <ActivityIndicator size="small" color="#8b5cf6" />
             </View>
+          )}
+          {Boolean(groupLoadError) && !groupLoading && !currentGroup && (
+            <Text style={styles.groupErrorText}>{groupLoadError}</Text>
           )}
         </View>
 
@@ -851,14 +1007,14 @@ export default function GroupChatScreen({ navigation, route }) {
             </View>
           ) : null}
 
-          {!messageLoading && !messageError && filteredMessages.length === 0 ? (
+          {!messageLoading && !messageError && messages.length === 0 ? (
             <View style={styles.messageStateCard}>
               <Text style={styles.messageStateText}>{t('common.noData')}</Text>
             </View>
           ) : null}
 
           {!messageLoading && !messageError
-            ? filteredMessages.map(msg => (
+            ? messages.map(msg => (
                 <View key={msg.id} style={styles.messageCard}>
                   <View style={styles.msgHeader}>
                     <Avatar uri={msg.avatar} name={msg.author} size={24} />
@@ -870,78 +1026,36 @@ export default function GroupChatScreen({ navigation, route }) {
                   <View style={styles.msgActions}>
                     {(() => {
                       const isMessageLiked = getMessageLikedState(msg);
-                      const isMessageDisliked = getMessageDislikedState(msg);
-                      const isLikeDisabled = isLikeInteractionDisabled(isMessageLiked, isMessageDisliked);
-                      const isDislikeDisabled = isDislikeInteractionDisabled(isMessageLiked, isMessageDisliked);
                       return <>
                     <TouchableOpacity
-                      style={[styles.msgActionBtn, isLikeDisabled && styles.msgActionBtnDisabled]}
+                      style={styles.msgActionBtn}
                       onPress={() =>
                         setLiked(prev => ({
                           ...prev,
                           [msg.id]: !getMessageLikedState(msg),
                         }))
                       }
-                      disabled={isLikeDisabled}
                     >
                       <Ionicons
                         name={isMessageLiked ? 'thumbs-up' : 'thumbs-up-outline'}
                         size={14}
-                        color={isMessageLiked ? '#ef4444' : isLikeDisabled ? '#d1d5db' : '#6b7280'}
+                        color={isMessageLiked ? '#ef4444' : '#6b7280'}
                       />
-                      <Text style={[styles.msgActionText, isMessageLiked && styles.msgActionTextLiked, isLikeDisabled && styles.msgActionTextDisabled]}>
+                      <Text style={[styles.msgActionText, isMessageLiked && styles.msgActionTextLiked]}>
                         {msg.likes + (isMessageLiked ? 1 : 0)}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.msgActionBtn, isDislikeDisabled && styles.msgActionBtnDisabled]}
-                      onPress={() =>
-                        setDisliked(prev => ({
-                          ...prev,
-                          [msg.id]: !getMessageDislikedState(msg),
-                        }))
-                      }
-                      disabled={isDislikeDisabled}
-                    >
-                      <Ionicons
-                        name={isMessageDisliked ? 'thumbs-down' : 'thumbs-down-outline'}
-                        size={14}
-                        color={isMessageDisliked ? '#3b82f6' : isDislikeDisabled ? '#d1d5db' : '#6b7280'}
-                      />
-                      <Text style={[styles.msgActionText, isMessageDisliked && styles.msgActionTextDisliked, isDislikeDisabled && styles.msgActionTextDisabled]}>
-                        {msg.dislikes + (isMessageDisliked ? 1 : 0)}
                       </Text>
                     </TouchableOpacity>
                       </>;
                     })()}
-                    <TouchableOpacity style={styles.msgActionBtn}>
-                      <Ionicons name="arrow-redo-outline" size={14} color="#6b7280" />
-                      <Text style={styles.msgActionText}>{msg.shares}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.msgActionBtn}
-                      onPress={() =>
-                        setBookmarked(prev => ({
-                          ...prev,
-                          [msg.id]: !prev[msg.id],
-                        }))
-                      }
-                    >
-                      <Ionicons
-                        name={bookmarked[msg.id] ? 'bookmark' : 'star-outline'}
-                        size={14}
-                        color={bookmarked[msg.id] ? '#f59e0b' : '#6b7280'}
-                      />
-                      <Text style={[styles.msgActionText, bookmarked[msg.id] && styles.msgActionTextBookmarked]}>
-                        {msg.bookmarks + (bookmarked[msg.id] ? 1 : 0)}
-                      </Text>
-                    </TouchableOpacity>
                     <TouchableOpacity style={styles.msgActionBtn} onPress={handleReport}>
                       <Ionicons name="flag-outline" size={14} color="#6b7280" />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.replyBtn} onPress={() => openReplyModal(msg)}>
                       <Ionicons name="return-down-back-outline" size={14} color="#ef4444" />
-                      <Text style={styles.replyBtnText}>{t('screens.groupChat.reply')}</Text>
+                      <Text style={styles.replyBtnText}>
+                        {t('screens.groupChat.reply')}
+                        {msg.replyCount > 0 ? ` (${msg.replyCount})` : ''}
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -950,9 +1064,13 @@ export default function GroupChatScreen({ navigation, route }) {
         </View>
       </ScrollView>
 
-      <Modal visible={showReplyModal} transparent animationType="slide">
+      <Modal visible={showReplyModal} transparent animationType="slide" statusBarTranslucent>
+        <KeyboardAvoidingView
+          style={styles.replyKeyboardAvoidingView}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowReplyModal(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.replyModal}>
+          <TouchableOpacity activeOpacity={1} style={[styles.replyModal, { paddingBottom: Math.max(insets.bottom, 16) + 12 }]}>
             <View style={styles.replyModalHeader}>
               <Text style={styles.replyModalTitle}>{t('screens.groupChat.replyModalTitle')}</Text>
               <TouchableOpacity onPress={() => setShowReplyModal(false)}>
@@ -988,15 +1106,23 @@ export default function GroupChatScreen({ navigation, route }) {
                 <Text style={styles.replyCancelText}>{t('screens.groupChat.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.replySubmitBtn, !replyText.trim() && styles.replySubmitBtnDisabled]}
+                style={[
+                  styles.replySubmitBtn,
+                  (!replyText.trim() || publishingReply) && styles.replySubmitBtnDisabled,
+                ]}
                 onPress={handleReply}
-                disabled={!replyText.trim()}
+                disabled={!replyText.trim() || publishingReply}
               >
-                <Text style={styles.replySubmitText}>{t('screens.groupChat.send')}</Text>
+                {publishingReply ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.replySubmitText}>{t('screens.groupChat.send')}</Text>
+                )}
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
 
       <View
@@ -1067,12 +1193,17 @@ export default function GroupChatScreen({ navigation, route }) {
                 <TouchableOpacity
                   style={[
                     styles.composerSendBtn,
-                    !writeMessageText.trim() && !selectedMessageImage && styles.composerSendBtnDisabled,
+                    (!writeMessageText.trim() && !selectedMessageImage) && styles.composerSendBtnDisabled,
+                    publishingMessage && styles.composerSendBtnDisabled,
                   ]}
                   onPress={() => handlePublishMessage(writeMessageText)}
-                  disabled={!writeMessageText.trim() && !selectedMessageImage}
+                  disabled={(!writeMessageText.trim() && !selectedMessageImage) || publishingMessage}
                 >
-                  <Ionicons name="send" size={18} color="#fff" />
+                  {publishingMessage ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <Ionicons name="send" size={18} color="#fff" />
+                  )}
                 </TouchableOpacity>
               </View>
               <View style={styles.composerToolbar}>
@@ -1177,6 +1308,16 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(11),
     color: '#ef4444',
   },
+  groupMetaTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginLeft: 8,
+  },
+  groupMetaTagText: {
+    fontSize: scaleFont(11),
+    fontWeight: '500',
+  },
   questionTitle: {
     fontSize: scaleFont(16),
     fontWeight: '600',
@@ -1194,9 +1335,21 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     marginTop: 8,
   },
+  groupStatusText: {
+    fontSize: scaleFont(13),
+    color: '#ef4444',
+    marginTop: 8,
+    lineHeight: 18,
+  },
   groupLoadingRow: {
     marginTop: 12,
     alignItems: 'flex-start',
+  },
+  groupErrorText: {
+    marginTop: 12,
+    fontSize: scaleFont(13),
+    color: '#ef4444',
+    lineHeight: 18,
   },
   messagesSection: {
     backgroundColor: '#fff',
@@ -1358,13 +1511,17 @@ const styles = StyleSheet.create({
     backgroundColor: modalTokens.overlay,
     justifyContent: 'flex-end',
   },
+  replyKeyboardAvoidingView: {
+    flex: 1,
+  },
   replyModal: {
     backgroundColor: modalTokens.surface,
     borderTopLeftRadius: modalTokens.sheetRadius,
     borderTopRightRadius: modalTokens.sheetRadius,
     borderTopWidth: 1,
     borderColor: modalTokens.border,
-    paddingBottom: 34,
+    paddingBottom: 12,
+    maxHeight: '82%',
   },
   replyModalHeader: {
     flexDirection: 'row',

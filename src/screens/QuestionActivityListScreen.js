@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import KeyboardDismissView from '../components/KeyboardDismissView';
 import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
 import { showToast } from '../utils/toast';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 
 import { scaleFont } from '../utils/responsive';
 const activitiesData = [
@@ -16,6 +18,7 @@ const activitiesData = [
 export default function QuestionActivityListScreen({ navigation, route }) {
   const { t } = useTranslation();
   const { questionId, questionTitle } = route?.params || {};
+  const bottomSafeInset = useBottomSafeInset(20);
   const [joinedActivities, setJoinedActivities] = useState({});
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [activityForm, setActivityForm] = useState({ 
@@ -125,7 +128,12 @@ export default function QuestionActivityListScreen({ navigation, route }) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
         <View style={styles.statsBar}>
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>{activitiesData.length}</Text>
@@ -226,8 +234,10 @@ export default function QuestionActivityListScreen({ navigation, route }) {
       </ScrollView>
 
       {/* 发起活动弹窗 */}
-      <Modal visible={showActivityModal} animationType="slide">
-        <SafeAreaView style={styles.activityModal}>
+      <Modal visible={showActivityModal} animationType="slide" statusBarTranslucent>
+        <KeyboardAvoidingView style={styles.modalKeyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <KeyboardDismissView>
+        <SafeAreaView style={styles.activityModal} edges={['top']}>
           <View style={styles.activityModalHeader}>
             <TouchableOpacity onPress={() => setShowActivityModal(false)} style={styles.activityCloseBtn}>
               <Ionicons name="close" size={26} color="#333" />
@@ -253,7 +263,12 @@ export default function QuestionActivityListScreen({ navigation, route }) {
             <Text style={styles.boundQuestionText} numberOfLines={2}>{questionTitle}</Text>
           </View>
 
-          <ScrollView style={styles.activityFormArea} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            style={styles.activityFormArea}
+            contentContainerStyle={[styles.activityFormContent, { paddingBottom: bottomSafeInset + 28 }]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+          >
             {/* 发起身份选择 */}
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.organizerType.label')} <Text style={styles.required}>{t('screens.questionActivityList.modal.organizerType.required')}</Text></Text>
@@ -404,9 +419,11 @@ export default function QuestionActivityListScreen({ navigation, route }) {
               />
             </View>
 
-            <View style={{ height: 40 }} />
+            <View style={{ height: bottomSafeInset + 16 }} />
           </ScrollView>
         </SafeAreaView>
+        </KeyboardDismissView>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -460,6 +477,7 @@ const styles = StyleSheet.create({
   joinBtnTextActive: { color: '#22c55e' },
   emptySpace: { height: 20 },
   // 发起活动弹窗样式
+  modalKeyboardView: { flex: 1 },
   activityModal: { flex: 1, backgroundColor: modalTokens.surface },
   activityModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   activityCloseBtn: { padding: 4 },
@@ -474,6 +492,7 @@ const styles = StyleSheet.create({
   boundQuestionLabel: { fontSize: scaleFont(12), fontWeight: '500', color: '#22c55e' },
   boundQuestionText: { fontSize: scaleFont(14), color: '#374151', lineHeight: scaleFont(20) },
   activityFormArea: { flex: 1, padding: 16, backgroundColor: modalTokens.surface },
+  activityFormContent: { flexGrow: 1 },
   formGroup: { marginBottom: 16 },
   formLabel: { fontSize: scaleFont(14), fontWeight: '500', color: '#374151', marginBottom: 8 },
   formInput: { backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, fontSize: scaleFont(15), color: modalTokens.textPrimary },

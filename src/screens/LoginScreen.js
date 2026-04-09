@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import KeyboardDismissView from '../components/KeyboardDismissView';
 import authApi from '../services/api/authApi';
 import DeviceInfo from '../utils/deviceInfo';
 import { showToast } from '../utils/toast';
@@ -305,16 +306,18 @@ export default function LoginScreen({ navigation, onLogin }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <KeyboardDismissView>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            showsVerticalScrollIndicator={false}
+          >
           {/* Logo 区域 */}
           <View style={styles.logoContainer}>
             <View style={styles.logoCircle}>
@@ -580,6 +583,7 @@ export default function LoginScreen({ navigation, onLogin }) {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      </KeyboardDismissView>
     </SafeAreaView>
   );
 }

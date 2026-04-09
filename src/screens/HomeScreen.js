@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { AppState, View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, Dimensions, TextInput, FlatList, Platform, ActivityIndicator, RefreshControl } from 'react-native';
+import { AppState, View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, Dimensions, TextInput, FlatList, Platform, ActivityIndicator, RefreshControl, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import ShareModal from '../components/ShareModal';
 import EditTextModal from '../components/EditTextModal';
 import InitialCredentialsModal from '../components/InitialCredentialsModal';
 import WriteCommentModal from '../components/WriteCommentModal';
+import KeyboardDismissView from '../components/KeyboardDismissView';
 import RegionSelector from '../components/RegionSelector';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/useTranslation';
@@ -1402,7 +1403,9 @@ export default function HomeScreen({ navigation }) {
       {/* 三个点操作弹窗 */}
       <Modal visible={showActionModal} transparent animationType="slide">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowActionModal(false)}>
-          <View style={styles.actionModal}>
+          <View style={[styles.actionModal, {
+          paddingBottom: Math.max(insets.bottom, 16) + 14
+        }]}>
             <View style={styles.actionModalHandle} />
             <TouchableOpacity
               style={[
@@ -1472,9 +1475,13 @@ export default function HomeScreen({ navigation }) {
       </Modal>
 
       {/* 社交平台用户选择弹窗 */}
-      <Modal visible={showSocialModal} transparent animationType="slide">
+      <Modal visible={showSocialModal} transparent animationType="slide" statusBarTranslucent>
         <View style={styles.modalOverlay}>
-          <View style={styles.socialModal}>
+          <KeyboardAvoidingView style={styles.modalKeyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <KeyboardDismissView>
+          <View style={[styles.socialModal, {
+          paddingBottom: Math.max(insets.bottom, 16) + 14
+        }]}>
             <View style={styles.socialHeader}>
               <TouchableOpacity onPress={() => setShowSocialModal(false)}>
                 <Ionicons name="arrow-back" size={24} color="#1f2937" />
@@ -1507,6 +1514,7 @@ export default function HomeScreen({ navigation }) {
             <FlatList
               data={filteredSocialUsers}
               keyExtractor={item => item.id.toString()}
+              keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => (
                 <TouchableOpacity style={styles.socialUserItem} onPress={() => sendSocialMessage(item)}>
                   <Avatar uri={item.avatar} name={item.name} size={40} />
@@ -1523,8 +1531,13 @@ export default function HomeScreen({ navigation }) {
                 </TouchableOpacity>
               )}
               style={styles.socialUserList}
+              contentContainerStyle={{
+                paddingBottom: Math.max(insets.bottom, 12)
+              }}
             />
           </View>
+            </KeyboardDismissView>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -1605,7 +1618,10 @@ export default function HomeScreen({ navigation }) {
       {/* 评论弹窗 */}
       <WriteCommentModal
         visible={showCommentModal}
-        onClose={() => setShowCommentModal(false)}
+        onClose={() => {
+        setShowCommentModal(false);
+        setCurrentQuestionForComment(null);
+      }}
         onPublish={async (text, asTeam, images = []) => {
           console.log('发布评论:', { text, asTeam, images });
           showToast('评论发布成功！', 'success');
@@ -1843,6 +1859,7 @@ const styles = StyleSheet.create({
   gridImage: { width: 100, height: 100, borderRadius: 8 },
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: modalTokens.overlay },
+  modalKeyboardView: { flex: 1, justifyContent: 'flex-end' },
   regionModal: { backgroundColor: modalTokens.surface, borderTopLeftRadius: modalTokens.sheetRadius, borderTopRightRadius: modalTokens.sheetRadius, borderTopWidth: 1, borderColor: modalTokens.border, maxHeight: '70%' },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
   modalTitle: { fontSize: scaleFont(16), fontWeight: '600', color: modalTokens.textPrimary },

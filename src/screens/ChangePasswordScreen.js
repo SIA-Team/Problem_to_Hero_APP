@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import KeyboardDismissView from '../components/KeyboardDismissView';
 import { authApi } from '../services/api';
 import DebugToken from '../utils/debugToken';
 import { showToast } from '../utils/toast';
@@ -216,6 +217,7 @@ export default function ChangePasswordScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <KeyboardDismissView>
       {/* 密码修改成功模态框 */}
       <PasswordChangedModal
         visible={showSuccessModal}
@@ -241,6 +243,7 @@ export default function ChangePasswordScreen({ navigation }) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         enableOnAndroid={true}
         enableAutomaticScroll={true}
         extraScrollHeight={Platform.OS === 'ios' ? 20 : 40}
@@ -462,6 +465,7 @@ export default function ChangePasswordScreen({ navigation }) {
             <Text style={styles.securityTipItem}>• 不要在多个平台使用相同密码</Text>
           </View>
       </KeyboardAwareScrollView>
+      </KeyboardDismissView>
     </SafeAreaView>
   );
 }

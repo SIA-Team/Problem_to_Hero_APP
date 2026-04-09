@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
 import userApi from '../services/api/userApi';
@@ -24,6 +25,7 @@ import { scaleFont } from '../utils/responsive';
 
 function FeedbackScreen({ navigation }) {
   const { t } = useTranslation();
+  const bottomSafeInset = useBottomSafeInset();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [contact, setContact] = useState('');
@@ -244,8 +246,12 @@ function FeedbackScreen({ navigation }) {
 
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: bottomSafeInset + 112 },
+          ]}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
           showsVerticalScrollIndicator={false}
         >
           {/* 顶部提示卡片 */}
@@ -451,7 +457,14 @@ function FeedbackScreen({ navigation }) {
         </ScrollView>
 
         {/* 底部提交按钮 */}
-        <View style={styles.footer}>
+        <View
+          style={[
+            styles.footer,
+            {
+              paddingBottom: bottomSafeInset,
+            },
+          ]}
+        >
           <TouchableOpacity
             style={[
               styles.submitButton,
@@ -680,7 +693,8 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: '#fff',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
     borderTopWidth: 1,
     borderTopColor: '#f3f4f6',
     shadowColor: '#000',

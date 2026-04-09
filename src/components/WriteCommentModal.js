@@ -1,9 +1,23 @@
 import React, { useState } from 'react';
-import { View, Text, Modal, TouchableOpacity, TextInput, StyleSheet, ScrollView, Image } from 'react-native';
+import {
+  View,
+  Text,
+  Modal,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  ScrollView,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  useWindowDimensions
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from './Avatar';
 import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
+import KeyboardDismissView from './KeyboardDismissView';
 import ModalSafeAreaView from './ModalSafeAreaView';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 
@@ -19,12 +33,17 @@ const WriteCommentModal = ({
   title = '写评论'
 }) => {
   const bottomSafeInset = useBottomSafeInset();
+  const insets = useSafeAreaInsets();
+  const {
+    height: windowHeight
+  } = useWindowDimensions();
   const [text, setText] = useState('');
   const [selectedIdentity, setSelectedIdentity] = useState('personal');
   const [selectedImages, setSelectedImages] = useState([]);
   const [showImagePicker, setShowImagePicker] = useState(false);
 
   const canPublish = text.trim() || selectedImages.length > 0;
+  const sheetMaxHeight = Math.min(windowHeight - Math.max(insets.top, 12), windowHeight * 0.9);
 
   const handlePublish = () => {
     if (!canPublish) {
@@ -92,9 +111,15 @@ const WriteCommentModal = ({
       statusBarTranslucent
       navigationBarTranslucent
     >
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
-        <ModalSafeAreaView style={styles.container} edges={['top']}>
+        <KeyboardDismissView>
+        <ModalSafeAreaView style={[styles.container, {
+          maxHeight: sheetMaxHeight
+        }]} edges={['top']}>
           <View style={styles.header}>
             {renderHeaderSide('left')}
             <Text style={styles.title}>{title}</Text>
@@ -103,9 +128,12 @@ const WriteCommentModal = ({
 
           <ScrollView
             style={styles.content}
-            contentContainerStyle={styles.contentContainer}
+            contentContainerStyle={[styles.contentContainer, {
+              paddingBottom: 24
+            }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
           >
             {originalComment ? (
               <View style={styles.originalCommentCard}>
@@ -192,7 +220,8 @@ const WriteCommentModal = ({
             )}
           </View>
         </ModalSafeAreaView>
-      </View>
+        </KeyboardDismissView>
+      </KeyboardAvoidingView>
 
       <ImagePickerSheet
         visible={showImagePicker}
@@ -214,8 +243,8 @@ const styles = StyleSheet.create({
     flex: 1
   },
   container: {
-    height: '88%',
     width: '100%',
+    minHeight: '60%',
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,

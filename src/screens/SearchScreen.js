@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
+import KeyboardDismissView from '../components/KeyboardDismissView';
 import { showAppAlert } from '../utils/appAlert';
 import { scaleFont } from '../utils/responsive';
 const searchHistory = ['Python学习', '养猫攻略', '职业规划', '数据分析'];
@@ -99,7 +100,8 @@ export default function SearchScreen({
       backgroundColor: '#d1d5db'
     };
   };
-  return <SafeAreaView style={styles.container}>
+  return <SafeAreaView style={styles.container} edges={['top']}>
+      <KeyboardDismissView>
       {/* 头部 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{
@@ -128,7 +130,12 @@ export default function SearchScreen({
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
         {/* 搜索历史 */}
         {history.length > 0 && <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -191,6 +198,7 @@ export default function SearchScreen({
           </View>
         </View>
       </ScrollView>
+      </KeyboardDismissView>
     </SafeAreaView>;
 }
 const styles = StyleSheet.create({

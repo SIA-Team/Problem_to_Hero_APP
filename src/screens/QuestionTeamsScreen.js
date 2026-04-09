@@ -28,47 +28,62 @@ const getRoleKey = (userRole, isJoined) => {
   }
 
   switch (Number(userRole)) {
-    case 0:
+    case 2:
       return 'admin';
     case 1:
-    case 2:
       return 'member';
     default:
       return 'member';
   }
 };
 
-const getStatusColor = (statusDesc) => {
-  const normalizedStatus = String(statusDesc || '');
-
-  if (normalizedStatus.includes('\u975e\u5e38')) {
-    return '#ef4444';
+const getStatusMeta = (status, statusDesc) => {
+  switch (Number(status)) {
+    case 1:
+      return {
+        text: statusDesc || '招募中',
+        color: '#22c55e',
+      };
+    case 2:
+      return {
+        text: statusDesc || '满员',
+        color: '#f59e0b',
+      };
+    case 3:
+      return {
+        text: statusDesc || '已结束',
+        color: '#9ca3af',
+      };
+    default:
+      return {
+        text: statusDesc || '未知状态',
+        color: '#6b7280',
+      };
   }
-
-  if (normalizedStatus.includes('\u8f83')) {
-    return '#f59e0b';
-  }
-
-  if (normalizedStatus.includes('\u6d3b\u8dc3')) {
-    return '#22c55e';
-  }
-
-  return '#22c55e';
 };
 
 const normalizeTeam = (team) => {
   const isJoined = Boolean(team?.isJoined);
   const role = getRoleKey(team?.userRole, isJoined);
+  const statusMeta = getStatusMeta(team?.status, team?.statusDesc);
 
   return {
-    ...team,
-    members: Number(team?.memberCount) || 0,
-    leader: team?.creatorName || '-',
+    id: String(team?.id ?? ''),
+    questionId: String(team?.questionId ?? ''),
+    name: team?.name || '',
+    description: team?.description || '',
+    avatar: team?.avatar || '',
+    memberCount: Number(team?.memberCount) || 0,
+    maxMembers: Number(team?.maxMembers) || 0,
+    status: Number(team?.status) || 0,
+    statusDesc: statusMeta.text,
+    creatorName: team?.creatorName || '-',
     isJoined,
     isPending: false,
+    userRole: Number(team?.userRole) || 0,
     role,
     isAdmin: role === 'admin',
-    activeColor: getStatusColor(team?.statusDesc),
+    statusColor: statusMeta.color,
   };
 };
 
@@ -144,7 +159,7 @@ export default function QuestionTeamsScreen({ route, navigation }) {
         name: team.name,
         avatar: team.avatar,
         role: team.isAdmin ? TEAM_ROLE_LEADER : TEAM_ROLE_MEMBER,
-        members: team.members,
+        members: team.memberCount,
         questions: 0,
         description: team.description || '',
         createdAt: '',
@@ -287,6 +302,13 @@ export default function QuestionTeamsScreen({ route, navigation }) {
                 <Text style={styles.teamDesc} numberOfLines={2}>
                   {team.description}
                 </Text>
+                <View style={styles.capacityRow}>
+                  <Ionicons name="people-outline" size={14} color="#9ca3af" />
+                  <Text style={styles.capacityText}>
+                    {team.memberCount}
+                    {team.maxMembers > 0 ? `/${team.maxMembers}` : ''}
+                  </Text>
+                </View>
                 {Boolean(team.isJoined) && (
                   <View style={styles.userRoleRow}>
                     <Ionicons
@@ -322,32 +344,33 @@ export default function QuestionTeamsScreen({ route, navigation }) {
                 <View style={styles.metaItem}>
                   <Ionicons name="people" size={14} color="#9ca3af" />
                   <Text style={styles.metaText}>
-                    {team.members}
+                    {team.memberCount}
+                    {team.maxMembers > 0 ? `/${team.maxMembers}` : ''}
                     {t('screens.questionTeams.meta.people')}
                   </Text>
                 </View>
                 <View style={styles.metaDivider} />
                 <View style={styles.metaItem}>
                   <Ionicons name="person" size={14} color="#9ca3af" />
-                  <Text style={styles.metaText}>{team.leader}</Text>
+                  <Text style={styles.metaText}>{team.creatorName}</Text>
                 </View>
                 <View style={styles.metaDivider} />
                 <View
                   style={[
                     styles.activeTag,
-                    { backgroundColor: `${team.activeColor}15` },
+                    { backgroundColor: `${team.statusColor}15` },
                   ]}
                 >
                   <View
                     style={[
                       styles.activeDot,
-                      { backgroundColor: team.activeColor },
+                      { backgroundColor: team.statusColor },
                     ]}
                   />
                   <Text
-                    style={[styles.activeText, { color: team.activeColor }]}
+                    style={[styles.activeText, { color: team.statusColor }]}
                   >
-                    {team.statusDesc || t('screens.questionTeams.activeLevel.active')}
+                    {team.statusDesc}
                   </Text>
                 </View>
               </View>
@@ -639,6 +662,16 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     lineHeight: scaleFont(18),
     marginBottom: 6,
+  },
+  capacityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 6,
+  },
+  capacityText: {
+    fontSize: scaleFont(12),
+    color: '#9ca3af',
   },
   userRoleRow: {
     flexDirection: 'row',
