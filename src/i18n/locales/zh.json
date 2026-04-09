@@ -1,4 +1,4 @@
-﻿{
+{
   "app": {
     "name": "Problem to Hero",
     "slogan": "将问题转化为英雄解决方案"
@@ -1367,7 +1367,6 @@
       }
     },
     "activity": {
-      "title": "活动",
       "myActivities": "我的活动",
       "create": "创建",
       "empty": "暂无活动",

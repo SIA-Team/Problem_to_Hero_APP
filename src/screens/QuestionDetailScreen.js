@@ -5654,6 +5654,17 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       return;
     }
 
+    console.log('[QuestionDetail][GroupChat] navigate', {
+      questionId: normalizedQuestionId,
+      routeQuestionId: route?.params?.id,
+      detailQuestionId: questionData?.id,
+      detailQuestionQuestionId: questionData?.questionId,
+      groupId: normalizeEntityId(questionData?.groupId),
+      publicGroupId: normalizeEntityId(questionData?.publicGroupId),
+      questionGroupId: normalizeEntityId(questionData?.questionGroupId),
+      questionTitle: questionData?.title,
+    });
+
     navigation.navigate('GroupChat', {
       questionId: normalizedQuestionId,
       groupId: normalizeEntityId(

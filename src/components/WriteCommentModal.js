@@ -20,6 +20,7 @@ import ImagePickerSheet from './ImagePickerSheet';
 import KeyboardDismissView from './KeyboardDismissView';
 import ModalSafeAreaView from './ModalSafeAreaView';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
+import useKeyboardBottomOffset from '../hooks/useKeyboardBottomOffset';
 
 import { scaleFont } from '../utils/responsive';
 const WriteCommentModal = ({
@@ -34,6 +35,10 @@ const WriteCommentModal = ({
 }) => {
   const bottomSafeInset = useBottomSafeInset();
   const insets = useSafeAreaInsets();
+  const keyboardOffset = useKeyboardBottomOffset({
+    enabled: visible,
+    bottomInset: bottomSafeInset,
+  });
   const {
     height: windowHeight
   } = useWindowDimensions();
@@ -43,7 +48,11 @@ const WriteCommentModal = ({
   const [showImagePicker, setShowImagePicker] = useState(false);
 
   const canPublish = text.trim() || selectedImages.length > 0;
-  const sheetMaxHeight = Math.min(windowHeight - Math.max(insets.top, 12), windowHeight * 0.9);
+  const availableSheetHeight = Math.max(
+    windowHeight - Math.max(insets.top, 12) - keyboardOffset,
+    windowHeight * 0.45
+  );
+  const sheetMaxHeight = Math.min(availableSheetHeight, windowHeight * 0.9);
 
   const handlePublish = () => {
     if (!canPublish) {
@@ -118,7 +127,8 @@ const WriteCommentModal = ({
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
         <KeyboardDismissView>
         <ModalSafeAreaView style={[styles.container, {
-          maxHeight: sheetMaxHeight
+          maxHeight: sheetMaxHeight,
+          marginBottom: keyboardOffset
         }]} edges={['top']}>
           <View style={styles.header}>
             {renderHeaderSide('left')}

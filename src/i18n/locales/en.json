@@ -1464,6 +1464,164 @@
         },
         "createSuccess": "Activity created successfully!"
       }
+    },
+    "settings": {
+      "title": "Settings",
+      "profile": {
+        "groupTitle": "Edit Profile",
+        "nickname": "Nickname",
+        "bio": "Bio",
+        "gender": "Gender",
+        "birthday": "Birthday",
+        "location": "Location",
+        "occupation": "Occupation",
+        "userId": "User ID"
+      },
+      "account": {
+        "groupTitle": "Account & Security",
+        "changePassword": "Change Password",
+        "bindPhone": "Bind Phone",
+        "bindEmail": "Bind Email",
+        "notBound": "Not Bound"
+      },
+      "notifications": {
+        "groupTitle": "Notifications",
+        "push": "Push Notifications",
+        "pushDesc": "Receive system push notifications",
+        "like": "Likes",
+        "comment": "Comments",
+        "follow": "New Followers",
+        "system": "System Messages"
+      },
+      "privacy": {
+        "groupTitle": "Privacy Settings",
+        "showOnline": "Show Online Status",
+        "showOnlineDesc": "Let other users see your online status",
+        "allowMessage": "Allow Messages from Strangers",
+        "allowMessageDesc": "Allow users you don't follow to send you messages",
+        "blacklist": "Blacklist"
+      },
+      "general": {
+        "groupTitle": "General Settings",
+        "clearCache": "Clear Cache",
+        "language": "Language",
+        "languageChinese": "Simplified Chinese"
+      },
+      "wallet": {
+        "groupTitle": "Wallet & Super Likes",
+        "purchaseSuperLike": "Purchase Super Likes",
+        "superLikeHistory": "Super Like History"
+      },
+      "help": {
+        "groupTitle": "Help & Feedback",
+        "faq": "FAQ",
+        "customerService": "Customer Service",
+        "online": "Online",
+        "feedback": "Feedback"
+      },
+      "about": {
+        "groupTitle": "About",
+        "checkUpdate": "Check for Updates",
+        "userAgreement": "User Agreement",
+        "privacyPolicy": "Privacy Policy",
+        "deviceInfo": "Device Info",
+        "aboutUs": "About Us"
+      },
+      "logout": "Logout",
+      "editModal": {
+        "cancel": "Cancel",
+        "save": "Save",
+        "placeholder": "Please enter",
+        "hints": {
+          "nickname": "2-20 characters, can include letters, numbers",
+          "bio": "Tell us about yourself",
+          "location": "Enter your location",
+          "occupation": "Enter your occupation"
+        }
+      },
+      "alerts": {
+        "saveSuccess": {
+          "title": "Saved Successfully",
+          "message": "Your profile has been updated"
+        },
+        "changeAvatar": {
+          "title": "Change Avatar",
+          "message": "Select image source",
+          "takePhoto": "Take Photo",
+          "chooseFromAlbum": "Choose from Album",
+          "openCamera": "Open camera",
+          "openAlbum": "Open album"
+        },
+        "gender": {
+          "title": "Select Gender",
+          "message": "Please select your gender",
+          "male": "Male",
+          "female": "Female",
+          "secret": "Prefer not to say"
+        },
+        "birthday": {
+          "title": "Select Birthday",
+          "message": "Open date picker"
+        },
+        "changePassword": {
+          "title": "Change Password",
+          "message": "Open change password page"
+        },
+        "bindPhone": {
+          "title": "Bind Phone",
+          "message": "Open phone binding page"
+        },
+        "bindEmail": {
+          "title": "Bind Email",
+          "message": "Open email binding page"
+        },
+        "blacklist": {
+          "title": "Blacklist",
+          "message": "Open blacklist management page"
+        },
+        "clearCache": {
+          "title": "Clear Cache",
+          "message": "Are you sure you want to clear cache?",
+          "success": "Cache cleared"
+        },
+        "language": {
+          "title": "Select Language",
+          "message": "Open language selection page"
+        },
+        "checkUpdate": {
+          "title": "Check for Updates",
+          "message": "You are using the latest version"
+        },
+        "userAgreement": {
+          "title": "User Agreement",
+          "message": "Open user agreement page"
+        },
+        "privacyPolicy": {
+          "title": "Privacy Policy",
+          "message": "Open privacy policy page"
+        },
+        "aboutUs": {
+          "title": "About Us",
+          "message": "Problem to Hero v1.0.0\n\nA community platform to help people solve problems"
+        },
+        "faq": {
+          "title": "FAQ",
+          "message": "Open FAQ page"
+        },
+        "customerService": {
+          "title": "Customer Service",
+          "message": "Open customer service page"
+        },
+        "feedback": {
+          "title": "Feedback",
+          "message": "Open feedback page"
+        },
+        "logout": {
+          "title": "Logout",
+          "message": "Are you sure you want to logout?",
+          "button": "Logout"
+        }
+      }
     }
   },
   "common": {

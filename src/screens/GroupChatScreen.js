@@ -122,7 +122,20 @@ const normalizeQuestionGroupIdsResponse = response => {
         : [];
 
   return candidateList
-    .map(item => Number(item))
+    .map(item => {
+      if (item && typeof item === 'object') {
+        return Number(
+          item?.groupId ??
+            item?.id ??
+            item?.publicGroupId ??
+            item?.questionGroupId ??
+            item?.groupID ??
+            item?.groupNo
+        );
+      }
+
+      return Number(item);
+    })
     .filter(item => Number.isInteger(item) && item >= 0);
 };
 
@@ -184,6 +197,9 @@ const getGroupChatErrorMessage = (error, fallbackMessage) => {
 };
 
 const GROUP_API_REQUEST_CONFIG = {};
+const logGroupChatDebug = (...args) => {
+  console.log('[GroupChatDebug]', ...args);
+};
 
 const toSafeNumber = value => {
   const parsed = Number(value);
@@ -400,6 +416,15 @@ export default function GroupChatScreen({ navigation, route }) {
     showWriteMessageModalRef.current = showWriteMessageModal;
   }, [showWriteMessageModal]);
 
+  useEffect(() => {
+    logGroupChatDebug('screen init', {
+      routeQuestionId: route?.params?.questionId,
+      routeGroupId: route?.params?.groupId,
+      routeGroup: route?.params?.group,
+      question: route?.params?.question,
+    });
+  }, [route?.params?.group, route?.params?.groupId, route?.params?.question, route?.params?.questionId]);
+
   const question = route?.params?.question || DEFAULT_QUESTION;
   const questionId = route?.params?.questionId || question?.id;
   const routeGroupId =
@@ -425,6 +450,8 @@ export default function GroupChatScreen({ navigation, route }) {
   const displayQuestionTitle = currentGroup?.name || question.title || t('screens.groupChat.title');
   const displayCapacity =
     currentGroup && displayMaxMembers > 0 ? `${displayMemberCount}/${displayMaxMembers}` : '';
+  const canOpenMessageComposer = hasGroupIdValue(currentGroupId);
+  const disabledComposerHint = groupLoadError || t('screens.groupChat.groupNotFound');
   const groupRoleMeta = getGroupRoleMeta(currentGroup?.userRole);
   const groupStatusMeta = getGroupStatusMeta(currentGroup?.status);
   const groupStatusText =
@@ -505,7 +532,13 @@ export default function GroupChatScreen({ navigation, route }) {
       throw new Error(t('screens.groupChat.groupInfoUnavailable'));
     }
 
+    logGroupChatDebug('fetchQuestionGroups:start', {
+      questionId,
+      routeGroupId,
+      routeQuestion: question,
+    });
     const response = await questionApi.getQuestionGroups(questionId);
+    logGroupChatDebug('fetchQuestionGroups:response', response);
 
     if (!isSuccessResponse(response)) {
       throw new Error(getGroupChatErrorMessage(response, t('screens.groupChat.groupInfoUnavailable')));
@@ -513,6 +546,11 @@ export default function GroupChatScreen({ navigation, route }) {
 
     const groups = normalizeQuestionGroupsResponse(response);
     const nextGroupIds = extractGroupIdsFromGroups(groups);
+    logGroupChatDebug('fetchQuestionGroups:normalized', {
+      questionId,
+      groups,
+      nextGroupIds,
+    });
 
     setQuestionGroups(prev => (areQuestionGroupsEqual(prev, groups) ? prev : groups));
     setQuestionGroupIds(prev => (arePrimitiveArraysEqual(prev, nextGroupIds) ? prev : nextGroupIds));
@@ -526,13 +564,24 @@ export default function GroupChatScreen({ navigation, route }) {
       throw new Error(t('screens.groupChat.groupInfoUnavailable'));
     }
 
+    logGroupChatDebug('fetchQuestionGroupIds:start', {
+      questionId,
+      routeGroupId,
+      cachedQuestionGroupIds: questionGroupIds,
+    });
     const response = await questionApi.getQuestionGroupIds(questionId);
+    logGroupChatDebug('fetchQuestionGroupIds:response', response);
 
     if (!isSuccessResponse(response)) {
       throw new Error(getGroupChatErrorMessage(response, t('screens.groupChat.groupInfoUnavailable')));
     }
 
     const groupIds = normalizeQuestionGroupIdsResponse(response);
+    logGroupChatDebug('fetchQuestionGroupIds:normalized', {
+      questionId,
+      rawData: response?.data,
+      groupIds,
+    });
     if (!groupIds.length) {
       setQuestionGroupIds(prev => (prev.length ? [] : prev));
       throw new Error(t('screens.groupChat.groupNotFound'));
@@ -677,20 +726,42 @@ export default function GroupChatScreen({ navigation, route }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (canOpenMessageComposer || !showWriteMessageModal) {
+      return;
+    }
+
+    keepComposerOpenRef.current = false;
+    setShowWriteMessageModal(false);
+    setWriteMessageText('');
+    setSelectedMessageImage('');
+  }, [canOpenMessageComposer, showWriteMessageModal]);
+
   const ensureCurrentGroupId = async () => {
+    logGroupChatDebug('ensureCurrentGroupId:input', {
+      currentGroupId,
+      routeGroupId,
+      questionGroupIds,
+      currentGroup,
+    });
+
     if (hasGroupIdValue(currentGroupId)) {
+      logGroupChatDebug('ensureCurrentGroupId:useCurrentGroupId', currentGroupId);
       return currentGroupId;
     }
 
     if (hasGroupIdValue(routeGroupId)) {
+      logGroupChatDebug('ensureCurrentGroupId:useRouteGroupId', routeGroupId);
       return routeGroupId;
     }
 
     if (questionGroupIds.length > 0) {
+      logGroupChatDebug('ensureCurrentGroupId:useCachedQuestionGroupId', questionGroupIds[0]);
       return questionGroupIds[0];
     }
     const groupIds = await fetchQuestionGroupIds();
     const targetGroupId = groupIds[0];
+    logGroupChatDebug('ensureCurrentGroupId:fetchedFallbackGroupIds', groupIds);
 
     if (!hasGroupIdValue(targetGroupId)) {
       throw new Error(t('screens.groupChat.groupInfoUnavailable'));
@@ -702,6 +773,14 @@ export default function GroupChatScreen({ navigation, route }) {
   const createGroupMessage = async ({ content, parentId = 0 }) => {
     const resolvedGroupId = await ensureCurrentGroupId();
     const token = await AsyncStorage.getItem('authToken');
+    logGroupChatDebug('createGroupMessage:payload', {
+      resolvedGroupId,
+      currentGroupId,
+      routeGroupId,
+      questionGroupIds,
+      parentId,
+      contentLength: String(content ?? '').trim().length,
+    });
     const response = await apiClient.post(
       API_ENDPOINTS.GROUP.MESSAGE_CREATE,
       {
@@ -719,6 +798,7 @@ export default function GroupChatScreen({ navigation, route }) {
           : undefined,
       }
     );
+    logGroupChatDebug('createGroupMessage:response', response);
 
     if (!isSuccessResponse(response) || !response?.data) {
       throw new Error(getGroupChatErrorMessage(response, t('screens.groupChat.publishFailed')));
@@ -789,6 +869,11 @@ export default function GroupChatScreen({ navigation, route }) {
   };
 
   const openWriteMessageModal = () => {
+    if (!canOpenMessageComposer) {
+      showToast(disabledComposerHint, 'warning');
+      return;
+    }
+
     setShowWriteMessageModal(true);
     setTimeout(() => {
       focusComposerInput();
@@ -1133,11 +1218,27 @@ export default function GroupChatScreen({ navigation, route }) {
           },
         ]}
       >
-        <TouchableOpacity style={styles.inputWrapper} activeOpacity={0.85} onPress={openWriteMessageModal}>
-          <Text style={styles.inputPlaceholderText}>{t('screens.groupChat.inputPlaceholder')}</Text>
+        <TouchableOpacity
+          style={[styles.inputWrapper, !canOpenMessageComposer && styles.inputWrapperDisabled]}
+          activeOpacity={canOpenMessageComposer ? 0.85 : 1}
+          onPress={openWriteMessageModal}
+          disabled={!canOpenMessageComposer}
+        >
+          <Text
+            style={[
+              styles.inputPlaceholderText,
+              !canOpenMessageComposer && styles.inputPlaceholderTextDisabled,
+            ]}
+          >
+            {canOpenMessageComposer ? t('screens.groupChat.inputPlaceholder') : disabledComposerHint}
+          </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.sendBtn, styles.sendBtnDisabled]} onPress={openWriteMessageModal}>
-          <Ionicons name="send" size={18} color="#fff" />
+        <TouchableOpacity
+          style={[styles.sendBtn, !canOpenMessageComposer && styles.sendBtnDisabled]}
+          onPress={openWriteMessageModal}
+          disabled={!canOpenMessageComposer}
+        >
+          <Ionicons name="send" size={18} color={canOpenMessageComposer ? '#fff' : '#fef2f2'} />
         </TouchableOpacity>
       </View>
 
@@ -1626,9 +1727,17 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: 'center',
   },
+  inputWrapperDisabled: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
   inputPlaceholderText: {
     fontSize: scaleFont(14),
     color: '#9ca3af',
+  },
+  inputPlaceholderTextDisabled: {
+    color: '#c0c7d1',
   },
   sendBtn: {
     backgroundColor: '#ef4444',

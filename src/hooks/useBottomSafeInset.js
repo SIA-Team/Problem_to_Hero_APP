@@ -12,9 +12,22 @@ const getAndroidNavigationBarInsetFallback = () => {
 
   const screenHeight = Dimensions.get('screen').height;
   const windowHeight = Dimensions.get('window').height;
+  const totalInsetDiff = Math.max(screenHeight - windowHeight, 0);
   const statusBarHeight = StatusBar.currentHeight || 0;
 
-  return Math.max(screenHeight - windowHeight - statusBarHeight, 0);
+  if (totalInsetDiff <= statusBarHeight + 8) {
+    return 0;
+  }
+
+  const navigationOnlyInset = Math.max(totalInsetDiff - statusBarHeight, 0);
+
+  // Some Android devices report a window height that already excludes the status bar.
+  // In that case, subtracting StatusBar.currentHeight makes the navigation inset too small.
+  if (navigationOnlyInset < 24) {
+    return totalInsetDiff;
+  }
+
+  return navigationOnlyInset;
 };
 
 export default function useBottomSafeInset(minimumInset = 12) {
