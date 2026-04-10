@@ -14,6 +14,7 @@ import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import { scaleFont } from '../utils/responsive';
 import teamApi from '../services/api/teamApi';
 import { buildTeamDetailRouteState } from '../utils/teamTransforms';
+import { executeTeamExitFlow, FALLBACK_TEAM_MEMBERS, getTransferLeaderCandidates } from '../utils/teamExit';
 const initialMessages = [{
   id: 1,
   author: '张三',
@@ -45,46 +46,6 @@ const initialMessages = [{
   shares: 6,
   bookmarks: 12
 }];
-
-const TEAM_ROLE_LEADER_VALUE = 3;
-const TEAM_ROLE_ADMIN_VALUE = 2;
-
-const normalizeTransferLeaderCandidate = (member) => {
-  const rawUserId = member?.userId ?? member?.memberUserId ?? member?.targetUserId ?? member?.id;
-  const userId = Number(rawUserId) || 0;
-  const userRole = Number(member?.userRole ?? member?.roleValue ?? member?.roleType) || 0;
-  const roleLabel = member?.role || (userRole === TEAM_ROLE_LEADER_VALUE ? '队长' : userRole === TEAM_ROLE_ADMIN_VALUE ? '管理员' : '成员');
-  const isLeader = userRole === TEAM_ROLE_LEADER_VALUE || roleLabel === '队长';
-
-  return {
-    id: String(member?.id ?? userId ?? ''),
-    userId,
-    name: member?.name || member?.userName || member?.nickName || member?.nickname || '-',
-    avatar: member?.avatar || member?.userAvatar || '',
-    role: roleLabel,
-    isLeader,
-  };
-};
-
-const getTransferLeaderCandidates = (sources = []) => {
-  for (const source of sources) {
-    if (!Array.isArray(source) || source.length === 0) {
-      continue;
-    }
-
-    const normalizedMembers = source
-      .map(normalizeTransferLeaderCandidate)
-      .filter((member) => member.userId > 0 && !member.isLeader);
-
-    if (normalizedMembers.length > 0) {
-      return normalizedMembers;
-    }
-  }
-
-  return teamMembers
-    .map(normalizeTransferLeaderCandidate)
-    .filter((member) => member.userId > 0 && !member.isLeader);
-};
 
 const initialDiscussionComments = {
   1: [{
@@ -953,21 +914,12 @@ export default function TeamDetailScreen({
   const selectedNewLeaderMember = React.useMemo(() => transferLeaderCandidates.find(member => String(member.userId) === String(selectedNewLeader)) || null, [selectedNewLeader, transferLeaderCandidates]);
 
   const handleLeaveTeamRequest = async newCaptainUserId => {
-    const normalizedTeamId = Number(team?.id ?? routeTeamId);
-    if (!Number.isFinite(normalizedTeamId) || normalizedTeamId <= 0) {
-      showAppAlert(t('screens.teamDetail.alerts.hint'), '团队ID无效');
-      return false;
-    }
-
     try {
       setLeaveSubmitting(true);
-      const response = await teamApi.leaveTeam(normalizedTeamId, newCaptainUserId);
-      const isSuccess = response?.code === 0 || response?.code === 200;
-
-      if (!isSuccess) {
-        throw new Error(response?.msg || 'Failed to leave team');
-      }
-
+      await executeTeamExitFlow({
+        teamId: team?.id ?? routeTeamId,
+        newCaptainUserId,
+      });
       showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.teamExited'));
       navigation.goBack();
       return true;
@@ -1025,21 +977,8 @@ export default function TeamDetailScreen({
       return;
     }
 
-    const normalizedTeamId = Number(team?.id ?? routeTeamId);
-    if (!Number.isFinite(normalizedTeamId) || normalizedTeamId <= 0) {
-      showAppAlert(t('screens.teamDetail.alerts.hint'), '团队ID无效');
-      return;
-    }
-
     try {
       setTransferSubmitting(true);
-      const response = await teamApi.transferCaptain(normalizedTeamId, selectedNewLeaderMember.userId);
-      const isSuccess = response?.code === 0 || response?.code === 200;
-
-      if (!isSuccess) {
-        throw new Error(response?.msg || 'Failed to transfer team captain');
-      }
-
       setShowTransferLeaderModal(false);
       setSelectedNewLeader(null);
       await handleLeaveTeamRequest(selectedNewLeaderMember.userId);

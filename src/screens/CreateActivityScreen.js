@@ -143,6 +143,7 @@ export default function CreateActivityScreen({
   };
   return <SafeAreaView style={styles.container} edges={['top']}>
       <KeyboardDismissView>
+      <View style={styles.screenContent}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn} hitSlop={{
         top: 15,
@@ -330,6 +331,7 @@ export default function CreateActivityScreen({
           </View>
         </View>}
       <DateTimePickerModal visible={Boolean(activeTimeField)} onClose={() => setActiveTimeField(null)} currentDateTime={activeTimeField ? newActivity[activeTimeField] : ''} onSelect={value => handleSelectDateTime(activeTimeField, value)} title={activeTimeField === 'endTime' ? t('screens.createActivity.time.picker.endTitle') : t('screens.createActivity.time.picker.startTitle')} cancelText={t('screens.createActivity.time.picker.cancel')} confirmText={t('screens.createActivity.time.picker.confirm')} />
+      </View>
       </KeyboardDismissView>
     </SafeAreaView>;
 }
@@ -337,6 +339,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff'
+  },
+  screenContent: {
+    flex: 1
   },
   header: {
     flexDirection: 'row',

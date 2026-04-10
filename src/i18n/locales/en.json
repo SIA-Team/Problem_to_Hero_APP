@@ -1339,6 +1339,7 @@
       },
       "userRole": {
         "label": "Your role: ",
+        "leader": "Leader",
         "admin": "Admin",
         "member": "Member",
         "notJoined": "Not joined"

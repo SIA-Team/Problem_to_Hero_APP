@@ -1524,6 +1524,7 @@
       },
       "userRole": {
         "label": "你的身份：",
+        "leader": "队长",
         "admin": "管理员",
         "member": "成员",
         "notJoined": "未加入"
