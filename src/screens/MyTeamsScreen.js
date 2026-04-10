@@ -7,7 +7,10 @@ import KeyboardDismissView from '../components/KeyboardDismissView';
 import { createMyTeamsData } from '../data/profileMenuMockData';
 import { modalTokens } from '../components/modalTokens';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
+import teamApi from '../services/api/teamApi';
 import { showAppAlert } from '../utils/appAlert';
+import { mapTeamToDetailRoute, normalizeMyTeam } from '../utils/teamTransforms';
+import { executeTeamExitFlow, getTransferLeaderCandidates } from '../utils/teamExit';
 
 import { scaleFont } from '../utils/responsive';
 /*
@@ -53,11 +56,46 @@ export default function MyTeamsScreen({
   const [teamName, setTeamName] = useState('');
   const [teamDescription, setTeamDescription] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creatingTeam, setCreatingTeam] = useState(false);
+  const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);
+  const [exitConfirmTeam, setExitConfirmTeam] = useState(null);
+  const [exitConfirmRequiresTransfer, setExitConfirmRequiresTransfer] = useState(false);
+  const [showTransferLeaderModal, setShowTransferLeaderModal] = useState(false);
+  const [selectedExitTeam, setSelectedExitTeam] = useState(null);
+  const [selectedNewLeader, setSelectedNewLeader] = useState(null);
+  const [exitSubmitting, setExitSubmitting] = useState(false);
   const handleOpenCreateModal = () => {
     setShowCreateModal(true);
   };
   const handleCloseCreateModal = () => {
     setShowCreateModal(false);
+  };
+  const transferLeaderCandidates = React.useMemo(() => getTransferLeaderCandidates([selectedExitTeam?.teamMembers, selectedExitTeam?.memberList, selectedExitTeam?.members]), [selectedExitTeam]);
+  const selectedNewLeaderMember = React.useMemo(() => transferLeaderCandidates.find(member => String(member.userId) === String(selectedNewLeader)) || null, [selectedNewLeader, transferLeaderCandidates]);
+  const isTeamLeader = team => Boolean(team?.isLeader) || team?.role === '\u961f\u957f' || team?.role === '闃熼暱' || Number(team?.userRole) === 3;
+  const closeExitConfirmModal = () => {
+    setShowExitConfirmModal(false);
+    setExitConfirmTeam(null);
+    setExitConfirmRequiresTransfer(false);
+  };
+  const openExitConfirmModal = (team, requiresTransfer) => {
+    setExitConfirmTeam(team);
+    setExitConfirmRequiresTransfer(Boolean(requiresTransfer));
+    setTimeout(() => {
+      setShowExitConfirmModal(true);
+    }, 180);
+  };
+  const closeTransferLeaderModal = () => {
+    setShowTransferLeaderModal(false);
+    setSelectedExitTeam(null);
+    setSelectedNewLeader(null);
+  };
+  const openTransferLeaderModal = team => {
+    setSelectedExitTeam(team);
+    setSelectedNewLeader(null);
+    setTimeout(() => {
+      setShowTransferLeaderModal(true);
+    }, 180);
   };
 
   // 我的问题列表（用于创建团队时选择）
@@ -77,52 +115,133 @@ export default function MyTeamsScreen({
     reward: 100
   }];
   const handleTeamPress = team => {
-    navigation.navigate('TeamDetail', {
-      team: team
-    });
+    navigation.navigate('TeamDetail', mapTeamToDetailRoute(team));
   };
   const handleCreateTeam = () => {
     handleOpenCreateModal();
   };
   const handleSubmitCreate = () => {
-    if (!teamName.trim()) {
-      showAppAlert('提示', '请输入团队名称');
+    submitCreateTeam();
+  };
+  const submitCreateTeam = async () => {
+    const trimmedName = teamName.trim();
+    const trimmedDescription = teamDescription.trim();
+
+    if (!trimmedName) {
+      showAppAlert('\u63d0\u793a', '\u8bf7\u8f93\u5165\u56e2\u961f\u540d\u79f0');
       return;
     }
-    if (!teamDescription.trim()) {
-      showAppAlert('提示', '请输入团队说明');
-      return;
+
+    try {
+      setCreatingTeam(true);
+      const response = await teamApi.createTeam({
+        questionIds: selectedQuestions.map(question => question.id),
+        name: trimmedName,
+        description: trimmedDescription,
+        avatar: '',
+        maxMembers: 0
+      });
+      const isSuccess = response?.code === 0 || response?.code === 200;
+
+      if (!isSuccess || !response?.data) {
+        throw new Error(response?.msg || 'Failed to create team');
+      }
+
+      const createdTeam = normalizeMyTeam(response.data);
+      setTeams(prevTeams => [createdTeam, ...prevTeams.filter(team => String(team.id) !== String(createdTeam.id))]);
+      handleCloseCreateModal();
+      setTeamName('');
+      setSelectedQuestions([]);
+      setTeamDescription('');
+      showAppAlert('\u6210\u529f', `\u56e2\u961f"${createdTeam.name}"\u521b\u5efa\u6210\u529f\uff01`);
+    } catch (requestError) {
+      console.error('Failed to create team from my teams screen:', requestError);
+      showAppAlert('\u63d0\u793a', requestError?.message || '\u521b\u5efa\u56e2\u961f\u5931\u8d25');
+    } finally {
+      setCreatingTeam(false);
     }
-    showAppAlert('成功', `团队"${teamName}"创建成功！${selectedQuestions.length > 0 ? `已关联${selectedQuestions.length}个问题` : ''}`);
-    handleCloseCreateModal();
-    setTeamName('');
-    setSelectedQuestions([]);
-    setTeamDescription('');
+  };
+  const handleExitTeamRequest = async (team, newCaptainUserId) => {
+    try {
+      setExitSubmitting(true);
+      await executeTeamExitFlow({
+        teamId: team?.id,
+        newCaptainUserId,
+      });
+      setTeams(prevTeams => prevTeams.filter(item => String(item.id) !== String(team.id)));
+      closeTransferLeaderModal();
+      showAppAlert('\u6210\u529f', '\u60a8\u5df2\u9000\u51fa\u8be5\u56e2\u961f');
+      return true;
+    } catch (requestError) {
+      console.error('Failed to exit team from my teams screen:', requestError);
+      showAppAlert('\u63d0\u793a', requestError?.message || '\u9000\u51fa\u56e2\u961f\u5931\u8d25');
+      return false;
+    } finally {
+      setExitSubmitting(false);
+    }
   };
   const handleLeaveTeam = team => {
-    showAppAlert('退出团队', `确定要退出"${team.name}"吗？`, [{
-      text: '取消',
-      style: 'cancel'
-    }, {
-      text: '退出',
-      style: 'destructive',
-      onPress: () => {
-        setTeams(teams.filter(t => t.id !== team.id));
-        showAppAlert('已退出', '您已退出该团队');
+    if (exitSubmitting) {
+      return;
+    }
+
+    if (isTeamLeader(team)) {
+      const nextLeaderCandidates = getTransferLeaderCandidates([team?.teamMembers, team?.memberList, team?.members]);
+
+      if (nextLeaderCandidates.length === 0) {
+        showAppAlert('\u63d0\u793a', '\u5f53\u524d\u6682\u65e0\u53ef\u79fb\u4ea4\u7684\u56e2\u5458\uff0c\u65e0\u6cd5\u9000\u51fa\u56e2\u961f');
+        return;
       }
-    }]);
+
+      openExitConfirmModal(team, true);
+      return;
+    }
+
+    openExitConfirmModal(team, false);
   };
-  const handleDismissTeam = team => {
-    showAppAlert('解散团队', `确定要解散"${team.name}"吗？此操作不可恢复。`, [{
-      text: '取消',
-      style: 'cancel'
+  const handleConfirmExitModal = async () => {
+    const currentTeam = exitConfirmTeam;
+    const requiresTransfer = exitConfirmRequiresTransfer;
+
+    closeExitConfirmModal();
+
+    if (!currentTeam) {
+      return;
+    }
+
+    if (requiresTransfer) {
+      openTransferLeaderModal(currentTeam);
+      return;
+    }
+
+    await handleExitTeamRequest(currentTeam);
+  };
+  const handleConfirmTransferLeader = async () => {
+    if (!selectedExitTeam) {
+      return;
+    }
+
+    if (!selectedNewLeaderMember?.userId) {
+      showAppAlert('\u63d0\u793a', '\u8bf7\u9009\u62e9\u65b0\u7684\u961f\u957f');
+      return;
+    }
+
+    await handleExitTeamRequest(selectedExitTeam, selectedNewLeaderMember.userId);
+  };
+  const handleOpenTeamActions = team => {
+    showAppAlert('\u56e2\u961f\u64cd\u4f5c', '\u9009\u62e9\u64cd\u4f5c', [{
+      text: '\u67e5\u770b\u8be6\u60c5',
+      onPress: () => handleTeamPress(team)
     }, {
-      text: '解散',
+      text: '\u56e2\u961f\u8bbe\u7f6e',
+      onPress: () => showAppAlert('\u56e2\u961f\u8bbe\u7f6e', '\u6253\u5f00\u56e2\u961f\u8bbe\u7f6e\u9875\u9762')
+    }, {
+      text: '\u9000\u51fa\u56e2\u961f',
       style: 'destructive',
-      onPress: () => {
-        setTeams(teams.filter(t => t.id !== team.id));
-        showAppAlert('已解散', '团队已解散');
-      }
+      onPress: () => handleLeaveTeam(team)
+    }, {
+      text: '\u53d6\u6d88',
+      style: 'cancel'
     }]);
   };
   return <SafeAreaView style={styles.container} edges={['top']}>
@@ -204,24 +323,7 @@ export default function MyTeamsScreen({
               </View>
               <TouchableOpacity style={styles.moreBtn} onPress={e => {
             e.stopPropagation();
-            showAppAlert('团队操作', `选择操作`, [{
-              text: '查看详情',
-              onPress: () => handleTeamPress(team)
-            }, {
-              text: '团队设置',
-              onPress: () => showAppAlert('团队设置', '打开团队设置页面')
-            }, team.role === '队长' ? {
-              text: '解散团队',
-              style: 'destructive',
-              onPress: () => handleDismissTeam(team)
-            } : {
-              text: '退出团队',
-              style: 'destructive',
-              onPress: () => handleLeaveTeam(team)
-            }, {
-              text: '取消',
-              style: 'cancel'
-            }]);
+            handleOpenTeamActions(team);
           }}>
                 <Ionicons name="ellipsis-vertical" size={20} color="#9ca3af" />
               </TouchableOpacity>
@@ -239,12 +341,80 @@ export default function MyTeamsScreen({
             </TouchableOpacity>
           </View>}
 
-        <View style={{
+      <View style={{
         height: 40
       }} />
       </ScrollView>
 
-      {/* 创建团队弹窗 */}
+      <Modal visible={showExitConfirmModal} animationType="fade" transparent onRequestClose={() => {
+      if (!exitSubmitting) {
+        closeExitConfirmModal();
+      }
+    }}>
+        <View style={styles.exitConfirmOverlay}>
+          <View style={styles.exitConfirmCard}>
+            <Text style={styles.exitConfirmTitle}>{'\u9000\u51fa\u56e2\u961f'}</Text>
+            <Text style={styles.exitConfirmMessage}>
+              {exitConfirmRequiresTransfer ? '\u8bf7\u6307\u5b9a\u4e00\u4eba\u4e3a\u961f\u957f' : `\u786e\u5b9a\u8981\u9000\u51fa"${exitConfirmTeam?.name || ''}"\u5417\uff1f`}
+            </Text>
+            <View style={styles.exitConfirmActions}>
+              <TouchableOpacity style={styles.exitConfirmCancelBtn} onPress={closeExitConfirmModal} disabled={exitSubmitting} activeOpacity={0.85}>
+                <Text style={styles.exitConfirmCancelText}>{'\u53d6\u6d88'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.exitConfirmConfirmBtn} onPress={handleConfirmExitModal} disabled={exitSubmitting} activeOpacity={0.85}>
+                <Text style={styles.exitConfirmConfirmText}>{'\u786e\u8ba4'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 选择新队长弹窗 */}
+      <Modal visible={showTransferLeaderModal} animationType="slide" transparent onRequestClose={() => {
+      if (exitSubmitting) {
+        return;
+      }
+      closeTransferLeaderModal();
+    }}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.transferLeaderModal}>
+            <View style={styles.transferLeaderHeader}>
+              <TouchableOpacity onPress={() => {
+              if (exitSubmitting) {
+                return;
+              }
+              closeTransferLeaderModal();
+            }}>
+                <Text style={styles.transferLeaderCancelText}>{'\u53d6\u6d88'}</Text>
+              </TouchableOpacity>
+              <Text style={styles.transferLeaderTitle}>{'\u9009\u62e9\u65b0\u961f\u957f'}</Text>
+              <TouchableOpacity onPress={handleConfirmTransferLeader} disabled={!selectedNewLeader || exitSubmitting}>
+                <Text style={[styles.transferLeaderConfirmText, (!selectedNewLeader || exitSubmitting) && styles.transferLeaderConfirmTextDisabled]}>
+                  {exitSubmitting ? '\u786e\u8ba4\u4e2d...' : '\u786e\u8ba4'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.transferLeaderList} contentContainerStyle={styles.transferLeaderListContent} showsVerticalScrollIndicator={false}>
+              {transferLeaderCandidates.map(member => <TouchableOpacity key={`${member.id}-${member.userId}`} style={styles.transferLeaderItem} onPress={() => {
+              if (!exitSubmitting) {
+                setSelectedNewLeader(member.userId);
+              }
+            }} disabled={exitSubmitting}>
+                  <View style={styles.transferLeaderRadio}>
+                    {String(selectedNewLeader) === String(member.userId) && <View style={styles.transferLeaderRadioInner} />}
+                  </View>
+                  <Avatar uri={member.avatar} name={member.name} size={40} />
+                  <View style={styles.transferLeaderInfo}>
+                    <Text style={styles.transferLeaderName}>{member.name}</Text>
+                    <Text style={styles.transferLeaderRole}>{member.role}</Text>
+                  </View>
+                </TouchableOpacity>)}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={showCreateModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleCloseCreateModal} statusBarTranslucent>
         <KeyboardAvoidingView
           style={styles.modalKeyboardView}
@@ -299,9 +469,7 @@ export default function MyTeamsScreen({
 
           {/* 团队说明 */}
           <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>团队说明 <Text style={{
-                color: '#ef4444'
-              }}>*</Text></Text>
+            <Text style={styles.formLabel}>团队说明</Text>
             <TextInput style={styles.textArea} placeholder="介绍一下这个团队的目标和规则..." placeholderTextColor="#9ca3af" value={teamDescription} onChangeText={setTeamDescription} multiline numberOfLines={4} />
           </View>
 
@@ -313,8 +481,8 @@ export default function MyTeamsScreen({
           <View style={[styles.sheetFooter, {
           paddingBottom: bottomSafeInset
         }]}>
-            <TouchableOpacity style={[styles.submitBtn, (!teamName.trim() || !teamDescription.trim()) && styles.submitBtnDisabled]} onPress={handleSubmitCreate} disabled={!teamName.trim() || !teamDescription.trim()}>
-              <Text style={styles.submitBtnText}>创建团队</Text>
+            <TouchableOpacity style={[styles.submitBtn, (!teamName.trim() || creatingTeam) && styles.submitBtnDisabled]} onPress={submitCreateTeam} disabled={!teamName.trim() || creatingTeam}>
+              <Text style={styles.submitBtnText}>{creatingTeam ? '\u521b\u5efa\u4e2d...' : '创建团队'}</Text>
             </TouchableOpacity>
           </View>
             </SafeAreaView>
@@ -514,6 +682,160 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
     paddingHorizontal: 40
+  },
+  exitConfirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 24
+  },
+  exitConfirmCard: {
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.08)',
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowOffset: {
+      width: 0,
+      height: 8
+    },
+    shadowRadius: 18,
+    elevation: 10
+  },
+  exitConfirmTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8
+  },
+  exitConfirmMessage: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#6b7280',
+    marginBottom: 16
+  },
+  exitConfirmActions: {
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'flex-end'
+  },
+  exitConfirmCancelBtn: {
+    minWidth: 84,
+    height: 40,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f3f4f6'
+  },
+  exitConfirmCancelText: {
+    color: '#374151',
+    fontSize: 14,
+    fontWeight: '600'
+  },
+  exitConfirmConfirmBtn: {
+    minWidth: 84,
+    height: 40,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ef4444'
+  },
+  exitConfirmConfirmText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600'
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.45)',
+    justifyContent: 'flex-end'
+  },
+  transferLeaderModal: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingBottom: 20,
+    maxHeight: '78%'
+  },
+  transferLeaderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  transferLeaderCancelText: {
+    fontSize: scaleFont(16),
+    color: '#6b7280',
+    fontWeight: '500'
+  },
+  transferLeaderTitle: {
+    fontSize: scaleFont(18),
+    color: '#111827',
+    fontWeight: '600'
+  },
+  transferLeaderConfirmText: {
+    fontSize: scaleFont(16),
+    color: '#ef4444',
+    fontWeight: '600'
+  },
+  transferLeaderConfirmTextDisabled: {
+    color: '#d1d5db'
+  },
+  transferLeaderList: {
+    flexGrow: 0
+  },
+  transferLeaderListContent: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 12
+  },
+  transferLeaderItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  transferLeaderRadio: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16
+  },
+  transferLeaderRadioInner: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#ef4444'
+  },
+  transferLeaderInfo: {
+    marginLeft: 14,
+    flex: 1
+  },
+  transferLeaderName: {
+    fontSize: scaleFont(16),
+    color: '#111827',
+    fontWeight: '500',
+    marginBottom: 4
+  },
+  transferLeaderRole: {
+    fontSize: scaleFont(14),
+    color: '#94a3b8'
   },
   // Modal 样式
   modalContainer: {

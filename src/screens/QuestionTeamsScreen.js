@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -15,11 +16,11 @@ import Avatar from '../components/Avatar';
 import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
 import questionApi from '../services/api/questionApi';
+import teamApi from '../services/api/teamApi';
 import { showAppAlert } from '../utils/appAlert';
+import { mapTeamToDetailRoute, normalizeQuestionTeam } from '../utils/teamTransforms';
 
 import { scaleFont } from '../utils/responsive';
-const TEAM_ROLE_LEADER = '\u961f\u957f';
-const TEAM_ROLE_MEMBER = '\u6210\u5458';
 const EMPTY_ERROR_KEY = '__EMPTY_NO_DATA__';
 
 const getRoleKey = (userRole, isJoined) => {
@@ -28,6 +29,8 @@ const getRoleKey = (userRole, isJoined) => {
   }
 
   switch (Number(userRole)) {
+    case 3:
+      return 'leader';
     case 2:
       return 'admin';
     case 1:
@@ -70,6 +73,7 @@ const normalizeTeam = (team) => {
   return {
     id: String(team?.id ?? ''),
     questionId: String(team?.questionId ?? ''),
+    questionIds: Array.isArray(team?.questionIds) ? team.questionIds.map((id) => String(id)) : [],
     name: team?.name || '',
     description: team?.description || '',
     avatar: team?.avatar || '',
@@ -82,7 +86,9 @@ const normalizeTeam = (team) => {
     isPending: false,
     userRole: Number(team?.userRole) || 0,
     role,
-    isAdmin: role === 'admin',
+    isLeader: role === 'leader',
+    isAdmin: role === 'leader' || role === 'admin',
+    myMemberStatus: Number(team?.myMemberStatus) || 0,
     statusColor: statusMeta.color,
   };
 };
@@ -97,6 +103,55 @@ export default function QuestionTeamsScreen({ route, navigation }) {
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamDesc, setNewTeamDesc] = useState('');
   const [showPendingModal, setShowPendingModal] = useState(false);
+  const [creatingTeam, setCreatingTeam] = useState(false);
+  const [currentUserNames, setCurrentUserNames] = useState([]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCurrentUserNames = async () => {
+      try {
+        const [userInfoRaw, currentUsername] = await Promise.all([
+          AsyncStorage.getItem('userInfo'),
+          AsyncStorage.getItem('currentUsername'),
+        ]);
+        const nextNames = [];
+
+        if (userInfoRaw) {
+          try {
+            const userInfo = JSON.parse(userInfoRaw);
+            nextNames.push(
+              userInfo?.username,
+              userInfo?.nickName,
+              userInfo?.nickname,
+              userInfo?.userName,
+              userInfo?.name
+            );
+          } catch (parseError) {
+            console.error('Failed to parse userInfo for team creator matching:', parseError);
+          }
+        }
+
+        nextNames.push(currentUsername);
+
+        if (isMounted) {
+          setCurrentUserNames(
+            nextNames
+              .map((item) => String(item ?? '').trim())
+              .filter(Boolean)
+          );
+        }
+      } catch (storageError) {
+        console.error('Failed to load current user info for team creator matching:', storageError);
+      }
+    };
+
+    loadCurrentUserNames();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -125,7 +180,9 @@ export default function QuestionTeamsScreen({ route, navigation }) {
         }
 
         const nextTeams = Array.isArray(response?.data)
-          ? response.data.map(normalizeTeam)
+          ? response.data.map((team) =>
+              normalizeQuestionTeam(team, { currentUserNames })
+            )
           : [];
 
         if (isMounted) {
@@ -150,28 +207,10 @@ export default function QuestionTeamsScreen({ route, navigation }) {
     return () => {
       isMounted = false;
     };
-  }, [questionId]);
+  }, [questionId, currentUserNames]);
 
   const handleTeamPress = (team) => {
-    navigation.navigate('TeamDetail', {
-      team: {
-        id: team.id,
-        name: team.name,
-        avatar: team.avatar,
-        role: team.isAdmin ? TEAM_ROLE_LEADER : TEAM_ROLE_MEMBER,
-        members: team.memberCount,
-        questions: 0,
-        description: team.description || '',
-        createdAt: '',
-        isActive: Boolean(team.statusDesc),
-        creatorId: team.isAdmin ? 1 : 0,
-        currentUserId: team.isAdmin ? 1 : -1,
-        isAdmin: team.isAdmin,
-      },
-      isJoined: team.isJoined,
-      isPending: team.isPending,
-      restrictedView: !team.isJoined,
-    });
+    navigation.navigate('TeamDetail', mapTeamToDetailRoute(team));
   };
 
   const handleApplyJoin = (teamId, teamName) => {
@@ -203,8 +242,11 @@ export default function QuestionTeamsScreen({ route, navigation }) {
     );
   };
 
-  const handleCreateTeam = () => {
-    if (!newTeamName.trim()) {
+  const handleCreateTeam = async () => {
+    const trimmedName = newTeamName.trim();
+    const trimmedDescription = newTeamDesc.trim();
+
+    if (!trimmedName) {
       showAppAlert(
         t('screens.questionTeams.alerts.hint'),
         t('screens.questionTeams.alerts.nameRequired')
@@ -212,13 +254,50 @@ export default function QuestionTeamsScreen({ route, navigation }) {
       return;
     }
 
-    showAppAlert(
-      t('screens.questionTeams.alerts.success'),
-      t('screens.questionTeams.alerts.createSuccess').replace('{name}', newTeamName)
-    );
-    setShowCreateModal(false);
-    setNewTeamName('');
-    setNewTeamDesc('');
+    if (questionId === undefined || questionId === null || questionId === '') {
+      showAppAlert(t('screens.questionTeams.alerts.hint'), t('common.noData'));
+      return;
+    }
+
+    try {
+      setCreatingTeam(true);
+      const response = await teamApi.createTeam({
+        questionIds: [questionId],
+        name: trimmedName,
+        description: trimmedDescription,
+        avatar: '',
+        maxMembers: 0,
+      });
+      const isSuccess = response?.code === 0 || response?.code === 200;
+
+      if (!isSuccess || !response?.data) {
+        throw new Error(response?.msg || 'Failed to create team');
+      }
+
+      const createdTeam = normalizeQuestionTeam(response.data, {
+        currentUserNames,
+        forceCreatorMembership: true,
+      });
+      setTeams((prevTeams) => [
+        createdTeam,
+        ...prevTeams.filter((team) => team.id !== createdTeam.id),
+      ]);
+      setShowCreateModal(false);
+      setNewTeamName('');
+      setNewTeamDesc('');
+      showAppAlert(
+        t('screens.questionTeams.alerts.success'),
+        t('screens.questionTeams.alerts.createSuccess').replace('{name}', createdTeam.name)
+      );
+    } catch (requestError) {
+      console.error('Failed to create question team:', requestError);
+      showAppAlert(
+        t('screens.questionTeams.alerts.hint'),
+        requestError?.message || 'Failed to create team'
+      );
+    } finally {
+      setCreatingTeam(false);
+    }
   };
 
   return (
@@ -375,7 +454,14 @@ export default function QuestionTeamsScreen({ route, navigation }) {
                 </View>
               </View>
 
-              {!team.isJoined && !team.isPending && (
+              {!team.isJoined && !team.isPending && Boolean(team.isFrozen) && (
+                <View style={styles.frozenTag}>
+                  <Ionicons name="ban-outline" size={14} color="#9ca3af" />
+                  <Text style={styles.frozenTagText}>不可申请</Text>
+                </View>
+              )}
+
+              {!team.isJoined && !team.isPending && !team.isFrozen && (
                 <TouchableOpacity
                   style={styles.applyBtn}
                   onPress={() => handleApplyJoin(team.id, team.name)}
@@ -489,9 +575,16 @@ export default function QuestionTeamsScreen({ route, navigation }) {
                   maxLength={100}
                 />
               </View>
-              <TouchableOpacity style={styles.submitBtn} onPress={handleCreateTeam}>
+              <TouchableOpacity
+                style={[
+                  styles.submitBtn,
+                  (creatingTeam || !newTeamName.trim()) && styles.submitBtnDisabled,
+                ]}
+                onPress={handleCreateTeam}
+                disabled={creatingTeam || !newTeamName.trim()}
+              >
                 <Text style={styles.submitBtnText}>
-                  {t('screens.questionTeams.createModal.submit')}
+                  {creatingTeam ? t('common.loading') : t('screens.questionTeams.createModal.submit')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -780,6 +873,22 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(12),
     fontWeight: '500',
   },
+  frozenTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    gap: 4,
+  },
+  frozenTagText: {
+    color: '#9ca3af',
+    fontSize: scaleFont(12),
+    fontWeight: '500',
+  },
   enterTag: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -868,6 +977,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 10,
+  },
+  submitBtnDisabled: {
+    opacity: 0.6,
   },
   submitBtnText: {
     color: '#fff',
