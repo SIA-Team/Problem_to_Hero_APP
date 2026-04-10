@@ -12,6 +12,8 @@ import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import { scaleFont } from '../utils/responsive';
+import teamApi from '../services/api/teamApi';
+import { buildTeamDetailRouteState } from '../utils/teamTransforms';
 const initialMessages = [{
   id: 1,
   author: '张三',
@@ -43,6 +45,46 @@ const initialMessages = [{
   shares: 6,
   bookmarks: 12
 }];
+
+const TEAM_ROLE_LEADER_VALUE = 3;
+const TEAM_ROLE_ADMIN_VALUE = 2;
+
+const normalizeTransferLeaderCandidate = (member) => {
+  const rawUserId = member?.userId ?? member?.memberUserId ?? member?.targetUserId ?? member?.id;
+  const userId = Number(rawUserId) || 0;
+  const userRole = Number(member?.userRole ?? member?.roleValue ?? member?.roleType) || 0;
+  const roleLabel = member?.role || (userRole === TEAM_ROLE_LEADER_VALUE ? '队长' : userRole === TEAM_ROLE_ADMIN_VALUE ? '管理员' : '成员');
+  const isLeader = userRole === TEAM_ROLE_LEADER_VALUE || roleLabel === '队长';
+
+  return {
+    id: String(member?.id ?? userId ?? ''),
+    userId,
+    name: member?.name || member?.userName || member?.nickName || member?.nickname || '-',
+    avatar: member?.avatar || member?.userAvatar || '',
+    role: roleLabel,
+    isLeader,
+  };
+};
+
+const getTransferLeaderCandidates = (sources = []) => {
+  for (const source of sources) {
+    if (!Array.isArray(source) || source.length === 0) {
+      continue;
+    }
+
+    const normalizedMembers = source
+      .map(normalizeTransferLeaderCandidate)
+      .filter((member) => member.userId > 0 && !member.isLeader);
+
+    if (normalizedMembers.length > 0) {
+      return normalizedMembers;
+    }
+  }
+
+  return teamMembers
+    .map(normalizeTransferLeaderCandidate)
+    .filter((member) => member.userId > 0 && !member.isLeader);
+};
 
 const initialDiscussionComments = {
   1: [{
@@ -195,6 +237,7 @@ const flattenDiscussionReplyTree = (nodes = [], accumulator = []) => {
 };
 
 // 团队公告数据
+// Mock-backed sections stay in place so missing backend fields remain visible.
 const announcements = [{
   id: 1,
   title: '本周学习主题：Python装饰器',
@@ -219,6 +262,7 @@ const announcements = [{
 }];
 
 // 团队成员数据
+// Mock-backed sections stay in place so missing backend fields remain visible.
 const teamMembers = [{
   id: 1,
   name: '张三',
@@ -295,7 +339,7 @@ export default function TeamDetailScreen({
   const {
     t
   } = useTranslation();
-  const team = route?.params?.team || {
+  const fallbackTeam = React.useMemo(() => route?.params?.team || {
     id: 1,
     name: 'Python学习互助团队',
     avatar: 'https://api.dicebear.com/7.x/shapes/svg?seed=team1',
@@ -310,12 +354,72 @@ export default function TeamDetailScreen({
     currentUserId: 1,
     // 当前用户ID（模拟）
     isAdmin: true // 是否是管理员（队长或管理员）
-  };
+  }, [route?.params?.team]);
 
   // 限制访问模式：未加入的团队只能查看成员信息
-  const restrictedView = route?.params?.restrictedView || false;
+  const routeTeamId = route?.params?.teamId ?? fallbackTeam.id;
   const routeIsJoined = route?.params?.isJoined;
   const routeIsPending = route?.params?.isPending;
+  const fallbackRouteState = React.useMemo(() => ({
+    team: fallbackTeam,
+    isJoined: routeIsJoined,
+    isPending: routeIsPending,
+    restrictedView: Boolean(route?.params?.restrictedView)
+  }), [fallbackTeam, route?.params?.restrictedView, routeIsJoined, routeIsPending]);
+  const [teamDetailData, setTeamDetailData] = useState(null);
+  const [joinStateOverride, setJoinStateOverride] = useState({});
+  React.useEffect(() => {
+    setJoinStateOverride({});
+  }, [routeTeamId]);
+  React.useEffect(() => {
+    let isMounted = true;
+    const normalizedTeamId = Number(routeTeamId);
+
+    if (!Number.isFinite(normalizedTeamId) || normalizedTeamId <= 0) {
+      if (isMounted) {
+        setTeamDetailData(null);
+      }
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const loadTeamDetail = async () => {
+      try {
+        const response = await teamApi.getTeamDetail(normalizedTeamId);
+        const isSuccess = response?.code === 0 || response?.code === 200;
+
+        if (!isSuccess || !response?.data) {
+          throw new Error(response?.msg || 'Failed to load team detail');
+        }
+
+        if (isMounted) {
+          setTeamDetailData(response.data);
+        }
+      } catch (requestError) {
+        console.error('Failed to load team detail:', requestError);
+        if (isMounted) {
+          setTeamDetailData(null);
+        }
+      }
+    };
+
+    loadTeamDetail();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [routeTeamId]);
+  const detailRouteState = React.useMemo(() => buildTeamDetailRouteState(teamDetailData, fallbackRouteState), [teamDetailData, fallbackRouteState]);
+  const team = detailRouteState?.team || fallbackTeam;
+  const isLeader = Boolean(team?.isLeader) || Number(team?.userRole) === 3;
+  const isAdmin = Boolean(team?.isAdmin) || isLeader || Number(team?.userRole) === 2;
+  const defaultIsJoined = detailRouteState?.isJoined !== undefined ? Boolean(detailRouteState.isJoined) : Boolean(team?.userRole) || isAdmin;
+  const isJoined = joinStateOverride?.isJoined !== undefined ? Boolean(joinStateOverride.isJoined) : defaultIsJoined;
+  const isPending = joinStateOverride?.isPending !== undefined ? Boolean(joinStateOverride.isPending) : Boolean(detailRouteState?.isPending);
+  const restrictedView = Boolean(detailRouteState?.restrictedView || !isJoined);
+  const displayedMemberCount = Number(team?.memberCount ?? team?.members) || teamMembers.length;
+  const transferLeaderCandidates = React.useMemo(() => getTransferLeaderCandidates([route?.params?.teamMembers, route?.params?.members, teamDetailData?.memberList, teamDetailData?.members, detailRouteState?.team?.memberList, detailRouteState?.team?.members]), [detailRouteState?.team?.memberList, detailRouteState?.team?.members, route?.params?.members, route?.params?.teamMembers, teamDetailData?.memberList, teamDetailData?.members]);
   const [activeTab, setActiveTab] = useState('');
 
   // Initialize activeTab with translated value
@@ -333,8 +437,6 @@ export default function TeamDetailScreen({
   const [liked, setLiked] = useState({});
   const [disliked, setDisliked] = useState({});
   const [bookmarked, setBookmarked] = useState({});
-  const [isJoined, setIsJoined] = useState(routeIsJoined !== undefined ? routeIsJoined : team.role === '队长' || team.role === '成员');
-  const [isPending, setIsPending] = useState(routeIsPending || false);
   const [showDiscussionCommentListModal, setShowDiscussionCommentListModal] = useState(false);
   const [showDiscussionReplyModal, setShowDiscussionReplyModal] = useState(false);
   const [showDiscussionComposerModal, setShowDiscussionComposerModal] = useState(false);
@@ -411,7 +513,7 @@ export default function TeamDetailScreen({
     type: 'admin',
     status: 'pending'
   }]);
-  const tabs = getTabsForRole(team.isAdmin, t);
+  const tabs = getTabsForRole(isAdmin, t);
   const activeTabType = React.useMemo(() => {
     if (!activeTab) {
       return '';
@@ -502,7 +604,7 @@ export default function TeamDetailScreen({
   // 已加入团队时只显示部分成员
   const maxVisibleMembers = 10;
   const visibleMembers = teamMembers.slice(0, maxVisibleMembers);
-  const hasMoreMembers = teamMembers.length > maxVisibleMembers;
+  const hasMoreMembers = displayedMemberCount > maxVisibleMembers || teamMembers.length > maxVisibleMembers;
   const handleSend = () => {
     openDiscussionComposer({
       messageId: null,
@@ -846,10 +948,44 @@ export default function TeamDetailScreen({
   // 转让团长相关状态
   const [showTransferLeaderModal, setShowTransferLeaderModal] = useState(false);
   const [selectedNewLeader, setSelectedNewLeader] = useState(null);
+  const [transferSubmitting, setTransferSubmitting] = useState(false);
+  const [leaveSubmitting, setLeaveSubmitting] = useState(false);
+  const selectedNewLeaderMember = React.useMemo(() => transferLeaderCandidates.find(member => String(member.userId) === String(selectedNewLeader)) || null, [selectedNewLeader, transferLeaderCandidates]);
+
+  const handleLeaveTeamRequest = async newCaptainUserId => {
+    const normalizedTeamId = Number(team?.id ?? routeTeamId);
+    if (!Number.isFinite(normalizedTeamId) || normalizedTeamId <= 0) {
+      showAppAlert(t('screens.teamDetail.alerts.hint'), '团队ID无效');
+      return false;
+    }
+
+    try {
+      setLeaveSubmitting(true);
+      const response = await teamApi.leaveTeam(normalizedTeamId, newCaptainUserId);
+      const isSuccess = response?.code === 0 || response?.code === 200;
+
+      if (!isSuccess) {
+        throw new Error(response?.msg || 'Failed to leave team');
+      }
+
+      showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.teamExited'));
+      navigation.goBack();
+      return true;
+    } catch (requestError) {
+      console.error('Failed to leave team:', requestError);
+      showAppAlert(t('screens.teamDetail.alerts.hint'), requestError?.message || '退出团队失败');
+      return false;
+    } finally {
+      setLeaveSubmitting(false);
+    }
+  };
 
   const handleExitTeam = () => {
+    if (leaveSubmitting || transferSubmitting) {
+      return;
+    }
     // 如果是团长，需要先转让团长
-    if (team.isAdmin && team.currentUserId === team.creatorId) {
+    if (isLeader) {
       showAppAlert(
         t('screens.teamDetail.exit.title'),
         t('screens.teamDetail.exit.leaderMessage'),
@@ -859,6 +995,7 @@ export default function TeamDetailScreen({
         }, {
           text: t('common.confirm'),
           onPress: () => {
+            setSelectedNewLeader(null);
             setShowTransferLeaderModal(true);
           }
         }]
@@ -874,24 +1011,44 @@ export default function TeamDetailScreen({
         }, {
           text: t('screens.teamDetail.exit.confirmButton'),
           style: 'destructive',
-          onPress: () => {
-            showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.teamExited'));
-            navigation.goBack();
+          onPress: async () => {
+            await handleLeaveTeamRequest();
           }
         }]
       );
     }
   };
 
-  const handleConfirmTransferLeader = () => {
-    if (!selectedNewLeader) {
+  const handleConfirmTransferLeader = async () => {
+    if (!selectedNewLeaderMember?.userId) {
       showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.transfer.selectMember'));
       return;
     }
-    showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.leaderTransferred'));
-    setShowTransferLeaderModal(false);
-    setSelectedNewLeader(null);
-    navigation.goBack();
+
+    const normalizedTeamId = Number(team?.id ?? routeTeamId);
+    if (!Number.isFinite(normalizedTeamId) || normalizedTeamId <= 0) {
+      showAppAlert(t('screens.teamDetail.alerts.hint'), '团队ID无效');
+      return;
+    }
+
+    try {
+      setTransferSubmitting(true);
+      const response = await teamApi.transferCaptain(normalizedTeamId, selectedNewLeaderMember.userId);
+      const isSuccess = response?.code === 0 || response?.code === 200;
+
+      if (!isSuccess) {
+        throw new Error(response?.msg || 'Failed to transfer team captain');
+      }
+
+      setShowTransferLeaderModal(false);
+      setSelectedNewLeader(null);
+      await handleLeaveTeamRequest(selectedNewLeaderMember.userId);
+    } catch (requestError) {
+      console.error('Failed to transfer team captain:', requestError);
+      showAppAlert(t('screens.teamDetail.alerts.hint'), requestError?.message || '移交队长失败');
+    } finally {
+      setTransferSubmitting(false);
+    }
   };
   const handleDismissTeam = () => {
     setShowDismissModal(true);
@@ -928,7 +1085,11 @@ export default function TeamDetailScreen({
     }, {
       text: t('common.confirm'),
       onPress: () => {
-        setIsPending(true);
+        setJoinStateOverride(prevState => ({
+          ...prevState,
+          isJoined: false,
+          isPending: true
+        }));
         setShowPendingModal(true);
       }
     }]);
@@ -1077,7 +1238,7 @@ export default function TeamDetailScreen({
         </View>
         {!restrictedView && <View style={styles.headerActions}>
             {/* 管理员显示：邀请、发起活动、发布公告 */}
-            {Boolean(team.isAdmin) && <>
+            {Boolean(isAdmin) && <>
                 <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('InviteTeamMember', {
             teamName: team.name
           })}>
@@ -1106,14 +1267,28 @@ export default function TeamDetailScreen({
         {/* 团队信息卡片 - 限制访问模式下不显示 */}
         {!restrictedView && <View style={styles.teamInfoCard}>
             <View style={styles.teamTitleRow}>
-              <Text style={styles.teamName}>{team.name}</Text>
+              <View style={styles.teamTitleContent}>
+                <View style={styles.teamNameRow}>
+                  <Text style={styles.teamName}>{team.name}</Text>
+                  {team.statusDesc ? <View style={[styles.teamStatusTag, {
+                    backgroundColor: `${team.statusColor || '#e5e7eb'}15`
+                  }]}>
+                    <View style={[styles.teamStatusDot, {
+                      backgroundColor: team.statusColor || '#6b7280'
+                    }]} />
+                    <Text style={[styles.teamStatusText, {
+                      color: team.statusColor || '#6b7280'
+                    }]}>{team.statusDesc}</Text>
+                  </View> : null}
+                </View>
+              </View>
               {/* 管理员：显示退出团队按钮 */}
-              {Boolean(team.isAdmin) && <TouchableOpacity style={styles.compactDismissBtn} onPress={handleExitTeam}>
+              {Boolean(isAdmin) && <TouchableOpacity style={styles.compactDismissBtn} onPress={handleExitTeam}>
                   <Ionicons name="exit-outline" size={14} color="#ef4444" />
                   <Text style={styles.compactDismissBtnText}>{t('screens.teamDetail.actions.exit')}</Text>
                 </TouchableOpacity>}
               {/* 普通成员：显示三个操作按钮 */}
-              {!team.isAdmin && team.currentUserId !== team.creatorId && <View style={styles.compactActionsRow}>
+              {!isAdmin && <View style={styles.compactActionsRow}>
                   <TouchableOpacity style={styles.compactActionBtn} onPress={handleOpenCreateActivity}>
                     <Ionicons name="calendar" size={14} color="#3b82f6" />
                     <Text style={styles.compactActionBtnText}>{t('screens.teamDetail.actions.activity')}</Text>
@@ -1134,7 +1309,7 @@ export default function TeamDetailScreen({
             <View style={styles.teamStats}>
               <View style={styles.teamStatItem}>
                 <Ionicons name="people" size={14} color="#9ca3af" />
-                <Text style={styles.teamStatText}>{team.members} {t('screens.teamDetail.stats.members')}</Text>
+                <Text style={styles.teamStatText}>{team.members}{team.maxMembers ? `/${team.maxMembers}` : ''} {t('screens.teamDetail.stats.members')}</Text>
               </View>
               <View style={styles.teamStatItem}>
                 <Ionicons name="chatbubbles" size={14} color="#9ca3af" />
@@ -1146,7 +1321,7 @@ export default function TeamDetailScreen({
         {/* 团队成员区域 - 根据是否加入显示不同样式 */}
         <View style={styles.teamMembersSection}>
           <View style={styles.membersSectionHeader}>
-            <Text style={styles.teamMembersTitle}>{t('screens.teamDetail.teamMembers')} ({teamMembers.length})</Text>
+            <Text style={styles.teamMembersTitle}>{t('screens.teamDetail.teamMembers')} ({displayedMemberCount})</Text>
             {Boolean(!restrictedView && hasMoreMembers) && <TouchableOpacity onPress={() => setShowMembersModal(true)}>
                 <Text style={styles.viewAllText}>{t('screens.teamDetail.actions.viewAll')}</Text>
               </TouchableOpacity>}
@@ -1638,7 +1813,7 @@ export default function TeamDetailScreen({
           <View style={styles.modalOverlay}>
             <View style={styles.membersModal}>
               <View style={styles.membersModalHeader}>
-                <Text style={styles.membersModalTitle}>{t('screens.teamDetail.members.title')} {t('screens.teamDetail.members.count').replace('{count}', teamMembers.length)}</Text>
+                <Text style={styles.membersModalTitle}>{t('screens.teamDetail.members.title')} {t('screens.teamDetail.members.count').replace('{count}', displayedMemberCount)}</Text>
                 <TouchableOpacity onPress={() => setShowMembersModal(false)}>
                   <Ionicons name="close" size={24} color="#6b7280" />
                 </TouchableOpacity>
@@ -1810,6 +1985,9 @@ export default function TeamDetailScreen({
           <View style={styles.transferLeaderModal}>
             <View style={styles.transferLeaderHeader}>
               <TouchableOpacity onPress={() => {
+                if (transferSubmitting) {
+                  return;
+                }
                 setShowTransferLeaderModal(false);
                 setSelectedNewLeader(null);
               }}>
@@ -1818,12 +1996,12 @@ export default function TeamDetailScreen({
               <Text style={styles.transferLeaderTitle}>{t('screens.teamDetail.transfer.title')}</Text>
               <TouchableOpacity 
                 onPress={handleConfirmTransferLeader}
-                disabled={!selectedNewLeader}
+                disabled={!selectedNewLeader || transferSubmitting}
               >
                 <Text style={[
                   styles.transferLeaderConfirmText,
-                  !selectedNewLeader && styles.transferLeaderConfirmTextDisabled
-                ]}>{t('common.confirm')}</Text>
+                  (!selectedNewLeader || transferSubmitting) && styles.transferLeaderConfirmTextDisabled
+                ]}>{transferSubmitting ? '确认中...' : t('common.confirm')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -1832,16 +2010,21 @@ export default function TeamDetailScreen({
               contentContainerStyle={styles.transferLeaderListContent}
               showsVerticalScrollIndicator={false}
             >
-              {teamMembers
+              {transferLeaderCandidates
                 .filter(member => member.role !== '队长')
                 .map(member => (
                   <TouchableOpacity
-                    key={member.id}
+                    key={`${member.id}-${member.userId}`}
                     style={styles.transferLeaderItem}
-                    onPress={() => setSelectedNewLeader(member.id)}
+                    onPress={() => {
+                      if (!transferSubmitting) {
+                        setSelectedNewLeader(member.userId);
+                      }
+                    }}
+                    disabled={transferSubmitting}
                   >
                     <View style={styles.transferLeaderRadio}>
-                      {selectedNewLeader === member.id && (
+                      {String(selectedNewLeader) === String(member.userId) && (
                         <View style={styles.transferLeaderRadioInner} />
                       )}
                     </View>
@@ -1930,12 +2113,52 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 8
   },
+  teamTitleContent: {
+    flex: 1,
+    marginRight: 8
+  },
+  teamNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 6
+  },
   teamName: {
     fontSize: scaleFont(18),
     fontWeight: '600',
-    color: '#1f2937',
-    flex: 1,
-    marginRight: 8
+    color: '#1f2937'
+  },
+  teamStatusTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    gap: 4,
+    marginLeft: scaleFont(8)
+  },
+  teamStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3
+  },
+  teamStatusText: {
+    fontSize: scaleFont(11),
+    fontWeight: '500'
+  },
+  teamStatusBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999
+  },
+  teamStatusBadgeText: {
+    fontSize: scaleFont(11),
+    fontWeight: '600',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    overflow: 'hidden'
   },
   // 紧凑型操作按钮（放在标题右侧）
   compactActionsRow: {
