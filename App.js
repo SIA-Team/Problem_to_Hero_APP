@@ -80,7 +80,14 @@ import ApiDebugScreen from './src/screens/ApiDebugScreen';
 import FeedbackScreen from './src/screens/FeedbackScreen';
 import BlacklistScreen from './src/screens/BlacklistScreen';
 import WalletDetailScreen from './src/screens/WalletDetailScreen';
+import InterestOnboardingScreen from './src/screens/InterestOnboardingScreen';
 import { modalTokens } from './src/components/modalTokens';
+import {
+  markInterestOnboardingCompleted,
+  saveUserInterestPreferences,
+  setInterestOnboardingPending,
+  shouldShowInterestOnboarding,
+} from './src/utils/interestPreferences';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -524,6 +531,9 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [fontsLoaded, setFontsLoaded] = useState(false);
+  const [isCheckingInterestOnboarding, setIsCheckingInterestOnboarding] = useState(false);
+  const [shouldShowInterestOnboardingScreen, setShouldShowInterestOnboardingScreen] = useState(false);
+  const [interestOnboardingUserId, setInterestOnboardingUserId] = useState(null);
   
   console.log('📱 App state:', { isLoggedIn, isInitializing, fontsLoaded });
   
@@ -734,6 +744,11 @@ export default function App() {
                   );
                 }
                 
+                const registeredUserId = result.data.userBaseInfo?.userId;
+                if (registeredUserId) {
+                  await setInterestOnboardingPending(registeredUserId);
+                }
+
                 // 自动登录进入应用
                 setIsLoggedIn(true);
                 setIsInitializing(false);
@@ -803,6 +818,48 @@ export default function App() {
     return () => clearInterval(checkTokenInterval);
   }, [isLoggedIn]);
 
+  useEffect(() => {
+    let mounted = true;
+
+    const checkInterestOnboardingStatus = async () => {
+      if (!isLoggedIn) {
+        if (!mounted) return;
+        setShouldShowInterestOnboardingScreen(false);
+        setIsCheckingInterestOnboarding(false);
+        setInterestOnboardingUserId(null);
+        return;
+      }
+
+      setIsCheckingInterestOnboarding(true);
+
+      try {
+        const currentUser = await authApi.getCurrentUser();
+        const currentUserId = currentUser?.userId ? String(currentUser.userId) : null;
+        const shouldShow = await shouldShowInterestOnboarding(currentUserId);
+
+        if (!mounted) return;
+
+        setInterestOnboardingUserId(currentUserId);
+        setShouldShowInterestOnboardingScreen(shouldShow);
+      } catch (error) {
+        console.error('Failed to check interest onboarding status:', error);
+        if (mounted) {
+          setShouldShowInterestOnboardingScreen(false);
+        }
+      } finally {
+        if (mounted) {
+          setIsCheckingInterestOnboarding(false);
+        }
+      }
+    };
+
+    checkInterestOnboardingStatus();
+
+    return () => {
+      mounted = false;
+    };
+  }, [isLoggedIn]);
+
   // 显示加载界面直到字体和初始化完成
   if (!fontsLoaded || isInitializing) {
     console.log('🔄 App loading state:', { fontsLoaded, isInitializing });
@@ -823,8 +880,71 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    setShouldShowInterestOnboardingScreen(false);
+    setIsCheckingInterestOnboarding(false);
+    setInterestOnboardingUserId(null);
     setIsLoggedIn(false);
   };
+
+  const handleInterestOnboardingComplete = async (payload) => {
+    if (!interestOnboardingUserId) {
+      setShouldShowInterestOnboardingScreen(false);
+      return;
+    }
+
+    try {
+      await saveUserInterestPreferences(interestOnboardingUserId, payload);
+      await markInterestOnboardingCompleted(interestOnboardingUserId);
+      setShouldShowInterestOnboardingScreen(false);
+      showToast('Interest preferences saved.', 'success');
+    } catch (error) {
+      console.error('Failed to save interest onboarding result:', error);
+      showToast('Failed to save interest preferences.', 'error');
+    }
+  };
+
+  const handleInterestOnboardingSkip = async () => {
+    if (!interestOnboardingUserId) {
+      setShouldShowInterestOnboardingScreen(false);
+      return;
+    }
+
+    try {
+      await markInterestOnboardingCompleted(interestOnboardingUserId);
+    } catch (error) {
+      console.error('Failed to mark interest onboarding skipped:', error);
+    }
+
+    setShouldShowInterestOnboardingScreen(false);
+  };
+
+  if (isLoggedIn && isCheckingInterestOnboarding) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+        <ActivityIndicator size="large" color="#ef4444" />
+        <Text style={{ marginTop: 16, fontSize: 14, color: '#6b7280' }}>
+          Preparing personalized setup...
+        </Text>
+      </View>
+    );
+  }
+
+  if (isLoggedIn && shouldShowInterestOnboardingScreen) {
+    return (
+      <EmergencyProvider>
+        <SafeAreaProvider>
+          <StatusBar style="dark" />
+          <InterestOnboardingScreen
+            userId={interestOnboardingUserId}
+            onComplete={handleInterestOnboardingComplete}
+            onSkip={handleInterestOnboardingSkip}
+          />
+          <AppAlertContainer ref={appAlertRef} />
+          <ToastContainer ref={toastRef} />
+        </SafeAreaProvider>
+      </EmergencyProvider>
+    );
+  }
 
   if (!isLoggedIn) {
     return (
@@ -914,3 +1034,5 @@ export default function App() {
     </EmergencyProvider>
   );
 }
+
+
