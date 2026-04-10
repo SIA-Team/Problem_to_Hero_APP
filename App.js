@@ -88,6 +88,11 @@ import {
   setInterestOnboardingPending,
   shouldShowInterestOnboarding,
 } from './src/utils/interestPreferences';
+import {
+  loadComboChannels,
+  mergeUniqueChannels,
+  saveComboChannels,
+} from './src/services/channelSubscriptionService';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -129,6 +134,14 @@ const APP_LINKING = {
       },
     },
   },
+};
+
+const extractInterestChannels = (payload) => {
+  const level2 = Array.isArray(payload?.level2) ? payload.level2 : [];
+
+  return level2
+    .map((item) => (typeof item?.name === 'string' ? item.name.trim() : ''))
+    .filter(Boolean);
 };
 
 const getCurrentBundleFingerprint = () => {
@@ -894,6 +907,14 @@ export default function App() {
 
     try {
       await saveUserInterestPreferences(interestOnboardingUserId, payload);
+      const selectedInterestChannels = extractInterestChannels(payload);
+
+      if (selectedInterestChannels.length > 0) {
+        const savedComboChannels = await loadComboChannels();
+        const mergedChannels = mergeUniqueChannels(savedComboChannels, selectedInterestChannels);
+        await saveComboChannels(mergedChannels);
+      }
+
       await markInterestOnboardingCompleted(interestOnboardingUserId);
       setShouldShowInterestOnboardingScreen(false);
       showToast('Interest preferences saved.', 'success');

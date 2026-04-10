@@ -36,6 +36,57 @@ const questionTypes = [{
   color: '#3b82f6'
 }];
 const rewardAmounts = [10, 20, 50, 100];
+const CUSTOM_LEVEL2_PREFIX = 'custom-level2-';
+
+const normalizeCustomCategoryName = (value) => {
+  return (value || '').toString().trim();
+};
+
+const createCustomLevel2Category = (level1, customName) => {
+  const normalizedName = normalizeCustomCategoryName(customName);
+  const parentId = Number(level1?.id);
+  return {
+    id: `${CUSTOM_LEVEL2_PREFIX}${parentId || 0}:${normalizedName}`,
+    name: normalizedName,
+    icon: 'create-outline',
+    color: level1?.color || '#ef4444',
+    parentId: parentId || 0,
+    parentName: level1?.name || '',
+    isCustom: true,
+  };
+};
+
+const isCustomLevel2Category = (category) => {
+  return Boolean(category?.isCustom) || String(category?.id || '').startsWith(CUSTOM_LEVEL2_PREFIX);
+};
+
+const resolveEffectiveCategoryId = (level1, level2) => {
+  if (!level2) return null;
+
+  if (isCustomLevel2Category(level2)) {
+    const level1Id = Number(level1?.id);
+    return Number.isFinite(level1Id) && level1Id > 0 ? level1Id : null;
+  }
+
+  const level2Id = Number(level2.id);
+  return Number.isFinite(level2Id) && level2Id > 0 ? level2Id : null;
+};
+
+const buildCustomCategoryPayload = (level1, level2) => {
+  if (!isCustomLevel2Category(level2)) {
+    return {};
+  }
+
+  const normalizedCategoryName = normalizeCustomCategoryName(level2?.name);
+  return {
+    customCategoryName: normalizedCategoryName || undefined,
+    customCategoryParentId: Number(level1?.id) || Number(level2?.parentId) || undefined,
+    customCategoryParentName: level1?.name || level2?.parentName || undefined,
+    customCategoryLevel: 2,
+    customCategoryPending: 1,
+  };
+};
+
 export default function PublishScreen({
   navigation,
   route
@@ -110,6 +161,8 @@ export default function PublishScreen({
   const [tempSelectedLevel1, setTempSelectedLevel1] = useState(null); // 临时选中的一级分类（用于视图切换）
   const [loadingLevel2, setLoadingLevel2] = useState(false); // 二级分类加载状态
   const [level1SearchQuery, setLevel1SearchQuery] = useState(''); // 一级分类搜索关键词
+  const [level2SearchQuery, setLevel2SearchQuery] = useState('');
+  const [customLevel2Name, setCustomLevel2Name] = useState('');
 
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [regionStep, setRegionStep] = useState(0);
@@ -231,48 +284,72 @@ export default function PublishScreen({
 
   // 单独处理分类回显（当分类数据加载完成后）
   useEffect(() => {
-    if (draftData && level1Categories.length > 0) {
-      const categoryId = draftData.categoryId;
-      const categoryName = draftData.categoryName;
-      if (!categoryId && !categoryName) {
-        return;
+    if (!draftData || level1Categories.length === 0) {
+      return;
+    }
+
+    const categoryId = Number(draftData.categoryId);
+    const categoryName = normalizeCustomCategoryName(
+      draftData.customCategoryName || draftData.categoryName
+    );
+
+    if (!categoryId && !categoryName) {
+      return;
+    }
+
+    let found = false;
+    for (const level1 of level1Categories) {
+      if (!level2CategoriesMap[level1.id]) {
+        continue;
       }
 
-      // 查找对应的分类
-      let found = false;
-      for (const level1 of level1Categories) {
-        // 先尝试加载该一级分类的二级分类（如果还没加载）
-        if (!level2CategoriesMap[level1.id]) {
-          continue;
-        }
-        const level2List = level2CategoriesMap[level1.id] || [];
+      const level2List = level2CategoriesMap[level1.id] || [];
+      let level2 = null;
 
-        // 优先通过 ID 查找
-        let level2 = null;
-        if (categoryId) {
-          level2 = level2List.find(cat => cat.id === categoryId);
-        }
-
-        // 如果通过 ID 没找到，尝试通过名称查找
-        if (!level2 && categoryName) {
-          level2 = level2List.find(cat => cat.name === categoryName);
-        }
-        if (level2) {
-          setSelectedLevel1(level1);
-          setSelectedLevel2(level2);
-          found = true;
-          break;
-        }
+      if (categoryId) {
+        level2 = level2List.find((cat) => Number(cat.id) === categoryId);
       }
-      if (!found) {
-        // 尝试自动加载所有一级分类的二级分类
-        level1Categories.forEach(level1 => {
-          if (!level2CategoriesMap[level1.id]) {
-            fetchLevel2Categories(level1.id);
-          }
-        });
+
+      if (!level2 && categoryName) {
+        level2 = level2List.find(
+          (cat) => normalizeCustomCategoryName(cat.name) === categoryName
+        );
+      }
+
+      if (level2) {
+        setSelectedLevel1(level1);
+        setSelectedLevel2(level2);
+        found = true;
+        break;
       }
     }
+
+    if (found) {
+      return;
+    }
+
+    const fallbackLevel1 =
+      level1Categories.find((item) => Number(item.id) === categoryId) ||
+      level1Categories.find(
+        (item) => Number(item.id) === Number(draftData.customCategoryParentId)
+      );
+
+    const shouldRestoreCustom =
+      Boolean(draftData.customCategoryPending) ||
+      Boolean(draftData.customCategoryName) ||
+      (!found && Boolean(categoryName) && categoryId > 0);
+
+    if (fallbackLevel1 && categoryName && shouldRestoreCustom) {
+      setSelectedLevel1(fallbackLevel1);
+      setSelectedLevel2(createCustomLevel2Category(fallbackLevel1, categoryName));
+      return;
+    }
+
+    level1Categories.forEach((level1) => {
+      if (!level2CategoriesMap[level1.id]) {
+        fetchLevel2Categories(level1.id);
+      }
+    });
   }, [draftData, level1Categories, level2CategoriesMap]);
 
   // 加载一级分类
@@ -356,13 +433,16 @@ export default function PublishScreen({
         }
 
         // 转换数据格式并缓存
+        const parentCategory = level1Categories.find((item) => Number(item.id) === Number(parentId));
         const formattedCategories = allCategories.map(cat => ({
           id: cat.id,
           name: cat.name,
           originalIcon: cat.icon,
-          // 保存原始 Font Awesome 图标值
+          // ?????? Font Awesome ?????
           icon: cat.icon,
-          color: cat.color || getColorForCategory(cat.name) // 添加颜色
+          color: cat.color || getColorForCategory(cat.name), // ??????
+          parentId: Number(parentId),
+          parentName: parentCategory?.name || '',
         }));
         setLevel2CategoriesMap(prev => ({
           ...prev,
@@ -400,6 +480,68 @@ export default function PublishScreen({
     }
     const query = level1SearchQuery.toLowerCase().trim();
     return allCategories.filter(cat => cat.name.toLowerCase().includes(query) || cat.description && cat.description.toLowerCase().includes(query) || cat.desc && cat.desc.toLowerCase().includes(query));
+  };
+
+  const getFilteredLevel2Categories = () => {
+    const parentId = Number(tempSelectedLevel1?.id);
+    const source = level2CategoriesMap[parentId] || [];
+    const query = normalizeCustomCategoryName(level2SearchQuery).toLowerCase();
+
+    const filtered = !query
+      ? source
+      : source.filter((cat) => {
+          const name = normalizeCustomCategoryName(cat?.name).toLowerCase();
+          return name.includes(query);
+        });
+
+    if (
+      isCustomLevel2Category(selectedLevel2) &&
+      Number(selectedLevel2?.parentId) === parentId &&
+      normalizeCustomCategoryName(selectedLevel2?.name)
+    ) {
+      const customName = normalizeCustomCategoryName(selectedLevel2.name);
+      const customMatched = !query || customName.toLowerCase().includes(query);
+      const existed = filtered.some((item) => normalizeCustomCategoryName(item?.name) === customName);
+      if (customMatched && !existed) {
+        return [selectedLevel2, ...filtered];
+      }
+    }
+
+    return filtered;
+  };
+
+  const selectCustomLevel2 = () => {
+    const normalizedName = normalizeCustomCategoryName(customLevel2Name);
+
+    if (!tempSelectedLevel1) {
+      showToast(t('publish.selectLevel1'), 'warning');
+      return;
+    }
+
+    if (!normalizedName) {
+      showToast('Please enter a custom subcategory', 'warning');
+      return;
+    }
+
+    const level2List = level2CategoriesMap[tempSelectedLevel1.id] || [];
+    const existedCategory = level2List.find(
+      (cat) => normalizeCustomCategoryName(cat.name).toLowerCase() === normalizedName.toLowerCase()
+    );
+
+    if (existedCategory) {
+      selectLevel2(existedCategory);
+      showToast('Subcategory already exists and is selected', 'info');
+      return;
+    }
+
+    const customCategory = createCustomLevel2Category(tempSelectedLevel1, normalizedName);
+    setSelectedLevel1(tempSelectedLevel1);
+    setSelectedLevel2(customCategory);
+    setCustomLevel2Name('');
+    setLevel2SearchQuery('');
+    setShowCategoryModal(false);
+    setCategoryModalView('level1');
+    setTempSelectedLevel1(null);
   };
 
   // 根据分类名称返回颜色（辅助函数，用于后端没有返回颜色时的降级方案）
@@ -503,12 +645,18 @@ export default function PublishScreen({
     }
     try {
       // 构建草稿数据（与发布数据结构相同）
+      const effectiveCategoryId = resolveEffectiveCategoryId(selectedLevel1, selectedLevel2);
+      const normalizedCategoryName = normalizeCustomCategoryName(selectedLevel2?.name);
+      const customCategoryPayload = buildCustomCategoryPayload(selectedLevel1, selectedLevel2);
+
       const draftData = {
         id: 0,
         // 新建草稿
         type: selectedType,
         // 直接使用数字，不需要映射
-        categoryId: selectedLevel2?.id || 5,
+        categoryId: effectiveCategoryId || 5,
+        categoryName: normalizedCategoryName || '',
+        ...customCategoryPayload,
         // 使用选中的分类ID，如果没有则使用默认值5
         title: title.trim() || '',
         description: content.trim() || '',
@@ -639,6 +787,16 @@ export default function PublishScreen({
       showToast(t('publish.toasts.selectTeam'), 'warning');
       return;
     }
+
+    const effectiveCategoryId = resolveEffectiveCategoryId(selectedLevel1, selectedLevel2);
+    if (!effectiveCategoryId) {
+      showToast(t('publish.selectCategory'), 'warning');
+      return;
+    }
+
+    const normalizedCategoryName = normalizeCustomCategoryName(selectedLevel2?.name);
+    const customCategoryPayload = buildCustomCategoryPayload(selectedLevel1, selectedLevel2);
+
     try {
       setIsPublishing(true);
 
@@ -677,7 +835,9 @@ export default function PublishScreen({
           id: 0,
           type: selectedType,
           // 直接使用数字，不需要映射
-          categoryId: selectedLevel2.id,
+          categoryId: effectiveCategoryId,
+          categoryName: normalizedCategoryName || '',
+          ...customCategoryPayload,
           title: title.trim(),
           description: content.trim() || '',
           subQuestions: '[]',
@@ -706,7 +866,9 @@ export default function PublishScreen({
           // 新建问题
           type: selectedType,
           // 直接使用数字，不需要映射
-          categoryId: selectedLevel2.id,
+          categoryId: effectiveCategoryId,
+          categoryName: normalizedCategoryName || '',
+          ...customCategoryPayload,
           // 必填，使用选中的二级分类ID
           title: title.trim(),
           // 确保去除首尾空格
@@ -960,9 +1122,9 @@ export default function PublishScreen({
         pageSize: expertPageSize
       };
 
-      // 如果选择了二级分类，则按分类筛选
-      if (selectedLevel2?.id) {
-        params.categoryId = selectedLevel2.id;
+      const effectiveCategoryId = resolveEffectiveCategoryId(selectedLevel1, selectedLevel2);
+      if (effectiveCategoryId) {
+        params.categoryId = effectiveCategoryId;
       }
       const response = await expertApi.getExpertList(params);
       console.log('✅ 专家列表响应:', response);
@@ -1004,43 +1166,53 @@ export default function PublishScreen({
 
   // 当选择定向问题类型或分类变化时，重新加载专家列表
   useEffect(() => {
-    // 只有在选择了定向问题类型且选择了分类时才加载专家列表
-    if (selectedType === 2 && selectedLevel2?.id) {
-      // 2 = 定向问题
+    const effectiveCategoryId = resolveEffectiveCategoryId(selectedLevel1, selectedLevel2);
+
+    if (selectedType === 2 && effectiveCategoryId) {
+      // 2 = ??????
       loadExpertList(false);
-    } else if (selectedType === 2 && !selectedLevel2?.id) {
-      // 2 = 定向问题
-      // 如果选择了定向问题但没有选择分类，清空专家列表
+    } else if (selectedType === 2 && !effectiveCategoryId) {
+      // 2 = ??????
+      // ???????????????????????????????????
       setExpertList([]);
       setExpertTotal(0);
     }
-  }, [selectedType, selectedLevel2]);
+  }, [selectedType, selectedLevel1, selectedLevel2]);
 
   // 过滤专家列表（本地搜索）
   const filteredExperts = expertList.filter(user => user.nickname.toLowerCase().includes(expertSearchQuery.toLowerCase()) || user.categories && user.categories.some(cat => cat.name.toLowerCase().includes(expertSearchQuery.toLowerCase())));
   const selectLevel1 = async cat => {
     setTempSelectedLevel1(cat);
-    setCategoryModalView('level2'); // 切换到二级分类视图
+    setCategoryModalView('level2'); // ??????????????
+    setLevel2SearchQuery('');
+    setCustomLevel2Name('');
 
-    // 按需加载二级分类
+    // ????????????
     await fetchLevel2Categories(cat.id);
   };
   const selectLevel2 = cat => {
-    setSelectedLevel1(tempSelectedLevel1); // 确认选择一级分类
-    setSelectedLevel2(cat); // 选择二级分类
-    setShowCategoryModal(false); // 关闭弹窗
-    setCategoryModalView('level1'); // 重置视图
-    setTempSelectedLevel1(null); // 清空临时选择
+    setSelectedLevel1(tempSelectedLevel1); // ?????????????
+    setSelectedLevel2(cat); // ?????????
+    setShowCategoryModal(false); // ??????
+    setCategoryModalView('level1'); // ??????
+    setTempSelectedLevel1(null); // ?????????
+    setLevel1SearchQuery('');
+    setLevel2SearchQuery('');
+    setCustomLevel2Name('');
   };
   const backToLevel1 = () => {
     setCategoryModalView('level1');
     setTempSelectedLevel1(null);
+    setLevel2SearchQuery('');
+    setCustomLevel2Name('');
   };
   const handleCategoryModalClose = () => {
     setShowCategoryModal(false);
     setCategoryModalView('level1');
     setTempSelectedLevel1(null);
-    setLevel1SearchQuery(''); // 清空搜索关键词
+    setLevel1SearchQuery(''); // ???????????
+    setLevel2SearchQuery('');
+    setCustomLevel2Name('');
   };
   const getCategoryDisplay = () => {
     if (selectedLevel1 && selectedLevel2) {
@@ -1117,7 +1289,11 @@ export default function PublishScreen({
         {/* 问题类别选择 */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('publish.category')} <Text style={styles.required}>*</Text></Text>
-          <TouchableOpacity style={styles.categorySelector} onPress={() => setShowCategoryModal(true)}>
+          <TouchableOpacity
+            testID="publish-category-selector"
+            style={styles.categorySelector}
+            onPress={() => setShowCategoryModal(true)}
+          >
             <View style={styles.categorySelectorLeft}>
               {Boolean(selectedLevel1) && <View style={[styles.categoryIcon, {
               backgroundColor: selectedLevel1.color + '20'
@@ -1299,14 +1475,24 @@ export default function PublishScreen({
         {/* 问题标题 */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('publish.questionTitle')} <Text style={styles.required}>*</Text></Text>
-          <TextInput style={styles.titleInput} placeholder={t('publish.titlePlaceholder')} placeholderTextColor="#9ca3af" value={title} onChangeText={setTitle} maxLength={50} />
+          <TextInput
+            testID="publish-title-input"
+            style={styles.titleInput}
+            placeholder={t('publish.titlePlaceholder')}
+            placeholderTextColor="#9ca3af"
+            value={title}
+            onChangeText={setTitle}
+            maxLength={50}
+          />
           <Text style={styles.charCount}>{title.length}/50</Text>
         </View>
 
         {/* 问题描述 */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('publish.questionDescription')} <Text style={styles.required}>*</Text></Text>
-          <TextInput style={[styles.contentInput, {
+          <TextInput
+            testID="publish-content-input"
+            style={[styles.contentInput, {
           height: Math.max(150, contentInputHeight)
         }]} placeholder={t('publish.descriptionPlaceholder')} placeholderTextColor="#9ca3af" value={content} onChangeText={setContent} multiline textAlignVertical="top" maxLength={2000} onContentSizeChange={event => {
           setContentInputHeight(event.nativeEvent.contentSize.height);
@@ -1436,7 +1622,12 @@ export default function PublishScreen({
         </View>
 
         {/* 发布按钮 */}
-        <TouchableOpacity style={[styles.publishBtn, (!title || !content || !selectedLevel2 || isPublishing) && styles.publishBtnDisabled]} onPress={handlePublish} disabled={isPublishing}>
+        <TouchableOpacity
+          testID="publish-submit-button"
+          style={[styles.publishBtn, (!title || !content || !selectedLevel2 || isPublishing) && styles.publishBtnDisabled]}
+          onPress={handlePublish}
+          disabled={isPublishing}
+        >
           {isPublishing ? <View style={{
           flexDirection: 'row',
           alignItems: 'center'
@@ -1500,7 +1691,7 @@ export default function PublishScreen({
                     </View>
                     
                     {/* 分类列表 */}
-                    {getFilteredLevel1Categories().length > 0 ? getFilteredLevel1Categories().map(cat => <TouchableOpacity key={cat.id} style={styles.level1Item} onPress={() => selectLevel1(cat)} activeOpacity={0.7}>
+                    {getFilteredLevel1Categories().length > 0 ? getFilteredLevel1Categories().map(cat => <TouchableOpacity key={cat.id} testID={`publish-level1-item-${cat.id}`} style={styles.level1Item} onPress={() => selectLevel1(cat)} activeOpacity={0.7}>
                           <View style={[styles.level1Icon, {
                   backgroundColor: cat.color + '20'
                 }]}>
@@ -1520,16 +1711,58 @@ export default function PublishScreen({
                   </View>) : (/* 视图2：二级分类列表 */
             <View style={styles.level2Container}>
                     <Text style={styles.levelTitle}>{t('publish.selectLevel2')}</Text>
+
+                    <View style={styles.level1SearchContainer}>
+                      <Ionicons name="search" size={20} color="#9ca3af" />
+                      <TextInput
+                        style={styles.level1SearchInput}
+                        placeholder={t('publish.searchCategories')}
+                        value={level2SearchQuery}
+                        onChangeText={setLevel2SearchQuery}
+                        placeholderTextColor="#9ca3af"
+                      />
+                      {level2SearchQuery.length > 0 && <TouchableOpacity onPress={() => setLevel2SearchQuery('')}>
+                          <Ionicons name="close-circle" size={20} color="#9ca3af" />
+                        </TouchableOpacity>}
+                    </View>
+
+                    <View style={styles.customLevel2Row}>
+                      <View style={styles.customLevel2InputWrap}>
+                        <Ionicons name="create-outline" size={18} color="#9ca3af" />
+                        <TextInput
+                          style={styles.customLevel2Input}
+                          placeholder="Add custom subcategory"
+                          value={customLevel2Name}
+                          onChangeText={setCustomLevel2Name}
+                          placeholderTextColor="#9ca3af"
+                          returnKeyType="done"
+                          onSubmitEditing={selectCustomLevel2}
+                        />
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.customLevel2AddBtn, !normalizeCustomCategoryName(customLevel2Name) && styles.customLevel2AddBtnDisabled]}
+                        onPress={selectCustomLevel2}
+                        disabled={!normalizeCustomCategoryName(customLevel2Name)}
+                      >
+                        <Text style={styles.customLevel2AddBtnText}>Add</Text>
+                      </TouchableOpacity>
+                    </View>
+
                     {loadingLevel2 ? <View style={styles.level2LoadingContainer}>
                         <ActivityIndicator size="small" color={tempSelectedLevel1?.color || '#ef4444'} />
                         <Text style={styles.level2LoadingText}>{t('publish.loading')}</Text>
-                      </View> : <View style={styles.level2Grid}>
-                        {(level2CategoriesMap[tempSelectedLevel1?.id] || []).map(cat => <TouchableOpacity key={cat.id} style={styles.level2Item} onPress={() => selectLevel2(cat)} activeOpacity={0.7}>
-                            <CategoryIcon icon={cat.icon} size={18} color={tempSelectedLevel1?.color || '#6b7280'} style={{
+                      </View> : getFilteredLevel2Categories().length > 0 ? <View style={styles.level2Grid}>
+                        {getFilteredLevel2Categories().map(cat => <TouchableOpacity key={cat.id} testID={'publish-level2-item-' + cat.id} style={[styles.level2Item, String(selectedLevel2?.id) === String(cat.id) && styles.level2ItemActive]} onPress={() => selectLevel2(cat)} activeOpacity={0.7}>
+                            {isCustomLevel2Category(cat) ? <Ionicons name="create-outline" size={18} color={tempSelectedLevel1?.color || '#6b7280'} style={{
                     marginRight: 6
-                  }} />
+                  }} /> : <CategoryIcon icon={cat.icon} size={18} color={tempSelectedLevel1?.color || '#6b7280'} style={{
+                    marginRight: 6
+                  }} />}
                             <Text style={styles.level2Name}>{cat.name}</Text>
                           </TouchableOpacity>)}
+                      </View> : <View style={styles.level2Empty}>
+                        <Ionicons name="search-outline" size={24} color="#d1d5db" />
+                        <Text style={styles.level2EmptyText}>{t('publish.noSearchResult')}</Text>
                       </View>}
                   </View>)}
               </ScrollView>}
@@ -2200,6 +2433,44 @@ const styles = StyleSheet.create({
   level2Name: {
     fontSize: scaleFont(13),
     color: modalTokens.textPrimary
+  },
+  customLevel2Row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12
+  },
+  customLevel2InputWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: modalTokens.surfaceSoft,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  customLevel2Input: {
+    flex: 1,
+    fontSize: scaleFont(14),
+    color: modalTokens.textPrimary,
+    padding: 0,
+    marginLeft: 8
+  },
+  customLevel2AddBtn: {
+    marginLeft: 8,
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  customLevel2AddBtnDisabled: {
+    backgroundColor: '#fecaca'
+  },
+  customLevel2AddBtnText: {
+    fontSize: scaleFont(13),
+    color: '#fff',
+    fontWeight: '600'
   },
   level2Empty: {
     alignItems: 'center',
