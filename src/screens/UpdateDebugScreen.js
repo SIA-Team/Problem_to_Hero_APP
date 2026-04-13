@@ -1,78 +1,110 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Updates from 'expo-updates';
 import Constants from 'expo-constants';
+import {
+  getCurrentBundleFingerprint,
+  getOtaLaunchInfo,
+  loadRecentOtaErrors,
+} from '../utils/otaDiagnostics';
 
 const UpdateDebugScreen = () => {
   const [updateInfo, setUpdateInfo] = useState(null);
+  const [updateLogs, setUpdateLogs] = useState([]);
   const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     loadUpdateInfo();
   }, []);
 
-  const loadUpdateInfo = () => {
-    console.log('📊 加载更新信息...');
-    console.log('Updates.updateId:', Updates.updateId);
-    console.log('Updates.channel:', Updates.channel);
-    console.log('Updates.runtimeVersion:', Updates.runtimeVersion);
-    console.log('Updates.isEmbeddedLaunch:', Updates.isEmbeddedLaunch);
-    
+  const loadUpdateInfo = async () => {
+    const launchInfo = getOtaLaunchInfo();
+    const logs = await loadRecentOtaErrors();
+
     const info = {
-      // 当前运行的更新信息
-      currentUpdateId: Updates.updateId || '未知',
-      currentChannel: Updates.channel || '未知',
-      currentRuntimeVersion: Updates.runtimeVersion || '未知',
-      isEmbeddedLaunch: Updates.isEmbeddedLaunch,
-      isEmergencyLaunch: Updates.isEmergencyLaunch,
-      
-      // 应用配置信息
-      appVersion: Constants.expoConfig?.version || Constants.manifest?.version || '未知',
-      runtimeVersion: Constants.expoConfig?.runtimeVersion || Constants.manifest?.runtimeVersion || '未知',
-      releaseChannel: Constants.expoConfig?.releaseChannel || Constants.manifest?.releaseChannel || '未设置',
-      
-      // 更新配置
-      updatesEnabled: Constants.expoConfig?.updates?.enabled ?? Constants.manifest?.updates?.enabled ?? false,
-      checkAutomatically: Constants.expoConfig?.updates?.checkAutomatically || Constants.manifest?.updates?.checkAutomatically || '未设置',
-      updateUrl: Constants.expoConfig?.updates?.url || Constants.manifest?.updates?.url || '未设置',
+      ...launchInfo,
+      bundleFingerprint: getCurrentBundleFingerprint(),
+      appVersion:
+        Constants.expoConfig?.version || Constants.manifest?.version || 'unknown',
+      configRuntimeVersion:
+        Constants.expoConfig?.runtimeVersion ||
+        Constants.manifest?.runtimeVersion ||
+        'unknown',
+      releaseChannel:
+        Constants.expoConfig?.releaseChannel ||
+        Constants.manifest?.releaseChannel ||
+        'not-set',
+      updatesEnabled:
+        Constants.expoConfig?.updates?.enabled ??
+        Constants.manifest?.updates?.enabled ??
+        false,
+      checkAutomatically:
+        Constants.expoConfig?.updates?.checkAutomatically ||
+        Constants.manifest?.updates?.checkAutomatically ||
+        'not-set',
+      updateUrl:
+        Constants.expoConfig?.updates?.url ||
+        Constants.manifest?.updates?.url ||
+        'not-set',
     };
-    
-    console.log('📊 更新信息:', JSON.stringify(info, null, 2));
+
+    console.log('Loaded OTA debug info:', info);
     setUpdateInfo(info);
+    setUpdateLogs(logs);
+  };
+
+  const applyFetchedUpdate = async () => {
+    const result = await Updates.fetchUpdateAsync();
+
+    if (result.isRollBackToEmbedded || result.isNew) {
+      await Updates.reloadAsync();
+      return;
+    }
+
+    Alert.alert('提示', '没有拿到可立即应用的更新。');
   };
 
   const checkForUpdates = async () => {
     try {
       setChecking(true);
-      
-      // 检查更新
       const update = await Updates.checkForUpdateAsync();
-      
-      if (update.isAvailable) {
-        Alert.alert(
-          '发现新版本',
-          '是否立即下载并重启应用？',
-          [
-            { text: '取消', style: 'cancel' },
-            { 
-              text: '更新', 
-              onPress: async () => {
-                try {
-                  await Updates.fetchUpdateAsync();
-                  Alert.alert('更新成功', '应用将重启', [
-                    { text: '确定', onPress: () => Updates.reloadAsync() }
-                  ]);
-                } catch (error) {
-                  Alert.alert('更新失败', error.message);
-                }
+
+      if (update.isRollBackToEmbedded) {
+        Alert.alert('检测到回退修复', '服务端要求回退到内置版本。是否立即恢复？', [
+          { text: '取消', style: 'cancel' },
+          {
+            text: '恢复',
+            onPress: async () => {
+              try {
+                await applyFetchedUpdate();
+              } catch (error) {
+                Alert.alert('恢复失败', error.message);
               }
-            }
-          ]
-        );
-      } else {
-        Alert.alert('提示', '当前已是最新版本');
+            },
+          },
+        ]);
+        return;
       }
+
+      if (!update.isAvailable) {
+        Alert.alert('提示', '当前已经是最新版本。');
+        return;
+      }
+
+      Alert.alert('发现新版本', '是否立即下载并重启应用？', [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '更新',
+          onPress: async () => {
+            try {
+              await applyFetchedUpdate();
+            } catch (error) {
+              Alert.alert('更新失败', error.message);
+            }
+          },
+        },
+      ]);
     } catch (error) {
       Alert.alert('检查更新失败', error.message);
     } finally {
@@ -90,50 +122,68 @@ const UpdateDebugScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         <Text style={styles.title}>热更新调试信息</Text>
-        
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>当前运行版本</Text>
-          <InfoRow label="Update ID" value={updateInfo?.currentUpdateId || '未知'} />
-          <InfoRow label="Channel" value={updateInfo?.currentChannel || '未知'} />
-          <InfoRow label="Runtime Version" value={updateInfo?.currentRuntimeVersion || '未知'} />
-          <InfoRow 
-            label="启动方式" 
-            value={updateInfo?.isEmbeddedLaunch ? '内置版本' : '热更新版本'} 
+          <InfoRow label="Bundle 指纹" value={updateInfo?.bundleFingerprint} />
+          <InfoRow label="Update ID" value={updateInfo?.updateId} />
+          <InfoRow label="Channel" value={updateInfo?.channel} />
+          <InfoRow label="Runtime Version" value={updateInfo?.runtimeVersion} />
+          <InfoRow
+            label="启动来源"
+            value={updateInfo?.isEmbeddedLaunch ? '内置版本' : '下载更新'}
           />
-          <InfoRow 
-            label="紧急启动" 
-            value={updateInfo?.isEmergencyLaunch ? '是' : '否'} 
+          <InfoRow
+            label="紧急回退"
+            value={updateInfo?.isEmergencyLaunch ? '是' : '否'}
+          />
+          <InfoRow
+            label="回退原因"
+            value={updateInfo?.emergencyLaunchReason || '无'}
+            multiline
           />
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>应用配置</Text>
-          <InfoRow label="App Version" value={updateInfo?.appVersion || '未知'} />
-          <InfoRow label="Runtime Version" value={updateInfo?.runtimeVersion || '未知'} />
-          <InfoRow label="Release Channel" value={updateInfo?.releaseChannel || '未设置'} />
+          <Text style={styles.sectionTitle}>配置状态</Text>
+          <InfoRow label="App Version" value={updateInfo?.appVersion} />
+          <InfoRow
+            label="配置 Runtime"
+            value={String(updateInfo?.configRuntimeVersion || 'unknown')}
+            multiline
+          />
+          <InfoRow label="Release Channel" value={updateInfo?.releaseChannel} />
+          <InfoRow
+            label="Updates Enabled"
+            value={updateInfo?.updatesEnabled ? 'true' : 'false'}
+          />
+          <InfoRow
+            label="Check Automatically"
+            value={updateInfo?.checkAutomatically}
+          />
+          <InfoRow label="Update URL" value={updateInfo?.updateUrl} multiline />
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>更新配置</Text>
-          <InfoRow 
-            label="更新已启用" 
-            value={updateInfo?.updatesEnabled ? '是' : '否'} 
-          />
-          <InfoRow 
-            label="自动检查" 
-            value={updateInfo?.checkAutomatically || '未设置'} 
-          />
-          <InfoRow 
-            label="更新服务器" 
-            value={updateInfo?.updateUrl || '未设置'} 
-            multiline 
-          />
+          <Text style={styles.sectionTitle}>最近 OTA 错误日志</Text>
+          {updateLogs.length === 0 ? (
+            <Text style={styles.emptyText}>最近没有读取到错误日志。</Text>
+          ) : (
+            updateLogs.map((log, index) => (
+              <View key={`${log.timestamp}-${index}`} style={styles.logCard}>
+                <Text style={styles.logMeta}>
+                  {log.level} / {log.code}
+                </Text>
+                <Text style={styles.logMessage}>{log.message}</Text>
+              </View>
+            ))
+          )}
         </View>
 
-        <TouchableOpacity 
-          style={[styles.button, checking && styles.buttonDisabled]} 
+        <TouchableOpacity
+          style={[styles.button, checking && styles.buttonDisabled]}
           onPress={checkForUpdates}
           disabled={checking}
         >
@@ -142,50 +192,19 @@ const UpdateDebugScreen = () => {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[styles.button, styles.buttonSecondary]} 
-          onPress={reloadApp}
-        >
+        <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={reloadApp}>
           <Text style={styles.buttonText}>重启应用</Text>
         </TouchableOpacity>
-
-        <View style={styles.tips}>
-          <Text style={styles.tipsTitle}>💡 提示</Text>
-          <Text style={styles.tipsText}>
-            • 如果"启动方式"显示"内置版本"，说明还没有收到热更新{'\n'}
-            • 如果显示"热更新版本"，说明已经使用了热更新{'\n'}
-            • Update ID 会在每次热更新后改变{'\n'}
-            • 完全关闭应用后重新打开才会检查更新
-          </Text>
-        </View>
-
-        <View style={styles.verifySection}>
-          <Text style={styles.verifySectionTitle}>🔍 如何验证热更新生效</Text>
-          <View style={styles.verifyCard}>
-            <Text style={styles.verifyStep}>1. 记录当前的 Update ID</Text>
-            <Text style={styles.verifyStep}>2. 在电脑上发布新的热更新</Text>
-            <Text style={styles.verifyStep}>3. 完全关闭应用（从后台清除）</Text>
-            <Text style={styles.verifyStep}>4. 重新打开应用</Text>
-            <Text style={styles.verifyStep}>5. 如果 Update ID 改变了 = 热更新成功 ✅</Text>
-          </View>
-          <View style={styles.verifyNote}>
-            <Ionicons name="information-circle" size={16} color="#3b82f6" />
-            <Text style={styles.verifyNoteText}>
-              热更新不会改变 APK 文件本身，只会下载新的 JavaScript 代码。
-              在手机的"应用管理"中看到的版本号不会变化。
-            </Text>
-          </View>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
 };
 
-const InfoRow = ({ label, value, multiline }) => (
+const InfoRow = ({ label, value, multiline = false }) => (
   <View style={styles.infoRow}>
-    <Text style={styles.infoLabel}>{label}:</Text>
+    <Text style={styles.infoLabel}>{label}</Text>
     <Text style={[styles.infoValue, multiline && styles.infoValueMultiline]}>
-      {value}
+      {value ?? 'unknown'}
     </Text>
   </View>
 );
@@ -197,119 +216,91 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  content: {
     padding: 16,
+    paddingBottom: 28,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    color: '#111827',
     marginBottom: 20,
-    color: '#333',
   },
   section: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
     padding: 16,
     marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '600',
+    color: '#111827',
     marginBottom: 12,
-    color: '#333',
   },
   infoRow: {
     flexDirection: 'row',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#f3f4f6',
+    gap: 10,
   },
   infoLabel: {
+    width: 130,
     fontSize: 14,
-    color: '#666',
-    width: 140,
-    fontWeight: '500',
+    fontWeight: '600',
+    color: '#6b7280',
   },
   infoValue: {
-    fontSize: 14,
-    color: '#333',
     flex: 1,
+    fontSize: 14,
+    color: '#111827',
   },
   infoValueMultiline: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  logCard: {
+    borderWidth: 1,
+    borderColor: '#fee2e2',
+    backgroundColor: '#fff7f7',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+  },
+  logMeta: {
     fontSize: 12,
+    fontWeight: '600',
+    color: '#b91c1c',
+    marginBottom: 4,
+  },
+  logMessage: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#7f1d1d',
   },
   button: {
     backgroundColor: '#ef4444',
-    padding: 16,
-    borderRadius: 8,
+    paddingVertical: 14,
+    borderRadius: 10,
     alignItems: 'center',
     marginBottom: 12,
   },
-  buttonSecondary: {
-    backgroundColor: '#3b82f6',
+  secondaryButton: {
+    backgroundColor: '#2563eb',
   },
   buttonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: '#d1d5db',
   },
   buttonText: {
-    color: '#fff',
-    fontSize: 16,
+    color: '#ffffff',
+    fontSize: 15,
     fontWeight: '600',
-  },
-  tips: {
-    backgroundColor: '#fff3cd',
-    padding: 16,
-    borderRadius: 8,
-    marginTop: 8,
-    marginBottom: 20,
-  },
-  tipsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-    color: '#856404',
-  },
-  tipsText: {
-    fontSize: 14,
-    color: '#856404',
-    lineHeight: 20,
-  },
-  verifySection: {
-    marginTop: 16,
-    marginBottom: 20,
-  },
-  verifySectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
-  },
-  verifyCard: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  verifyStep: {
-    fontSize: 14,
-    color: '#374151',
-    lineHeight: 24,
-    paddingLeft: 8,
-  },
-  verifyNote: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#eff6ff',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 12,
-    gap: 8,
-  },
-  verifyNoteText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#1e40af',
-    lineHeight: 18,
   },
 });
 

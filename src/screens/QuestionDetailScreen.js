@@ -820,20 +820,20 @@ export default function QuestionDetailScreen({
     []
   );
 
-  // 使用 useMemo 创建 answerTabs，避免在模块加载时调用 t()
-  // 优化：只在初始数据加载完成后才显示数量，彻底避免闪烁
+  const supplementsTotal = React.useMemo(() => {
+    return Number(supplementsCache.featured.total || supplementsCache.newest.total || questionData?.supplementCount || questionData?.supplements || supplementsList.length || 0) || 0;
+  }, [supplementsCache.featured.total, supplementsCache.newest.total, questionData?.supplementCount, questionData?.supplements, supplementsList.length]);
+  const answersTabTotal = React.useMemo(() => {
+    return Number(answersCache.featured.total || answersCache.newest.total || questionData?.answerCount || questionData?.answers || answersTotal || 0) || 0;
+  }, [answersCache.featured.total, answersCache.newest.total, questionData?.answerCount, questionData?.answers, answersTotal]);
+  const commentsTabTotal = React.useMemo(() => {
+    return Number(commentsCache.likes.total || commentsCache.newest.total || questionData?.commentCount || questionData?.comments || commentsTotal || 0) || 0;
+  }, [commentsCache.likes.total, commentsCache.newest.total, questionData?.commentCount, questionData?.comments, commentsTotal]);
+
+  // 使用 useMemo 创建 answerTabs，优先显示详情接口中的数量，再回退到列表缓存数量
   const answerTabs = React.useMemo(() => {
-    // 检查初始数据是否已加载（featured排序的数据）
-    const initialDataLoaded = supplementsCache.featured.loaded && answersCache.featured.loaded;
-
-    // 如果初始数据未加载，不显示任何数量
-    if (!initialDataLoaded) {
-      return [t('screens.questionDetail.tabs.supplements'), t('screens.questionDetail.tabs.answers'), t('screens.questionDetail.tabs.comments'), t('screens.questionDetail.tabs.invite')];
-    }
-
-    // 初始数据已加载，显示实际数量（格式化后）
-    return [`${t('screens.questionDetail.tabs.supplements')} (${formatCount(supplementsList.length)})`, `${t('screens.questionDetail.tabs.answers')} (${formatCount(answersTotal)})`, `${t('screens.questionDetail.tabs.comments')} (${formatCount(commentsTotal || questionData?.commentCount || 0)})`, t('screens.questionDetail.tabs.invite')];
-  }, [t, supplementsList.length, answersTotal, commentsTotal, questionData?.commentCount, supplementsCache.featured.loaded, answersCache.featured.loaded]);
+    return [`${t('screens.questionDetail.tabs.supplements')} (${formatCount(supplementsTotal)})`, `${t('screens.questionDetail.tabs.answers')} (${formatCount(answersTabTotal)})`, `${t('screens.questionDetail.tabs.comments')} (${formatCount(commentsTabTotal)})`, t('screens.questionDetail.tabs.invite')];
+  }, [t, supplementsTotal, answersTabTotal, commentsTabTotal]);
 
   const getTabBaseLabel = React.useCallback(tabLabel => {
     if (!tabLabel) {
@@ -1110,6 +1110,7 @@ export default function QuestionDetailScreen({
     const normalizedCollectCount = Number(question.collectCount ?? question.bookmarkCount ?? question.bookmarks ?? 0) || 0;
     const normalizedCommentCount = Number(question.commentCount ?? question.comments ?? 0) || 0;
     const normalizedAnswerCount = Number(question.answerCount ?? question.answers ?? 0) || 0;
+    const normalizedSupplementCount = Number(question.supplementCount ?? question.supplements ?? question.supplementQuestionCount ?? question.supplement_question_count ?? 0) || 0;
     const normalizedAdoptRate = Number(question.adoptRate ?? question.solvedPercent ?? 0) || 0;
     const normalizedCreateTime = question.createTime ?? question.createdAt ?? null;
     const normalizedLiked = !!(question.liked ?? question.isLiked);
@@ -1150,6 +1151,8 @@ export default function QuestionDetailScreen({
       comments: normalizedCommentCount,
       answerCount: normalizedAnswerCount,
       answers: normalizedAnswerCount,
+      supplementCount: normalizedSupplementCount,
+      supplements: normalizedSupplementCount,
       adoptRate: normalizedAdoptRate,
       solvedPercent: normalizedAdoptRate,
       createTime: normalizedCreateTime,
@@ -5948,8 +5951,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         <View style={styles.answersSection}>
           <View style={styles.answerTabs}>
             {answerTabs.map(tab => <TouchableOpacity key={tab} style={styles.answerTabItem} onPress={() => {
-            setActiveTab(tab);
-            setSortFilter('精选');
+            if (tab !== activeTab) {
+              setActiveTab(tab);
+              setSortFilter('精选');
+            }
           }}>
                 <Text style={[styles.answerTabText, activeTab === tab && styles.answerTabTextActive]}>{tab}</Text>
                 {activeTab === tab && <View style={styles.answerTabIndicator} />}

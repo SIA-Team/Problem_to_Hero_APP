@@ -23,6 +23,14 @@ const officialRechargeUrl =
   process.env.RECHARGE_URL ||
   officialWebsiteUrl;
 
+const explicitRuntimeVersion = process.env.EXPO_RUNTIME_VERSION?.trim();
+const runtimeVersionPolicy =
+  process.env.EXPO_RUNTIME_VERSION_POLICY?.trim() || 'fingerprint';
+
+const runtimeVersion = explicitRuntimeVersion
+  ? explicitRuntimeVersion
+  : { policy: runtimeVersionPolicy };
+
 const androidConfig = {
   ...(baseConfig.android || {}),
   config: {
@@ -41,6 +49,7 @@ const iosConfig = {
 
 module.exports = () => ({
   ...baseConfig,
+  runtimeVersion,
   android: androidConfig,
   ios: iosConfig,
   extra: {
@@ -48,5 +57,6 @@ module.exports = () => ({
     googleMapsConfigured: Boolean(androidGoogleMapsApiKey),
     officialWebsiteUrl,
     officialRechargeUrl,
+    runtimeVersionPolicy: explicitRuntimeVersion ? 'manual' : runtimeVersionPolicy,
   },
 });

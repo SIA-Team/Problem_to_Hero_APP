@@ -15,6 +15,7 @@ import { scaleFont } from '../utils/responsive';
 import teamApi from '../services/api/teamApi';
 import { buildTeamDetailRouteState } from '../utils/teamTransforms';
 import { executeTeamExitFlow, FALLBACK_TEAM_MEMBERS, getTransferLeaderCandidates } from '../utils/teamExit';
+import { executeTeamJoinApply, isTeamJoinPendingError } from '../utils/teamJoin';
 const initialMessages = [{
   id: 1,
   author: '张三',
@@ -286,13 +287,23 @@ const teamMembers = [{
   role: '成员'
 }];
 
-// 根据是否是管理员显示不同的tabs
-const getTabsForRole = (isAdmin, t) => {
-  if (isAdmin) {
+// 根据是否是队长显示不同的tabs
+const getTabsForRole = (isLeader, t) => {
+  if (isLeader) {
     return [t('screens.teamDetail.tabs.discussion'), t('screens.teamDetail.tabs.announcement'), t('screens.teamDetail.tabs.approval')];
   }
   return [t('screens.teamDetail.tabs.discussion'), t('screens.teamDetail.tabs.announcement')];
 };
+
+const mapTeamApplication = application => ({
+  id: String(application?.memberId ?? application?.appUserId ?? ''),
+  memberId: Number(application?.memberId) || 0,
+  appUserId: Number(application?.appUserId) || 0,
+  user: application?.nickName || '-',
+  avatar: '',
+  reason: application?.applyReason || '',
+  status: 'pending'
+});
 export default function TeamDetailScreen({
   navigation,
   route
@@ -371,6 +382,49 @@ export default function TeamDetailScreen({
       isMounted = false;
     };
   }, [routeTeamId]);
+  React.useEffect(() => {
+    let isMounted = true;
+    const normalizedTeamId = Number(routeTeamId);
+
+    if (!isLeader || !Number.isFinite(normalizedTeamId) || normalizedTeamId <= 0) {
+      if (isMounted) {
+        setJoinRequests([]);
+      }
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const loadTeamApplications = async () => {
+      try {
+        const response = await teamApi.getTeamApplications(normalizedTeamId);
+        const isSuccess = response?.code === 0 || response?.code === 200;
+
+        if (!isSuccess) {
+          throw new Error(response?.msg || 'Failed to load team applications');
+        }
+
+        const nextApplications = Array.isArray(response?.data)
+          ? response.data.map(mapTeamApplication)
+          : [];
+
+        if (isMounted) {
+          setJoinRequests(nextApplications);
+        }
+      } catch (requestError) {
+        console.error('Failed to load team applications:', requestError);
+        if (isMounted) {
+          setJoinRequests([]);
+        }
+      }
+    };
+
+    loadTeamApplications();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isLeader, routeTeamId]);
   const detailRouteState = React.useMemo(() => buildTeamDetailRouteState(teamDetailData, fallbackRouteState), [teamDetailData, fallbackRouteState]);
   const team = detailRouteState?.team || fallbackTeam;
   const isLeader = Boolean(team?.isLeader) || Number(team?.userRole) === 3;
@@ -423,7 +477,11 @@ export default function TeamDetailScreen({
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementContent, setAnnouncementContent] = useState('');
   const [isPinned, setIsPinned] = useState(false);
-  const [showPendingModal, setShowPendingModal] = useState(false);
+  const [joinSubmitting, setJoinSubmitting] = useState(false);
+  const [approvingApplicationId, setApprovingApplicationId] = useState(null);
+  const [rejectingApplicationId, setRejectingApplicationId] = useState(null);
+  const [showJoinReasonModal, setShowJoinReasonModal] = useState(false);
+  const [joinReasonText, setJoinReasonText] = useState('');
   const isLikeInteractionDisabled = (likedState, dislikedState) => !likedState && !!dislikedState;
   const isDislikeInteractionDisabled = (likedState, dislikedState) => !dislikedState && !!likedState;
   const getTeamMessageLikedState = message => liked[message?.id] !== undefined ? liked[message.id] : !!message?.liked;
@@ -435,11 +493,6 @@ export default function TeamDetailScreen({
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [searchText, setSearchText] = useState('');
 
-  // 申请管理员相关状态
-  const [showApplyAdminModal, setShowApplyAdminModal] = useState(false);
-  const [applyReason, setApplyReason] = useState('');
-  const [hasApplied, setHasApplied] = useState(false);
-
   // 解散团队弹窗
   const [showDismissModal, setShowDismissModal] = useState(false);
   const [dismissConfirmText, setDismissConfirmText] = useState('');
@@ -447,34 +500,9 @@ export default function TeamDetailScreen({
   // 团队讨论排序方式
   const [discussionSortBy, setDiscussionSortBy] = useState('featured'); // featured or newest
 
-  // 审批消息数据（管理员可见）
-  const [joinRequests, setJoinRequests] = useState([{
-    id: 1,
-    user: '李明',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user1',
-    reason: '我对Python很感兴趣，希望能加入团队一起学习',
-    time: '2小时前',
-    type: 'join',
-    status: 'pending'
-  }, {
-    id: 2,
-    user: '王芳',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user2',
-    reason: '想和大家一起交流学习经验',
-    time: '5小时前',
-    type: 'join',
-    status: 'pending'
-  }]);
-  const [adminRequests, setAdminRequests] = useState([{
-    id: 3,
-    user: '张伟',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user3',
-    reason: '我有3年Python开发经验，可以帮助团队成员解决技术问题，组织学习活动',
-    time: '1天前',
-    type: 'admin',
-    status: 'pending'
-  }]);
-  const tabs = getTabsForRole(isAdmin, t);
+  // 审批消息数据（仅队长可见）
+  const [joinRequests, setJoinRequests] = useState([]);
+  const tabs = getTabsForRole(isLeader, t);
   const activeTabType = React.useMemo(() => {
     if (!activeTab) {
       return '';
@@ -850,40 +878,48 @@ export default function TeamDetailScreen({
     setSelectedUsers([]);
     setSearchText('');
   };
-
-  // 申请管理员处理
-  const handleApplyAdmin = () => {
-    if (!applyReason.trim()) {
-      showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.applyAdmin.fillReason'));
+  // 审批加入团队申请
+  const handleApproveJoin = async (requestId, approve) => {
+    const request = joinRequests.find(r => r.id === requestId);
+    if (!request) {
       return;
     }
-    showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.applicationSubmitted'));
-    setShowApplyAdminModal(false);
-    setHasApplied(true);
-    setApplyReason('');
-  };
-
-  // 审批加入团队申请
-  const handleApproveJoin = (requestId, approve) => {
-    const request = joinRequests.find(r => r.id === requestId);
     if (approve) {
-      showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.joinApproved').replace('{user}', request.user));
-      setJoinRequests(joinRequests.filter(r => r.id !== requestId));
-    } else {
-      showAppAlert(t('screens.teamDetail.alerts.rejected'), t('screens.teamDetail.alerts.joinRejected').replace('{user}', request.user));
-      setJoinRequests(joinRequests.filter(r => r.id !== requestId));
-    }
-  };
+      try {
+        setApprovingApplicationId(String(request.id));
+        const response = await teamApi.approveTeamApplication(team?.id ?? routeTeamId, request.appUserId);
+        const isSuccess = response?.code === 0 || response?.code === 200;
 
-  // 审批管理员申请
-  const handleApproveAdmin = (requestId, approve) => {
-    const request = adminRequests.find(r => r.id === requestId);
-    if (approve) {
-      showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.adminApproved').replace('{user}', request.user));
-      setAdminRequests(adminRequests.filter(r => r.id !== requestId));
+        if (!isSuccess) {
+          throw new Error(response?.msg || 'Failed to approve team application');
+        }
+
+        showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.joinApproved').replace('{user}', request.user));
+        setJoinRequests(joinRequests.filter(r => String(r.id) !== String(requestId)));
+      } catch (requestError) {
+        console.error('Failed to approve team application:', requestError);
+        showAppAlert(t('screens.teamDetail.alerts.hint'), requestError?.message || '同意申请失败');
+      } finally {
+        setApprovingApplicationId(null);
+      }
     } else {
-      showAppAlert(t('screens.teamDetail.alerts.rejected'), t('screens.teamDetail.alerts.adminRejected').replace('{user}', request.user));
-      setAdminRequests(adminRequests.filter(r => r.id !== requestId));
+      try {
+        setRejectingApplicationId(String(request.id));
+        const response = await teamApi.rejectTeamApplication(team?.id ?? routeTeamId, request.appUserId);
+        const isSuccess = response?.code === 0 || response?.code === 200;
+
+        if (!isSuccess) {
+          throw new Error(response?.msg || 'Failed to reject team application');
+        }
+
+        showAppAlert(t('screens.teamDetail.alerts.rejected'), t('screens.teamDetail.alerts.joinRejected').replace('{user}', request.user));
+        setJoinRequests(joinRequests.filter(r => String(r.id) !== String(requestId)));
+      } catch (requestError) {
+        console.error('Failed to reject team application:', requestError);
+        showAppAlert(t('screens.teamDetail.alerts.hint'), requestError?.message || '拒绝申请失败');
+      } finally {
+        setRejectingApplicationId(null);
+      }
     }
   };
 
@@ -1018,20 +1054,67 @@ export default function TeamDetailScreen({
     });
   };
   const handleJoinTeam = () => {
-    showAppAlert(t('screens.teamDetail.join.applyTitle'), t('screens.teamDetail.join.applyMessage'), [{
-      text: t('common.cancel'),
-      style: 'cancel'
-    }, {
-      text: t('common.confirm'),
-      onPress: () => {
+    setJoinReasonText('');
+    setShowJoinReasonModal(true);
+  };
+
+  const handleConfirmJoin = async () => {
+    const reason = joinReasonText.trim();
+    setShowJoinReasonModal(false);
+
+    try {
+      setJoinSubmitting(true);
+      await executeTeamJoinApply({
+        teamId: team?.id ?? routeTeamId,
+        reason
+      });
+      setJoinStateOverride(prevState => ({
+        ...prevState,
+        isJoined: false,
+        isPending: true
+      }));
+      try {
+        const latestResponse = await teamApi.getTeamDetail(team?.id ?? routeTeamId);
+        const latestSuccess = latestResponse?.code === 0 || latestResponse?.code === 200;
+
+        if (latestSuccess && latestResponse?.data) {
+          setTeamDetailData(latestResponse.data);
+        }
+      } catch (refreshError) {
+        console.error('Failed to refresh team detail after apply:', refreshError);
+      }
+      showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.applicationSubmitted'));
+    } catch (requestError) {
+      console.error('Failed to apply join from team detail screen:', requestError);
+      if (isTeamJoinPendingError(requestError)) {
         setJoinStateOverride(prevState => ({
           ...prevState,
           isJoined: false,
           isPending: true
         }));
-        setShowPendingModal(true);
       }
-    }]);
+      try {
+        const latestResponse = await teamApi.getTeamDetail(team?.id ?? routeTeamId);
+        const latestSuccess = latestResponse?.code === 0 || latestResponse?.code === 200;
+
+        if (latestSuccess && latestResponse?.data) {
+          setTeamDetailData(latestResponse.data);
+          const latestRouteState = buildTeamDetailRouteState(latestResponse.data, fallbackRouteState);
+          const latestPending = Boolean(latestRouteState?.isPending);
+
+          if (latestPending) {
+            showAppAlert(t('screens.teamDetail.alerts.hint'), isTeamJoinPendingError(requestError) ? requestError?.message || t('screens.teamDetail.alerts.applicationSubmitted') : '\u5f53\u524d\u7533\u8bf7\u72b6\u6001\u5df2\u540c\u6b65');
+            return;
+          }
+        }
+      } catch (refreshError) {
+        console.error('Failed to refresh team detail after apply error:', refreshError);
+      }
+      showAppAlert(t('screens.teamDetail.alerts.hint'), requestError?.message || t('screens.teamDetail.join.applyTitle'));
+    } finally {
+      setJoinSubmitting(false);
+      setJoinReasonText('');
+    }
   };
   const renderDiscussionReplyCard = (reply, options = {}) => {
     const relationCommentId = Number(reply.replyToCommentId ?? reply.parentId ?? 0) || 0;
@@ -1176,20 +1259,17 @@ export default function TeamDetailScreen({
           <Text style={styles.headerTitle}>{restrictedView ? t('screens.teamDetail.teamMembers') : t('screens.teamDetail.title')}</Text>
         </View>
         {!restrictedView && <View style={styles.headerActions}>
-            {/* 管理员显示：邀请、发起活动、发布公告 */}
-            {Boolean(isAdmin) && <>
-                <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('InviteTeamMember', {
-            teamName: team.name
-          })}>
-                  <Ionicons name="person-add" size={22} color="#22c55e" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.iconBtn} onPress={handleOpenCreateActivity}>
-                  <Ionicons name="calendar" size={22} color="#3b82f6" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.iconBtn} onPress={() => setShowPublishAnnouncementModal(true)}>
-                  <Ionicons name="megaphone" size={22} color="#f59e0b" />
-                </TouchableOpacity>
-              </>}
+            <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('InviteTeamMember', {
+          teamName: team.name
+        })}>
+              <Ionicons name="person-add" size={22} color="#22c55e" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconBtn} onPress={handleOpenCreateActivity}>
+              <Ionicons name="calendar" size={22} color="#3b82f6" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconBtn} onPress={() => setShowPublishAnnouncementModal(true)}>
+              <Ionicons name="megaphone" size={22} color="#f59e0b" />
+            </TouchableOpacity>
           </View>}
         {Boolean(restrictedView) && <View style={{
         width: 24
@@ -1221,28 +1301,10 @@ export default function TeamDetailScreen({
                   </View> : null}
                 </View>
               </View>
-              {/* 管理员：显示退出团队按钮 */}
-              {Boolean(isAdmin) && <TouchableOpacity style={styles.compactDismissBtn} onPress={handleExitTeam}>
+              <TouchableOpacity style={styles.compactDismissBtn} onPress={handleExitTeam}>
                   <Ionicons name="exit-outline" size={14} color="#ef4444" />
                   <Text style={styles.compactDismissBtnText}>{t('screens.teamDetail.actions.exit')}</Text>
-                </TouchableOpacity>}
-              {/* 普通成员：显示三个操作按钮 */}
-              {!isAdmin && <View style={styles.compactActionsRow}>
-                  <TouchableOpacity style={styles.compactActionBtn} onPress={handleOpenCreateActivity}>
-                    <Ionicons name="calendar" size={14} color="#3b82f6" />
-                    <Text style={styles.compactActionBtnText}>{t('screens.teamDetail.actions.activity')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.compactActionBtn, styles.compactActionBtnPurple, hasApplied && styles.compactActionBtnDisabled]} onPress={() => !hasApplied && setShowApplyAdminModal(true)} disabled={hasApplied}>
-                    <Ionicons name="shield-checkmark-outline" size={14} color={hasApplied ? '#9ca3af' : '#8b5cf6'} />
-                    <Text style={[styles.compactActionBtnText, styles.compactActionBtnTextPurple, hasApplied && styles.compactActionBtnTextDisabled]}>
-                      {hasApplied ? t('screens.teamDetail.actions.applied') : t('screens.teamDetail.actions.admin')}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.compactActionBtn, styles.compactActionBtnRed]} onPress={handleExitTeam}>
-                    <Ionicons name="exit-outline" size={14} color="#ef4444" />
-                    <Text style={[styles.compactActionBtnText, styles.compactActionBtnTextRed]}>{t('screens.teamDetail.actions.exit')}</Text>
-                  </TouchableOpacity>
-                </View>}
+                </TouchableOpacity>
             </View>
             <Text style={styles.teamDesc} numberOfLines={2}>{team.description}</Text>
             <View style={styles.teamStats}>
@@ -1302,8 +1364,8 @@ export default function TeamDetailScreen({
                     <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
                     {activeTab === tab && <View style={styles.tabIndicator} />}
                     {/* 审批消息显示未读数量 */}
-                    {tab === t('screens.teamDetail.tabs.approval') && joinRequests.length + adminRequests.length > 0 && <View style={styles.tabBadge}>
-                        <Text style={styles.tabBadgeText}>{joinRequests.length + adminRequests.length}</Text>
+                    {tab === t('screens.teamDetail.tabs.approval') && joinRequests.length > 0 && <View style={styles.tabBadge}>
+                        <Text style={styles.tabBadgeText}>{joinRequests.length}</Text>
                       </View>}
                   </TouchableOpacity>)}
               </View>
@@ -1412,7 +1474,7 @@ export default function TeamDetailScreen({
                       <Text style={styles.announcementTime}>{announcement.time}</Text>
                     </View>
                   </View>)}
-              </View>) : (/* 审批消息列表 - 仅管理员可见 */
+              </View>) : (/* 审批消息列表 - 仅队长可见 */
         <ScrollView style={styles.approvalList} showsVerticalScrollIndicator={false}>
                 {/* 加入团队申请 */}
                 {joinRequests.length > 0 && <View style={styles.approvalSection}>
@@ -1422,64 +1484,32 @@ export default function TeamDetailScreen({
                           <Avatar uri={request.avatar} name={request.user} size={40} />
                           <View style={styles.approvalUserInfo}>
                             <Text style={styles.approvalUserName}>{request.user}</Text>
-                            <Text style={styles.approvalTime}>{request.time}</Text>
                           </View>
                           {/* 按钮移到用户信息行右侧 */}
                           <View style={styles.approvalActionsInline}>
-                            <TouchableOpacity style={styles.approvalRejectBtnSmall} onPress={() => handleApproveJoin(request.id, false)}>
+                            <TouchableOpacity style={[styles.approvalRejectBtnSmall, rejectingApplicationId === String(request.id) && {
+                          opacity: 0.7
+                        }]} onPress={() => handleApproveJoin(request.id, false)} disabled={rejectingApplicationId === String(request.id)}>
                               <Ionicons name="close-circle" size={16} color="#ef4444" />
-                              <Text style={styles.approvalRejectTextSmall}>{t('screens.teamDetail.approval.reject')}</Text>
+                              <Text style={styles.approvalRejectTextSmall}>{rejectingApplicationId === String(request.id) ? '处理中...' : t('screens.teamDetail.approval.reject')}</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={styles.approvalApproveBtnSmall} onPress={() => handleApproveJoin(request.id, true)}>
+                            <TouchableOpacity style={[styles.approvalApproveBtnSmall, approvingApplicationId === String(request.id) && {
+                          opacity: 0.7
+                        }]} onPress={() => handleApproveJoin(request.id, true)} disabled={approvingApplicationId === String(request.id)}>
                               <Ionicons name="checkmark-circle" size={16} color="#fff" />
-                              <Text style={styles.approvalApproveTextSmall}>{t('screens.teamDetail.approval.approve')}</Text>
+                              <Text style={styles.approvalApproveTextSmall}>{approvingApplicationId === String(request.id) ? '处理中...' : t('screens.teamDetail.approval.approve')}</Text>
                             </TouchableOpacity>
                           </View>
                         </View>
                         <View style={styles.approvalReasonBox}>
                           <Text style={styles.approvalReasonLabel}>{t('screens.teamDetail.approval.reasonLabel')}</Text>
-                          <Text style={styles.approvalReasonText}>{request.reason}</Text>
-                        </View>
-                      </View>)}
-                  </View>}
-
-                {/* 管理员申请 */}
-                {adminRequests.length > 0 && <View style={styles.approvalSection}>
-                    <Text style={styles.approvalSectionTitle}>{t('screens.teamDetail.approval.adminRequests')} ({adminRequests.length})</Text>
-                    {adminRequests.map(request => <View key={request.id} style={styles.approvalItem}>
-                        <View style={styles.approvalHeader}>
-                          <Avatar uri={request.avatar} name={request.user} size={40} />
-                          <View style={styles.approvalUserInfo}>
-                            <View style={styles.approvalUserNameRow}>
-                              <Text style={styles.approvalUserName}>{request.user}</Text>
-                              <View style={styles.adminApplyBadge}>
-                                <Ionicons name="shield-checkmark" size={12} color="#8b5cf6" />
-                                <Text style={styles.adminApplyBadgeText}>{t('screens.teamDetail.approval.applyAdmin')}</Text>
-                              </View>
-                            </View>
-                            <Text style={styles.approvalTime}>{request.time}</Text>
-                          </View>
-                          {/* 按钮移到用户信息行右侧 */}
-                          <View style={styles.approvalActionsInline}>
-                            <TouchableOpacity style={styles.approvalRejectBtnSmall} onPress={() => handleApproveAdmin(request.id, false)}>
-                              <Ionicons name="close-circle" size={16} color="#ef4444" />
-                              <Text style={styles.approvalRejectTextSmall}>{t('screens.teamDetail.approval.reject')}</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.approvalApproveBtnSmall} onPress={() => handleApproveAdmin(request.id, true)}>
-                              <Ionicons name="checkmark-circle" size={16} color="#fff" />
-                              <Text style={styles.approvalApproveTextSmall}>{t('screens.teamDetail.approval.approve')}</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                        <View style={styles.approvalReasonBox}>
-                          <Text style={styles.approvalReasonLabel}>{t('screens.teamDetail.approval.reasonLabel')}</Text>
-                          <Text style={styles.approvalReasonText}>{request.reason}</Text>
+                          <Text style={styles.approvalReasonText}>{request.reason || '-'}</Text>
                         </View>
                       </View>)}
                   </View>}
 
                 {/* 空状态 */}
-                {joinRequests.length === 0 && adminRequests.length === 0 && <View style={styles.approvalEmpty}>
+                {joinRequests.length === 0 && <View style={styles.approvalEmpty}>
                     <Ionicons name="checkmark-done-circle-outline" size={64} color="#d1d5db" />
                     <Text style={styles.approvalEmptyText}>{t('screens.teamDetail.approval.empty')}</Text>
                     <Text style={styles.approvalEmptyHint}>{t('screens.teamDetail.approval.emptyHint')}</Text>
@@ -1504,10 +1534,12 @@ export default function TeamDetailScreen({
       {Boolean(restrictedView) && <View style={styles.teamActions}>
           {isPending ? <View style={styles.pendingNotice}>
               <Ionicons name="hourglass-outline" size={20} color="#f59e0b" />
-              <Text style={styles.pendingNoticeText}>{t('screens.teamDetail.join.pendingNotice')}</Text>
-            </View> : <TouchableOpacity style={styles.teamJoinBtn} onPress={handleJoinTeam}>
+              <Text style={styles.pendingNoticeText}>{'申请审核中'}</Text>
+            </View> : <TouchableOpacity style={[styles.teamJoinBtn, joinSubmitting && {
+          opacity: 0.7
+        }]} onPress={handleJoinTeam} disabled={joinSubmitting}>
               <Ionicons name="add-circle" size={20} color="#fff" />
-              <Text style={styles.teamJoinBtnText}>{t('screens.teamDetail.join.applyButton')}</Text>
+              <Text style={styles.teamJoinBtnText}>{joinSubmitting ? t('common.loading') : t('screens.teamDetail.join.applyButton')}</Text>
             </TouchableOpacity>}
         </View>}
 
@@ -1807,68 +1839,6 @@ export default function TeamDetailScreen({
         </View>
       </Modal>
 
-      {/* 等待审核弹窗 */}
-      <Modal visible={showPendingModal} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.pendingModal}>
-            <View style={styles.pendingModalIcon}>
-              <Ionicons name="hourglass" size={48} color="#f59e0b" />
-            </View>
-            <Text style={styles.pendingModalTitle}>{t('screens.teamDetail.join.pendingModalTitle')}</Text>
-            <Text style={styles.pendingModalDesc}>
-              {t('screens.teamDetail.join.pendingModalDesc')}
-            </Text>
-            <TouchableOpacity style={styles.pendingModalBtn} onPress={() => setShowPendingModal(false)}>
-              <Text style={styles.pendingModalBtnText}>{t('screens.teamDetail.join.pendingModalButton')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 申请管理员弹窗 */}
-      <Modal visible={showApplyAdminModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.applyAdminModal}>
-            <View style={styles.applyAdminModalHandle} />
-            
-            <View style={styles.applyAdminModalHeader}>
-              <Text style={styles.applyAdminModalTitle}>{t('screens.teamDetail.applyAdmin.title')}</Text>
-              <Text style={styles.applyAdminModalSubtitle}>
-                {t('screens.teamDetail.applyAdmin.subtitle')}
-              </Text>
-            </View>
-
-            <ScrollView style={styles.applyAdminModalContent} showsVerticalScrollIndicator={false}>
-              <View style={styles.applyAdminSection}>
-                <Text style={styles.applyAdminLabel}>{t('screens.teamDetail.applyAdmin.reasonLabel')} <Text style={{
-                  color: '#ef4444'
-                }}>{t('screens.teamDetail.applyAdmin.reasonRequired')}</Text></Text>
-                <TextInput style={styles.applyAdminTextarea} placeholder={t('screens.teamDetail.applyAdmin.reasonPlaceholder')} placeholderTextColor="#9ca3af" value={applyReason} onChangeText={setApplyReason} multiline textAlignVertical="top" />
-              </View>
-
-              <View style={styles.applyAdminTips}>
-                <Text style={styles.applyAdminTipsTitle}>{t('screens.teamDetail.applyAdmin.tipsTitle')}</Text>
-                <Text style={styles.applyAdminTipsText}>{t('screens.teamDetail.applyAdmin.tip1')}</Text>
-                <Text style={styles.applyAdminTipsText}>{t('screens.teamDetail.applyAdmin.tip2')}</Text>
-                <Text style={styles.applyAdminTipsText}>{t('screens.teamDetail.applyAdmin.tip3')}</Text>
-              </View>
-            </ScrollView>
-
-            <View style={styles.applyAdminModalFooter}>
-              <TouchableOpacity style={styles.cancelApplyBtn} onPress={() => {
-              setShowApplyAdminModal(false);
-              setApplyReason('');
-            }}>
-                <Text style={styles.cancelApplyBtnText}>{t('screens.teamDetail.applyAdmin.cancelButton')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.submitApplyBtn, !applyReason.trim() && styles.submitApplyBtnDisabled]} onPress={handleApplyAdmin} disabled={!applyReason.trim()}>
-                <Text style={styles.submitApplyBtnText}>{t('screens.teamDetail.applyAdmin.submitButton')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       {/* 解散团队弹窗 */}
       <Modal visible={showDismissModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
@@ -1975,6 +1945,60 @@ export default function TeamDetailScreen({
                   </TouchableOpacity>
                 ))}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 申请加入团队理由输入模态框 */}
+      <Modal
+        visible={showJoinReasonModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          if (!joinSubmitting) {
+            setShowJoinReasonModal(false);
+            setJoinReasonText('');
+          }
+        }}
+      >
+        <View style={styles.joinReasonOverlay}>
+          <View style={styles.joinReasonCard}>
+            <Text style={styles.joinReasonTitle}>申请加入团队</Text>
+            <Text style={styles.joinReasonTeamName}>"{team?.name}"</Text>
+            <Text style={styles.joinReasonLabel}>申请理由（选填）</Text>
+            <TextInput
+              style={styles.joinReasonInput}
+              placeholder="请简单说明您的申请理由..."
+              placeholderTextColor="#9ca3af"
+              value={joinReasonText}
+              onChangeText={setJoinReasonText}
+              multiline
+              numberOfLines={4}
+              maxLength={200}
+              textAlignVertical="top"
+            />
+            <Text style={styles.joinReasonCount}>{joinReasonText.length}/200</Text>
+            <View style={styles.joinReasonActions}>
+              <TouchableOpacity
+                style={styles.joinReasonCancelBtn}
+                onPress={() => {
+                  setShowJoinReasonModal(false);
+                  setJoinReasonText('');
+                }}
+                disabled={joinSubmitting}
+              >
+                <Text style={styles.joinReasonCancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.joinReasonConfirmBtn}
+                onPress={handleConfirmJoin}
+                disabled={joinSubmitting}
+              >
+                <Text style={styles.joinReasonConfirmText}>
+                  {joinSubmitting ? '提交中...' : '提交申请'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -3827,5 +3851,87 @@ const styles = StyleSheet.create({
   transferLeaderRole: {
     fontSize: scaleFont(13),
     color: modalTokens.textMuted
-  }
+  },
+  joinReasonOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 24
+  },
+  joinReasonCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  joinReasonTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  joinReasonTeamName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3b82f6',
+    marginBottom: 16,
+  },
+  joinReasonLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6b7280',
+    marginBottom: 8,
+  },
+  joinReasonInput: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    backgroundColor: '#f9fafb',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#111827',
+    minHeight: 100,
+  },
+  joinReasonCount: {
+    fontSize: 12,
+    color: '#9ca3af',
+    textAlign: 'right',
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  joinReasonActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  joinReasonCancelBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  joinReasonCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  joinReasonConfirmBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  joinReasonConfirmText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
 });

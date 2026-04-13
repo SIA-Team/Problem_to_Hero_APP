@@ -7,7 +7,6 @@ import { StatusBar } from 'expo-status-bar';
 import { View, Text, Modal, TouchableOpacity, TextInput, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
 import * as Font from 'expo-font';
 import * as Updates from 'expo-updates';
 import i18n from './src/i18n';
@@ -19,9 +18,15 @@ import UserCacheService from './src/services/UserCacheService';
 import ToastContainer from './src/components/ToastContainer';
 import AppAlertContainer from './src/components/AppAlertContainer';
 import { setToastRef, showToast } from './src/utils/toast';
-import { setAppAlertRef } from './src/utils/appAlert';
+import { setAppAlertRef, showAppAlert } from './src/utils/appAlert';
 import { syncCacheIdentity } from './src/utils/cacheManager';
 import UpdateChecker from './src/components/UpdateChecker';
+import {
+  buildEmergencyLaunchMessage,
+  getCurrentBundleFingerprint,
+  getOtaLaunchInfo,
+  loadRecentOtaErrors,
+} from './src/utils/otaDiagnostics';
 import { EmergencyProvider } from './src/contexts/EmergencyContext';
 
 import HomeScreen from './src/screens/HomeScreen';
@@ -142,18 +147,6 @@ const extractInterestChannels = (payload) => {
   return level2
     .map((item) => (typeof item?.name === 'string' ? item.name.trim() : ''))
     .filter(Boolean);
-};
-
-const getCurrentBundleFingerprint = () => {
-  const runtimeVersion =
-    Updates.runtimeVersion ||
-    Constants.expoConfig?.runtimeVersion ||
-    'unknown-runtime';
-  const updateId =
-    Updates.updateId ||
-    (Updates.isEmbeddedLaunch ? 'embedded' : 'no-update-id');
-
-  return `${runtimeVersion}:${updateId}`;
 };
 
 // Emergency Help Modal Component
@@ -547,6 +540,59 @@ export default function App() {
   const [isCheckingInterestOnboarding, setIsCheckingInterestOnboarding] = useState(false);
   const [shouldShowInterestOnboardingScreen, setShouldShowInterestOnboardingScreen] = useState(false);
   const [interestOnboardingUserId, setInterestOnboardingUserId] = useState(null);
+  const [otaRecoveryNotice, setOtaRecoveryNotice] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const inspectOtaLaunch = async () => {
+      if (__DEV__ || !Updates.isEnabled) {
+        return;
+      }
+
+      const launchInfo = getOtaLaunchInfo();
+      console.log('OTA launch info:', launchInfo);
+
+      if (!launchInfo.isEmergencyLaunch) {
+        return;
+      }
+
+      const recentErrors = await loadRecentOtaErrors();
+      console.error('Emergency OTA launch detected:', {
+        reason: launchInfo.emergencyLaunchReason,
+        recentErrors,
+      });
+
+      if (!mounted) {
+        return;
+      }
+
+      setOtaRecoveryNotice(
+        buildEmergencyLaunchMessage(
+          launchInfo.emergencyLaunchReason,
+          recentErrors
+        )
+      );
+    };
+
+    inspectOtaLaunch();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!otaRecoveryNotice) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      showAppAlert('热更新已自动回退', otaRecoveryNotice, [{ text: '知道了' }]);
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [otaRecoveryNotice]);
   
   console.log('📱 App state:', { isLoggedIn, isInitializing, fontsLoaded });
   
@@ -888,6 +934,10 @@ export default function App() {
 
   console.log('✅ App ready, isLoggedIn:', isLoggedIn);
 
+  const updateChecker = (
+    <UpdateChecker enabled={fontsLoaded && !isInitializing} />
+  );
+
   const handleLogin = () => {
     setIsLoggedIn(true);
   };
@@ -955,6 +1005,7 @@ export default function App() {
       <EmergencyProvider>
         <SafeAreaProvider>
           <StatusBar style="dark" />
+          {updateChecker}
           <InterestOnboardingScreen
             userId={interestOnboardingUserId}
             onComplete={handleInterestOnboardingComplete}
@@ -971,6 +1022,7 @@ export default function App() {
     return (
       <EmergencyProvider>
         <SafeAreaProvider>
+          {updateChecker}
           <NavigationContainer>
             <StatusBar style="dark" />
             <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -990,7 +1042,7 @@ export default function App() {
   return (
     <EmergencyProvider>
       <SafeAreaProvider>
-        <UpdateChecker />
+        {updateChecker}
         <NavigationContainer linking={APP_LINKING}>
         <StatusBar style="dark" />
         <Stack.Navigator screenOptions={{ headerShown: false }}>

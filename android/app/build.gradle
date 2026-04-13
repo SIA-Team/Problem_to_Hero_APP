@@ -99,8 +99,8 @@ android {
         applicationId 'com.qa.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "1.0.1"
+        versionCode 4
+        versionName "1.0.2"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -143,6 +143,19 @@ android {
     androidResources {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
     }
+}
+
+def ensureExpoRuntimeFingerprintScript = new File(projectRoot, "scripts/ensure-expo-runtime-fingerprint.js")
+
+tasks.register("ensureExpoRuntimeFingerprint", Exec) {
+    onlyIf { ensureExpoRuntimeFingerprintScript.exists() }
+    workingDir projectRoot
+    commandLine "node", ensureExpoRuntimeFingerprintScript.absolutePath
+    environment "NODE_ENV", System.getenv("NODE_ENV") ?: "production"
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("ensureExpoRuntimeFingerprint")
 }
 
 // Apply static values from `gradle.properties` to the `android.packagingOptions`

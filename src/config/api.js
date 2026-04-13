@@ -151,8 +151,13 @@ export const API_ENDPOINTS = {
   TEAM: {
     PUBLIC_QUESTION: buildApiPath(SERVICES.USER, '/app/team/public/question/:questionId'),
     LIST: '/teams',
+    MINE: buildApiPath(SERVICES.USER, '/app/team/mine'),
     DETAIL: buildApiPath(SERVICES.USER, '/app/team/detail/:teamId'),
     CREATE: buildApiPath(SERVICES.USER, '/app/team/create'),
+    APPLY: buildApiPath(SERVICES.USER, '/app/team/:teamId/apply'),
+    APPLICATIONS: buildApiPath(SERVICES.USER, '/app/team/:teamId/applications'),
+    APPROVE_APPLICATION: buildApiPath(SERVICES.USER, '/app/team/:teamId/apply/:appUserId/approve'),
+    REJECT_APPLICATION: buildApiPath(SERVICES.USER, '/app/team/:teamId/apply/:appUserId/reject'),
     TRANSFER: buildApiPath(SERVICES.USER, '/app/team/:teamId/transfer'),
     LEAVE: buildApiPath(SERVICES.USER, '/app/team/:teamId/leave'),
     UPDATE: '/teams/:id',

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import KeyboardDismissView from '../components/KeyboardDismissView';
-import { createMyTeamsData } from '../data/profileMenuMockData';
 import { modalTokens } from '../components/modalTokens';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import teamApi from '../services/api/teamApi';
@@ -51,7 +51,9 @@ export default function MyTeamsScreen({
   navigation
 }) {
   const bottomSafeInset = useBottomSafeInset(20);
-  const [teams, setTeams] = useState(() => createMyTeamsData());
+  const [teams, setTeams] = useState([]);
+  const [loadingMyTeams, setLoadingMyTeams] = useState(false);
+  const [hasLoadedMyTeams, setHasLoadedMyTeams] = useState(false);
   const [selectedQuestions, setSelectedQuestions] = useState([]);
   const [teamName, setTeamName] = useState('');
   const [teamDescription, setTeamDescription] = useState('');
@@ -73,6 +75,51 @@ export default function MyTeamsScreen({
   const transferLeaderCandidates = React.useMemo(() => getTransferLeaderCandidates([selectedExitTeam?.teamMembers, selectedExitTeam?.memberList, selectedExitTeam?.members]), [selectedExitTeam]);
   const selectedNewLeaderMember = React.useMemo(() => transferLeaderCandidates.find(member => String(member.userId) === String(selectedNewLeader)) || null, [selectedNewLeader, transferLeaderCandidates]);
   const isTeamLeader = team => Boolean(team?.isLeader) || team?.role === '\u961f\u957f' || team?.role === '闃熼暱' || Number(team?.userRole) === 3;
+  const visibleTeams = React.useMemo(() => teams.filter(team => team?.isJoined && !team?.isPending && !team?.isRejected && !team?.isExited && !team?.isFrozen), [teams]);
+  const createdTeamCount = React.useMemo(() => visibleTeams.filter(team => isTeamLeader(team)).length, [visibleTeams]);
+  const totalTeamMembers = React.useMemo(() => visibleTeams.reduce((sum, team) => sum + (Number(team?.members) || 0), 0), [visibleTeams]);
+  useFocusEffect(React.useCallback(() => {
+    let isActive = true;
+    const loadMyTeams = async () => {
+      try {
+        setLoadingMyTeams(true);
+        const response = await teamApi.getMyTeams();
+        const isSuccess = response?.code === 0 || response?.code === 200;
+
+        if (!isSuccess) {
+          throw new Error(response?.msg || 'Failed to fetch my teams');
+        }
+
+        const teamList = Array.isArray(response?.data) ? response.data : [];
+        const normalizedTeams = teamList.map(team => normalizeMyTeam(team));
+
+        if (!isActive) {
+          return;
+        }
+
+        setTeams(normalizedTeams);
+        setHasLoadedMyTeams(true);
+      } catch (requestError) {
+        console.error('Failed to fetch my teams:', requestError);
+
+        if (!isActive) {
+          return;
+        }
+
+        setHasLoadedMyTeams(true);
+      } finally {
+        if (isActive) {
+          setLoadingMyTeams(false);
+        }
+      }
+    };
+
+    loadMyTeams();
+
+    return () => {
+      isActive = false;
+    };
+  }, []));
   const closeExitConfirmModal = () => {
     setShowExitConfirmModal(false);
     setExitConfirmTeam(null);
@@ -276,25 +323,25 @@ export default function MyTeamsScreen({
         {/* 团队统计 */}
         <View style={styles.statsCard}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{teams.length}</Text>
+            <Text style={styles.statValue}>{visibleTeams.length}</Text>
             <Text style={styles.statLabel}>加入团队</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{teams.filter(t => t.role === '队长').length}</Text>
+            <Text style={styles.statValue}>{createdTeamCount}</Text>
             <Text style={styles.statLabel}>创建团队</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{teams.reduce((sum, t) => sum + t.members, 0)}</Text>
+            <Text style={styles.statValue}>{totalTeamMembers}</Text>
             <Text style={styles.statLabel}>团队成员</Text>
           </View>
         </View>
 
         {/* 团队列表 */}
         <View style={styles.teamsSection}>
-          <Text style={styles.sectionTitle}>全部团队 ({teams.length})</Text>
-          {teams.map(team => <TouchableOpacity key={team.id} style={styles.teamCard} onPress={() => handleTeamPress(team)} activeOpacity={0.7}>
+          <Text style={styles.sectionTitle}>全部团队 ({visibleTeams.length})</Text>
+          {visibleTeams.map(team => <TouchableOpacity key={team.id} style={styles.teamCard} onPress={() => handleTeamPress(team)} activeOpacity={0.7}>
               <Avatar uri={team.avatar} name={team.name} size={56} />
               <View style={styles.teamInfo}>
                 <View style={styles.teamHeader}>
@@ -315,10 +362,10 @@ export default function MyTeamsScreen({
                     <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
                     <Text style={styles.metaText}>{team.questions}个问题</Text>
                   </View>
-                  <View style={styles.metaItem}>
-                    <Ionicons name="time-outline" size={14} color="#9ca3af" />
-                    <Text style={styles.metaText}>创建于 {team.createdAt}</Text>
-                  </View>
+                  {team.createdAt ? <View style={styles.metaItem}>
+                      <Ionicons name="time-outline" size={14} color="#9ca3af" />
+                      <Text style={styles.metaText}>创建于 {team.createdAt}</Text>
+                    </View> : null}
                 </View>
               </View>
               <TouchableOpacity style={styles.moreBtn} onPress={e => {
@@ -331,14 +378,10 @@ export default function MyTeamsScreen({
         </View>
 
         {/* 空状态 */}
-        {teams.length === 0 && <View style={styles.emptyState}>
+        {hasLoadedMyTeams && !loadingMyTeams && visibleTeams.length === 0 && <View style={styles.emptyState}>
             <Ionicons name="people-circle-outline" size={80} color="#d1d5db" />
             <Text style={styles.emptyText}>还没有加入任何团队</Text>
             <Text style={styles.emptyHint}>创建或加入团队，与志同道合的伙伴一起学习</Text>
-            <TouchableOpacity style={styles.createBtn} onPress={handleCreateTeam}>
-              <Ionicons name="add-circle" size={20} color="#fff" />
-              <Text style={styles.createBtnText}>创建团队</Text>
-            </TouchableOpacity>
           </View>}
 
       <View style={{
