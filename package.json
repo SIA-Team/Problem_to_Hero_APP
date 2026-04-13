@@ -9,6 +9,7 @@
     "start:tunnel": "expo start --tunnel --go",
     "android": "expo run:android",
     "android:clean": "cd android && gradlew clean && cd ..",
+    "android:fingerprint:sync": "node scripts/ensure-expo-runtime-fingerprint.js",
     "android:build:prod": "eas build --profile production --platform android",
     "android:build:preview": "eas build --profile preview --platform android",
     "ios:build:dev": "eas build --profile development --platform ios",
@@ -76,7 +77,8 @@
     "jest": "^30.2.0",
     "qrcode": "^1.5.4",
     "react-native-worklets": "^0.7.2",
-    "react-test-renderer": "19.1.0"
+    "react-test-renderer": "19.1.0",
+    "typescript": "^6.0.2"
   },
   "private": true
 }

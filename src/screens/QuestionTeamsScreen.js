@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -19,6 +20,13 @@ import questionApi from '../services/api/questionApi';
 import teamApi from '../services/api/teamApi';
 import { showAppAlert } from '../utils/appAlert';
 import { mapTeamToDetailRoute, normalizeQuestionTeam } from '../utils/teamTransforms';
+import {
+  executeTeamJoinApply,
+  isTeamJoinPendingError,
+  loadTeamJoinPendingOverrides,
+  markTeamJoinPendingOverride,
+  saveTeamJoinPendingOverrides,
+} from '../utils/teamJoin';
 
 import { scaleFont } from '../utils/responsive';
 const EMPTY_ERROR_KEY = '__EMPTY_NO_DATA__';
@@ -102,9 +110,14 @@ export default function QuestionTeamsScreen({ route, navigation }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamDesc, setNewTeamDesc] = useState('');
-  const [showPendingModal, setShowPendingModal] = useState(false);
   const [creatingTeam, setCreatingTeam] = useState(false);
   const [currentUserNames, setCurrentUserNames] = useState([]);
+  const [applyingTeamId, setApplyingTeamId] = useState(null);
+  const [pendingApplyOverrides, setPendingApplyOverrides] = useState({});
+  const [pendingOverridesReady, setPendingOverridesReady] = useState(false);
+  const [showApplyReasonModal, setShowApplyReasonModal] = useState(false);
+  const [applyReasonText, setApplyReasonText] = useState('');
+  const [applyTargetTeam, setApplyTargetTeam] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -156,6 +169,31 @@ export default function QuestionTeamsScreen({ route, navigation }) {
   useEffect(() => {
     let isMounted = true;
 
+    const loadPendingOverrides = async () => {
+      const pendingOverrides = await loadTeamJoinPendingOverrides();
+
+      if (isMounted) {
+        setPendingApplyOverrides(pendingOverrides);
+        setPendingOverridesReady(true);
+      }
+    };
+
+    loadPendingOverrides();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!pendingOverridesReady) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
     const loadQuestionTeams = async () => {
       if (questionId === undefined || questionId === null || questionId === '') {
         if (isMounted) {
@@ -179,15 +217,17 @@ export default function QuestionTeamsScreen({ route, navigation }) {
           throw new Error(response?.msg || 'Failed to load question teams');
         }
 
-        const nextTeams = Array.isArray(response?.data)
+        const rawTeams = Array.isArray(response?.data)
           ? response.data.map((team) =>
               normalizeQuestionTeam(team, { currentUserNames })
             )
           : [];
+        const nextTeams = await hydrateTeamsWithMembershipState(rawTeams);
 
         if (isMounted) {
           setTeams(nextTeams);
         }
+        await syncPendingOverridesWithTeams(nextTeams);
       } catch (requestError) {
         console.error('Failed to load question teams:', requestError);
 
@@ -207,39 +247,190 @@ export default function QuestionTeamsScreen({ route, navigation }) {
     return () => {
       isMounted = false;
     };
-  }, [questionId, currentUserNames]);
+  }, [questionId, currentUserNames, pendingOverridesReady]);
 
   const handleTeamPress = (team) => {
-    navigation.navigate('TeamDetail', mapTeamToDetailRoute(team));
+    navigation.navigate('TeamDetail', mapTeamToDetailRoute({
+      ...team,
+      isPending: Boolean(team?.isPending || shouldUsePendingOverride(team)),
+    }));
   };
 
-  const handleApplyJoin = (teamId, teamName) => {
-    showAppAlert(
-      t('screens.questionTeams.alerts.applyTitle'),
-      t('screens.questionTeams.alerts.applyMessage').replace('{name}', teamName),
-      [
-        {
-          text: t('screens.questionTeams.alerts.cancel'),
-          style: 'cancel',
-        },
-        {
-          text: t('screens.questionTeams.alerts.confirmApply'),
-          onPress: () => {
-            setTeams((prevTeams) =>
-              prevTeams.map((team) =>
-                team.id === teamId
-                  ? {
-                      ...team,
-                      isPending: true,
-                    }
-                  : team
-              )
-            );
-            setShowPendingModal(true);
-          },
-        },
-      ]
+  const hydrateTeamsWithMembershipState = async (sourceTeams = []) => {
+    const hydratedTeams = await Promise.all(sourceTeams.map(async team => {
+      if (!team?.id) {
+        return team;
+      }
+
+      try {
+        const response = await teamApi.getTeamDetail(team.id);
+        const isSuccess = response?.code === 0 || response?.code === 200;
+
+        if (!isSuccess || !response?.data) {
+          return team;
+        }
+
+        return {
+          ...team,
+          ...normalizeQuestionTeam(response.data, {
+            currentUserNames
+          })
+        };
+      } catch (requestError) {
+        console.error('Failed to hydrate team membership state:', requestError);
+        return team;
+      }
+    }));
+
+    return hydratedTeams;
+  };
+
+  const syncPendingOverridesWithTeams = React.useCallback(async (sourceTeams = []) => {
+    const nextPendingOverrides = sourceTeams.reduce((accumulator, team) => {
+      if (team?.id && team?.isPending && !team?.isJoined) {
+        accumulator[String(team.id)] = true;
+      }
+      return accumulator;
+    }, {});
+
+    const normalizedOverrides = await saveTeamJoinPendingOverrides(nextPendingOverrides);
+    setPendingApplyOverrides(normalizedOverrides);
+    return normalizedOverrides;
+  }, []);
+
+  const markTeamPending = async (teamId) => {
+    const nextState = await markTeamJoinPendingOverride(teamId);
+    setPendingApplyOverrides((prevState) => ({
+      ...prevState,
+      ...nextState,
+    }));
+    return nextState;
+  };
+
+  const refreshQuestionTeams = async () => {
+    if (questionId === undefined || questionId === null || questionId === '') {
+      return [];
+    }
+
+    const latestResponse = await questionApi.getQuestionTeams(questionId);
+    const latestSuccess = latestResponse?.code === 0 || latestResponse?.code === 200;
+
+    if (!latestSuccess) {
+      throw new Error(latestResponse?.msg || 'Failed to refresh question teams');
+    }
+
+    const rawTeams = Array.isArray(latestResponse?.data)
+      ? latestResponse.data.map((team) =>
+          normalizeQuestionTeam(team, { currentUserNames })
+        )
+      : [];
+    const latestTeams = await hydrateTeamsWithMembershipState(rawTeams);
+
+    setTeams(latestTeams);
+    await syncPendingOverridesWithTeams(latestTeams);
+    return latestTeams;
+  };
+
+  useFocusEffect(React.useCallback(() => {
+    let isActive = true;
+
+    if (!pendingOverridesReady) {
+      return () => {
+        isActive = false;
+      };
+    }
+
+    const refreshOnFocus = async () => {
+      try {
+        setLoading(true);
+        setError('');
+        await refreshQuestionTeams();
+      } catch (requestError) {
+        console.error('Failed to refresh question teams on focus:', requestError);
+
+        if (isActive) {
+          setError(requestError?.message || 'Failed to refresh question teams');
+        }
+      } finally {
+        if (isActive) {
+          setLoading(false);
+        }
+      }
+    };
+
+    refreshOnFocus();
+
+    return () => {
+      isActive = false;
+    };
+  }, [pendingOverridesReady, questionId, currentUserNames]));
+
+  const shouldUsePendingOverride = (team) =>
+    Boolean(
+      pendingApplyOverrides[String(team?.id)] &&
+        !team?.isJoined &&
+        !team?.isPending &&
+        !team?.isFrozen &&
+        !team?.isRejected &&
+        !team?.isExited
     );
+
+  const handleApplyJoin = (teamId, teamName) => {
+    setApplyTargetTeam({ id: teamId, name: teamName });
+    setApplyReasonText('');
+    setShowApplyReasonModal(true);
+  };
+
+  const handleConfirmApply = async () => {
+    if (!applyTargetTeam) return;
+
+    const { id: teamId, name: teamName } = applyTargetTeam;
+    const reason = applyReasonText.trim();
+
+    setShowApplyReasonModal(false);
+
+    try {
+      setApplyingTeamId(String(teamId));
+      await executeTeamJoinApply({
+        teamId,
+        reason,
+      });
+      await markTeamPending(teamId);
+      await refreshQuestionTeams();
+      showAppAlert(
+        t('screens.questionTeams.alerts.success'),
+        '\u7533\u8bf7\u5df2\u63d0\u4ea4'
+      );
+    } catch (requestError) {
+      console.error('Failed to apply join from question teams screen:', requestError);
+      if (isTeamJoinPendingError(requestError)) {
+        await markTeamPending(teamId);
+      }
+      try {
+        const latestTeams = await refreshQuestionTeams();
+        const latestTeam = latestTeams.find((team) => String(team.id) === String(teamId));
+
+        if (latestTeam?.isPending) {
+          showAppAlert(
+            t('screens.questionTeams.alerts.hint'),
+            isTeamJoinPendingError(requestError)
+              ? requestError?.message || '\u60a8\u5df2\u5728\u7533\u8bf7\u4e2d'
+              : '\u5f53\u524d\u7533\u8bf7\u72b6\u6001\u5df2\u540c\u6b65'
+          );
+          return;
+        }
+      } catch (refreshError) {
+        console.error('Failed to refresh question teams after apply error:', refreshError);
+      }
+      showAppAlert(
+        t('screens.questionTeams.alerts.hint'),
+        requestError?.message || t('screens.questionTeams.alerts.applyTitle')
+      );
+    } finally {
+      setApplyingTeamId(null);
+      setApplyTargetTeam(null);
+      setApplyReasonText('');
+    }
   };
 
   const handleCreateTeam = async () => {
@@ -369,18 +560,12 @@ export default function QuestionTeamsScreen({ route, navigation }) {
                       </Text>
                     </View>
                   )}
-                  {Boolean(team.isPending) && (
-                    <View style={styles.pendingBadge}>
-                      <Ionicons name="time-outline" size={12} color="#f59e0b" />
-                      <Text style={styles.pendingText}>
-                        {t('screens.questionTeams.badges.pending')}
-                      </Text>
-                    </View>
-                  )}
                 </View>
-                <Text style={styles.teamDesc} numberOfLines={2}>
-                  {team.description}
-                </Text>
+                {team.description ? (
+                  <Text style={styles.teamDesc} numberOfLines={2}>
+                    {team.description}
+                  </Text>
+                ) : null}
                 <View style={styles.capacityRow}>
                   <Ionicons name="people-outline" size={14} color="#9ca3af" />
                   <Text style={styles.capacityText}>
@@ -428,11 +613,15 @@ export default function QuestionTeamsScreen({ route, navigation }) {
                     {t('screens.questionTeams.meta.people')}
                   </Text>
                 </View>
-                <View style={styles.metaDivider} />
-                <View style={styles.metaItem}>
-                  <Ionicons name="person" size={14} color="#9ca3af" />
-                  <Text style={styles.metaText}>{team.creatorName}</Text>
-                </View>
+                {team.creatorName && team.creatorName !== '-' ? (
+                  <>
+                    <View style={styles.metaDivider} />
+                    <View style={styles.metaItem}>
+                      <Ionicons name="person" size={14} color="#9ca3af" />
+                      <Text style={styles.metaText}>{team.creatorName}</Text>
+                    </View>
+                  </>
+                ) : null}
                 <View style={styles.metaDivider} />
                 <View
                   style={[
@@ -454,17 +643,18 @@ export default function QuestionTeamsScreen({ route, navigation }) {
                 </View>
               </View>
 
-              {!team.isJoined && !team.isPending && Boolean(team.isFrozen) && (
+              {!team.isJoined && !Boolean(team.isPending || shouldUsePendingOverride(team)) && Boolean(team.isFrozen) && (
                 <View style={styles.frozenTag}>
                   <Ionicons name="ban-outline" size={14} color="#9ca3af" />
                   <Text style={styles.frozenTagText}>不可申请</Text>
                 </View>
               )}
 
-              {!team.isJoined && !team.isPending && !team.isFrozen && (
+              {!team.isJoined && !Boolean(team.isPending || shouldUsePendingOverride(team)) && !team.isFrozen && (
                 <TouchableOpacity
                   style={styles.applyBtn}
                   onPress={() => handleApplyJoin(team.id, team.name)}
+                  disabled={applyingTeamId === String(team.id)}
                   activeOpacity={0.6}
                   accessible
                   accessibilityRole="button"
@@ -473,19 +663,19 @@ export default function QuestionTeamsScreen({ route, navigation }) {
                   <Ionicons
                     name="add-circle-outline"
                     size={16}
-                    color="#ef4444"
+                    color={applyingTeamId === String(team.id) ? '#fca5a5' : '#ef4444'}
                   />
-                  <Text style={styles.applyBtnText}>
-                    {t('screens.questionTeams.actions.apply')}
+                  <Text style={[styles.applyBtnText, applyingTeamId === String(team.id) && { color: '#fca5a5' }]}>
+                    {applyingTeamId === String(team.id) ? t('common.loading') : t('screens.questionTeams.actions.apply')}
                   </Text>
                 </TouchableOpacity>
               )}
 
-              {Boolean(team.isPending) && (
+              {Boolean(team.isPending || shouldUsePendingOverride(team)) && (
                 <View style={styles.pendingTag}>
                   <Ionicons name="hourglass-outline" size={14} color="#f59e0b" />
                   <Text style={styles.pendingTagText}>
-                    {t('screens.questionTeams.actions.waitingVote')}
+                    {'审核中'}
                   </Text>
                 </View>
               )}
@@ -592,29 +782,62 @@ export default function QuestionTeamsScreen({ route, navigation }) {
         </View>
       </Modal>
 
-      <Modal visible={showPendingModal} animationType="fade" transparent>
+      {/* 申请加入团队理由输入模态框 */}
+      <Modal
+        visible={showApplyReasonModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          if (!applyingTeamId) {
+            setShowApplyReasonModal(false);
+            setApplyTargetTeam(null);
+            setApplyReasonText('');
+          }
+        }}
+      >
         <View style={styles.modalOverlay}>
-          <View style={styles.pendingModal}>
-            <View style={styles.pendingModalIcon}>
-              <Ionicons name="hourglass" size={48} color="#f59e0b" />
+          <View style={styles.applyReasonCard}>
+            <Text style={styles.applyReasonTitle}>申请加入团队</Text>
+            <Text style={styles.applyReasonTeamName}>"{applyTargetTeam?.name}"</Text>
+            <Text style={styles.applyReasonLabel}>申请理由（选填）</Text>
+            <TextInput
+              style={styles.applyReasonInput}
+              placeholder="请简单说明您的申请理由..."
+              placeholderTextColor="#9ca3af"
+              value={applyReasonText}
+              onChangeText={setApplyReasonText}
+              multiline
+              numberOfLines={4}
+              maxLength={200}
+              textAlignVertical="top"
+            />
+            <Text style={styles.applyReasonCount}>{applyReasonText.length}/200</Text>
+            <View style={styles.applyReasonActions}>
+              <TouchableOpacity
+                style={styles.applyReasonCancelBtn}
+                onPress={() => {
+                  setShowApplyReasonModal(false);
+                  setApplyTargetTeam(null);
+                  setApplyReasonText('');
+                }}
+                disabled={applyingTeamId}
+              >
+                <Text style={styles.applyReasonCancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.applyReasonConfirmBtn}
+                onPress={handleConfirmApply}
+                disabled={applyingTeamId}
+              >
+                <Text style={styles.applyReasonConfirmText}>
+                  {applyingTeamId ? '提交中...' : '提交申请'}
+                </Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.pendingModalTitle}>
-              {t('screens.questionTeams.pendingModal.title')}
-            </Text>
-            <Text style={styles.pendingModalDesc}>
-              {t('screens.questionTeams.pendingModal.description')}
-            </Text>
-            <TouchableOpacity
-              style={styles.pendingModalBtn}
-              onPress={() => setShowPendingModal(false)}
-            >
-              <Text style={styles.pendingModalBtnText}>
-                {t('screens.questionTeams.pendingModal.button')}
-              </Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>
+
     </SafeAreaView>
   );
 }
@@ -802,12 +1025,15 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     borderTopWidth: 1,
     borderTopColor: '#f3f4f6',
+    gap: 12,
   },
   teamMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     flex: 1,
+    flexWrap: 'wrap',
+    marginRight: 8,
   },
   metaItem: {
     flexDirection: 'row',
@@ -853,6 +1079,7 @@ const styles = StyleSheet.create({
     cursor: 'pointer',
     zIndex: 10,
     position: 'relative',
+    flexShrink: 0,
   },
   applyBtnText: {
     color: '#ef4444',
@@ -867,6 +1094,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#fef3c7',
     gap: 4,
+    flexShrink: 0,
   },
   pendingTagText: {
     color: '#f59e0b',
@@ -883,6 +1111,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
     gap: 4,
+    flexShrink: 0,
   },
   frozenTagText: {
     color: '#9ca3af',
@@ -893,6 +1122,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
+    flexShrink: 0,
   },
   enterTagText: {
     fontSize: scaleFont(12),
@@ -1029,5 +1259,83 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(15),
     color: '#fff',
     fontWeight: '600',
+  },
+  applyReasonCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    marginHorizontal: 24,
+    marginBottom: 40,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  applyReasonTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  applyReasonTeamName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3b82f6',
+    marginBottom: 16,
+  },
+  applyReasonLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6b7280',
+    marginBottom: 8,
+  },
+  applyReasonInput: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    backgroundColor: '#f9fafb',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#111827',
+    minHeight: 100,
+  },
+  applyReasonCount: {
+    fontSize: 12,
+    color: '#9ca3af',
+    textAlign: 'right',
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  applyReasonActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  applyReasonCancelBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  applyReasonCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  applyReasonConfirmBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  applyReasonConfirmText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });

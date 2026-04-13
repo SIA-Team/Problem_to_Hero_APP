@@ -3,7 +3,7 @@
     "name": "Problem to Hero",
     "slug": "qa-native-app",
     "scheme": "problemtohero",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "splash": {
@@ -19,11 +19,13 @@
       "fallbackToCacheTimeout": 0,
       "url": "https://u.expo.dev/2e6de8bb-4642-4ad3-9a2b-f914db1c07cc"
     },
-    "runtimeVersion": "1.0.0",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.problemtohero.app",
-      "buildNumber": "3",
+      "buildNumber": "6",
       "infoPlist": {
         "UIViewControllerBasedStatusBarAppearance": false,
         "NSPhotoLibraryUsageDescription": "允许访问您的相册以上传图片和更换头像",

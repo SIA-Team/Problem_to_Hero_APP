@@ -264,15 +264,21 @@ const authApi = {
     } finally {
       // 清除本地存储（保留 deviceFingerprint，避免重复注册）
       console.log('🗑️ 清除本地存储数据...');
-      await AsyncStorage.multiRemove([
-        'authToken', 
-        'refreshToken', 
-        'userInfo',
-        'username',
-        'lastRegisterTime',
-        'userProfileCache',
-        'userProfileCacheTime'
-      ]);
+      
+      // 获取所有 AsyncStorage 的 keys
+      const allKeys = await AsyncStorage.getAllKeys();
+      
+      // 筛选出需要清除的 keys（排除 deviceFingerprint）
+      const keysToRemove = allKeys.filter(key => 
+        key !== 'deviceFingerprint' && 
+        key !== '@device_fingerprint'
+      );
+      
+      // 批量删除
+      if (keysToRemove.length > 0) {
+        await AsyncStorage.multiRemove(keysToRemove);
+      }
+      
       console.log('✅ 本地数据已清除（保留设备指纹）');
     }
   },
