@@ -14,14 +14,9 @@ import { Ionicons } from '@expo/vector-icons';
 import questionCategoryService from '../services/questionCategoryService';
 import { showToast } from '../utils/toast';
 
-const MIN_LEVEL1_SELECTION = 1;
-const MIN_LEVEL2_SELECTION = 3;
-const MAX_LEVEL2_SELECTION = 30;
-
 const normalizeText = (value) => (value || '').toString().trim().toLowerCase();
 
 export default function InterestOnboardingScreen({ userId, onComplete, onSkip }) {
-  const [step, setStep] = useState(1);
   const [loadingLevel1, setLoadingLevel1] = useState(true);
   const [level1Categories, setLevel1Categories] = useState([]);
   const [selectedLevel1Ids, setSelectedLevel1Ids] = useState([]);
@@ -51,6 +46,7 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
         if (!mounted) return;
 
         setLevel1Categories(normalized);
+        setActiveLevel1Id((prev) => prev || normalized[0]?.id || null);
       } catch (error) {
         console.error('Failed to load level1 categories:', error);
         if (mounted) {
@@ -139,54 +135,11 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
 
     setSelectedLevel1Ids((prev) => {
       const exists = prev.includes(categoryId);
-
-      if (exists) {
-        const next = prev.filter((id) => id !== categoryId);
-
-        setSelectedLevel2Map((prevLevel2) => {
-          const nextLevel2 = { ...prevLevel2 };
-
-          Object.keys(nextLevel2).forEach((id) => {
-            const selected = nextLevel2[id];
-            if (selected?.parentId === categoryId) {
-              delete nextLevel2[id];
-            }
-          });
-
-          return nextLevel2;
-        });
-
-        if (activeLevel1Id === categoryId) {
-          setActiveLevel1Id(next[0] || null);
-        }
-
-        return next;
-      }
-
-      const next = [...prev, categoryId];
-
-      if (!activeLevel1Id) {
-        setActiveLevel1Id(categoryId);
-      }
-
-      return next;
+      return exists ? prev.filter((id) => id !== categoryId) : [...prev, categoryId];
     });
 
+    setActiveLevel1Id(categoryId);
     await loadLevel2(categoryId);
-  };
-
-  const handleStep1Next = () => {
-    if (selectedLevel1Ids.length < MIN_LEVEL1_SELECTION) {
-      showToast(`Please select at least ${MIN_LEVEL1_SELECTION} major category.`, 'warning');
-      return;
-    }
-
-    const nextActive = activeLevel1Id || selectedLevel1Ids[0];
-    setActiveLevel1Id(nextActive);
-    if (nextActive) {
-      loadLevel2(nextActive);
-    }
-    setStep(2);
   };
 
   const handleSwitchActiveLevel1 = (parentId) => {
@@ -204,11 +157,6 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
         return next;
       }
 
-      if (Object.keys(prev).length >= MAX_LEVEL2_SELECTION) {
-        showToast(`You can select up to ${MAX_LEVEL2_SELECTION} subcategories.`, 'warning');
-        return prev;
-      }
-
       return {
         ...prev,
         [key]: {
@@ -222,11 +170,6 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
   };
 
   const handleComplete = async () => {
-    if (selectedLevel2List.length < MIN_LEVEL2_SELECTION) {
-      showToast(`Please select at least ${MIN_LEVEL2_SELECTION} subcategories.`, 'warning');
-      return;
-    }
-
     if (!userId) {
       showToast('Unable to identify current user.', 'error');
       return;
@@ -292,12 +235,7 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
         <Text style={styles.subtitle}>
           We will use your selections to personalize question recommendations.
         </Text>
-        <View style={styles.progressRow}>
-          <View style={[styles.progressDot, styles.progressDotActive]} />
-          <View style={[styles.progressLine, step === 2 && styles.progressLineActive]} />
-          <View style={[styles.progressDot, step === 2 && styles.progressDotActive]} />
-        </View>
-        <Text style={styles.stepText}>{step === 1 ? 'Step 1/2: Major categories' : 'Step 2/2: Subcategories'}</Text>
+        <Text style={styles.stepText}>Choose major categories and subcategories on this page.</Text>
       </View>
 
       {loadingLevel1 ? (
@@ -307,7 +245,7 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
         </View>
       ) : null}
 
-      {!loadingLevel1 && step === 1 ? (
+      {!loadingLevel1 ? (
         <View style={styles.body}>
           <TextInput
             style={styles.searchInput}
@@ -327,26 +265,24 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
             keyExtractor={(item) => String(item.id)}
             numColumns={2}
             columnWrapperStyle={styles.level1Row}
+            style={styles.level1ListView}
             contentContainerStyle={styles.level1List}
             showsVerticalScrollIndicator={false}
           />
-        </View>
-      ) : null}
-
-      {!loadingLevel1 && step === 2 ? (
-        <View style={styles.body}>
+          <Text style={styles.sectionTitle}>Subcategories</Text>
           <ScrollView
             horizontal
             style={styles.level1TabsScroll}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.level1Tabs}
           >
-            {selectedLevel1List.map((item) => {
+            {level1Categories.map((item) => {
               const active = item.id === activeLevel1Id;
+              const selected = selectedLevel1Ids.includes(item.id);
               return (
                 <TouchableOpacity
                   key={item.id}
-                  style={[styles.level1Tab, active && styles.level1TabActive]}
+                  style={[styles.level1Tab, active && styles.level1TabActive, selected && styles.level1TabSelected]}
                   onPress={() => handleSwitchActiveLevel1(item.id)}
                 >
                   <Text style={[styles.level1TabText, active && styles.level1TabTextActive]}>{item.name}</Text>
@@ -410,7 +346,11 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
               );
             })}
 
-            {!loadingLevel2Map[activeLevel1Id] && activeLevel2List.length === 0 ? (
+            {!activeLevel1Id ? (
+              <Text style={styles.emptyText}>No major categories available.</Text>
+            ) : null}
+
+            {activeLevel1Id && !loadingLevel2Map[activeLevel1Id] && activeLevel2List.length === 0 ? (
               <Text style={styles.emptyText}>No subcategories found.</Text>
             ) : null}
           </ScrollView>
@@ -426,15 +366,9 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
           <Text style={styles.skipButtonText}>Skip for now</Text>
         </TouchableOpacity>
 
-        {step === 1 ? (
-          <TouchableOpacity style={styles.primaryButton} onPress={handleStep1Next}>
-            <Text style={styles.primaryButtonText}>Next</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity style={styles.primaryButton} onPress={handleComplete} disabled={submitting}>
-            {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryButtonText}>Start using app</Text>}
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity style={styles.primaryButton} onPress={handleComplete} disabled={submitting}>
+          {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryButtonText}>Start using app</Text>}
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -485,7 +419,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ef4444',
   },
   stepText: {
-    marginTop: 8,
+    marginTop: 12,
     fontSize: 12,
     color: '#6b7280',
   },
@@ -516,10 +450,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   level1List: {
-    paddingBottom: 16,
+    paddingBottom: 6,
+  },
+  level1ListView: {
+    maxHeight: 224,
   },
   level1Row: {
     justifyContent: 'space-between',
+  },
+  sectionTitle: {
+    marginTop: 4,
+    marginBottom: 10,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
   },
   level1Card: {
     width: '48.4%',
@@ -572,6 +516,9 @@ const styles = StyleSheet.create({
   level1TabActive: {
     borderColor: '#ef4444',
     backgroundColor: '#fef2f2',
+  },
+  level1TabSelected: {
+    borderColor: '#fca5a5',
   },
   level1TabText: {
     fontSize: 13,

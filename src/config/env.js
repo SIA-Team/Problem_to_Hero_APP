@@ -32,7 +32,7 @@ export const FIXED_GROUP_SERVER_URL = 'http://8.146.230.62:8080';
 const getServerLabel = (server) => {
   switch (server) {
     case 'server1':
-      return '开发服务器 (123.144.149.59:30560)';
+      return '开发服务器 (116.168.31.142:30560)';
     case 'server2':
       return '生产服务器 (8.146.230.62:8080)';
     case 'custom':
@@ -93,7 +93,7 @@ export const updateDynamicServer = (server, customUrl = '') => {
  * 支持不同接口使用不同的服务器地址
  * 
  * 配置方式：
- * - 'server1': 使用 http://123.144.149.59:30560 (开发服务器，备用)
+ * - 'server1': 使用 http://116.168.31.142:30560 (开发服务器，备用)
  * - 'server2': 使用 http://8.146.230.62:8080 (生产服务器，当前默认)
  * - 不配置：使用默认服务器地址 (当前为生产服务器 server2)
  * 
@@ -249,19 +249,19 @@ const ENV = {
   dev: {
     apiUrl: 'http://8.146.230.62:8080',           // 默认API地址（生产服务器）
     contentApiUrl: 'http://8.146.230.62:8080',    // 内容服务
-    server1Url: 'http://123.144.149.59:30560',    // 开发服务器（备用）
+    server1Url: 'http://116.168.31.142:30560',    // 开发服务器（备用）
     server2Url: 'http://8.146.230.62:8080',       // 生产服务器
   },
   staging: {
     apiUrl: 'http://8.146.230.62:8080',
     contentApiUrl: 'http://8.146.230.62:8080',  // 内容服务
-    server1Url: 'http://123.144.149.59:30560',  // 开发服务器（备用）
+    server1Url: 'http://116.168.31.142:30560',  // 开发服务器（备用）
     server2Url: 'http://8.146.230.62:8080',     // 生产服务器
   },
   prod: {
     apiUrl: 'http://8.146.230.62:8080',
     contentApiUrl: 'http://8.146.230.62:8080',  // 内容服务
-    server1Url: 'http://123.144.149.59:30560',  // 开发服务器（备用）
+    server1Url: 'http://116.168.31.142:30560',  // 开发服务器（备用）
     server2Url: 'http://8.146.230.62:8080',     // 生产服务器
   }
 };
