@@ -1,4 +1,5 @@
 import React from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Modal,
   View,
@@ -17,7 +18,7 @@ import ShareToFriendsModal from './ShareToFriendsModal';
 import EditTextModal from './EditTextModal';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import { showToast } from '../utils/toast';
-import { buildShareUrl, buildTwitterShareText, openTwitterShare } from '../utils/shareService';
+import { buildProblemToHeroInviteText, buildShareUrl, openTwitterShare } from '../utils/shareService';
 
 import { scaleFont } from '../utils/responsive';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -90,6 +91,7 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
   const [showFriendsModal, setShowFriendsModal] = React.useState(false);
   const [showTwitterEditor, setShowTwitterEditor] = React.useState(false);
   const [twitterDraftText, setTwitterDraftText] = React.useState('');
+  const [currentInviteUsername, setCurrentInviteUsername] = React.useState('');
 
   React.useEffect(() => {
     if (!visible) {
@@ -98,8 +100,78 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
     }
   }, [visible]);
 
+  React.useEffect(() => {
+    let isMounted = true;
+
+    const loadCurrentInviteUsername = async () => {
+      try {
+        const [userInfoRaw, currentUsername] = await Promise.all([
+          AsyncStorage.getItem('userInfo'),
+          AsyncStorage.getItem('currentUsername'),
+        ]);
+
+        const candidates = [
+          shareData?.inviterUsername,
+          shareData?.username,
+          shareData?.userName,
+        ];
+
+        if (userInfoRaw) {
+          try {
+            const userInfo = JSON.parse(userInfoRaw);
+            candidates.push(
+              userInfo?.username,
+              userInfo?.nickName,
+              userInfo?.nickname,
+              userInfo?.userName,
+              userInfo?.name
+            );
+          } catch (parseError) {
+            console.error('Failed to parse current user info for share twitter copy:', parseError);
+          }
+        }
+
+        candidates.push(currentUsername, 'ProblemToHero');
+
+        const normalizedName = candidates
+          .map(item => String(item ?? '').trim())
+          .find(Boolean);
+
+        if (isMounted && normalizedName) {
+          setCurrentInviteUsername(normalizedName);
+        }
+      } catch (storageError) {
+        console.error('Failed to load current user name for share twitter copy:', storageError);
+        if (isMounted) {
+          setCurrentInviteUsername('ProblemToHero');
+        }
+      }
+    };
+
+    loadCurrentInviteUsername();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [shareData?.inviterUsername, shareData?.userName, shareData?.username, visible]);
+
+  const buildUnifiedShareText = React.useCallback(() => {
+    const inviteText = buildProblemToHeroInviteText({
+      twitterHandle: shareData?.twitterHandle || shareData?.twitterUsername,
+      inviterUsername: currentInviteUsername,
+      title: shareData?.title,
+    });
+
+    return String(inviteText ?? '').trim();
+  }, [
+    currentInviteUsername,
+    shareData?.title,
+    shareData?.twitterHandle,
+    shareData?.twitterUsername,
+  ]);
+
   const openTwitterEditor = () => {
-    setTwitterDraftText(buildTwitterShareText(shareData));
+    setTwitterDraftText(buildUnifiedShareText());
     setShowTwitterEditor(true);
   };
 
@@ -196,10 +268,12 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
 
       if (platform === 'link') {
         const shareUrl = buildShareUrl(shareData);
-        const result = await copyLinkSafely(shareUrl);
+        const shareText = buildUnifiedShareText();
+        const shareMessage = shareText ? `${shareText}\n${shareUrl}` : shareUrl;
+        const result = await copyLinkSafely(shareMessage);
 
         if (result === 'copied') {
-          showToast('Link copied', 'success');
+          showToast('Text and link copied', 'success');
         } else if (result === 'shared') {
           showToast('Clipboard unavailable, opened share sheet', 'info');
         } else {
@@ -207,7 +281,7 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
         }
 
         if (onShare) {
-          onShare(platform, { ...shareData, url: shareUrl });
+          onShare(platform, { ...shareData, shareText, url: shareUrl });
         }
         handleClose();
         return;

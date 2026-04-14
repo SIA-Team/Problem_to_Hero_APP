@@ -121,6 +121,10 @@ export const API_ENDPOINTS = {
   CATEGORY: {
     LIST: buildApiPath(SERVICES.CONTENT, '/app/content/category/list'),
   },
+
+  REGION: {
+    CHILDREN: buildApiPath(SERVICES.USER, '/app/region/children'),
+  },
   
   // 回答相关
   ANSWER: {

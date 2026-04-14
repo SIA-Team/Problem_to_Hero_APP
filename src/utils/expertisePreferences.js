@@ -120,3 +120,15 @@ export const buildExpertiseSummary = (payload) => {
 
   return '未设置';
 };
+
+export const getExpertiseCategoryIds = (payload) => {
+  const normalized = normalizePayload(payload || {});
+  const categoryIds = [
+    ...normalized.level1.map((item) => item.id),
+    ...normalized.level2.map((item) => item.id),
+  ];
+
+  return Array.from(new Set(categoryIds)).filter(
+    (id) => Number.isFinite(id) && id > 0
+  );
+};

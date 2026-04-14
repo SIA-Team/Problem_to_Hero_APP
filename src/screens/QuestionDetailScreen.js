@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image, TextInput, StyleSheet, Modal, Alert, RefreshControl, ActivityIndicator, Animated, KeyboardAvoidingView, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
@@ -26,7 +27,9 @@ import { normalizeEntityId } from '../utils/jsonLongId';
 import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import { scaleFont } from '../utils/responsive';
-import { buildTwitterShareText, openTwitterShare } from '../utils/shareService';
+import { buildProblemToHeroInviteText, openTwitterShare } from '../utils/shareService';
+import twitterInviteUsers from '../utils/twitterInviteUsers';
+import { getTwitterInviteStatusText, loadQuestionTwitterInvites, saveQuestionTwitterInvite } from '../services/twitterInviteState';
 const answers = [{
   id: 1,
   author: 'Python老司机',
@@ -575,6 +578,7 @@ export default function QuestionDetailScreen({
   const [twitterInviteDraftText, setTwitterInviteDraftText] = useState('');
   const [selectedTwitterInviteUser, setSelectedTwitterInviteUser] = useState(null);
   const [pendingTwitterInvitePlatform, setPendingTwitterInvitePlatform] = useState(null);
+  const [currentInviteUsername, setCurrentInviteUsername] = useState('');
   const [answerSelectedTeams, setAnswerSelectedTeams] = useState([]); // 回答选中的团队
   const [supplementQuestionIdentity, setSupplementQuestionIdentity] = useState('personal'); // 补充问题身份
   const [supplementQuestionSelectedTeams, setSupplementQuestionSelectedTeams] = useState([]); // 补充问题选中的团队
@@ -602,10 +606,95 @@ export default function QuestionDetailScreen({
   const bottomSafeInset = useBottomSafeInset(20);
   const commentSheetBottomSpacing = Math.max(insets.bottom, 16) + 12;
   const [commentsPage, setCommentsPage] = useState(1);
+  const [invitedTwitterUsersState, setInvitedTwitterUsersState] = useState([]);
+  const [loadingTwitterInvites, setLoadingTwitterInvites] = useState(false);
   const [loadingInvited, setLoadingInvited] = useState(false);
   const [loadingSupplements, setLoadingSupplements] = useState(false);
   const [loadingAnswers, setLoadingAnswers] = useState(false);
   const [loadingComments, setLoadingComments] = useState(false);
+  const currentQuestionId = React.useMemo(() => {
+    const candidateQuestionId = route?.params?.id ?? questionData?.id ?? questionData?.questionId;
+    const normalizedQuestionId = String(candidateQuestionId ?? '').trim();
+    return normalizedQuestionId || null;
+  }, [route?.params?.id, questionData?.id, questionData?.questionId]);
+
+  const loadInvitedTwitterUsers = React.useCallback(async () => {
+    if (!currentQuestionId) {
+      setInvitedTwitterUsersState([]);
+      return;
+    }
+
+    try {
+      setLoadingTwitterInvites(true);
+      const storedInvites = await loadQuestionTwitterInvites(currentQuestionId);
+      setInvitedTwitterUsersState(storedInvites);
+    } catch (error) {
+      console.error('Failed to load invited twitter users:', error);
+      setInvitedTwitterUsersState([]);
+    } finally {
+      setLoadingTwitterInvites(false);
+    }
+  }, [currentQuestionId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCurrentInviteUsername = async () => {
+      try {
+        const [userInfoRaw, currentUsername] = await Promise.all([
+          AsyncStorage.getItem('userInfo'),
+          AsyncStorage.getItem('currentUsername'),
+        ]);
+
+        const candidates = [];
+
+        if (userInfoRaw) {
+          try {
+            const userInfo = JSON.parse(userInfoRaw);
+            candidates.push(
+              userInfo?.username,
+              userInfo?.nickName,
+              userInfo?.nickname,
+              userInfo?.userName,
+              userInfo?.name
+            );
+          } catch (parseError) {
+            console.error('Failed to parse current user info for Twitter invite copy:', parseError);
+          }
+        }
+
+        candidates.push(currentUsername);
+
+        const normalizedName = candidates
+          .map(item => String(item ?? '').trim())
+          .find(Boolean);
+
+        if (isMounted && normalizedName) {
+          setCurrentInviteUsername(normalizedName.startsWith('@') ? normalizedName : `@${normalizedName}`);
+        }
+      } catch (storageError) {
+        console.error('Failed to load current user name for Twitter invite copy:', storageError);
+      }
+    };
+
+    loadCurrentInviteUsername();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    loadInvitedTwitterUsers();
+  }, [loadInvitedTwitterUsers]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadInvitedTwitterUsers();
+    });
+
+    return unsubscribe;
+  }, [navigation, loadInvitedTwitterUsers]);
 
   // 增加悬赏相关状态
   const [showAddRewardModal, setShowAddRewardModal] = useState(false);
@@ -809,16 +898,52 @@ export default function QuestionDetailScreen({
     return num > 999 ? '999+' : num;
   };
 
-  const recommendedTwitterUsers = React.useMemo(
-    () =>
-      [1, 2, 3, 4, 5].map(i => ({
-        id: i,
-        name: `@user${i}`,
-        followers: `${i}k粉丝`,
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=rectwitter${i}`
-      })),
-    []
+  const invitedTwitterUsersMap = React.useMemo(() => {
+    return invitedTwitterUsersState.reduce((result, item) => {
+      if (item?.id) {
+        result[item.id] = item;
+      }
+      return result;
+    }, {});
+  }, [invitedTwitterUsersState]);
+
+  const normalizedTwitterSearch = React.useMemo(
+    () => searchTwitterUser.trim().toLowerCase(),
+    [searchTwitterUser]
   );
+
+  const filteredTwitterInviteUsers = React.useMemo(() => {
+    if (!normalizedTwitterSearch) {
+      return twitterInviteUsers;
+    }
+
+    return twitterInviteUsers.filter(user => {
+      const searchSource = [user?.name, user?.followers, user?.id]
+        .map(item => String(item ?? '').toLowerCase())
+        .join(' ');
+
+      return searchSource.includes(normalizedTwitterSearch);
+    });
+  }, [normalizedTwitterSearch, twitterInviteUsers]);
+
+  const recommendedTwitterUsers = React.useMemo(
+    () => filteredTwitterInviteUsers.slice(0, 5),
+    [filteredTwitterInviteUsers]
+  );
+
+  const invitedTwitterUsers = React.useMemo(() => {
+    if (!normalizedTwitterSearch) {
+      return invitedTwitterUsersState;
+    }
+
+    return invitedTwitterUsersState.filter(user => {
+      const searchSource = [user?.name, user?.followers, user?.id]
+        .map(item => String(item ?? '').toLowerCase())
+        .join(' ');
+
+      return searchSource.includes(normalizedTwitterSearch);
+    });
+  }, [invitedTwitterUsersState, normalizedTwitterSearch]);
 
   const supplementsTotal = React.useMemo(() => {
     return Number(supplementsCache.featured.total || supplementsCache.newest.total || questionData?.supplementCount || questionData?.supplements || supplementsList.length || 0) || 0;
@@ -5281,23 +5406,48 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     type: 'sharequestion',
     qid: Number(route?.params?.id ?? questionData?.id) || null
   });
+  const buildTwitterInviteDraftText = React.useCallback((twitterUser, sharePayload) => {
+    const fallbackInviterName = [
+      questionData?.userName,
+      questionData?.userNickname,
+      questionData?.authorNickName,
+      questionData?.author,
+      'ProblemToHero',
+    ]
+      .map(item => String(item ?? '').trim())
+      .find(Boolean);
+    const inviterUsername = typeof currentInviteUsername === 'string' && currentInviteUsername.trim()
+      ? currentInviteUsername.trim()
+      : fallbackInviterName;
+
+    return buildProblemToHeroInviteText({
+      twitterHandle: twitterUser?.name,
+      inviterUsername,
+      title: sharePayload?.title,
+    });
+  }, [currentInviteUsername, questionData?.author, questionData?.authorNickName, questionData?.userName, questionData?.userNickname]);
+  const closeTwitterInviteEditor = React.useCallback(() => {
+    setShowTwitterInviteEditor(false);
+    setTwitterInviteDraftText('');
+    setSelectedTwitterInviteUser(null);
+  }, []);
   const openTwitterInviteEditor = user => {
     const sharePayload = buildQuestionSharePayload();
-    const defaultShareText = buildTwitterShareText(sharePayload);
-    const normalizedHandle = typeof user?.name === 'string' ? user.name.trim() : '';
-    const prefixedHandle = normalizedHandle
-      ? normalizedHandle.startsWith('@')
-        ? normalizedHandle
-        : `@${normalizedHandle}`
-      : '';
 
     setSelectedTwitterInviteUser(user);
-    setTwitterInviteDraftText(
-      prefixedHandle ? `${prefixedHandle} ${defaultShareText}` : defaultShareText
-    );
+    setTwitterInviteDraftText(buildTwitterInviteDraftText(user, sharePayload));
     setShowTwitterInviteEditor(true);
   };
   const handleTwitterInviteShare = async customShareText => {
+    if (!selectedTwitterInviteUser?.id) {
+      showToast('请选择要邀请的推特用户', 'warning');
+      return;
+    }
+    if (!currentQuestionId) {
+      showToast('问题ID不存在', 'error');
+      return;
+    }
+
     setPendingTwitterInvitePlatform('twitter');
 
     try {
@@ -5306,13 +5456,41 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         shareText: customShareText
       });
 
+      const nextInviteFallbackRecord = {
+        ...selectedTwitterInviteUser,
+        status: 'initiated',
+        statusText: getTwitterInviteStatusText('initiated'),
+        inviteText: String(customShareText ?? '').trim(),
+        openedVia: result?.openedVia || '',
+        updatedAt: new Date().toISOString(),
+      };
+
       if (result?.openedVia === 'browser') {
         showToast('Twitter app not installed, opened web share', 'info');
       }
 
-      setShowTwitterInviteEditor(false);
-      setTwitterInviteDraftText('');
-      setSelectedTwitterInviteUser(null);
+      try {
+        const savedInvite = await saveQuestionTwitterInvite(currentQuestionId, selectedTwitterInviteUser, {
+          status: 'initiated',
+          inviteText: customShareText,
+          openedVia: result?.openedVia,
+        });
+
+        setInvitedTwitterUsersState(previousItems => [
+          savedInvite,
+          ...previousItems.filter(item => item.id !== savedInvite.id),
+        ]);
+      } catch (storageError) {
+        console.error('Failed to persist twitter invite state:', storageError);
+        setInvitedTwitterUsersState(previousItems => [
+          nextInviteFallbackRecord,
+          ...previousItems.filter(item => item.id !== nextInviteFallbackRecord.id),
+        ]);
+      }
+
+      closeTwitterInviteEditor();
+      setShowAllInvited(false);
+      showToast('已发起邀请', 'success');
     } catch (error) {
       console.error('Failed to invite via twitter:', error);
       showToast('Unable to open Twitter', 'error');
@@ -5801,7 +5979,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               </View>
             </TouchableOpacity>
             <View style={styles.actionButtonsRight}>
-              <TouchableOpacity style={styles.smallActionBtn} onPress={() => navigation.navigate('InviteAnswer')}>
+              <TouchableOpacity style={styles.smallActionBtn} onPress={() => navigation.navigate('InviteAnswer', {
+              questionId: currentQuestionId || questionData?.id || questionData?.questionId || null,
+              questionTitle: questionData?.title || '',
+              questionContent: questionData?.content || ''
+            })}>
                 <Ionicons name="at" size={18} color="#3b82f6" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.smallActionBtn} onPress={openQuestionGroupChat}>
@@ -6418,7 +6600,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               {inviteTab === '推特' && <View style={styles.inviteTabContent}>
                   {/* 推荐邀请用户 - 横向滚动 */}
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recommendScroll}>
-                    {recommendedTwitterUsers.map(user => <View key={`rec-twitter-${user.id}`} style={styles.recommendUserCard}>
+                    {recommendedTwitterUsers.map(user => {
+                    const invitedRecord = invitedTwitterUsersMap[user.id];
+                    const inviteCompleted = Boolean(invitedRecord);
+                    const inviteStatusText = invitedRecord?.statusText || '已发起';
+                    return <View key={`rec-twitter-${user.id}`} style={styles.recommendUserCard}>
                         <Image source={{
                   uri: user.avatar
                 }} style={styles.recommendUserAvatar} />
@@ -6427,40 +6613,58 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                           <Text style={styles.recommendUserDesc} numberOfLines={1}>{user.followers}</Text>
                         </View>
                         <TouchableOpacity
-                          style={[styles.recommendInviteBtn, styles.recommendInviteBtnTwitter]}
-                          onPress={() => openTwitterInviteEditor(user)}
+                          style={[
+                            styles.recommendInviteBtn,
+                            inviteCompleted ? styles.recommendInviteBtnInvited : styles.recommendInviteBtnTwitter
+                          ]}
+                          onPress={() => {
+                            if (inviteCompleted) {
+                              showToast(invitedRecord?.statusText || '已发起邀请', 'info');
+                              return;
+                            }
+                            openTwitterInviteEditor(user);
+                          }}
                           disabled={pendingTwitterInvitePlatform === 'twitter'}
                         >
                           {pendingTwitterInvitePlatform === 'twitter' && selectedTwitterInviteUser?.id === user.id ? (
                             <ActivityIndicator size="small" color="#fff" />
+                          ) : inviteCompleted ? (
+                            <Text style={styles.recommendInviteBtnText}>{inviteStatusText}</Text>
                           ) : (
                             <Ionicons name="logo-twitter" size={12} color="#fff" />
                           )}
                         </TouchableOpacity>
-                      </View>)}
+                      </View>;
+                  })}
+                    {recommendedTwitterUsers.length === 0 && <View style={styles.invitedEmptyState}>
+                        <Text style={styles.invitedEmptyText}>没有匹配的推特用户</Text>
+                      </View>}
                   </ScrollView>
 
                   {/* 已邀请用户列表 */}
-                  <Text style={styles.invitedListTitle}>已邀请</Text>
-                  {[1, 2, 3, 4, 5, 6].slice(0, showAllInvited ? 6 : 3).map(i => <View key={`invited-twitter-${i}`} style={styles.inviteUserCard}>
-                      <Avatar uri={`https://api.dicebear.com/7.x/avataaars/svg?seed=twitter${i}`} name={`@twitter_user${i}`} size={40} />
+                  <Text style={styles.invitedListTitle}>已发起邀请</Text>
+                  {invitedTwitterUsers.length === 0 && !loadingTwitterInvites && <View style={styles.invitedEmptyState}>
+                      <Text style={styles.invitedEmptyText}>{normalizedTwitterSearch ? '没有匹配的邀请记录' : '保存文案并跳转到推特后，会展示在这里'}</Text>
+                    </View>}
+                  {invitedTwitterUsers.slice(0, showAllInvited ? invitedTwitterUsers.length : 3).map(user => <View key={`invited-twitter-${user.id}`} style={styles.inviteUserCard}>
+                      <Avatar uri={user.avatar} name={user.name} size={40} />
                       <View style={styles.inviteUserInfo}>
-                        <Text style={styles.inviteUserName}>@twitter_user{i}</Text>
-                        <Text style={styles.inviteUserDesc}>{i * 1000} 关注者</Text>
+                        <Text style={styles.inviteUserName}>{user.name}</Text>
+                        <Text style={styles.inviteUserDesc}>{user.followers}</Text>
                       </View>
                       <View style={styles.invitedTag}>
                         <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
-                        <Text style={styles.invitedTagText}>已邀请</Text>
+                        <Text style={styles.invitedTagText}>{user.statusText || '已发起邀请'}</Text>
                       </View>
                     </View>)}
-                  {Boolean(loadingInvited) && <View style={styles.loadingIndicator}>
+                  {Boolean(loadingTwitterInvites) && <View style={styles.loadingIndicator}>
                       <Text style={styles.loadingText}>加载中...</Text>
                     </View>}
-                  {!showAllInvited && <TouchableOpacity style={styles.loadMoreInvitedBtn} onPress={() => setShowAllInvited(true)}>
-                      <Text style={styles.loadMoreInvitedText}>查看更多邀请 (3)</Text>
+                  {!showAllInvited && invitedTwitterUsers.length > 3 && <TouchableOpacity style={styles.loadMoreInvitedBtn} onPress={() => setShowAllInvited(true)}>
+                      <Text style={styles.loadMoreInvitedText}>查看更多邀请 ({invitedTwitterUsers.length - 3})</Text>
                       <Ionicons name="chevron-down" size={16} color="#ef4444" />
                     </TouchableOpacity>}
-                  {Boolean(showAllInvited) && <TouchableOpacity style={styles.collapseBtn} onPress={() => {
+                  {Boolean(showAllInvited) && invitedTwitterUsers.length > 3 && <TouchableOpacity style={styles.collapseBtn} onPress={() => {
               setShowAllInvited(false);
               setInvitedPage(1);
             }}>
@@ -8420,10 +8624,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       />
       <EditTextModal
         visible={showTwitterInviteEditor}
-        onClose={() => {
-          setShowTwitterInviteEditor(false);
-          setSelectedTwitterInviteUser(null);
-        }}
+        onClose={closeTwitterInviteEditor}
         title="编辑推特邀请文案"
         currentValue={twitterInviteDraftText}
         onSave={handleTwitterInviteShare}
@@ -10817,7 +11018,7 @@ const styles = StyleSheet.create({
   inviteSearchContainer: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: '#fafafa',
+    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6'
   },
@@ -10840,7 +11041,8 @@ const styles = StyleSheet.create({
   },
   inviteTabContent: {
     paddingHorizontal: 16,
-    paddingTop: 16
+    paddingTop: 16,
+    backgroundColor: '#ffffff'
   },
   // 推荐用户横向滚动
   recommendScroll: {
@@ -10892,6 +11094,12 @@ const styles = StyleSheet.create({
   recommendInviteBtnTwitter: {
     backgroundColor: '#1DA1F2'
   },
+  recommendInviteBtnInvited: {
+    backgroundColor: '#22c55e',
+    width: 'auto',
+    minWidth: 54,
+    paddingHorizontal: 8
+  },
   recommendInviteBtnFacebook: {
     backgroundColor: '#4267B2'
   },
@@ -10902,6 +11110,15 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginBottom: 8,
     marginTop: 4
+  },
+  invitedEmptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20
+  },
+  invitedEmptyText: {
+    fontSize: scaleFont(12),
+    color: '#9ca3af'
   },
   inviteUserCard: {
     flexDirection: 'row',

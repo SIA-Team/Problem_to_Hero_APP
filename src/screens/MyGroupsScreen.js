@@ -13,39 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import { createMyGroupsData } from '../data/profileMenuMockData';
 import { showToast } from '../utils/toast';
-
 import { scaleFont } from '../utils/responsive';
-/*
-const MOCK_GROUPS = [
-  {
-    id: 1,
-    name: 'Python学习交流群',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=group1',
-    memberCount: 128,
-    lastMessage: '大家好，有人在吗？',
-    lastMessageTime: '10:30',
-    unreadCount: 3,
-  },
-  {
-    id: 2,
-    name: '前端开发讨论组',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=group2',
-    memberCount: 256,
-    lastMessage: 'React 18 有什么新特性？',
-    lastMessageTime: '昨天',
-    unreadCount: 0,
-  },
-  {
-    id: 3,
-    name: '算法刷题小组',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=group3',
-    memberCount: 89,
-    lastMessage: '今天的每日一题做了吗？',
-    lastMessageTime: '2天前',
-    unreadCount: 15,
-  },
-];
-*/
 
 export default function MyGroupsScreen({ navigation }) {
   const [groups, setGroups] = useState([]);
@@ -61,8 +29,8 @@ export default function MyGroupsScreen({ navigation }) {
       setLoading(true);
       setGroups(createMyGroupsData());
     } catch (error) {
-      console.error('加载群聊列表失败:', error);
-      showToast('加载失败，请重试', 'error');
+      console.error('\u52a0\u8f7d\u7fa4\u804a\u5217\u8868\u5931\u8d25:', error);
+      showToast('\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5', 'error');
     } finally {
       setLoading(false);
     }
@@ -92,7 +60,7 @@ export default function MyGroupsScreen({ navigation }) {
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#1f2937" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>我的群聊</Text>
+          <Text style={styles.headerTitle}>{'\u6211\u7684\u7fa4\u804a'}</Text>
           <View style={styles.headerPlaceholder} />
         </View>
         <View style={styles.loadingContainer}>
@@ -108,10 +76,8 @@ export default function MyGroupsScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>我的群聊</Text>
-        <TouchableOpacity onPress={() => showToast('创建群聊功能开发中', 'info')}>
-          <Ionicons name="add-circle-outline" size={24} color="#1f2937" />
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{'\u6211\u7684\u7fa4\u804a'}</Text>
+        <View style={styles.headerPlaceholder} />
       </View>
 
       <ScrollView
@@ -128,8 +94,8 @@ export default function MyGroupsScreen({ navigation }) {
         {groups.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="chatbubbles-outline" size={64} color="#d1d5db" />
-            <Text style={styles.emptyText}>还没有加入任何群聊</Text>
-            <Text style={styles.emptyHint}>快去加入感兴趣的群聊吧</Text>
+            <Text style={styles.emptyText}>{'\u8fd8\u6ca1\u6709\u52a0\u5165\u4efb\u4f55\u7fa4\u804a'}</Text>
+            <Text style={styles.emptyHint}>{'\u5feb\u53bb\u52a0\u5165\u611f\u5174\u8da3\u7684\u7fa4\u804a\u5427'}</Text>
           </View>
         ) : (
           groups.map(group => (

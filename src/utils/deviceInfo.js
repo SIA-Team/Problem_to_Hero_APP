@@ -9,6 +9,37 @@ import NetInfo from '@react-native-community/netinfo';
  * 收集用户设备的各种信息，用于分析和统计
  */
 class DeviceInfo {
+  static buildFingerprintHash(fingerprintData) {
+    let hash = 0;
+
+    for (let i = 0; i < fingerprintData.length; i++) {
+      const char = fingerprintData.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+
+    return Math.abs(hash).toString(16).padStart(16, '0');
+  }
+
+  static buildFallbackFingerprintData() {
+    const { width, height } = Dimensions.get('screen');
+
+    return [
+      Platform.OS || 'unknown',
+      String(Platform.Version ?? 'unknown'),
+      Device.brand || 'unknown',
+      Device.modelName || 'unknown',
+      Device.modelId || 'unknown',
+      `${width}x${height}`,
+      'safe-fallback',
+    ].join('|');
+  }
+
+  static generateFallbackFingerprintString() {
+    const fallbackData = this.buildFallbackFingerprintData();
+    console.log('馃洅 使用安全兜底设备指纹:', fallbackData);
+    return this.buildFingerprintHash(fallbackData);
+  }
   /**
    * 获取完整的设备信息
    * @returns {Promise<Object>} 设备信息对象

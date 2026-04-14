@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import categoryApi from '../services/api/categoryApi';
+import questionCategoryService from '../services/questionCategoryService';
 import { showToast } from '../utils/toast';
 
 const MIN_LEVEL1_SELECTION = 1;
@@ -19,38 +19,6 @@ const MIN_LEVEL2_SELECTION = 3;
 const MAX_LEVEL2_SELECTION = 30;
 
 const normalizeText = (value) => (value || '').toString().trim().toLowerCase();
-
-const loadAllPages = async (requestPage) => {
-  const first = await requestPage(1);
-  if (!first || first.code !== 200 || !first.data) {
-    throw new Error(first?.msg || 'Failed to load categories');
-  }
-
-  const firstRows = first.data.rows || [];
-  const total = Number(first.data.total || firstRows.length || 0);
-  const pageSize = Number(first.data.pageSize || firstRows.length || 100);
-
-  if (firstRows.length >= total || total <= pageSize) {
-    return firstRows;
-  }
-
-  const totalPages = Math.ceil(total / pageSize);
-  const remainRequests = [];
-
-  for (let page = 2; page <= totalPages; page += 1) {
-    remainRequests.push(requestPage(page));
-  }
-
-  const remainResponses = await Promise.all(remainRequests);
-  const remainRows = remainResponses.flatMap((res) => {
-    if (res?.code !== 200 || !res?.data?.rows) {
-      return [];
-    }
-    return res.data.rows;
-  });
-
-  return [...firstRows, ...remainRows];
-};
 
 export default function InterestOnboardingScreen({ userId, onComplete, onSkip }) {
   const [step, setStep] = useState(1);
@@ -72,13 +40,7 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
       setLoadingLevel1(true);
 
       try {
-        const rows = await loadAllPages((pageNum) =>
-          categoryApi.getCategoryList({
-            pageNum,
-            pageSize: 100,
-            parentId: 0,
-          })
-        );
+        const rows = await questionCategoryService.getLevel1Categories();
 
         const normalized = rows.map((item) => ({
           id: Number(item.id),
@@ -143,13 +105,7 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
     }));
 
     try {
-      const rows = await loadAllPages((pageNum) =>
-        categoryApi.getCategoryList({
-          pageNum,
-          pageSize: 100,
-          parentId,
-        })
-      );
+      const rows = await questionCategoryService.getLevel2Categories(parentId);
 
       const parentName = level1Categories.find((item) => item.id === parentId)?.name || '';
       const normalized = rows.map((item) => ({

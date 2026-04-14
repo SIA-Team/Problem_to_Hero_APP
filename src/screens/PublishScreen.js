@@ -7,6 +7,7 @@ import IdentitySelector from '../components/IdentitySelector';
 import ImagePickerSheet from '../components/ImagePickerSheet';
 import KeyboardDismissView from '../components/KeyboardDismissView';
 import categoryApi from '../services/api/categoryApi';
+import questionCategoryService from '../services/questionCategoryService';
 import questionApi from '../services/api/questionApi';
 import uploadApi from '../services/api/uploadApi';
 import expertApi from '../services/api/expertApi';
@@ -357,6 +358,9 @@ export default function PublishScreen({
     setCategoryLoading(true);
     setCategoryError(null);
     try {
+      const categories = await questionCategoryService.getLevel1Categories();
+      setLevel1Categories(categories);
+      return;
       // 请求一级分类，pageSize设置为100，通常足够
       const response = await categoryApi.getCategoryList({
         pageNum: 1,
@@ -396,6 +400,15 @@ export default function PublishScreen({
     }
     setLoadingLevel2(true);
     try {
+      const parentCategory = level1Categories.find((item) => Number(item.id) === Number(parentId));
+      const formattedCategories = await questionCategoryService.getLevel2Categories(parentId, {
+        parentName: parentCategory?.name || '',
+      });
+      setLevel2CategoriesMap(prev => ({
+        ...prev,
+        [parentId]: formattedCategories
+      }));
+      return;
       // 首次请求，pageSize=100，通常足够
       const response = await categoryApi.getCategoryList({
         pageNum: 1,

@@ -163,6 +163,37 @@ export const buildTwitterShareText = (shareData = {}) => {
   return 'Check this out on Problem to Hero';
 };
 
+const normalizeTwitterHandle = (value, fallback = '@ProblemToHero') => {
+  const normalized = String(value ?? '').trim();
+  const source = normalized || fallback;
+
+  return source.startsWith('@') ? source : `@${source}`;
+};
+
+export const buildProblemToHeroInviteText = ({
+  twitterHandle,
+  inviterUsername,
+  title,
+} = {}) => {
+  const normalizedTwitterHandle = String(twitterHandle ?? '').trim();
+  const normalizedInviterHandle = normalizeTwitterHandle(inviterUsername, '@ProblemToHero');
+  const normalizedTitle = String(title ?? '').trim();
+
+  if (normalizedTwitterHandle && normalizedTitle) {
+    return `${normalizeTwitterHandle(normalizedTwitterHandle)} ${normalizedInviterHandle} on Problem to Hero invited you to answer: ${normalizedTitle}`;
+  }
+
+  if (normalizedTwitterHandle) {
+    return `${normalizeTwitterHandle(normalizedTwitterHandle)} ${normalizedInviterHandle} on Problem to Hero invited you to answer this question.`;
+  }
+
+  if (normalizedTitle) {
+    return `${normalizedInviterHandle} on Problem to Hero invited you to answer: ${normalizedTitle}`;
+  }
+
+  return `${normalizedInviterHandle} on Problem to Hero invited you to answer this question.`;
+};
+
 export const buildTwitterIntentUrl = (shareData = {}) => {
   const shareUrl = buildShareUrl(shareData);
   const shareText = `${buildTwitterShareText(shareData)}\n${shareUrl}`;
