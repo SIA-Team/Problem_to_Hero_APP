@@ -10,6 +10,7 @@ import teamApi from './teamApi';
 import uploadApi from './uploadApi';
 import reportApi from './reportApi';
 import emergencyApi from './emergencyApi';
+import regionApi from './regionApi';
 
 export {
   authApi,
@@ -21,6 +22,7 @@ export {
   uploadApi,
   reportApi,
   emergencyApi,
+  regionApi,
 };
 
 // 默认导出所有 API
@@ -34,4 +36,5 @@ export default {
   upload: uploadApi,
   report: reportApi,
   emergency: emergencyApi,
+  region: regionApi,
 };

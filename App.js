@@ -17,10 +17,17 @@ import DebugToken from './src/utils/debugToken';
 import UserCacheService from './src/services/UserCacheService';
 import ToastContainer from './src/components/ToastContainer';
 import AppAlertContainer from './src/components/AppAlertContainer';
+import RootErrorBoundary from './src/components/RootErrorBoundary';
 import { setToastRef, showToast } from './src/utils/toast';
 import { setAppAlertRef, showAppAlert } from './src/utils/appAlert';
 import { syncCacheIdentity } from './src/utils/cacheManager';
 import UpdateChecker from './src/components/UpdateChecker';
+import {
+  getStartupRecoveryNotice,
+  STARTUP_INIT_TIMEOUT_MS,
+  STARTUP_STEP_TIMEOUT_MS,
+  withTimeout,
+} from './src/utils/startupSafety';
 import {
   buildEmergencyLaunchMessage,
   getCurrentBundleFingerprint,
@@ -531,7 +538,7 @@ function MainTabs({ onLogout }) {
   );
 }
 
-export default function App() {
+function AppContent() {
   console.log('📱 App component rendering...');
   
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -541,6 +548,7 @@ export default function App() {
   const [shouldShowInterestOnboardingScreen, setShouldShowInterestOnboardingScreen] = useState(false);
   const [interestOnboardingUserId, setInterestOnboardingUserId] = useState(null);
   const [otaRecoveryNotice, setOtaRecoveryNotice] = useState(null);
+  const [startupRecoveryNotice, setStartupRecoveryNotice] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -593,6 +601,24 @@ export default function App() {
 
     return () => clearTimeout(timer);
   }, [otaRecoveryNotice]);
+
+  useEffect(() => {
+    if (!isInitializing) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      console.error('App initialization timed out, switching to safe login mode');
+      setStartupRecoveryNotice(getStartupRecoveryNotice());
+      setShouldShowInterestOnboardingScreen(false);
+      setIsCheckingInterestOnboarding(false);
+      setInterestOnboardingUserId(null);
+      setIsLoggedIn(false);
+      setIsInitializing(false);
+    }, STARTUP_INIT_TIMEOUT_MS);
+
+    return () => clearTimeout(timer);
+  }, [isInitializing]);
   
   console.log('📱 App state:', { isLoggedIn, isInitializing, fontsLoaded });
   
@@ -608,6 +634,19 @@ export default function App() {
       setAppAlertRef(ref);
     }
   }, []);
+
+  const resolveDeviceFingerprint = async () => {
+    try {
+      return await withTimeout(
+        () => DeviceInfo.generateFingerprintString(),
+        STARTUP_STEP_TIMEOUT_MS,
+        'device fingerprint'
+      );
+    } catch (error) {
+      console.error('Device fingerprint generation exceeded startup guard:', error);
+      return DeviceInfo.generateFallbackFingerprintString();
+    }
+  };
 
   // 预加载字体
   useEffect(() => {
@@ -774,7 +813,7 @@ export default function App() {
             try {
               // 生成设备指纹字符串
               console.log('📱 步骤 1: 生成设备指纹');
-              const fingerprint = await DeviceInfo.generateFingerprintString();
+              const fingerprint = await resolveDeviceFingerprint();
               console.log('   ✅ 设备指纹生成成功:', fingerprint);
               
               // 使用重试机制调用自动注册接口
@@ -1022,6 +1061,13 @@ export default function App() {
     return (
       <EmergencyProvider>
         <SafeAreaProvider>
+          {startupRecoveryNotice ? (
+            <View style={{ backgroundColor: '#fff1f2', paddingHorizontal: 16, paddingVertical: 10 }}>
+              <Text style={{ color: '#b91c1c', fontSize: 13, lineHeight: 18 }}>
+                {startupRecoveryNotice}
+              </Text>
+            </View>
+          ) : null}
           {updateChecker}
           <NavigationContainer>
             <StatusBar style="dark" />
@@ -1105,6 +1151,14 @@ export default function App() {
       </NavigationContainer>
     </SafeAreaProvider>
     </EmergencyProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <RootErrorBoundary>
+      <AppContent />
+    </RootErrorBoundary>
   );
 }
 

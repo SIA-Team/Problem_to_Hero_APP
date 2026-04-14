@@ -23,7 +23,12 @@ import authApi from '../services/api/authApi';
 import { showAppAlert } from '../utils/appAlert';
 import { getRegionData } from '../data/regionData';
 import { scaleFont } from '../utils/responsive';
-import { getUserExpertisePreferences, saveUserExpertisePreferences, buildExpertiseSummary } from '../utils/expertisePreferences';
+import {
+  getUserExpertisePreferences,
+  saveUserExpertisePreferences,
+  buildExpertiseSummary,
+  getExpertiseCategoryIds
+} from '../utils/expertisePreferences';
 export default function SettingsScreen({
   navigation
 }) {
@@ -496,11 +501,31 @@ export default function SettingsScreen({
       level1: Array.isArray(payload?.level1) ? payload.level1 : [],
       level2: Array.isArray(payload?.level2) ? payload.level2 : []
     };
+    const expertiseCategoryIds = getExpertiseCategoryIds(normalizedPayload);
 
     setIsLoading(true);
     try {
+      const updatedProfile = await UserCacheService.updateUserProfile({
+        expertiseCategoryIds
+      });
       await saveUserExpertisePreferences(userProfile.userId, normalizedPayload);
       setExpertisePreferences(normalizedPayload);
+      if (updatedProfile) {
+        setUserProfile({
+          userId: updatedProfile.userId || '',
+          username: updatedProfile.username || '',
+          usernameLastModified: updatedProfile.usernameLastModified || null,
+          name: updatedProfile.nickName || '用户',
+          bio: updatedProfile.signature || '',
+          location: updatedProfile.location || '',
+          occupation: updatedProfile.profession || '',
+          gender: updatedProfile.sex === '0' ? '男' : updatedProfile.sex === '1' ? '女' : '保密',
+          birthday: updatedProfile.birthday || '',
+          avatar: updatedProfile.avatar || null,
+          email: updatedProfile.email || '',
+          phone: updatedProfile.phonenumber || ''
+        });
+      }
       setShowExpertiseModal(false);
       showToast('擅长领域已更新', 'success');
     } catch (saveError) {

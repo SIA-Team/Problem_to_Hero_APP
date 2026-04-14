@@ -12,45 +12,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import categoryApi from '../services/api/categoryApi';
+import questionCategoryService from '../services/questionCategoryService';
 import { modalTokens } from './modalTokens';
 
-const PAGE_SIZE = 100;
-
 const normalizeText = (value) => (value || '').toString().trim().toLowerCase();
-
-const loadAllPages = async (requestPage) => {
-  const first = await requestPage(1);
-  if (!first || first.code !== 200 || !first.data) {
-    throw new Error(first?.msg || 'Failed to load categories');
-  }
-
-  const firstRows = first.data.rows || [];
-  const total = Number(first.data.total || firstRows.length || 0);
-  const pageSize = Number(first.data.pageSize || firstRows.length || PAGE_SIZE);
-
-  if (firstRows.length >= total || total <= pageSize) {
-    return firstRows;
-  }
-
-  const totalPages = Math.ceil(total / pageSize);
-  const remainRequests = [];
-
-  for (let page = 2; page <= totalPages; page += 1) {
-    remainRequests.push(requestPage(page));
-  }
-
-  const remainResponses = await Promise.all(remainRequests);
-  const remainRows = remainResponses.flatMap((res) => {
-    if (res?.code !== 200 || !res?.data?.rows) {
-      return [];
-    }
-
-    return res.data.rows;
-  });
-
-  return [...firstRows, ...remainRows];
-};
 
 const normalizeCurrentValue = (currentValue = {}) => {
   const level1 = Array.isArray(currentValue?.level1) ? currentValue.level1 : [];
@@ -172,20 +137,15 @@ export default function ExpertisePickerModal({
       }));
 
       try {
-        const rows = await loadAllPages((pageNum) =>
-          categoryApi.getCategoryList({
-            pageNum,
-            pageSize: PAGE_SIZE,
-            parentId,
-          })
-        );
+        const rows = await questionCategoryService.getLevel2Categories(parentId, {
+          parentName: level1NameMap.get(parentId) || '',
+        });
 
-        const parentName = level1NameMap.get(parentId) || '';
         const normalized = rows.map((item) => ({
           id: Number(item.id),
           name: item.name,
           parentId,
-          parentName,
+          parentName: item.parentName || level1NameMap.get(parentId) || '',
         }));
 
         setLevel2ByParent((prev) => ({
@@ -237,13 +197,7 @@ export default function ExpertisePickerModal({
       setLoadingLevel1(true);
 
       try {
-        const rows = await loadAllPages((pageNum) =>
-          categoryApi.getCategoryList({
-            pageNum,
-            pageSize: PAGE_SIZE,
-            parentId: 0,
-          })
-        );
+        const rows = await questionCategoryService.getLevel1Categories();
 
         if (!active) {
           return;
