@@ -19,17 +19,38 @@ import questionApi from '../services/api/questionApi';
 import answerApi from '../services/api/answerApi';
 import commentApi from '../services/api/commentApi';
 import uploadApi from '../services/api/uploadApi';
+import userApi from '../services/api/userApi';
+import { getFollowState, setFollowState } from '../services/followState';
+import {
+  getQuestionDetailCache,
+  getQuestionDetailListCaches,
+  setQuestionDetailCache,
+  setQuestionDetailListCaches,
+} from '../services/questionDetailCache';
 import { loadQuestionSupplements } from '../utils/dataLoader';
 import { showToast } from '../utils/toast';
+import { showAppAlert } from '../utils/appAlert';
 import { formatNumber } from '../utils/numberFormatter';
 import { formatTime } from '../utils/timeFormatter';
 import { normalizeEntityId } from '../utils/jsonLongId';
 import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import { scaleFont } from '../utils/responsive';
-import { buildProblemToHeroInviteText, openTwitterShare } from '../utils/shareService';
+import { buildProblemToHeroInviteText, buildProblemToHeroLocalInviteText, buildShareUrl, openTwitterShare } from '../utils/shareService';
 import twitterInviteUsers from '../utils/twitterInviteUsers';
 import { getTwitterInviteStatusText, loadQuestionTwitterInvites, saveQuestionTwitterInvite } from '../services/twitterInviteState';
+import {
+  LOCAL_INVITE_STATUSES,
+  getLocalInviteStatusText,
+  isCompletedLocalInviteStatus,
+  loadQuestionLocalInvites,
+  saveQuestionLocalInvite,
+} from '../services/localInviteState';
+import { buildLocalInviteDisplayName, buildLocalInviteUserDescription, mergeLocalInviteUsers, normalizeFollowingInviteUsers, normalizeLocalInviteUser, normalizePublicUserSearchResponse } from '../utils/localInviteUsers';
+import {
+  isPrivateMessagingServiceUnavailableError,
+  sendPlainPrivateMessage,
+} from '../utils/privateShareService';
 const answers = [{
   id: 1,
   author: 'Python老司机',
@@ -333,6 +354,37 @@ const supplementQuestions = [{
   bookmarks: 11,
   superLikes: 0
 }];
+
+const createQuestionDetailListEntry = () => ({
+  list: [],
+  total: 0,
+  pageNum: 1,
+  hasMore: true,
+  loaded: false,
+  lastUpdated: null,
+});
+
+const createInitialSupplementsCacheState = () => ({
+  featured: createQuestionDetailListEntry(),
+  newest: createQuestionDetailListEntry(),
+});
+
+const createInitialAnswersCacheState = () => ({
+  featured: createQuestionDetailListEntry(),
+  newest: createQuestionDetailListEntry(),
+});
+
+const createInitialCommentsCacheState = () => ({
+  likes: createQuestionDetailListEntry(),
+  newest: createQuestionDetailListEntry(),
+});
+
+const normalizeCachedQuestionDetailLists = cachedLists => ({
+  supplementsCache: cachedLists?.supplementsCache || createInitialSupplementsCacheState(),
+  answersCache: cachedLists?.answersCache || createInitialAnswersCacheState(),
+  commentsCache: cachedLists?.commentsCache || createInitialCommentsCacheState(),
+});
+
 export default function QuestionDetailScreen({
   navigation,
   route
@@ -343,32 +395,34 @@ export default function QuestionDetailScreen({
 
   // 淡入动画
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const routeQuestionId = React.useMemo(() => {
+    const normalizedQuestionId = String(route?.params?.id ?? '').trim();
+    return normalizedQuestionId || null;
+  }, [route?.params?.id]);
+  const initialQuestionDetail = React.useMemo(() => {
+    return routeQuestionId ? getQuestionDetailCache(routeQuestionId) : null;
+  }, [routeQuestionId]);
+  const initialQuestionListCaches = React.useMemo(() => {
+    return normalizeCachedQuestionDetailLists(
+      routeQuestionId ? getQuestionDetailListCaches(routeQuestionId) : null
+    );
+  }, [routeQuestionId]);
+  const shouldShowInitialLoadingState = Boolean(loading && !questionData);
+
+  useEffect(() => {
+    if (initialQuestionDetail) {
+      fadeAnim.setValue(1);
+    }
+  }, [fadeAnim, initialQuestionDetail]);
 
   // 问题详情数据状态
-  const [questionData, setQuestionData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [questionData, setQuestionData] = useState(() => initialQuestionDetail);
+  const [loading, setLoading] = useState(() => !initialQuestionDetail);
   const [error, setError] = useState(null);
   const [detailReloadVersion, setDetailReloadVersion] = useState(0);
 
   // 补充列表状态 - 优化为分排序方式缓存
-  const [supplementsCache, setSupplementsCache] = useState({
-    featured: {
-      list: [],
-      total: 0,
-      pageNum: 1,
-      hasMore: true,
-      loaded: false,
-      lastUpdated: null
-    },
-    newest: {
-      list: [],
-      total: 0,
-      pageNum: 1,
-      hasMore: true,
-      loaded: false,
-      lastUpdated: null
-    }
-  });
+  const [supplementsCache, setSupplementsCache] = useState(() => initialQuestionListCaches.supplementsCache);
   const [supplementsLoading, setSupplementsLoading] = useState(false);
   const [supplementsRefreshing, setSupplementsRefreshing] = useState(false);
   const [supplementsLoadingMore, setSupplementsLoadingMore] = useState(false);
@@ -381,48 +435,14 @@ export default function QuestionDetailScreen({
   const supplementsHasMore = currentSupplementsData.hasMore;
 
   // 回答列表状态 - 优化为分排序方式缓存
-  const [answersCache, setAnswersCache] = useState({
-    featured: {
-      list: [],
-      total: 0,
-      pageNum: 1,
-      hasMore: true,
-      loaded: false,
-      lastUpdated: null
-    },
-    newest: {
-      list: [],
-      total: 0,
-      pageNum: 1,
-      hasMore: true,
-      loaded: false,
-      lastUpdated: null
-    }
-  });
+  const [answersCache, setAnswersCache] = useState(() => initialQuestionListCaches.answersCache);
   const [answersLoading, setAnswersLoading] = useState(false);
   const [answersRefreshing, setAnswersRefreshing] = useState(false);
   const [answersLoadingMore, setAnswersLoadingMore] = useState(false);
   const [answersSortBy, setAnswersSortBy] = useState('featured');
 
   // 评论列表状态 - 按排序方式缓存
-  const [commentsCache, setCommentsCache] = useState({
-    likes: {
-      list: [],
-      total: 0,
-      pageNum: 1,
-      hasMore: true,
-      loaded: false,
-      lastUpdated: null
-    },
-    newest: {
-      list: [],
-      total: 0,
-      pageNum: 1,
-      hasMore: true,
-      loaded: false,
-      lastUpdated: null
-    }
-  });
+  const [commentsCache, setCommentsCache] = useState(() => initialQuestionListCaches.commentsCache);
   const [commentsRefreshing, setCommentsRefreshing] = useState(false);
   const [commentsLoadingMore, setCommentsLoadingMore] = useState(false);
   const [commentsSortBy, setCommentsSortBy] = useState('likes');
@@ -447,8 +467,11 @@ export default function QuestionDetailScreen({
   const [suppLiked, setSuppLiked] = useState({});
   const [suppDisliked, setSuppDisliked] = useState({});
   const [suppBookmarked, setSuppBookmarked] = useState({});
-  const [liked, setLiked] = useState({});
-  const [bookmarked, setBookmarked] = useState(false);
+  const [liked, setLiked] = useState(() => ({
+    main: !!initialQuestionDetail?.liked,
+    dislike: !!initialQuestionDetail?.disliked,
+  }));
+  const [bookmarked, setBookmarked] = useState(() => !!initialQuestionDetail?.collected);
   const [hearted, setHearted] = useState(false);
   const [showAnswerModal, setShowAnswerModal] = useState(false);
   const [showSupplementModal, setShowSupplementModal] = useState(false);
@@ -579,6 +602,10 @@ export default function QuestionDetailScreen({
   const [selectedTwitterInviteUser, setSelectedTwitterInviteUser] = useState(null);
   const [pendingTwitterInvitePlatform, setPendingTwitterInvitePlatform] = useState(null);
   const [currentInviteUsername, setCurrentInviteUsername] = useState('');
+  const [currentInviteUserId, setCurrentInviteUserId] = useState('');
+  const [questionAuthorIsFollowing, setQuestionAuthorIsFollowing] = useState(null);
+  const [questionAuthorFollowSubmitting, setQuestionAuthorFollowSubmitting] = useState(false);
+  const [questionAuthorFollowerCount, setQuestionAuthorFollowerCount] = useState(0);
   const [answerSelectedTeams, setAnswerSelectedTeams] = useState([]); // 回答选中的团队
   const [supplementQuestionIdentity, setSupplementQuestionIdentity] = useState('personal'); // 补充问题身份
   const [supplementQuestionSelectedTeams, setSupplementQuestionSelectedTeams] = useState([]); // 补充问题选中的团队
@@ -606,6 +633,12 @@ export default function QuestionDetailScreen({
   const bottomSafeInset = useBottomSafeInset(20);
   const commentSheetBottomSpacing = Math.max(insets.bottom, 16) + 12;
   const [commentsPage, setCommentsPage] = useState(1);
+  const [recommendedLocalUsers, setRecommendedLocalUsers] = useState([]);
+  const [searchedLocalUsers, setSearchedLocalUsers] = useState([]);
+  const [invitedLocalUsersState, setInvitedLocalUsersState] = useState([]);
+  const [loadingLocalInviteUsers, setLoadingLocalInviteUsers] = useState(false);
+  const [loadingLocalSearch, setLoadingLocalSearch] = useState(false);
+  const [sendingLocalInviteUserId, setSendingLocalInviteUserId] = useState(null);
   const [invitedTwitterUsersState, setInvitedTwitterUsersState] = useState([]);
   const [loadingTwitterInvites, setLoadingTwitterInvites] = useState(false);
   const [loadingInvited, setLoadingInvited] = useState(false);
@@ -617,6 +650,35 @@ export default function QuestionDetailScreen({
     const normalizedQuestionId = String(candidateQuestionId ?? '').trim();
     return normalizedQuestionId || null;
   }, [route?.params?.id, questionData?.id, questionData?.questionId]);
+
+  useEffect(() => {
+    const cachedLists = normalizeCachedQuestionDetailLists(
+      routeQuestionId ? getQuestionDetailListCaches(routeQuestionId) : null
+    );
+    setSupplementsCache(cachedLists.supplementsCache);
+    setAnswersCache(cachedLists.answersCache);
+    setCommentsCache(cachedLists.commentsCache);
+  }, [routeQuestionId]);
+
+  useEffect(() => {
+    if (!currentQuestionId || !questionData || typeof questionData !== 'object') {
+      return;
+    }
+
+    setQuestionDetailCache(currentQuestionId, questionData);
+  }, [currentQuestionId, questionData]);
+
+  useEffect(() => {
+    if (!currentQuestionId) {
+      return;
+    }
+
+    setQuestionDetailListCaches(currentQuestionId, {
+      supplementsCache,
+      answersCache,
+      commentsCache,
+    });
+  }, [answersCache, commentsCache, currentQuestionId, supplementsCache]);
 
   const loadInvitedTwitterUsers = React.useCallback(async () => {
     if (!currentQuestionId) {
@@ -636,6 +698,134 @@ export default function QuestionDetailScreen({
     }
   }, [currentQuestionId]);
 
+  const loadInvitedLocalUsers = React.useCallback(async () => {
+    if (!currentQuestionId) {
+      setInvitedLocalUsersState([]);
+      return;
+    }
+
+    try {
+      setLoadingLocalInviteUsers(true);
+      const storedInvites = await loadQuestionLocalInvites(currentQuestionId);
+      setInvitedLocalUsersState(storedInvites);
+    } catch (error) {
+      console.error('Failed to load invited local users:', error);
+      setInvitedLocalUsersState([]);
+    } finally {
+      setLoadingLocalInviteUsers(false);
+    }
+  }, [currentQuestionId]);
+
+  const loadRecommendedLocalUsers = React.useCallback(async () => {
+    const fallbackSearchKeywords = ['a', 'e', 'm', '1', '8'];
+
+    try {
+      let mergedUsers = [];
+
+      try {
+        const response = await userApi.getFollowing({
+          pageNum: 1,
+          page: 1,
+          pageSize: 10,
+          size: 10,
+          limit: 10,
+        });
+        mergedUsers = mergeLocalInviteUsers(normalizeFollowingInviteUsers(response));
+      } catch (followError) {
+        console.error('Failed to load following users for local invite recommendation:', followError);
+      }
+
+      if (mergedUsers.length < 6) {
+        const fallbackResults = await Promise.allSettled(
+          fallbackSearchKeywords.map(keyword => userApi.searchPublicProfiles(keyword, 10))
+        );
+
+        fallbackResults.forEach(result => {
+          if (result.status !== 'fulfilled') {
+            return;
+          }
+
+          mergedUsers = mergeLocalInviteUsers([
+            ...mergedUsers,
+            ...normalizePublicUserSearchResponse(result.value),
+          ]);
+        });
+      }
+
+      setRecommendedLocalUsers(mergedUsers.slice(0, 10));
+    } catch (error) {
+      console.error('Failed to load recommended local invite users:', error);
+      setRecommendedLocalUsers([]);
+    }
+  }, []);
+
+  const resolveFollowStateValue = React.useCallback(value => {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    if (typeof value === 'number') {
+      return value > 0;
+    }
+
+    if (typeof value === 'string') {
+      const normalizedValue = value.trim().toLowerCase();
+
+      if (['1', 'true', 'yes', 'follow', 'followed', 'following'].includes(normalizedValue)) {
+        return true;
+      }
+
+      if (['0', 'false', 'no', 'unfollow', 'unfollowed', 'none'].includes(normalizedValue)) {
+        return false;
+      }
+    }
+
+    return null;
+  }, []);
+
+  const resolveInitialFollowState = React.useCallback((...sources) => {
+    const candidateKeys = [
+      'isFollowing',
+      'following',
+      'isFollowed',
+      'followed',
+      'hasFollowed',
+      'hasFollow',
+      'followStatus',
+      'relationStatus',
+      'relationType',
+    ];
+
+    for (const source of sources) {
+      if (!source || typeof source !== 'object') {
+        continue;
+      }
+
+      for (const key of candidateKeys) {
+        const resolvedValue = resolveFollowStateValue(source[key]);
+        if (resolvedValue !== null) {
+          return resolvedValue;
+        }
+      }
+
+      if (source.data && typeof source.data === 'object') {
+        const nestedResolvedValue = resolveInitialFollowState(source.data);
+        if (nestedResolvedValue !== null) {
+          return nestedResolvedValue;
+        }
+      }
+
+      if (source.userBaseInfo && typeof source.userBaseInfo === 'object') {
+        const nestedResolvedValue = resolveInitialFollowState(source.userBaseInfo);
+        if (nestedResolvedValue !== null) {
+          return nestedResolvedValue;
+        }
+      }
+    }
+
+    return null;
+  }, [resolveFollowStateValue]);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -651,6 +841,12 @@ export default function QuestionDetailScreen({
         if (userInfoRaw) {
           try {
             const userInfo = JSON.parse(userInfoRaw);
+            if (isMounted) {
+              const normalizedUserId = String(userInfo?.userId ?? userInfo?.id ?? userInfo?.uid ?? '').trim();
+              if (normalizedUserId) {
+                setCurrentInviteUserId(normalizedUserId);
+              }
+            }
             candidates.push(
               userInfo?.username,
               userInfo?.nickName,
@@ -685,16 +881,127 @@ export default function QuestionDetailScreen({
   }, []);
 
   useEffect(() => {
+    loadInvitedLocalUsers();
     loadInvitedTwitterUsers();
-  }, [loadInvitedTwitterUsers]);
+    loadRecommendedLocalUsers();
+  }, [loadInvitedLocalUsers, loadInvitedTwitterUsers, loadRecommendedLocalUsers]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
+      loadInvitedLocalUsers();
       loadInvitedTwitterUsers();
+      loadRecommendedLocalUsers();
     });
 
     return unsubscribe;
-  }, [navigation, loadInvitedTwitterUsers]);
+  }, [navigation, loadInvitedLocalUsers, loadInvitedTwitterUsers, loadRecommendedLocalUsers]);
+
+  useEffect(() => {
+    const normalizedKeyword = searchLocalUser.trim();
+
+    if (!normalizedKeyword) {
+      setSearchedLocalUsers([]);
+      setLoadingLocalSearch(false);
+      return undefined;
+    }
+
+    let isActive = true;
+    const timer = setTimeout(async () => {
+      try {
+        setLoadingLocalSearch(true);
+        const response = await userApi.searchPublicProfiles(normalizedKeyword, 20);
+        if (!isActive) {
+          return;
+        }
+        setSearchedLocalUsers(normalizePublicUserSearchResponse(response));
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+        console.error('Failed to search local invite users:', error);
+        setSearchedLocalUsers([]);
+      } finally {
+        if (isActive) {
+          setLoadingLocalSearch(false);
+        }
+      }
+    }, 300);
+
+    return () => {
+      isActive = false;
+      clearTimeout(timer);
+    };
+  }, [searchLocalUser]);
+
+  useEffect(() => {
+    const targetUserId = String(questionData?.publicUserId ?? questionData?.authorId ?? questionData?.userId ?? '').trim();
+    const followerCount = Number(
+      questionData?.fanCount ??
+      questionData?.fansCount ??
+      questionData?.followerCount ??
+      questionData?.followedCount ??
+      0
+    ) || 0;
+    const isAnonymousQuestion = Number(questionData?.isAnonymous || 0) === 1;
+    const isOwnQuestion = Boolean(currentInviteUserId) && targetUserId === currentInviteUserId;
+
+    setQuestionAuthorFollowerCount(followerCount);
+
+    if (!targetUserId || isAnonymousQuestion || isOwnQuestion) {
+      setQuestionAuthorIsFollowing(false);
+      return;
+    }
+
+    const cachedFollowState = getFollowState(targetUserId);
+    const resolvedFollowState = resolveInitialFollowState(questionData);
+
+    if (typeof cachedFollowState === 'boolean') {
+      setQuestionAuthorIsFollowing(cachedFollowState);
+      return;
+    }
+
+    if (typeof resolvedFollowState === 'boolean') {
+      setQuestionAuthorIsFollowing(resolvedFollowState);
+      setFollowState(targetUserId, resolvedFollowState);
+      return;
+    }
+
+    setQuestionAuthorIsFollowing(null);
+
+    let isActive = true;
+
+    userApi.getFollowStatus(targetUserId).then(response => {
+      if (!isActive) {
+        return;
+      }
+
+      const apiFollowState = resolveInitialFollowState(response?.data, response);
+      const nextFollowState = typeof apiFollowState === 'boolean' ? apiFollowState : false;
+      setQuestionAuthorIsFollowing(nextFollowState);
+      setFollowState(targetUserId, nextFollowState);
+    }).catch(error => {
+      console.error('Failed to load question author follow status:', error);
+      if (isActive) {
+        setQuestionAuthorIsFollowing(false);
+      }
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [
+    currentInviteUserId,
+    questionData,
+    questionData?.authorId,
+    questionData?.fanCount,
+    questionData?.fansCount,
+    questionData?.followedCount,
+    questionData?.followerCount,
+    questionData?.isAnonymous,
+    questionData?.publicUserId,
+    questionData?.userId,
+    resolveInitialFollowState,
+  ]);
 
   // 增加悬赏相关状态
   const [showAddRewardModal, setShowAddRewardModal] = useState(false);
@@ -907,6 +1214,120 @@ export default function QuestionDetailScreen({
     }, {});
   }, [invitedTwitterUsersState]);
 
+  const invitedLocalUsersMap = React.useMemo(() => {
+    return invitedLocalUsersState.reduce((result, item) => {
+      if (item?.id) {
+        result[item.id] = item;
+      }
+      return result;
+    }, {});
+  }, [invitedLocalUsersState]);
+
+  const questionParticipantInviteUsers = React.useMemo(() => {
+    const candidateUsers = [];
+
+    const appendCandidateUser = user => {
+      const normalizedUser = normalizeLocalInviteUser(user);
+
+      if (!normalizedUser) {
+        return;
+      }
+
+      candidateUsers.push(normalizedUser);
+    };
+
+    appendCandidateUser({
+      userId: questionData?.publicUserId ?? questionData?.authorId ?? questionData?.userId,
+      username: questionData?.userName,
+      nickName: questionData?.userNickname ?? questionData?.authorNickName ?? questionData?.author,
+      avatar: questionData?.userAvatar ?? questionData?.authorAvatar ?? questionData?.avatar,
+      profession: questionData?.profession,
+      signature: questionData?.signature,
+      location: questionData?.location,
+      answerCount: questionData?.answerCount,
+    });
+
+    (answersList || []).forEach(answer => {
+      appendCandidateUser({
+        userId: answer?.publicUserId ?? answer?.authorId ?? answer?.userId,
+        username: answer?.userName,
+        nickName: answer?.userNickname ?? answer?.authorNickName ?? answer?.author,
+        avatar: answer?.userAvatar ?? answer?.authorAvatar ?? answer?.avatar,
+        profession: answer?.title ?? answer?.profession,
+        signature: answer?.signature,
+        location: answer?.location,
+        answerCount: answer?.answerCount,
+      });
+    });
+
+    (commentsList || []).forEach(comment => {
+      appendCandidateUser({
+        userId: comment?.userId ?? comment?.authorId,
+        username: comment?.userName,
+        nickName: comment?.userNickname ?? comment?.authorNickName ?? comment?.author,
+        avatar: comment?.userAvatar ?? comment?.authorAvatar ?? comment?.avatar,
+        profession: comment?.profession,
+        signature: comment?.signature,
+        location: comment?.location,
+        answerCount: comment?.answerCount,
+      });
+    });
+
+    (supplementsList || []).forEach(supplement => {
+      appendCandidateUser({
+        userId: supplement?.publicUserId ?? supplement?.authorId ?? supplement?.userId,
+        username: supplement?.userName,
+        nickName: supplement?.userNickname ?? supplement?.authorNickName ?? supplement?.author,
+        avatar: supplement?.userAvatar ?? supplement?.authorAvatar ?? supplement?.avatar,
+        profession: supplement?.profession,
+        signature: supplement?.signature,
+        location: supplement?.location,
+        answerCount: supplement?.answerCount,
+      });
+    });
+
+    return mergeLocalInviteUsers(candidateUsers);
+  }, [
+    answersList,
+    commentsList,
+    questionData?.answerCount,
+    questionData?.author,
+    questionData?.authorAvatar,
+    questionData?.authorId,
+    questionData?.authorNickName,
+    questionData?.avatar,
+    questionData?.location,
+    questionData?.profession,
+    questionData?.publicUserId,
+    questionData?.signature,
+    questionData?.userAvatar,
+    questionData?.userId,
+    questionData?.userName,
+    questionData?.userNickname,
+    supplementsList,
+  ]);
+
+  const displayedLocalUsers = React.useMemo(() => {
+    const normalizedKeyword = searchLocalUser.trim();
+    const sourceUsers = normalizedKeyword
+      ? searchedLocalUsers
+      : mergeLocalInviteUsers([...questionParticipantInviteUsers, ...recommendedLocalUsers]).filter(user => {
+          if (currentInviteUserId && String(user?.userId ?? user?.id ?? '').trim() === currentInviteUserId) {
+            return false;
+          }
+
+          return !isCompletedLocalInviteStatus(invitedLocalUsersMap[String(user?.id ?? '')]?.status);
+        });
+
+    return mergeLocalInviteUsers(sourceUsers).filter(user => {
+      if (!currentInviteUserId) {
+        return true;
+      }
+
+      return String(user?.userId ?? user?.id ?? '').trim() !== currentInviteUserId;
+    });
+  }, [currentInviteUserId, invitedLocalUsersMap, questionParticipantInviteUsers, recommendedLocalUsers, searchLocalUser, searchedLocalUsers]);
+
   const normalizedTwitterSearch = React.useMemo(
     () => searchTwitterUser.trim().toLowerCase(),
     [searchTwitterUser]
@@ -914,7 +1335,7 @@ export default function QuestionDetailScreen({
 
   const filteredTwitterInviteUsers = React.useMemo(() => {
     if (!normalizedTwitterSearch) {
-      return twitterInviteUsers;
+      return twitterInviteUsers.filter(user => !invitedTwitterUsersMap[user.id]);
     }
 
     return twitterInviteUsers.filter(user => {
@@ -924,7 +1345,7 @@ export default function QuestionDetailScreen({
 
       return searchSource.includes(normalizedTwitterSearch);
     });
-  }, [normalizedTwitterSearch, twitterInviteUsers]);
+  }, [invitedTwitterUsersMap, normalizedTwitterSearch, twitterInviteUsers]);
 
   const recommendedTwitterUsers = React.useMemo(
     () => filteredTwitterInviteUsers.slice(0, 5),
@@ -944,6 +1365,28 @@ export default function QuestionDetailScreen({
       return searchSource.includes(normalizedTwitterSearch);
     });
   }, [invitedTwitterUsersState, normalizedTwitterSearch]);
+
+  const visibleInvitedLocalUsers = React.useMemo(() => {
+    const normalizedKeyword = searchLocalUser.trim().toLowerCase();
+
+    if (!normalizedKeyword) {
+      return invitedLocalUsersState;
+    }
+
+    return invitedLocalUsersState.filter(user => {
+      const searchSource = [
+        buildLocalInviteDisplayName(user),
+        user?.username,
+        user?.profession,
+        user?.signature,
+        user?.location,
+      ]
+        .map(item => String(item ?? '').toLowerCase())
+        .join(' ');
+
+      return searchSource.includes(normalizedKeyword);
+    });
+  }, [invitedLocalUsersState, searchLocalUser]);
 
   const supplementsTotal = React.useMemo(() => {
     return Number(supplementsCache.featured.total || supplementsCache.newest.total || questionData?.supplementCount || questionData?.supplements || supplementsList.length || 0) || 0;
@@ -1473,14 +1916,32 @@ export default function QuestionDetailScreen({
     const fetchQuestionDetail = async () => {
       const questionId = route?.params?.id;
       try {
-        fadeAnim.setValue(0);
-        setLoading(true);
-        setError(null);
         if (!questionId) {
           setQuestionData(null);
           setError('问题ID不存在');
           return;
         }
+
+        const cachedQuestionDetail = detailReloadVersion === 0 ? getQuestionDetailCache(questionId) : null;
+
+        if (cachedQuestionDetail) {
+          fadeAnim.setValue(1);
+          setQuestionData(cachedQuestionDetail);
+          setLiked(prev => ({
+            ...prev,
+            main: !!cachedQuestionDetail.liked,
+            dislike: !!cachedQuestionDetail.disliked
+          }));
+          setBookmarked(!!cachedQuestionDetail.collected);
+          setLoading(false);
+          setError(null);
+          void refreshCommunitySolveVoteSummary(questionId);
+          return;
+        }
+
+        fadeAnim.setValue(0);
+        setLoading(true);
+        setError(null);
         console.log('📋 开始加载问题详情，ID:', questionId);
 
         const detailResponse = await questionApi.getQuestionDetail(questionId);
@@ -1497,6 +1958,7 @@ export default function QuestionDetailScreen({
 
         const normalizedQuestionDetail = normalizeQuestionDetail(detailResponse.data);
         setQuestionData(normalizedQuestionDetail);
+        setQuestionDetailCache(questionId, normalizedQuestionDetail);
         setLiked(prev => ({
           ...prev,
           main: !!normalizedQuestionDetail.liked,
@@ -5406,13 +5868,207 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     type: 'sharequestion',
     qid: Number(route?.params?.id ?? questionData?.id) || null
   });
+  const handleQuestionAuthorFollowPress = React.useCallback(async () => {
+    const targetUserId = String(questionData?.publicUserId ?? questionData?.authorId ?? questionData?.userId ?? '').trim();
+    const isAnonymousQuestion = Number(questionData?.isAnonymous || 0) === 1;
+    const isOwnQuestion = Boolean(currentInviteUserId) && targetUserId === currentInviteUserId;
+    const isFollowStateReady = typeof questionAuthorIsFollowing === 'boolean';
+
+    if (!targetUserId || isAnonymousQuestion || isOwnQuestion || !isFollowStateReady) {
+      return;
+    }
+
+    const executeFollowAction = async follow => {
+      if (questionAuthorFollowSubmitting) {
+        return;
+      }
+
+      try {
+        setQuestionAuthorFollowSubmitting(true);
+        const response = follow
+          ? await userApi.followUser(targetUserId)
+          : await userApi.unfollowUser(targetUserId);
+
+        if (response?.code !== 200) {
+          showToast(
+            response?.msg || (follow ? '关注失败，请稍后重试' : '取消关注失败，请稍后重试'),
+            'error'
+          );
+          return;
+        }
+
+        const responseFollowState = resolveInitialFollowState(response?.data, response);
+        const resolvedFollowState =
+          typeof responseFollowState === 'boolean' ? responseFollowState : follow;
+
+        const nextFollowerCountFromResponse = Number(
+          response?.data?.followersCount ??
+          response?.data?.fanCount ??
+          response?.data?.fansCount ??
+          response?.data?.followerCount ??
+          response?.data?.followedCount
+        );
+
+        setQuestionAuthorIsFollowing(resolvedFollowState);
+        setFollowState(targetUserId, resolvedFollowState);
+        setQuestionAuthorFollowerCount(previousCount => {
+          if (Number.isFinite(nextFollowerCountFromResponse)) {
+            return nextFollowerCountFromResponse;
+          }
+
+          return Math.max(0, previousCount + (resolvedFollowState ? 1 : -1));
+        });
+        showToast(response?.msg || (resolvedFollowState ? '已关注' : '已取消关注'), 'success');
+      } catch (error) {
+        showToast(
+          error?.message || (follow ? '关注失败，请稍后重试' : '取消关注失败，请稍后重试'),
+          'error'
+        );
+      } finally {
+        setQuestionAuthorFollowSubmitting(false);
+      }
+    };
+
+    if (questionAuthorIsFollowing) {
+      showAppAlert(
+        t('profile.unfollowConfirmTitle'),
+        t('profile.unfollowConfirmMessage'),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          {
+            text: t('common.confirm'),
+            onPress: () => {
+              executeFollowAction(false);
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    await executeFollowAction(true);
+  }, [
+    currentInviteUserId,
+    questionAuthorFollowSubmitting,
+    questionAuthorIsFollowing,
+    questionData?.authorId,
+    questionData?.isAnonymous,
+    questionData?.publicUserId,
+    questionData?.userId,
+    resolveInitialFollowState,
+    t,
+  ]);
+  const buildLocalInviteMessage = React.useCallback(targetUser => {
+    const inviterName = typeof currentInviteUsername === 'string' && currentInviteUsername.trim()
+      ? currentInviteUsername.replace(/^@/, '').trim()
+      : 'ProblemVsHero';
+    const shareUrl = buildShareUrl(buildQuestionSharePayload());
+    const displayName = buildLocalInviteDisplayName(targetUser);
+    const title = String(questionData?.title ?? '').trim() || '这个问题';
+
+    return buildProblemToHeroLocalInviteText({
+      inviterName,
+      targetName: displayName,
+      title,
+      shareUrl,
+    });
+  }, [currentInviteUsername, questionData?.title]);
+  const handleLocalInvite = React.useCallback(async targetUser => {
+    if (!targetUser?.userId) {
+      showToast('用户信息不完整，暂时无法邀请', 'warning');
+      return;
+    }
+    if (!currentQuestionId) {
+      showToast('问题ID不存在', 'error');
+      return;
+    }
+    if (sendingLocalInviteUserId) {
+      return;
+    }
+
+    const existingInviteRecord = invitedLocalUsersMap[targetUser.userId];
+    if (isCompletedLocalInviteStatus(existingInviteRecord?.status)) {
+      showToast(existingInviteRecord.statusText || '已邀请', 'info');
+      return;
+    }
+
+    const inviteText = buildLocalInviteMessage(targetUser);
+
+    try {
+      setSendingLocalInviteUserId(targetUser.userId);
+      await sendPlainPrivateMessage({
+        recipientUserId: targetUser.userId,
+        content: inviteText,
+      });
+
+      let savedInvite;
+      try {
+        savedInvite = await saveQuestionLocalInvite(currentQuestionId, targetUser, {
+          status: LOCAL_INVITE_STATUSES.INVITED,
+          inviteText,
+        });
+      } catch (storageError) {
+        console.error('Failed to persist local invite state:', storageError);
+        savedInvite = {
+          ...targetUser,
+          id: String(targetUser.userId),
+          status: LOCAL_INVITE_STATUSES.INVITED,
+          statusText: getLocalInviteStatusText(LOCAL_INVITE_STATUSES.INVITED),
+          inviteText,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+
+      setInvitedLocalUsersState(previousItems => [
+        savedInvite,
+        ...previousItems.filter(item => item.id !== savedInvite.id),
+      ]);
+      setShowAllInvited(false);
+      showToast('已邀请', 'success');
+    } catch (error) {
+      if (isPrivateMessagingServiceUnavailableError(error)) {
+        console.warn('Private messaging service unavailable in question detail local invite:', error?.originalMessage || error?.message);
+
+        let retryInviteRecord;
+        try {
+          retryInviteRecord = await saveQuestionLocalInvite(currentQuestionId, targetUser, {
+            status: LOCAL_INVITE_STATUSES.SERVICE_UNAVAILABLE,
+            inviteText,
+          });
+        } catch (storageError) {
+          console.error('Failed to persist retryable local invite state:', storageError);
+          retryInviteRecord = {
+            ...targetUser,
+            id: String(targetUser.userId),
+            status: LOCAL_INVITE_STATUSES.SERVICE_UNAVAILABLE,
+            statusText: getLocalInviteStatusText(LOCAL_INVITE_STATUSES.SERVICE_UNAVAILABLE),
+            inviteText,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+
+        setInvitedLocalUsersState(previousItems => [
+          retryInviteRecord,
+          ...previousItems.filter(item => item.id !== retryInviteRecord.id),
+        ]);
+        setShowAllInvited(false);
+        showToast('本站私信服务暂不可用，请稍后重试邀请', 'warning');
+        return;
+      }
+
+      console.error('Failed to send local invite:', error);
+      showToast(error?.message || '发送邀请失败', 'error');
+    } finally {
+      setSendingLocalInviteUserId(null);
+    }
+  }, [buildLocalInviteMessage, currentQuestionId, invitedLocalUsersMap, sendingLocalInviteUserId]);
   const buildTwitterInviteDraftText = React.useCallback((twitterUser, sharePayload) => {
     const fallbackInviterName = [
       questionData?.userName,
       questionData?.userNickname,
       questionData?.authorNickName,
       questionData?.author,
-      'ProblemToHero',
+      'ProblemVsHero',
     ]
       .map(item => String(item ?? '').trim())
       .find(Boolean);
@@ -5887,6 +6543,44 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     questionData?.userNickname,
     route?.params?.id,
   ]);
+  if (shouldShowInitialLoadingState) {
+    return <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{
+          top: 10,
+          bottom: 10,
+          left: 10,
+          right: 10
+        }} activeOpacity={0.7}>
+            <Ionicons name="arrow-back" size={24} color="#374151" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{t('screens.questionDetail.title')}</Text>
+          <View style={styles.headerRight}>
+            <TouchableOpacity onPress={() => openShareModalWithData(buildQuestionSharePayload())} hitSlop={{
+            top: 10,
+            bottom: 10,
+            left: 10,
+            right: 10
+          }} activeOpacity={0.7}>
+              <Ionicons name="arrow-redo-outline" size={22} color="#374151" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('Report', {
+            type: 'question',
+            targetType: 1,
+            targetId: Number(route?.params?.id ?? questionData?.id) || 0
+          })}>
+              <Ionicons name="flag-outline" size={22} color="#ef4444" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{
+        paddingBottom: bottomSafeInset + 76
+      }}>
+          <QuestionDetailSkeleton />
+        </ScrollView>
+      </SafeAreaView>;
+  }
   return <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{
@@ -5920,9 +6614,6 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{
       paddingBottom: bottomSafeInset + 76
     }}>
-        {/* 骨架屏加载状态 */}
-        {Boolean(loading && !questionData) && <QuestionDetailSkeleton />}
-
         {/* 错误状态 */}
         {Boolean(error && !loading) && <View style={styles.errorContainer}>
             <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
@@ -5954,6 +6645,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           </Text>
           
           {/* 作者信息和操作按钮行 - 紧跟标题 */}
+          {(() => {
+            const authorUserId = String(questionData?.publicUserId ?? questionData?.authorId ?? questionData?.userId ?? '').trim();
+            const canFollowAuthor = Boolean(authorUserId) && Number(questionData?.isAnonymous || 0) !== 1 && authorUserId !== currentInviteUserId;
+            const displayFollowCount = formatCount(questionAuthorFollowerCount);
+            return (
           <View style={styles.authorActionsRow}>
             <TouchableOpacity style={styles.authorInfoLeft} activeOpacity={0.7} onPress={() => openPublicProfile(questionData, {
             userId: questionData.publicUserId ?? questionData.authorId ?? questionData.userId,
@@ -5965,13 +6661,26 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   <Text style={styles.smallAuthorName}>
                     {questionData.isAnonymous === 1 ? '匿名用户' : questionData.userName || questionData.userNickname || '匿名用户'}
                   </Text>
-                  <TouchableOpacity style={styles.followBtnSmall}>
-                    <Ionicons name="add" size={12} color="#ef4444" />
-                    <Text style={styles.followBtnSmallText}>
-                      {t('common.follow')}
-                    </Text>
-                    <Text style={styles.followCountText}>(1.2k)</Text>
-                  </TouchableOpacity>
+                  {canFollowAuthor && <TouchableOpacity
+                    style={[styles.followBtnSmall, questionAuthorIsFollowing && styles.followBtnSmallActive]}
+                    onPress={handleQuestionAuthorFollowPress}
+                    disabled={questionAuthorFollowSubmitting || typeof questionAuthorIsFollowing !== 'boolean'}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    {questionAuthorFollowSubmitting || typeof questionAuthorIsFollowing !== 'boolean' ? (
+                      <ActivityIndicator size="small" color={questionAuthorIsFollowing ? '#6b7280' : '#ef4444'} />
+                    ) : (
+                      <>
+                        {!questionAuthorIsFollowing && <Ionicons name="add" size={12} color="#ef4444" />}
+                        <Text style={[styles.followBtnSmallText, questionAuthorIsFollowing && styles.followBtnSmallTextActive]}>
+                          {questionAuthorIsFollowing ? '已关注' : t('common.follow')}
+                        </Text>
+                        <Text style={[styles.followCountText, questionAuthorIsFollowing && styles.followCountTextActive]}>
+                          ({displayFollowCount})
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>}
                 </View>
                 <Text style={styles.smallPostTime}>
                   {formatTime(questionData.createTime || questionData.createdAt)} · {questionData.location || '未知'}
@@ -5982,7 +6691,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <TouchableOpacity style={styles.smallActionBtn} onPress={() => navigation.navigate('InviteAnswer', {
               questionId: currentQuestionId || questionData?.id || questionData?.questionId || null,
               questionTitle: questionData?.title || '',
-              questionContent: questionData?.content || ''
+              questionContent: questionData?.content || '',
+              participantUsers: questionParticipantInviteUsers.slice(0, 12),
+              localInviteUsersSnapshot: displayedLocalUsers.slice(0, 12)
             })}>
                 <Ionicons name="at" size={18} color="#3b82f6" />
               </TouchableOpacity>
@@ -6003,6 +6714,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               </TouchableOpacity>
             </View>
           </View>
+            );
+          })()}
 
           {/* 问题描述 - 在用户信息栏下面，作为独立的内容块 */}
           {Boolean(questionData.description) && <Text style={styles.questionContent}>{questionData.description}</Text>}
@@ -6553,41 +7266,78 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               {inviteTab === '本站' && <View style={styles.inviteTabContent}>
                   {/* 推荐邀请用户 - 横向滚动 */}
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recommendScroll}>
-                    {[1, 2, 3, 4, 5].map(i => <View key={`rec-local-${i}`} style={styles.recommendUserCard}>
-                        <Image source={{
-                  uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=reclocal${i}`
-                }} style={styles.recommendUserAvatar} />
+                    {displayedLocalUsers.slice(0, 8).map(user => {
+                    const invitedRecord = invitedLocalUsersMap[user.id];
+                    const inviteCompleted = isCompletedLocalInviteStatus(invitedRecord?.status);
+                    const inviteStatusText = invitedRecord?.statusText || '已邀请';
+                    const inviteNeedsRetry = Boolean(invitedRecord) && !inviteCompleted;
+                    const isSendingInvite = sendingLocalInviteUserId === user.userId;
+                    return <View key={`rec-local-${user.id}`} style={styles.recommendUserCard}>
+                        <Avatar uri={user.avatar} name={buildLocalInviteDisplayName(user)} size={36} />
                         <View style={styles.recommendUserTextContainer}>
-                          <Text style={styles.recommendUserName} numberOfLines={1}>推荐用户{i}</Text>
-                          <Text style={styles.recommendUserDesc} numberOfLines={1}>{i * 20}回答</Text>
+                          <Text style={styles.recommendUserName} numberOfLines={1}>{buildLocalInviteDisplayName(user)}</Text>
+                          <Text style={styles.recommendUserDesc} numberOfLines={1}>{buildLocalInviteUserDescription(user)}</Text>
                         </View>
-                        <TouchableOpacity style={styles.recommendInviteBtn}>
-                          <Ionicons name="add" size={12} color="#fff" />
+                        <TouchableOpacity
+                          style={[
+                            styles.recommendInviteBtn,
+                            inviteCompleted
+                              ? styles.recommendInviteBtnInvited
+                              : inviteNeedsRetry
+                                ? styles.recommendInviteBtnRetry
+                                : null
+                          ]}
+                          onPress={() => {
+                            if (inviteCompleted) {
+                              showToast(inviteStatusText, 'info');
+                              return;
+                            }
+                            handleLocalInvite(user);
+                          }}
+                          disabled={Boolean(sendingLocalInviteUserId)}
+                        >
+                          {isSendingInvite ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : inviteCompleted || inviteNeedsRetry ? (
+                            <Text style={styles.recommendInviteBtnText}>{inviteStatusText}</Text>
+                          ) : (
+                            <Ionicons name="add" size={12} color="#fff" />
+                          )}
                         </TouchableOpacity>
-                      </View>)}
+                      </View>;
+                  })}
+                    {displayedLocalUsers.length === 0 && !loadingLocalSearch && <View style={styles.invitedEmptyState}>
+                        <Text style={styles.invitedEmptyText}>{searchLocalUser.trim() ? '没有找到匹配的用户' : '暂无可邀请的本站用户'}</Text>
+                      </View>}
+                    {loadingLocalSearch && <View style={styles.loadingIndicator}>
+                        <Text style={styles.loadingText}>搜索中...</Text>
+                      </View>}
                   </ScrollView>
 
                   {/* 已邀请用户列表 */}
                   <Text style={styles.invitedListTitle}>已邀请</Text>
-                  {[1, 2, 3, 4, 5, 6, 7, 8].slice(0, showAllInvited ? 8 : 3).map(i => <View key={`invited-local-${i}`} style={styles.inviteUserCard}>
-                      <Avatar uri={`https://api.dicebear.com/7.x/avataaars/svg?seed=local${i}`} name={`用户${i}`} size={40} />
+                  {visibleInvitedLocalUsers.length === 0 && !loadingLocalInviteUsers && <View style={styles.invitedEmptyState}>
+                      <Text style={styles.invitedEmptyText}>{searchLocalUser.trim() ? '没有匹配的邀请记录' : '私信发送成功后，会显示在这里'}</Text>
+                    </View>}
+                  {visibleInvitedLocalUsers.slice(0, showAllInvited ? visibleInvitedLocalUsers.length : 3).map(user => <View key={`invited-local-${user.id}`} style={styles.inviteUserCard}>
+                      <Avatar uri={user.avatar} name={buildLocalInviteDisplayName(user)} size={40} />
                       <View style={styles.inviteUserInfo}>
-                        <Text style={styles.inviteUserName}>用户{i}</Text>
-                        <Text style={styles.inviteUserDesc}>Python开发者 · 回答过 {i * 10} 个问题</Text>
+                        <Text style={styles.inviteUserName}>{buildLocalInviteDisplayName(user)}</Text>
+                        <Text style={styles.inviteUserDesc}>{buildLocalInviteUserDescription(user)}</Text>
                       </View>
                       <View style={styles.invitedTag}>
                         <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
-                        <Text style={styles.invitedTagText}>已邀请</Text>
+                        <Text style={styles.invitedTagText}>{user.statusText || '已邀请'}</Text>
                       </View>
                     </View>)}
-                  {Boolean(loadingInvited) && <View style={styles.loadingIndicator}>
+                  {Boolean(loadingLocalInviteUsers) && <View style={styles.loadingIndicator}>
                       <Text style={styles.loadingText}>加载中...</Text>
                     </View>}
-                  {!showAllInvited && <TouchableOpacity style={styles.loadMoreInvitedBtn} onPress={() => setShowAllInvited(true)}>
-                      <Text style={styles.loadMoreInvitedText}>{t('screens.questionDetail.loadMoreInvites')} (5)</Text>
+                  {!showAllInvited && visibleInvitedLocalUsers.length > 3 && <TouchableOpacity style={styles.loadMoreInvitedBtn} onPress={() => setShowAllInvited(true)}>
+                      <Text style={styles.loadMoreInvitedText}>{t('screens.questionDetail.loadMoreInvites')} ({visibleInvitedLocalUsers.length - 3})</Text>
                       <Ionicons name="chevron-down" size={16} color="#ef4444" />
                     </TouchableOpacity>}
-                  {Boolean(showAllInvited) && <TouchableOpacity style={styles.collapseBtn} onPress={() => {
+                  {Boolean(showAllInvited) && visibleInvitedLocalUsers.length > 3 && <TouchableOpacity style={styles.collapseBtn} onPress={() => {
               setShowAllInvited(false);
               setInvitedPage(1);
             }}>
@@ -8973,16 +9723,25 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     gap: 2
   },
+  followBtnSmallActive: {
+    backgroundColor: '#f3f4f6'
+  },
   followBtnSmallText: {
     fontSize: scaleFont(10),
     color: '#ef4444',
     fontWeight: '500'
+  },
+  followBtnSmallTextActive: {
+    color: '#6b7280'
   },
   followCountText: {
     fontSize: scaleFont(10),
     color: '#ef4444',
     fontWeight: '400',
     marginLeft: 2
+  },
+  followCountTextActive: {
+    color: '#6b7280'
   },
   smallPostTime: {
     fontSize: scaleFont(11),
@@ -11096,6 +11855,12 @@ const styles = StyleSheet.create({
   },
   recommendInviteBtnInvited: {
     backgroundColor: '#22c55e',
+    width: 'auto',
+    minWidth: 54,
+    paddingHorizontal: 8
+  },
+  recommendInviteBtnRetry: {
+    backgroundColor: '#f59e0b',
     width: 'auto',
     minWidth: 54,
     paddingHorizontal: 8

@@ -82,6 +82,22 @@ const userApi = {
     return apiClient.get(url);
   },
 
+  searchPublicProfiles: (keyword, limit = 20) => {
+    const normalizedKeyword = String(keyword ?? '').trim();
+    const normalizedLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
+
+    if (!normalizedKeyword) {
+      return Promise.reject(new Error('keyword is required'));
+    }
+
+    return apiClient.get(API_ENDPOINTS.USER.PUBLIC_SEARCH, {
+      params: {
+        keyword: normalizedKeyword,
+        limit: normalizedLimit,
+      },
+    });
+  },
+
   updateProfile: (data) => {
     return apiClient.put(API_ENDPOINTS.USER.UPDATE_PROFILE, data);
   },
@@ -314,8 +330,16 @@ const userApi = {
     return apiClient.get(API_ENDPOINTS.USER.FOLLOWING, { params: normalizedParams });
   },
 
-  getWalletBalance: () => {
-    return apiClient.get(API_ENDPOINTS.WALLET.BALANCE);
+  getWalletBalance: async () => {
+    // Wallet balance API is disabled for now; return local placeholder data.
+    return {
+      code: 200,
+      msg: 'wallet balance api disabled',
+      data: {
+        balance: 0,
+        currency: 'usd',
+      },
+    };
   },
 
   /**

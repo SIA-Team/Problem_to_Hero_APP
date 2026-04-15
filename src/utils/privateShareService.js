@@ -2,6 +2,7 @@ import notificationApi from '../services/api/notificationApi';
 import { buildShareParams, buildShareUrl } from './shareService';
 
 const isSuccessResponse = (response) => response && (response.code === 200 || response.code === 0);
+export const PRIVATE_MESSAGING_UNAVAILABLE_ERROR_CODE = 'PRIVATE_MESSAGING_UNAVAILABLE';
 
 const truncateText = (value, maxLength = 80) => {
   if (typeof value !== 'string') {
@@ -309,6 +310,43 @@ const extractConversationIdFromValue = (value, depth = 0) => {
 export const extractConversationIdFromPrivateMessageResponse = (response) =>
   extractConversationIdFromValue(response);
 
+const extractPrivateMessagingErrorMessage = error => {
+  const candidates = [
+    error?.message,
+    error?.msg,
+    error?.data?.msg,
+    error?.data?.message,
+    error?.response?.data?.msg,
+    error?.response?.data?.message,
+  ];
+
+  return candidates
+    .map(value => `${value ?? ''}`.trim())
+    .find(Boolean) || '';
+};
+
+const isPrivateConversationTableMissingError = error => {
+  const normalizedMessage = extractPrivateMessagingErrorMessage(error).toLowerCase();
+
+  return normalizedMessage.includes('app_private_conversation')
+    && (normalizedMessage.includes("doesn't exist") || normalizedMessage.includes('does not exist'));
+};
+
+const normalizePrivateMessagingError = error => {
+  if (!isPrivateConversationTableMissingError(error)) {
+    return error;
+  }
+
+  const wrappedError = new Error('本站私信服务暂不可用，请稍后重试');
+  wrappedError.code = PRIVATE_MESSAGING_UNAVAILABLE_ERROR_CODE;
+  wrappedError.originalMessage = extractPrivateMessagingErrorMessage(error);
+  wrappedError.cause = error;
+  return wrappedError;
+};
+
+export const isPrivateMessagingServiceUnavailableError = error =>
+  error?.code === PRIVATE_MESSAGING_UNAVAILABLE_ERROR_CODE || isPrivateConversationTableMissingError(error);
+
 const buildRequestCandidates = ({ recipientUserId, conversationId, content, payload, mode = 'share' }) => {
   const serializedPayload = payload ? JSON.stringify(payload) : undefined;
   const normalizedRecipientUserId = normalizeRecipientUserId(recipientUserId);
@@ -369,9 +407,11 @@ const sendWithCandidates = async (candidates) => {
         return response;
       }
 
-      lastError = new Error(response?.msg || response?.message || 'Failed to send private message');
+      lastError = normalizePrivateMessagingError(
+        new Error(response?.msg || response?.message || 'Failed to send private message')
+      );
     } catch (error) {
-      lastError = error;
+      lastError = normalizePrivateMessagingError(error);
     }
   }
 
@@ -416,7 +456,9 @@ export const sendPlainPrivateMessage = async ({ recipientUserId, conversationId,
 
   const response = await notificationApi.sendPrivateMessage(requestBody);
   if (!isSuccessResponse(response)) {
-    throw new Error(response?.msg || response?.message || 'Failed to send private message');
+    throw normalizePrivateMessagingError(
+      new Error(response?.msg || response?.message || 'Failed to send private message')
+    );
   }
   const resolvedConversationId = extractConversationIdFromPrivateMessageResponse(response);
   return { response, content: normalizedContent, conversationId: resolvedConversationId };

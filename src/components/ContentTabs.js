@@ -75,8 +75,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tabItem: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     position: 'relative',
   },
   tabText: {
@@ -100,12 +100,12 @@ const styles = StyleSheet.create({
   rightIcons: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingRight: 12,
+    paddingRight: 10,
     gap: 8,
   },
   iconButton: {
-    width: 36,
-    height: 36,
+    width: 34,
+    height: 34,
     justifyContent: 'center',
     alignItems: 'center',
   },

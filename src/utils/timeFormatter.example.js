@@ -95,13 +95,13 @@ import { formatTime, formatDate } from '../utils/timeFormatter';
 export default function MyComponent({ item }) {
   return (
     <View>
-      {/* Display relative time */}
+      <Text>{'Display relative time'}</Text>
       <Text>{formatTime(item.createdAt)}</Text>
       
-      {/* Display formatted date */}
+      <Text>{'Display formatted date'}</Text>
       <Text>{formatDate(item.publishedAt)}</Text>
       
-      {/* Display date with time */}
+      <Text>{'Display date with time'}</Text>
       <Text>{formatDate(item.updatedAt, { includeTime: true })}</Text>
     </View>
   );

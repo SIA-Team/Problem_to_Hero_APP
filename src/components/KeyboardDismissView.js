@@ -1,5 +1,5 @@
 import React from 'react';
-import { Keyboard, TouchableWithoutFeedback } from 'react-native';
+import { Keyboard, TouchableWithoutFeedback, View, StyleSheet } from 'react-native';
 
 export default function KeyboardDismissView({
   children,
@@ -7,7 +7,13 @@ export default function KeyboardDismissView({
 }) {
   return (
     <TouchableWithoutFeedback accessible={false} onPress={onDismiss}>
-      {children}
+      <View style={styles.container}>{children}</View>
     </TouchableWithoutFeedback>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+});

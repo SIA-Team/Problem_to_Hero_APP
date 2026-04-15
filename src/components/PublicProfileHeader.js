@@ -1,60 +1,65 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Platform, Text } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Platform, StatusBar, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-/**
- * 公开主页顶部导航栏组件
- * 左侧：返回按钮
- * 中间：留空
- * 右侧：转发按钮
- */
 export default function PublicProfileHeader({
-  bio,
   onBack,
   onShare,
   showBlacklist = false,
   onBlacklist,
   blacklistLabel = '加入黑名单',
   blacklistDisabled = false,
+  overlay = true,
 }) {
   const insets = useSafeAreaInsets();
-  
-  // 计算安全的顶部内边距
-  const safeTopPadding = Math.max(insets.top, Platform.OS === 'android' ? 8 : 0);
-
-  /**
-   * 处理转发
-   */
-  const handleShare = async () => {
-    if (onShare) {
-      onShare();
-    }
-  };
-
-  const handleBlacklist = () => {
-    if (onBlacklist) {
-      onBlacklist();
-    }
-  };
+  const safeTopInset = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0
+  );
 
   return (
-    <View style={[styles.container, { paddingTop: safeTopPadding + 12 }]}>
-      {/* 返回按钮 */}
-      <TouchableOpacity style={styles.backButton} onPress={onBack}>
-        <Ionicons name="arrow-back" size={24} color="#1f2937" />
+    <View
+      style={[
+        styles.container,
+        overlay ? styles.overlayContainer : styles.defaultContainer,
+        { paddingTop: safeTopInset, minHeight: safeTopInset + 48 },
+      ]}
+    >
+      <TouchableOpacity
+        style={[styles.iconButton, styles.backButton, overlay && styles.overlayIconButton]}
+        onPress={onBack}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="arrow-back" size={22} color={overlay ? '#fff' : '#1f2937'} />
       </TouchableOpacity>
 
-      {/* 中间留空 */}
       <View style={styles.centerSection} />
 
-      {/* 转发按钮 */}
       <View style={styles.actions}>
-        {showBlacklist ? <TouchableOpacity style={[styles.blacklistButton, blacklistDisabled && styles.blacklistButtonDisabled]} onPress={handleBlacklist} disabled={blacklistDisabled}>
-            <Text style={styles.blacklistText}>{blacklistLabel}</Text>
-          </TouchableOpacity> : null}
-        <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
-          <Ionicons name="arrow-redo-outline" size={24} color="#1f2937" />
+        {showBlacklist ? (
+          <TouchableOpacity
+            style={[
+              styles.blacklistButton,
+              overlay && styles.overlayChip,
+              blacklistDisabled && styles.blacklistButtonDisabled,
+            ]}
+            onPress={onBlacklist}
+            disabled={blacklistDisabled}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.blacklistText, overlay && styles.overlayText]}>
+              {blacklistLabel}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
+        <TouchableOpacity
+          style={[styles.iconButton, overlay && styles.overlayIconButton]}
+          onPress={onShare}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="arrow-redo-outline" size={22} color={overlay ? '#fff' : '#1f2937'} />
         </TouchableOpacity>
       </View>
     </View>
@@ -66,49 +71,63 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingBottom: 2,
+  },
+  defaultContainer: {
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
+  overlayContainer: {
+    backgroundColor: 'transparent',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
   },
   centerSection: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
   },
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    minWidth: 40,
+    gap: 8,
   },
-  actionButton: {
+  iconButton: {
     width: 40,
     height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  backButton: {
+    alignItems: 'center',
+  },
+  overlayIconButton: {
+    backgroundColor: 'rgba(15, 23, 42, 0.28)',
   },
   blacklistButton: {
     minWidth: 88,
-    height: 40,
+    height: 36,
+    paddingHorizontal: 12,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 8,
+  },
+  overlayChip: {
+    backgroundColor: 'rgba(15, 23, 42, 0.28)',
   },
   blacklistButtonDisabled: {
     opacity: 0.6,
   },
   blacklistText: {
     fontSize: 14,
-    color: '#1f2937',
     fontWeight: '500',
+    color: '#1f2937',
+  },
+  overlayText: {
+    color: '#fff',
   },
 });

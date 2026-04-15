@@ -435,7 +435,7 @@ export default function HomeScreen({ navigation }) {
   const handleTwitterInviteShare = async (customShareText) => {
     const sharePayload = buildQuestionSharePayload(selectedQuestion);
     if (!sharePayload) {
-      showToast('当前问题信息缺失，暂时无法分享到推特', 'warning');
+      showToast(t('home.shareQuestionMissing'), 'warning');
       return;
     }
 
@@ -448,7 +448,7 @@ export default function HomeScreen({ navigation }) {
       });
 
       if (result?.openedVia === 'browser') {
-        showToast('Twitter app not installed, opened web share', 'info');
+        showToast(t('home.twitterOpenedInBrowser'), 'info');
       }
 
       setShowTwitterInviteEditor(false);
@@ -457,7 +457,7 @@ export default function HomeScreen({ navigation }) {
       setShowSocialModal(false);
     } catch (error) {
       console.error('Failed to invite via twitter:', error);
-      showToast('Unable to open Twitter', 'error');
+      showToast(t('home.twitterOpenFailed'), 'error');
     } finally {
       setPendingSocialInvitePlatform(null);
     }
@@ -469,7 +469,12 @@ export default function HomeScreen({ navigation }) {
       return;
     }
 
-    showToast(`已向 ${user.name} 发送私信,邀请回答问题:${selectedQuestion?.title?.substring(0, 30)}...`, 'success');
+    showToast(
+      t('home.socialInviteSent')
+        .replace('{name}', user.name)
+        .replace('{title}', selectedQuestion?.title?.substring(0, 30) || ''),
+      'success'
+    );
     setShowSocialModal(false);
   };
 
@@ -523,11 +528,11 @@ export default function HomeScreen({ navigation }) {
       if (newState) {
         // 点赞
         await questionApi.likeQuestion(id);
-        showToast(t('home.likeSuccess') || '点赞成功', 'success');
+        showToast(t('home.likeSuccess'), 'success');
       } else {
         // 取消点赞
         await questionApi.unlikeQuestion(id);
-        showToast(t('home.unlikeSuccess') || '已取消点赞', 'success');
+        showToast(t('home.unlikeSuccess'), 'success');
       }
     } catch (error) {
       console.error('点赞操作失败:', error);
@@ -540,7 +545,7 @@ export default function HomeScreen({ navigation }) {
             : item
         )
       );
-      showToast(t('home.likeFailed') || '操作失败，请重试', 'error');
+      showToast(t('home.likeFailed'), 'error');
     }
   };
 
@@ -565,11 +570,11 @@ export default function HomeScreen({ navigation }) {
       if (newState) {
         // 收藏
         await questionApi.collectQuestion(id);
-        showToast(t('home.collectSuccess') || '收藏成功', 'success');
+        showToast(t('home.collectSuccess'), 'success');
       } else {
         // 取消收藏
         await questionApi.uncollectQuestion(id);
-        showToast(t('home.uncollectSuccess') || '已取消收藏', 'success');
+        showToast(t('home.uncollectSuccess'), 'success');
       }
     } catch (error) {
       console.error('收藏操作失败:', error);
@@ -582,7 +587,7 @@ export default function HomeScreen({ navigation }) {
             : item
         )
       );
-      showToast(t('home.collectFailed') || '操作失败，请重试', 'error');
+      showToast(t('home.collectFailed'), 'error');
     }
   };
 
@@ -613,11 +618,11 @@ export default function HomeScreen({ navigation }) {
       if (newState) {
         // 点踩
         await questionApi.dislikeQuestion(id);
-        showToast(t('home.dislikeSuccess') || '已踩', 'success');
+        showToast(t('home.dislikeSuccess'), 'success');
       } else {
         // 取消点踩
         await questionApi.undislikeQuestion(id);
-        showToast(t('home.undislikeSuccess') || '已取消踩', 'success');
+        showToast(t('home.undislikeSuccess'), 'success');
       }
       // 点踩成功后关闭弹窗
       setShowActionModal(false);
@@ -632,7 +637,7 @@ export default function HomeScreen({ navigation }) {
             : item
         )
       );
-      showToast(t('home.dislikeFailed') || '操作失败，请重试', 'error');
+      showToast(t('home.dislikeFailed'), 'error');
     }
   };
 
@@ -872,8 +877,10 @@ export default function HomeScreen({ navigation }) {
     if (walletBalance < amount) {
       setIsUnlockingPaidQuestion(false);
       showAppAlert(
-        '钱包余额不足',
-        `当前余额 $${formatPaidAmount(walletBalance)}，不足以支付本次查看费用 $${formatPaidAmount(amount)}，是否前往充值？`,
+        t('home.insufficientBalanceTitle'),
+        t('home.insufficientBalanceMessage')
+          .replace('{balance}', formatPaidAmount(walletBalance))
+          .replace('{amount}', formatPaidAmount(amount)),
         [
           {
             text: t('common.cancel'),
@@ -917,12 +924,15 @@ export default function HomeScreen({ navigation }) {
       };
 
       closePaidAlertModal();
-      showToast(`已支付 $${formatPaidAmount(amount)}，现在可以查看完整内容`, 'success');
+      showToast(
+        t('home.payToViewSuccess').replace('{amount}', formatPaidAmount(amount)),
+        'success'
+      );
       navigateToQuestionDetail(unlockedQuestion, pendingPaidQuestionRouteParams);
     } catch (error) {
       console.error('Failed to unlock paid question:', error);
       setIsUnlockingPaidQuestion(false);
-      showAppAlert('支付失败', '本次付费查看处理失败，请稍后重试。');
+      showAppAlert(t('home.payToViewFailedTitle'), t('home.payToViewFailedMessage'));
     }
   }, [
     closePaidAlertModal,
@@ -1430,12 +1440,12 @@ export default function HomeScreen({ navigation }) {
             <TouchableOpacity style={styles.actionItem} onPress={() => { if (selectedQuestion) toggleBookmark(selectedQuestion.id); setShowActionModal(false); }}>
               <Ionicons name={selectedQuestion && bookmarkedItems[selectedQuestion.id] ? "star" : "star-outline"} size={22} color={selectedQuestion && bookmarkedItems[selectedQuestion.id] ? "#f59e0b" : "#1f2937"} />
               <Text style={[styles.actionItemText, selectedQuestion && bookmarkedItems[selectedQuestion.id] && { color: '#f59e0b' }]}>
-                {selectedQuestion && bookmarkedItems[selectedQuestion.id] ? '已收藏' : '收藏'} ({formatNumber(selectedQuestion?.collectCount || 0)})
+                {selectedQuestion && bookmarkedItems[selectedQuestion.id] ? t('home.bookmarked') : t('home.bookmark')} ({formatNumber(selectedQuestion?.collectCount || 0)})
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); showToast('加入团队功能', 'info'); }}>
+            <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); showToast(t('home.joinTeamFeature'), 'info'); }}>
               <Ionicons name="people-circle-outline" size={22} color="#1f2937" />
-              <Text style={styles.actionItemText}>加入团队</Text>
+              <Text style={styles.actionItemText}>{t('home.joinTeam')}</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.actionItem} 
@@ -1449,15 +1459,15 @@ export default function HomeScreen({ navigation }) {
               }}
             >
               <Ionicons name="create-outline" size={22} color="#ef4444" />
-              <Text style={[styles.actionItemText, { color: '#ef4444' }]}>写回答</Text>
+              <Text style={[styles.actionItemText, { color: '#ef4444' }]}>{t('home.writeAnswer')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); handlePaidQuestionPress(selectedQuestion, { defaultTab: 'supplements', openSupplementModal: true }); }}>
               <Ionicons name="add-circle-outline" size={22} color="#1f2937" />
-              <Text style={styles.actionItemText}>补充问题</Text>
+              <Text style={styles.actionItemText}>{t('home.supplementQuestion')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); navigation.navigate('QuestionActivityList', { questionId: selectedQuestion?.id, questionTitle: selectedQuestion?.title, openCreateModal: true }); }}>
               <Ionicons name="calendar-outline" size={22} color="#22c55e" />
-              <Text style={styles.actionItemText}>发起活动</Text>
+              <Text style={styles.actionItemText}>{t('home.startActivity')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionItem} onPress={() => openSocialModal('twitter')}>
               <FontAwesome5 name="twitter" size={20} color="#1DA1F2" />
@@ -1465,10 +1475,10 @@ export default function HomeScreen({ navigation }) {
             </TouchableOpacity>
             <TouchableOpacity style={[styles.actionItem, styles.reportItem]}>
               <Ionicons name="flag-outline" size={22} color="#ef4444" />
-              <Text style={[styles.actionItemText, { color: '#ef4444' }]}>举报</Text>
+              <Text style={[styles.actionItemText, { color: '#ef4444' }]}>{t('common.report')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowActionModal(false)}>
-              <Text style={styles.cancelBtnText}>取消</Text>
+              <Text style={styles.cancelBtnText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -1503,13 +1513,13 @@ export default function HomeScreen({ navigation }) {
               <Ionicons name="search" size={18} color="#9ca3af" />
               <TextInput
                 style={styles.socialSearchInput}
-                placeholder="搜索用户..."
+                placeholder={t('home.socialSearchPlaceholder')}
                 value={socialSearchText}
                 onChangeText={setSocialSearchText}
               />
             </View>
 
-            <Text style={styles.socialRecommendTitle}>推荐用户</Text>
+            <Text style={styles.socialRecommendTitle}>{t('home.socialRecommendedUsers')}</Text>
 
             <FlatList
               data={filteredSocialUsers}
@@ -1523,9 +1533,9 @@ export default function HomeScreen({ navigation }) {
                     <Text style={styles.socialUserHandle}>{item.handle}</Text>
                   </View>
                   <View style={styles.socialUserMeta}>
-                    <Text style={styles.socialUserFollowers}>{item.followers} 粉丝</Text>
+                    <Text style={styles.socialUserFollowers}>{item.followers} {t('home.socialFollowers')}</Text>
                     <TouchableOpacity style={styles.inviteBtn} onPress={() => sendSocialMessage(item)}>
-                      <Text style={styles.inviteBtnText}>邀请回答</Text>
+                      <Text style={styles.inviteBtnText}>{t('home.socialInviteAnswer')}</Text>
                     </TouchableOpacity>
                   </View>
                 </TouchableOpacity>
@@ -1547,13 +1557,13 @@ export default function HomeScreen({ navigation }) {
           setShowTwitterInviteEditor(false);
           setSelectedSocialInviteUser(null);
         }}
-        title="编辑推特邀请文案"
+        title={t('home.twitterInviteEditorTitle')}
         currentValue={twitterInviteDraftText}
         onSave={handleTwitterInviteShare}
-        placeholder={`请输入要分享到推特的文案，可手动添加 ${selectedSocialInviteUser?.handle || '@用户名'}`}
+        placeholder={t('home.twitterInviteEditorPlaceholder').replace('{handle}', selectedSocialInviteUser?.handle || '@username')}
         maxLength={220}
         multiline
-        hint="链接会自动追加到文案后面"
+        hint={t('home.twitterInviteEditorHint')}
         loading={pendingSocialInvitePlatform === 'twitter'}
       />
 
@@ -1624,12 +1634,12 @@ export default function HomeScreen({ navigation }) {
       }}
         onPublish={async (text, asTeam, images = []) => {
           console.log('发布评论:', { text, asTeam, images });
-          showToast('评论发布成功！', 'success');
+          showToast(t('home.commentPublishSuccess'), 'success');
           setShowCommentModal(false);
           setCurrentQuestionForComment(null);
         }}
-        placeholder="写下你的评论..."
-        title="写评论"
+        placeholder={t('home.commentPlaceholder')}
+        title={t('home.commentTitle')}
       />
     </SafeAreaView>
   );
@@ -1694,10 +1704,10 @@ const styles = StyleSheet.create({
   cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   cardHeaderRight: { flexDirection: 'row', alignItems: 'center' },
   avatar: { width: 16, height: 16, borderRadius: 8 },
-  authorName: { fontSize: scaleFont(12), color: '#999999', marginLeft: 4, fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
-  metaSeparator: { fontSize: scaleFont(12), color: '#999999', marginHorizontal: 3, fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
-  postTime: { fontSize: scaleFont(12), color: '#999999', fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
-  locationText: { fontSize: scaleFont(12), color: '#999999', marginLeft: 1, fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
+  authorName: { fontSize: scaleFont(14), fontWeight: '400', color: '#999999', marginLeft: 4, fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
+  metaSeparator: { fontSize: scaleFont(14), color: '#999999', marginHorizontal: 3, fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
+  postTime: { fontSize: scaleFont(14), fontWeight: '400', color: '#999999', fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
+  locationText: { fontSize: scaleFont(14), fontWeight: '400', color: '#999999', marginLeft: 1, fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
   headerActionBtn: { flexDirection: 'row', alignItems: 'center', marginLeft: 16 },
   headerActionBtnDisabled: { opacity: 0.45 },
   headerActionText: { fontSize: scaleFont(12), color: '#666666', marginLeft: 4 },
@@ -1754,12 +1764,12 @@ const styles = StyleSheet.create({
   paidViewPrice: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   paidViewPriceText: { fontSize: scaleFont(16), color: '#f59e0b', fontWeight: '700' },
   questionTitle: {
-    fontSize: scaleFont(17),
+    fontSize: scaleFont(16),
     lineHeight: scaleFont(22),
-    fontWeight: '600',
+    fontWeight: '400',
     color: '#1a1a1a',
     letterSpacing: -0.2,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium',
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
     textAlign: 'left',
   },
   titleContainer: {

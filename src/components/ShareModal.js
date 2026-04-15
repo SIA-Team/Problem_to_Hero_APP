@@ -131,7 +131,7 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
           }
         }
 
-        candidates.push(currentUsername, 'ProblemToHero');
+        candidates.push(currentUsername, 'ProblemVsHero');
 
         const normalizedName = candidates
           .map(item => String(item ?? '').trim())
@@ -143,7 +143,7 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
       } catch (storageError) {
         console.error('Failed to load current user name for share twitter copy:', storageError);
         if (isMounted) {
-          setCurrentInviteUsername('ProblemToHero');
+          setCurrentInviteUsername('ProblemVsHero');
         }
       }
     };

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Dimensions, Alert, ActivityIndicator } from 'react-native';
+﻿import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Dimensions, Alert, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -9,6 +9,7 @@ import { showToast } from '../utils/toast';
 import { showAppAlert } from '../utils/appAlert';
 
 import { scaleFont } from '../utils/responsive';
+import { appLogo } from '../constants/appAssets';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation, onLogin }) {
@@ -30,7 +31,7 @@ export default function LoginScreen({ navigation, onLogin }) {
   };
 
   const handleSendCode = () => {
-    // 取消邮箱验证
+    // 鍙栨秷閭楠岃瘉
     // if (!email || !validateEmail(email)) {
     //   showToast('Please enter a valid email address', 'warning');
     //   return;
@@ -49,15 +50,15 @@ export default function LoginScreen({ navigation, onLogin }) {
   };
 
   const handleSubmit = async () => {
-    // 临时测试：直接设置一个测试 token（开发环境）
+    // 涓存椂娴嬭瘯锛氱洿鎺ヨ缃竴涓祴璇?token锛堝紑鍙戠幆澧冿級
     if (__DEV__) {
       try {
-        // 设置测试 token - 请替换为你的真实 token
+        // 璁剧疆娴嬭瘯 token - 璇锋浛鎹负浣犵殑鐪熷疄 token
         const testToken = 'test_token_please_replace_with_real_token';
         await AsyncStorage.setItem('authToken', testToken);
-        console.log('✅ Test token set:', testToken);
+        console.log('鉁?Test token set:', testToken);
         
-        showAppAlert('登录成功', '已设置测试 token，可以测试修改密码功能', [
+        showAppAlert('登录成功', '已设置测试 token，可以测试修改密码功能。', [
           {
             text: '确定',
             onPress: () => {
@@ -73,36 +74,36 @@ export default function LoginScreen({ navigation, onLogin }) {
       }
     }
     
-    // 以下是真实的登录逻辑（当后端 API 准备好后使用）
+    // 浠ヤ笅鏄湡瀹炵殑鐧诲綍閫昏緫锛堝綋鍚庣 API 鍑嗗濂藉悗浣跨敤锛?
     /*
-    // 基本验证
+    // 鍩烘湰楠岃瘉
     if (!email || !email.trim()) {
-      showAppAlert('提示', '请输入邮箱或手机号');
+      showAppAlert('鎻愮ず', '璇疯緭鍏ラ偖绠辨垨鎵嬫満鍙?);
       return;
     }
     
     if (!password || !password.trim()) {
-      showAppAlert('提示', '请输入密码');
+      showAppAlert('鎻愮ず', '璇疯緭鍏ュ瘑鐮?);
       return;
     }
 
     setLoading(true);
 
     try {
-      // 调用登录 API
+      // 璋冪敤鐧诲綍 API
       const response = await authApi.login({
-        phone: email, // 使用 phone 字段（根据后端 API 定义）
+        phone: email, // 浣跨敤 phone 瀛楁锛堟牴鎹悗绔?API 瀹氫箟锛?
         password: password,
       });
 
       setLoading(false);
 
-      // 检查响应
+      // 妫€鏌ュ搷搴?
       if (response.code === 200 || response.token) {
-        // 登录成功，token 已在 authApi.login 中保存
-        showAppAlert('登录成功', '欢迎回来！', [
+        // 鐧诲綍鎴愬姛锛宼oken 宸插湪 authApi.login 涓繚瀛?
+        showAppAlert('鐧诲綍鎴愬姛', '娆㈣繋鍥炴潵锛?, [
           {
-            text: '确定',
+            text: '纭畾',
             onPress: () => {
               if (onLogin) {
                 onLogin();
@@ -111,12 +112,12 @@ export default function LoginScreen({ navigation, onLogin }) {
           },
         ]);
       } else {
-        showAppAlert('登录失败', response.msg || '登录失败，请检查账号密码');
+        showAppAlert('鐧诲綍澶辫触', response.msg || '鐧诲綍澶辫触锛岃妫€鏌ヨ处鍙峰瘑鐮?);
       }
     } catch (error) {
       setLoading(false);
       
-      let errorMessage = '登录失败，请稍后重试';
+      let errorMessage = '鐧诲綍澶辫触锛岃绋嶅悗閲嶈瘯';
       
       if (error.data && error.data.msg) {
         errorMessage = error.data.msg;
@@ -124,7 +125,7 @@ export default function LoginScreen({ navigation, onLogin }) {
         errorMessage = error.message;
       }
       
-      showAppAlert('登录失败', errorMessage);
+      showAppAlert('鐧诲綍澶辫触', errorMessage);
       console.error('Login error:', error);
     }
     */
@@ -142,13 +143,13 @@ export default function LoginScreen({ navigation, onLogin }) {
           {/* Logo */}
           <View style={styles.logoSection}>
             <View style={styles.logoCircle}>
-              <Ionicons name="help-circle" size={60} color="#ef4444" />
+              <Image source={appLogo} style={styles.logoImage} resizeMode="contain" />
             </View>
-            <Text style={styles.appName}>Problem to Hero</Text>
+            <Text style={styles.appName}>Problem vs Hero</Text>
             <Text style={styles.slogan}>Turn problems into heroic solutions</Text>
           </View>
 
-          {/* 切换标签 */}
+          {/* 鍒囨崲鏍囩 */}
           <View style={styles.tabBar}>
             <TouchableOpacity style={[styles.tab, isLogin && styles.tabActive]} onPress={() => setIsLogin(true)}>
               <Text style={[styles.tabText, isLogin && styles.tabTextActive]}>Sign In</Text>
@@ -158,7 +159,7 @@ export default function LoginScreen({ navigation, onLogin }) {
             </TouchableOpacity>
           </View>
 
-          {/* 表单 */}
+          {/* 琛ㄥ崟 */}
           <View style={styles.formContainer}>
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Email</Text>
@@ -182,7 +183,7 @@ export default function LoginScreen({ navigation, onLogin }) {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>密码</Text>
+              <Text style={styles.inputLabel}>瀵嗙爜</Text>
               <View style={[
                 styles.inputWrapper,
                 passwordFocused && styles.inputWrapperFocused
@@ -229,12 +230,12 @@ export default function LoginScreen({ navigation, onLogin }) {
               {loading ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={styles.submitText}>{isLogin ? '登录' : '注册'}</Text>
+                <Text style={styles.submitText}>{isLogin ? '鐧诲綍' : '娉ㄥ唽'}</Text>
               )}
             </TouchableOpacity>
           </View>
 
-          {/* 第三方登录 */}
+          {/* 绗笁鏂圭櫥褰?*/}
           <View style={styles.thirdPartySection}>
             <View style={styles.dividerRow}>
               <View style={styles.divider} />
@@ -275,6 +276,7 @@ const styles = StyleSheet.create({
     marginBottom: SCREEN_HEIGHT < 700 ? 20 : 40,
   },
   logoCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#fef2f2', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  logoImage: { width: 76, height: 76 },
   appName: { fontSize: scaleFont(28), fontWeight: 'bold', color: '#1f2937', letterSpacing: -0.5, marginBottom: 8 },
   slogan: { fontSize: scaleFont(14), color: '#9ca3af' },
   tabBar: { flexDirection: 'row', borderBottomWidth: 2, borderBottomColor: '#f3f4f6', marginBottom: 24 },
@@ -333,3 +335,4 @@ const styles = StyleSheet.create({
     padding: 10,
   },
 });
+

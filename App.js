@@ -112,7 +112,7 @@ const SERVER_SELECTION_STORAGE_KEY = '@app_server_selection';
 const INITIAL_CREDENTIALS_NOTICE_STORAGE_KEY = '@initial_credentials_notice';
 const INITIAL_CREDENTIALS_DEFAULT_PASSWORD = '12345678';
 const APP_LINKING = {
-  prefixes: ['problemtohero://'],
+  prefixes: ['problemvshero://'],
   config: {
     screens: {
       Main: '',

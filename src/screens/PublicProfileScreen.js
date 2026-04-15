@@ -25,9 +25,7 @@ import blacklistApi from '../services/api/blacklistApi';
 import { addBlockedUser, removeBlockedUser } from '../services/blacklistState';
 import { getFollowState, setFollowState } from '../services/followState';
 import {
-  getMyFollowingCount,
   refreshMyFollowingCount,
-  subscribeMyFollowingCount,
 } from '../services/myFollowingCountState';
 import UserCacheService from '../services/UserCacheService';
 import { showAppAlert } from '../utils/appAlert';
@@ -339,8 +337,7 @@ export default function PublicProfileScreen({ navigation, route }) {
       setIsLoading(true);
       setError(null);
 
-      const [profileResponse, cachedProfile, blacklistItems] = await Promise.all([
-        userApi.getPublicProfile(userId),
+      const [cachedProfile, blacklistItems] = await Promise.all([
         UserCacheService.getUserProfile(),
         blacklistApi.getBlacklist().catch(blacklistError => {
           console.error('Load blacklist status failed:', blacklistError);
@@ -350,25 +347,21 @@ export default function PublicProfileScreen({ navigation, route }) {
 
       const currentProfile =
         cachedProfile || (await UserCacheService.fetchAndCacheUserProfile(true));
-      const profilePayload = resolveProfilePayload(profileResponse);
-      let nextUserData = buildProfileViewModel(profilePayload, userId);
       const nextCurrentUserId = currentProfile?.userId ? String(currentProfile.userId) : null;
+      const normalizedRouteUserId = String(userId ?? '').trim();
       const nextIsOwnProfile =
         String(nextCurrentUserId || '') !== '' &&
-        String(nextCurrentUserId) === String(nextUserData.userId || userId);
-      if (nextIsOwnProfile) {
-        try {
-          const myFollowingCount = await refreshMyFollowingCount();
-          nextUserData = overrideStatsItemValue(
-            nextUserData,
-            'following',
-            Number.isFinite(myFollowingCount) ? myFollowingCount : 0
-          );
-        } catch (followingCountError) {
-          console.error('Load own following count failed:', followingCountError);
-          nextUserData = overrideStatsItemValue(nextUserData, 'following', getMyFollowingCount());
-        }
-      }
+        normalizedRouteUserId !== '' &&
+        String(nextCurrentUserId) === normalizedRouteUserId;
+
+      const profileResponse = nextIsOwnProfile || !normalizedRouteUserId
+        ? await userApi.getProfile()
+        : await userApi.getPublicProfile(normalizedRouteUserId);
+      const profilePayload = resolveProfilePayload(profileResponse);
+      let nextUserData = buildProfileViewModel(
+        profilePayload,
+        nextIsOwnProfile ? nextCurrentUserId : normalizedRouteUserId
+      );
       const nextIsBlacklisted = nextIsOwnProfile
         ? false
         : resolveBlacklistStatus(blacklistItems, nextUserData.userId || userId);
@@ -439,24 +432,6 @@ export default function PublicProfileScreen({ navigation, route }) {
       loadUserData();
     }, [userId])
   );
-
-  useEffect(() => {
-    if (!isOwnProfile) {
-      return undefined;
-    }
-
-    setUserData(prevUserData =>
-      overrideStatsItemValue(prevUserData, 'following', getMyFollowingCount())
-    );
-
-    const unsubscribe = subscribeMyFollowingCount(nextCount => {
-      setUserData(prevUserData =>
-        overrideStatsItemValue(prevUserData, 'following', nextCount)
-      );
-    });
-
-    return unsubscribe;
-  }, [isOwnProfile]);
 
   const handleRetry = () => {
     loadUserData();
@@ -873,7 +848,7 @@ export default function PublicProfileScreen({ navigation, route }) {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ef4444" />
           <Text style={styles.loadingText}>{t('common.loading')}</Text>
@@ -884,7 +859,7 @@ export default function PublicProfileScreen({ navigation, route }) {
 
   if (error) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
           <Text style={styles.errorMessage}>{error}</Text>
@@ -898,7 +873,7 @@ export default function PublicProfileScreen({ navigation, route }) {
 
   if (!userData) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
         <View style={styles.errorContainer}>
           <Ionicons name="person-outline" size={48} color="#9ca3af" />
           <Text style={styles.errorMessage}>{t('profile.userNotFound')}</Text>
@@ -911,7 +886,7 @@ export default function PublicProfileScreen({ navigation, route }) {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
       <PublicProfileHeader
         bio={userData.bio}
         onBack={handleGoBack}

@@ -532,7 +532,7 @@ export default function PublishScreen({
     }
 
     if (!normalizedName) {
-      showToast('Please enter a custom subcategory', 'warning');
+      showToast(t('publish.toasts.customSubcategoryRequired'), 'warning');
       return;
     }
 
@@ -543,7 +543,7 @@ export default function PublishScreen({
 
     if (existedCategory) {
       selectLevel2(existedCategory);
-      showToast('Subcategory already exists and is selected', 'info');
+      showToast(t('publish.toasts.subcategoryExists'), 'info');
       return;
     }
 
@@ -1161,7 +1161,7 @@ export default function PublishScreen({
       }
     } catch (error) {
       console.error('❌ 加载专家列表失败:', error);
-      showToast(t('publish.toasts.loadExpertsFailed') || 'Failed to load experts', 'error');
+      showToast(t('publish.toasts.loadExpertsFailed'), 'error');
     } finally {
       setExpertLoading(false);
       setExpertLoadingMore(false);
@@ -1286,13 +1286,13 @@ export default function PublishScreen({
 
         {/* 地区选择 */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>地区</Text>
+          <Text style={styles.sectionTitle}>{t('publish.addLocation')}</Text>
           <TouchableOpacity style={styles.categorySelector} onPress={handleLocationPress}>
             <View style={styles.categorySelectorLeft}>
               <Text style={[styles.categorySelectorText, !location && {
               color: '#9ca3af'
             }]}>
-                {location || '您的问题属于的地区'}
+                {location || t('home.selectRegion')}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
@@ -1458,7 +1458,7 @@ export default function PublishScreen({
                       {expertSearchQuery ? t('publish.noExpertsFound') : !selectedLevel2?.id ? t('publish.selectCategoryFirst') : t('publish.noCategoryExperts')}
                     </Text>
                     <Text style={styles.noResultsHint}>
-                      {expertSearchQuery ? t('publish.noExpertsHint') : !selectedLevel2?.id ? t('publish.selectCategoryFirst') + '后可查看该领域的专家' : t('publish.tryCategoryHint')}
+                      {expertSearchQuery ? t('publish.noExpertsHint') : !selectedLevel2?.id ? t('publish.selectCategoryFirstHint') : t('publish.tryCategoryHint')}
                     </Text>
                   </View>}
               </View>
@@ -1651,7 +1651,7 @@ export default function PublishScreen({
               <Text style={styles.publishBtnText}>
                 {isUploadingImages ? t('publish.uploadingImages') : t('publish.publishing')}
               </Text>
-            </View> : <Text style={styles.publishBtnText}>发布问题</Text>}
+            </View> : <Text style={styles.publishBtnText}>{t('publish.publishButton')}</Text>}
         </TouchableOpacity>
         <View style={{
         height: 30
@@ -1864,9 +1864,9 @@ export default function PublishScreen({
               >
                 <Ionicons name="close" size={24} color="#1f2937" />
               </TouchableOpacity>
-              <Text style={styles.modalTitle}>选择区域</Text>
+              <Text style={styles.modalTitle}>{t('home.selectRegion')}</Text>
               <TouchableOpacity onPress={confirmLocationSelection}>
-                <Text style={styles.confirmText}>确认</Text>
+                <Text style={styles.confirmText}>{t('home.confirm')}</Text>
               </TouchableOpacity>
             </View>
 

@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "Problem to Hero",
+    "name": "Problem vs Hero",
     "slogan": "Turn problems into heroic solutions"
   },
   "tabs": {
@@ -38,7 +38,10 @@
     "answers": "answers",
     "shares": "shares",
     "bookmarks": "bookmarks",
+    "bookmark": "Bookmark",
+    "bookmarked": "Bookmarked",
     "solvedPercent": "solved",
+    "solved": "Solved",
     "viewDetails": "View Details",
     "global": "Global",
     "loading": "Loading...",
@@ -73,7 +76,31 @@
     "collectFailed": "Operation failed, please try again",
     "dislikeSuccess": "Disliked",
     "undislikeSuccess": "Dislike removed",
-    "dislikeFailed": "Operation failed, please try again"
+    "dislikeFailed": "Operation failed, please try again",
+    "shareQuestionMissing": "Current question information is missing, so it can't be shared to Twitter right now",
+    "twitterOpenedInBrowser": "Twitter app not installed, opened web share",
+    "twitterOpenFailed": "Unable to open Twitter",
+    "socialInviteSent": "Sent a direct message to {name} inviting them to answer: {title}...",
+    "insufficientBalanceTitle": "Insufficient wallet balance",
+    "insufficientBalanceMessage": "Your current balance is ${balance}, which is not enough to pay the viewing fee of ${amount}. Would you like to recharge?",
+    "payToViewSuccess": "Paid ${amount}. You can now view the full content.",
+    "payToViewFailedTitle": "Payment failed",
+    "payToViewFailedMessage": "We couldn't complete this paid view. Please try again later.",
+    "joinTeam": "Join Team",
+    "joinTeamFeature": "Join team feature coming soon",
+    "writeAnswer": "Write Answer",
+    "supplementQuestion": "Add Supplement",
+    "startActivity": "Start Activity",
+    "commentPublishSuccess": "Comment published successfully",
+    "commentPlaceholder": "Write your comment...",
+    "commentTitle": "Write Comment",
+    "socialSearchPlaceholder": "Search users...",
+    "socialRecommendedUsers": "Recommended Users",
+    "socialFollowers": "followers",
+    "socialInviteAnswer": "Invite to Answer",
+    "twitterInviteEditorTitle": "Edit Twitter invite text",
+    "twitterInviteEditorPlaceholder": "Enter the text to share on Twitter. You can manually add {handle}",
+    "twitterInviteEditorHint": "The link will be appended automatically after the text"
   },
   "emergency": {
     "title": "Emergency Help",
@@ -171,6 +198,7 @@
     "privateAnswerTip": "The answer will only be visible to you, other users cannot see it",
     "moreSettings": "More Settings",
     "addLocation": "Add Location",
+    "selectCategoryFirstHint": "Select a category first to view experts in this field",
     "whoCanSee": "Who Can See",
     "visibility": {
       "everyone": "Everyone",
@@ -218,7 +246,10 @@
       "networkError": "Network error, please check your connection",
       "serverError": "Server error, please try again later",
       "requestTimeout": "Request timeout, please check your connection",
-      "maxExperts": "Maximum 5 experts"
+      "maxExperts": "Maximum 5 experts",
+      "customSubcategoryRequired": "Please enter a custom subcategory",
+      "subcategoryExists": "This subcategory already exists and has been selected",
+      "loadExpertsFailed": "Failed to load experts"
     }
   },
   "profile": {
@@ -283,10 +314,18 @@
     "likesStats": "Your content has received {count} likes",
     "incomeDetails": "Income Details",
     "expenseDetails": "Expense Details",
+    "incomeDetailSummary": "Monthly answer income: $320.00\n\n- Adopted answers x 8 $280\n- High-quality answer bonus $40",
+    "expenseDetailSummary": "Monthly reward expense: $150.00\n\n- Python learning question $50\n- Career planning question $100",
     "pendingAnswers": "You have {count} answers pending adoption",
     "deleteDraft": "Delete Draft",
     "deleteDraftConfirm": "Are you sure you want to delete this draft?",
     "draftDeleted": "Draft deleted",
+    "draftLoadFailedTitle": "Failed to load draft",
+    "draftLoadFailedMessage": "Unable to load draft data",
+    "draftLoadFailedNetwork": "Network error, please try again later",
+    "draftLoading": "Loading...",
+    "noDrafts": "No drafts yet",
+    "noDraftsHint": "You haven't saved any drafts yet",
     "continueEditing": "Continue editing your draft",
     "clearHistory": "Clear History",
     "clearHistoryConfirm": "Are you sure you want to clear browsing history?",
@@ -327,6 +366,20 @@
     "verificationInfo": "Verification Info",
     "verificationTime": "Verification Time: ",
     "verificationOrg": "Verification Organization: Official Verification Center",
+    "commentDetailTitle": "Comment Details",
+    "commentDetailMessage": "Comment details coming soon",
+    "likeFeatureTitle": "Like",
+    "likeFeatureMessage": "Like feature coming soon",
+    "replyFeatureTitle": "Reply",
+    "replyFeatureMessage": "Reply feature coming soon",
+    "shareFeatureTitle": "Share",
+    "shareFeatureMessage": "Share feature coming soon",
+    "bookmarkFeatureTitle": "Bookmark",
+    "bookmarkFeatureMessage": "Bookmark feature coming soon",
+    "removeBookmarkFeatureTitle": "Remove Bookmark",
+    "removeBookmarkFeatureMessage": "Remove bookmark feature coming soon",
+    "dislikeFeatureTitle": "Dislike",
+    "dislikeFeatureMessage": "Dislike feature coming soon",
     "verificationModal": {
       "title": "Identity Verification",
       "selectType": "Please select your verification type",
@@ -536,6 +589,46 @@
         "clearHistoryMessage": "Are you sure you want to clear search history?",
         "viewMoreTitle": "View More",
         "viewMoreMessage": "More hot topics feature coming soon..."
+      }
+    },
+    "login": {
+      "title": "Sign In",
+      "usernameLabel": "Username",
+      "usernamePlaceholder": "Enter your username",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Enter your password",
+      "submit": "Sign In",
+      "dividerOr": "or",
+      "deviceLogin": "Sign in with device",
+      "firstUseHint": "Your account will be created automatically on first use. The default password is 12345678.",
+      "networkDiagnosis": "Network Diagnosis",
+      "validation": {
+        "usernameRequired": "Please enter your username",
+        "usernameMin": "Username must be at least 3 characters",
+        "passwordRequired": "Please enter your password",
+        "passwordMin": "Password must be at least 6 characters"
+      },
+      "toasts": {
+        "loginSuccess": "Login successful",
+        "invalidCredentials": "Invalid username or password",
+        "networkError": "Network error, please check your connection and try again",
+        "deviceLoginSuccess": "Login successful. Your username is {username}",
+        "deviceLoginFailed": "Device login failed. Please check your network and try again"
+      },
+      "server": {
+        "title": "Switch Server",
+        "enterCustomServer": "Please enter a custom server URL first.",
+        "confirmMessage": "Switch to {name} ({url})?\n\nThe change will take effect immediately without restarting the app.",
+        "successTitle": "Server switched",
+        "successMessage": "The server has been updated and is now active.",
+        "failureTitle": "Switch failed",
+        "failureMessage": "Unable to switch the server. Please try again.",
+        "settingsTitle": "Server Settings",
+        "current": "Current",
+        "customPlaceholder": "Enter a custom server URL, for example http://192.168.1.100:8080",
+        "unset": "Not set",
+        "switching": "Switching server...",
+        "switchHint": "Switching server takes effect immediately and does not require restarting the app."
       }
     },
     "teamDetail": {
@@ -1471,12 +1564,14 @@
       "profile": {
         "groupTitle": "Edit Profile",
         "nickname": "Nickname",
+        "username": "Username",
         "bio": "Bio",
         "gender": "Gender",
         "birthday": "Birthday",
         "location": "Location",
         "occupation": "Occupation",
-        "userId": "User ID"
+        "userId": "User ID",
+        "notSet": "Not Set"
       },
       "account": {
         "groupTitle": "Account & Security",
@@ -1506,7 +1601,8 @@
         "groupTitle": "General Settings",
         "clearCache": "Clear Cache",
         "language": "Language",
-        "languageChinese": "Simplified Chinese"
+        "languageChinese": "Simplified Chinese",
+        "languageEnglish": "English"
       },
       "wallet": {
         "groupTitle": "Wallet & Super Likes",
@@ -1525,10 +1621,32 @@
         "checkUpdate": "Check for Updates",
         "userAgreement": "User Agreement",
         "privacyPolicy": "Privacy Policy",
+        "connectionStatus": "Connection Status",
+        "updateDebug": "Update Debug",
         "deviceInfo": "Device Info",
         "aboutUs": "About Us"
       },
       "logout": "Logout",
+      "toasts": {
+        "updateFailed": "Update failed, please try again",
+        "selectLocation": "Please select a location",
+        "occupationUpdated": "Occupation updated",
+        "userInfoLoading": "User information is still loading, please try again shortly",
+        "expertiseUpdated": "Expertise updated",
+        "saveFailed": "Save failed, please try again later",
+        "locationUpdated": "Location updated",
+        "profileUpdated": "{title} updated",
+        "usernameUpdated": "Username updated",
+        "bindPhoneSuccess": "Phone number bound successfully",
+        "bindEmailSuccess": "Email bound successfully",
+        "cacheCleared": "Cache cleared",
+        "cacheClearFailed": "Failed to clear cache, please try again",
+        "switchedZh": "Switched to Simplified Chinese",
+        "switchedEn": "Switched to English",
+        "avatarUpdated": "Avatar updated successfully",
+        "networkRetry": "Network error, please try again later",
+        "uploadFailed": "Upload failed"
+      },
       "editModal": {
         "cancel": "Cancel",
         "save": "Save",
@@ -1586,8 +1704,16 @@
           "success": "Cache cleared"
         },
         "language": {
-          "title": "Select Language",
-          "message": "Open language selection page"
+          "title": "Switch Language",
+          "message": "During development, you can switch freely between Chinese and English. Production builds stay in English."
+        },
+        "genericError": {
+          "title": "Error",
+          "unknownFieldType": "Unknown field type"
+        },
+        "imageTooLarge": {
+          "title": "Image Too Large",
+          "message": "Please select an image smaller than 5 MB"
         },
         "checkUpdate": {
           "title": "Check for Updates",
@@ -1603,7 +1729,7 @@
         },
         "aboutUs": {
           "title": "About Us",
-          "message": "Problem to Hero v1.0.0\n\nA community platform to help people solve problems"
+          "message": "Problem vs Hero v1.0.0\n\nA community platform to help people solve problems"
         },
         "faq": {
           "title": "FAQ",

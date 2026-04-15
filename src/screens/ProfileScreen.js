@@ -22,11 +22,6 @@ import { openOfficialRechargePage } from '../utils/externalLinks';
 import { applyMockRecharge, getWalletBalanceWithMock } from '../utils/walletMock';
 import { formatTime } from '../utils/timeFormatter';
 import { formatNumber } from '../utils/numberFormatter';
-import {
-  getMyFollowingCount,
-  refreshMyFollowingCount,
-  subscribeMyFollowingCount,
-} from '../services/myFollowingCountState';
 import ServerSwitcher from '../components/ServerSwitcher';
 
 import { scaleFont } from '../utils/responsive';
@@ -170,11 +165,13 @@ export default function ProfileScreen({
     bio: '',
     location: '',
     occupation: '',
+    likeCount: 0,
     followersCount: 0,
+    followingCount: 0,
+    friendCount: 0,
     passwordChanged: false // 是否修改过密码（默认 false，表示未修改，会显示默认密码�?
   });
   const [draftsTotalCount, setDraftsTotalCount] = useState(0);
-  const [myFollowingCount, setMyFollowingCount] = useState(getMyFollowingCount());
 
   // 加载用户信息
   const loadUserProfile = React.useCallback(async () => {
@@ -194,11 +191,24 @@ export default function ProfileScreen({
         bio: cachedProfile.signature || '',
         location: cachedProfile.location || '',
         occupation: cachedProfile.profession || '',
+        likeCount: normalizeProfileCount(
+          cachedProfile.likeCount,
+          cachedProfile.likesCount,
+          cachedProfile.likedCount
+        ),
         followersCount: normalizeProfileCount(
           cachedProfile.fanCount,
           cachedProfile.fansCount,
           cachedProfile.followersCount,
           cachedProfile.followerCount
+        ),
+        followingCount: normalizeProfileCount(
+          cachedProfile.followCount,
+          cachedProfile.followingCount
+        ),
+        friendCount: normalizeProfileCount(
+          cachedProfile.friendCount,
+          cachedProfile.friendsCount
         ),
         passwordChanged: cachedProfile.passwordChanged === true || hasChangedPassword
       }));
@@ -215,11 +225,24 @@ export default function ProfileScreen({
         bio: freshProfile.signature || '',
         location: freshProfile.location || '',
         occupation: freshProfile.profession || '',
+        likeCount: normalizeProfileCount(
+          freshProfile.likeCount,
+          freshProfile.likesCount,
+          freshProfile.likedCount
+        ),
         followersCount: normalizeProfileCount(
           freshProfile.fanCount,
           freshProfile.fansCount,
           freshProfile.followersCount,
           freshProfile.followerCount
+        ),
+        followingCount: normalizeProfileCount(
+          freshProfile.followCount,
+          freshProfile.followingCount
+        ),
+        friendCount: normalizeProfileCount(
+          freshProfile.friendCount,
+          freshProfile.friendsCount
         ),
         passwordChanged: freshProfile.passwordChanged === true || hasChangedPassword
       }));
@@ -227,19 +250,6 @@ export default function ProfileScreen({
   }, []);
 
   // 首次加载
-  const loadMyFollowingCount = React.useCallback(async () => {
-    try {
-      await refreshMyFollowingCount();
-    } catch (error) {
-      console.error('Failed to load my following count:', error);
-    }
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = subscribeMyFollowingCount(setMyFollowingCount);
-    return unsubscribe;
-  }, []);
-
   const loadWalletBalance = React.useCallback(async () => {
     const fallbackWalletBalance = await getWalletBalanceWithMock(0);
 
@@ -287,9 +297,8 @@ export default function ProfileScreen({
 
   useEffect(() => {
     loadUserProfile();
-    loadMyFollowingCount();
     loadWalletBalance();
-  }, [loadMyFollowingCount, loadUserProfile, loadWalletBalance]);
+  }, [loadUserProfile, loadWalletBalance]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
@@ -316,12 +325,11 @@ export default function ProfileScreen({
   useFocusEffect(React.useCallback(() => {
     console.log('ProfileScreen: screen focused, reloading user profile');
     loadUserProfile();
-    loadMyFollowingCount();
     loadWalletBalance();
-  }, [loadMyFollowingCount, loadUserProfile, loadWalletBalance]));
+  }, [loadUserProfile, loadWalletBalance]));
   const stats = React.useMemo(() => [{
     label: t('profile.likes'),
-    value: '3.5k',
+    value: formatNumber(userProfile.likeCount),
     screen: 'Likes'
   }, {
     label: t('profile.followers'),
@@ -329,13 +337,13 @@ export default function ProfileScreen({
     screen: 'Fans'
   }, {
     label: t('profile.following'),
-    value: formatNumber(myFollowingCount),
+    value: formatNumber(userProfile.followingCount),
     screen: 'Follow'
   }, {
     label: t('profile.friends'),
-    value: '56',
+    value: formatNumber(userProfile.friendCount),
     screen: 'Friends'
-  }], [myFollowingCount, t, userProfile.followersCount]);
+  }], [t, userProfile.followersCount, userProfile.followingCount, userProfile.friendCount, userProfile.likeCount]);
   const menuItems = React.useMemo(() => [{
     icon: 'document-text',
     label: t('profile.myDrafts'),
@@ -798,10 +806,13 @@ export default function ProfileScreen({
         navigation.navigate('Follow');
         break;
       case t('profile.likes'):
-        showAppAlert(t('profile.likesStats').replace('{count}', '3.5k'));
+        showAppAlert(t('profile.likesStats').replace('{count}', formatNumber(userProfile.likeCount)));
         break;
       case t('profile.friends'):
-        showAppAlert(t('profile.myFriends'), t('profile.youHaveFriends').replace('{count}', '56'));
+        showAppAlert(
+          t('profile.myFriends'),
+          t('profile.youHaveFriends').replace('{count}', formatNumber(userProfile.friendCount))
+        );
         break;
       default:
         break;
@@ -888,10 +899,10 @@ export default function ProfileScreen({
         }]);
         break;
       case 'expense':
-        showAppAlert(t('profile.expenseDetails'), t('profile.monthlyExpense') + '$150.00\n\n- Python学习问题�?50\n- 职业规划问题�?100');
+        showAppAlert(t('profile.expenseDetails'), t('profile.expenseDetailSummary'));
         break;
       case 'income':
-        showAppAlert(t('profile.incomeDetails'), t('profile.monthlyIncome') + '$320.00\n\n- 被采纳回�?x 8�?280\n- 优质回答奖励�?40');
+        showAppAlert(t('profile.incomeDetails'), t('profile.incomeDetailSummary'));
         break;
       case 'pending':
         showAppAlert(t('profile.pendingAdoption'), t('profile.pendingAnswers').replace('{count}', '12'));
@@ -962,11 +973,11 @@ export default function ProfileScreen({
         });
       } else {
         console.error('�?获取草稿失败:', response);
-        showAppAlert('获取草稿失败', response?.msg || '无法加载草稿数据');
+        showAppAlert(t('profile.draftLoadFailedTitle'), response?.msg || t('profile.draftLoadFailedMessage'));
       }
     } catch (error) {
       console.error('�?获取草稿详情失败:', error);
-      showAppAlert('获取草稿失败', '网络错误，请稍后重试');
+      showAppAlert(t('profile.draftLoadFailedTitle'), t('profile.draftLoadFailedNetwork'));
     }
   };
   const handleDeleteDraft = item => {
@@ -1505,14 +1516,14 @@ export default function ProfileScreen({
                   </View>
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('转发', '转发功能');
+                    showAppAlert(t('profile.shareFeatureTitle'), t('profile.shareFeatureMessage'));
                   }}>
                     <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
                     <Text style={styles.questionStatText}>{formatNumber(q.shares)}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('收藏', '收藏功能');
+                    showAppAlert(t('profile.bookmarkFeatureTitle'), t('profile.bookmarkFeatureMessage'));
                   }}>
                     <Ionicons name="star-outline" size={12} color="#9ca3af" />
                     <Text style={styles.questionStatText}>{formatNumber(q.collects)}</Text>
@@ -1524,7 +1535,7 @@ export default function ProfileScreen({
                   <View style={{flex: 1}} />
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('Dislike', 'Dislike feature');
+                    showAppAlert(t('profile.dislikeFeatureTitle'), t('profile.dislikeFeatureMessage'));
                   }}>
                     <Ionicons name="thumbs-down-outline" size={12} color="#9ca3af" />
                     <Text style={styles.questionStatText}>{formatNumber(q.dislikes)}</Text>
@@ -1572,14 +1583,14 @@ export default function ProfileScreen({
                   </View>
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('转发', '转发功能');
+                    showAppAlert(t('profile.shareFeatureTitle'), t('profile.shareFeatureMessage'));
                   }}>
                     <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
                     <Text style={styles.questionStatText}>{formatNumber(a.shares)}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('收藏', '收藏功能');
+                    showAppAlert(t('profile.bookmarkFeatureTitle'), t('profile.bookmarkFeatureMessage'));
                   }}>
                     <Ionicons name="star-outline" size={12} color="#9ca3af" />
                     <Text style={styles.questionStatText}>{formatNumber(a.collects)}</Text>
@@ -1587,7 +1598,7 @@ export default function ProfileScreen({
                   <View style={{flex: 1}} />
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('Dislike', 'Dislike feature');
+                    showAppAlert(t('profile.dislikeFeatureTitle'), t('profile.dislikeFeatureMessage'));
                   }}>
                     <Ionicons name="thumbs-down-outline" size={12} color="#9ca3af" />
                     <Text style={styles.questionStatText}>{formatNumber(a.dislikes)}</Text>
@@ -1636,7 +1647,7 @@ export default function ProfileScreen({
               } else if (item.type === 'answer' || item.type === 'supplementAnswer') {
                 navigation.navigate('AnswerDetail', { answerId: item.id });
               } else if (item.type === 'comment') {
-                showAppAlert('评论详情', '评论详情功能');
+                showAppAlert(t('profile.commentDetailTitle'), t('profile.commentDetailMessage'));
               }
             }}>
                 <View style={styles.likeItemHeader}>
@@ -1665,28 +1676,28 @@ export default function ProfileScreen({
                 <View style={styles.answerStats}>
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('点赞', '点赞功能');
+                    showAppAlert(t('profile.likeFeatureTitle'), t('profile.likeFeatureMessage'));
                   }}>
                     <Ionicons name="thumbs-up" size={12} color="#ef4444" />
                     <Text style={[styles.questionStatText, {color: '#ef4444'}]}>{formatNumber(item.likes)}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('回复', '回复功能');
+                    showAppAlert(t('profile.replyFeatureTitle'), t('profile.replyFeatureMessage'));
                   }}>
                     <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
                     <Text style={styles.questionStatText}>0</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('转发', '转发功能');
+                    showAppAlert(t('profile.shareFeatureTitle'), t('profile.shareFeatureMessage'));
                   }}>
                     <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
                     <Text style={styles.questionStatText}>0</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('收藏', '收藏功能');
+                    showAppAlert(t('profile.bookmarkFeatureTitle'), t('profile.bookmarkFeatureMessage'));
                   }}>
                     <Ionicons name="star-outline" size={12} color="#9ca3af" />
                     <Text style={styles.questionStatText}>0</Text>
@@ -1694,7 +1705,7 @@ export default function ProfileScreen({
                   <View style={{flex: 1}} />
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('Dislike', 'Dislike feature');
+                    showAppAlert(t('profile.dislikeFeatureTitle'), t('profile.dislikeFeatureMessage'));
                   }}>
                     <Ionicons name="thumbs-down-outline" size={12} color="#9ca3af" />
                     <Text style={styles.questionStatText}>0</Text>
@@ -1748,28 +1759,28 @@ export default function ProfileScreen({
                 <View style={styles.answerStats}>
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('点赞', '点赞功能');
+                    showAppAlert(t('profile.likeFeatureTitle'), t('profile.likeFeatureMessage'));
                   }}>
                     <Ionicons name="thumbs-up-outline" size={12} color="#9ca3af" />
                     <Text style={styles.questionStatText}>0</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('回复', '回复功能');
+                    showAppAlert(t('profile.replyFeatureTitle'), t('profile.replyFeatureMessage'));
                   }}>
                     <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
                     <Text style={styles.questionStatText}>0</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('转发', '转发功能');
+                    showAppAlert(t('profile.shareFeatureTitle'), t('profile.shareFeatureMessage'));
                   }}>
                     <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
                     <Text style={styles.questionStatText}>0</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('取消收藏', '取消收藏功能');
+                    showAppAlert(t('profile.removeBookmarkFeatureTitle'), t('profile.removeBookmarkFeatureMessage'));
                   }}>
                     <Ionicons name="star" size={12} color="#f59e0b" />
                     <Text style={[styles.questionStatText, {color: '#f59e0b'}]}>1</Text>
@@ -1777,7 +1788,7 @@ export default function ProfileScreen({
                   <View style={{flex: 1}} />
                   <TouchableOpacity style={styles.questionStatItem} onPress={(e) => {
                     e.stopPropagation();
-                    showAppAlert('Dislike', 'Dislike feature');
+                    showAppAlert(t('profile.dislikeFeatureTitle'), t('profile.dislikeFeatureMessage'));
                   }}>
                     <Ionicons name="thumbs-down-outline" size={12} color="#9ca3af" />
                     <Text style={styles.questionStatText}>0</Text>
@@ -1918,11 +1929,11 @@ export default function ProfileScreen({
         }]}>
             {draftsLoading && draftsList.length === 0 ? <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#ef4444" />
-                <Text style={styles.loadingText}>加载�?..</Text>
+                <Text style={styles.loadingText}>{t('profile.draftLoading')}</Text>
               </View> : draftsList.length === 0 ? <View style={styles.emptyContainer}>
                 <Ionicons name="document-text-outline" size={48} color="#d1d5db" />
-                <Text style={styles.emptyText}>暂无草稿</Text>
-                <Text style={styles.emptyHint}>您还没有保存任何草稿</Text>
+                <Text style={styles.emptyText}>{t('profile.noDrafts')}</Text>
+                <Text style={styles.emptyHint}>{t('profile.noDraftsHint')}</Text>
               </View> : draftsList.map(item => <View key={item.id} style={styles.draftItem}>
                   <TouchableOpacity style={styles.draftContent} onPress={() => handleDraftPress(item)}>
                     <View style={styles.draftTypeTag}>
@@ -2027,46 +2038,46 @@ export default function ProfileScreen({
             {verificationStep === 1 && selectedVerificationType === 'personal' && <View style={styles.formContainer}>
                 {/* 证件类型 */}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>证件类型 <Text style={styles.required}>*</Text></Text>
+                  <Text style={styles.fieldLabel}>{t('profile.verificationModal.idType')} <Text style={styles.required}>*</Text></Text>
                   <TouchableOpacity style={styles.fieldInput}>
-                    <Text style={styles.fieldInputText}>ID card</Text>
+                    <Text style={styles.fieldInputText}>{t('profile.verificationModal.idCard')}</Text>
                     <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
                   </TouchableOpacity>
                 </View>
 
                 {/* 证件号码 */}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>证件号码 <Text style={styles.required}>*</Text></Text>
-                  <TextInput style={styles.fieldInput} placeholder="Enter ID number" placeholderTextColor="#9ca3af" value={verificationData.personal.idNumber} onChangeText={text => updateVerificationField('idNumber', text)} />
+                  <Text style={styles.fieldLabel}>{t('profile.verificationModal.idNumber')} <Text style={styles.required}>*</Text></Text>
+                  <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.idNumberPlaceholder')} placeholderTextColor="#9ca3af" value={verificationData.personal.idNumber} onChangeText={text => updateVerificationField('idNumber', text)} />
                 </View>
 
                 {/* 上传证件照片 */}
                 <View style={styles.uploadSection}>
-                  <Text style={styles.uploadSectionTitle}>上传证件照片</Text>
+                  <Text style={styles.uploadSectionTitle}>{t('profile.verificationModal.uploadIdPhotos')}</Text>
                   
                   <View style={styles.uploadGrid}>
                     {/* 证件正面 */}
                     <View style={styles.uploadItemWrapper}>
-                      <Text style={styles.uploadLabel}>证件正面 <Text style={styles.required}>*</Text></Text>
+                      <Text style={styles.uploadLabel}>{t('profile.verificationModal.idFront')} <Text style={styles.required}>*</Text></Text>
                       <TouchableOpacity style={styles.uploadBox} onPress={() => handleImageUpload('idFront')}>
                         {verificationData.personal.idFront ? <Image source={{
                       uri: verificationData.personal.idFront
                     }} style={styles.uploadedImage} /> : <View style={styles.uploadPlaceholder}>
                             <Ionicons name="camera-outline" size={40} color="#d1d5db" />
-                            <Text style={styles.uploadPlaceholderText}>点击上传</Text>
+                            <Text style={styles.uploadPlaceholderText}>{t('profile.verificationModal.clickUpload')}</Text>
                           </View>}
                       </TouchableOpacity>
                     </View>
 
                     {/* 证件反面 */}
                     <View style={styles.uploadItemWrapper}>
-                      <Text style={styles.uploadLabel}>证件反面 <Text style={styles.required}>*</Text></Text>
+                      <Text style={styles.uploadLabel}>{t('profile.verificationModal.idBack')} <Text style={styles.required}>*</Text></Text>
                       <TouchableOpacity style={styles.uploadBox} onPress={() => handleImageUpload('idBack')}>
                         {verificationData.personal.idBack ? <Image source={{
                       uri: verificationData.personal.idBack
                     }} style={styles.uploadedImage} /> : <View style={styles.uploadPlaceholder}>
                             <Ionicons name="camera-outline" size={40} color="#d1d5db" />
-                            <Text style={styles.uploadPlaceholderText}>点击上传</Text>
+                            <Text style={styles.uploadPlaceholderText}>{t('profile.verificationModal.clickUpload')}</Text>
                           </View>}
                       </TouchableOpacity>
                     </View>
@@ -2074,16 +2085,16 @@ export default function ProfileScreen({
 
                   <View style={styles.uploadTip}>
                     <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
-                    <Text style={styles.uploadTipText}>Please make sure the ID information is clear and fully visible.</Text>
+                    <Text style={styles.uploadTipText}>{t('profile.verificationModal.uploadTip')}</Text>
                   </View>
                 </View>
 
                 {/* 专业资质认证（可选） */}
                 <View style={styles.uploadSection}>
                   <View style={styles.qualificationHeader}>
-                    <Text style={styles.uploadSectionTitle}>专业资质认证</Text>
+                    <Text style={styles.uploadSectionTitle}>{t('profile.verificationModal.qualifications')}</Text>
                   </View>
-                  <Text style={styles.qualificationDesc}>请上传您的专业资质证书（如：律师证、医师证、教师证等）</Text>
+                  <Text style={styles.qualificationDesc}>{t('profile.verificationModal.qualificationsDesc')}</Text>
                   
                   {/* 已上传的资质列表 */}
                   {verificationData.personal.qualifications.map((qual, index) => <View key={qual.id} style={styles.qualificationItem}>
@@ -2092,7 +2103,7 @@ export default function ProfileScreen({
                     uri: qual.image
                   }} style={styles.qualificationImage} />
                         <View style={styles.qualificationInfo}>
-                          <TextInput style={styles.qualificationNameInput} placeholder="请输入资质名称（如：律师执业证）" placeholderTextColor="#9ca3af" value={qual.name} onChangeText={text => updateQualificationName(qual.id, text)} />
+                          <TextInput style={styles.qualificationNameInput} placeholder={t('profile.verificationModal.qualificationName')} placeholderTextColor="#9ca3af" value={qual.name} onChangeText={text => updateQualificationName(qual.id, text)} />
                         </View>
                       </View>
                       <TouchableOpacity style={styles.qualificationDelete} onPress={() => removeQualification(qual.id)}>
@@ -2103,12 +2114,12 @@ export default function ProfileScreen({
                   {/* 添加资质按钮 */}
                   <TouchableOpacity style={styles.addQualificationBtn} onPress={addQualification}>
                     <Ionicons name="add-circle-outline" size={24} color="#3b82f6" />
-                    <Text style={styles.addQualificationText}>添加资质证书</Text>
+                    <Text style={styles.addQualificationText}>{t('profile.verificationModal.addQualification')}</Text>
                   </TouchableOpacity>
 
                   <View style={styles.uploadTip}>
                     <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
-                    <Text style={styles.uploadTipText}>Professional certificates such as lawyer, doctor, or teacher credentials are supported.</Text>
+                    <Text style={styles.uploadTipText}>{t('profile.verificationModal.qualificationTip')}</Text>
                   </View>
                 </View>
 
@@ -2118,71 +2129,71 @@ export default function ProfileScreen({
             {verificationStep === 1 && selectedVerificationType === 'enterprise' && <View style={styles.formContainer}>
                 {/* 企业名称 */}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>企业名称 <Text style={styles.required}>*</Text></Text>
-                  <TextInput style={styles.fieldInput} placeholder="Enter enterprise name" placeholderTextColor="#9ca3af" value={verificationData.enterprise.name} onChangeText={text => updateVerificationField('name', text)} />
+                  <Text style={styles.fieldLabel}>{t('profile.verificationModal.enterpriseName')} <Text style={styles.required}>*</Text></Text>
+                  <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.enterpriseNamePlaceholder')} placeholderTextColor="#9ca3af" value={verificationData.enterprise.name} onChangeText={text => updateVerificationField('name', text)} />
                 </View>
 
                 {/* 注册�?*/}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>Registration Number</Text>
-                  <TextInput style={styles.fieldInput} placeholder="请输入企业注册号" placeholderTextColor="#9ca3af" value={verificationData.enterprise.registrationNumber} onChangeText={text => updateVerificationField('registrationNumber', text)} />
+                  <Text style={styles.fieldLabel}>{t('profile.verificationModal.registrationNumber')}</Text>
+                  <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.registrationNumberPlaceholder')} placeholderTextColor="#9ca3af" value={verificationData.enterprise.registrationNumber} onChangeText={text => updateVerificationField('registrationNumber', text)} />
                 </View>
 
                 {/* 税号 */}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>税号 <Text style={styles.required}>*</Text></Text>
-                  <TextInput style={styles.fieldInput} placeholder="Enter tax number" placeholderTextColor="#9ca3af" value={verificationData.enterprise.taxNumber} onChangeText={text => updateVerificationField('taxNumber', text)} />
+                  <Text style={styles.fieldLabel}>{t('profile.verificationModal.taxNumber')} <Text style={styles.required}>*</Text></Text>
+                  <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.taxNumberPlaceholder')} placeholderTextColor="#9ca3af" value={verificationData.enterprise.taxNumber} onChangeText={text => updateVerificationField('taxNumber', text)} />
                 </View>
 
                 {/* 企业地址 */}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>企业地址 <Text style={styles.required}>*</Text></Text>
-                  <TextInput style={styles.fieldInput} placeholder="请输入企业注册地址" placeholderTextColor="#9ca3af" value={verificationData.enterprise.address} onChangeText={text => updateVerificationField('address', text)} />
+                  <Text style={styles.fieldLabel}>{t('profile.verificationModal.address')} <Text style={styles.required}>*</Text></Text>
+                  <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.addressPlaceholder')} placeholderTextColor="#9ca3af" value={verificationData.enterprise.address} onChangeText={text => updateVerificationField('address', text)} />
                 </View>
 
                 {/* 企业联系�?*/}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>企业联系�?<Text style={styles.required}>*</Text></Text>
-                  <TextInput style={styles.fieldInput} placeholder="请输入联系人姓名" placeholderTextColor="#9ca3af" value={verificationData.enterprise.contactPerson} onChangeText={text => updateVerificationField('contactPerson', text)} />
+                  <Text style={styles.fieldLabel}>{t('profile.verificationModal.contactPerson')}<Text style={styles.required}>*</Text></Text>
+                  <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.contactPersonPlaceholder')} placeholderTextColor="#9ca3af" value={verificationData.enterprise.contactPerson} onChangeText={text => updateVerificationField('contactPerson', text)} />
                 </View>
 
                 {/* 联系方式说明 */}
                 <View style={styles.contactMethodSection}>
-                  <Text style={styles.contactMethodTitle}>联系方式 <Text style={styles.required}>*</Text></Text>
-                  <Text style={styles.contactMethodDesc}>Please provide at least one contact method.</Text>
+                  <Text style={styles.contactMethodTitle}>{t('profile.verificationModal.contactMethod')} <Text style={styles.required}>*</Text></Text>
+                  <Text style={styles.contactMethodDesc}>{t('profile.verificationModal.contactMethodDesc')}</Text>
                 </View>
 
                 {/* 联系电话 */}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>联系电话</Text>
-                  <TextInput style={styles.fieldInput} placeholder="Enter phone number" placeholderTextColor="#9ca3af" keyboardType="phone-pad" maxLength={11} value={verificationData.enterprise.contactPhone} onChangeText={text => updateVerificationField('contactPhone', text)} />
+                  <Text style={styles.fieldLabel}>{t('profile.verificationModal.contactPhone')}</Text>
+                  <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.contactPhonePlaceholder')} placeholderTextColor="#9ca3af" keyboardType="phone-pad" maxLength={11} value={verificationData.enterprise.contactPhone} onChangeText={text => updateVerificationField('contactPhone', text)} />
                 </View>
 
                 {/* 联系邮箱 */}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>联系邮箱</Text>
-                  <TextInput style={styles.fieldInput} placeholder="请输入邮箱地址" placeholderTextColor="#9ca3af" keyboardType="email-address" autoCapitalize="none" value={verificationData.enterprise.contactEmail} onChangeText={text => updateVerificationField('contactEmail', text)} />
+                  <Text style={styles.fieldLabel}>{t('profile.verificationModal.contactEmail')}</Text>
+                  <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.contactEmailPlaceholder')} placeholderTextColor="#9ca3af" keyboardType="email-address" autoCapitalize="none" value={verificationData.enterprise.contactEmail} onChangeText={text => updateVerificationField('contactEmail', text)} />
                 </View>
 
                 {/* 上传注册文件 */}
                 <View style={styles.uploadSection}>
-                  <Text style={styles.uploadSectionTitle}>上传注册文件</Text>
+                  <Text style={styles.uploadSectionTitle}>{t('profile.verificationModal.uploadLicense')}</Text>
                   
                   <View style={styles.uploadSingleWrapper}>
-                    <Text style={styles.uploadLabel}>注册文件 <Text style={styles.required}>*</Text></Text>
+                    <Text style={styles.uploadLabel}>{t('profile.verificationModal.license')} <Text style={styles.required}>*</Text></Text>
                     <TouchableOpacity style={styles.uploadBoxLarge} onPress={() => handleImageUpload('license')}>
                       {verificationData.enterprise.license ? <Image source={{
                     uri: verificationData.enterprise.license
                   }} style={styles.uploadedImage} /> : <View style={styles.uploadPlaceholder}>
                           <Ionicons name="camera-outline" size={40} color="#d1d5db" />
-                          <Text style={styles.uploadPlaceholderText}>点击上传</Text>
+                          <Text style={styles.uploadPlaceholderText}>{t('profile.verificationModal.clickUpload')}</Text>
                         </View>}
                     </TouchableOpacity>
                   </View>
 
                   <View style={styles.uploadTip}>
                     <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
-                    <Text style={styles.uploadTipText}>Please upload a clear registration document photo with complete information.</Text>
+                    <Text style={styles.uploadTipText}>{t('profile.verificationModal.licenseTip')}</Text>
                   </View>
                 </View>
               </View>}
@@ -2191,55 +2202,55 @@ export default function ProfileScreen({
             {verificationStep === 1 && selectedVerificationType === 'government' && <View style={styles.formContainer}>
                 {/* 机构名称 */}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>机构名称 <Text style={styles.required}>*</Text></Text>
-                  <TextInput style={styles.fieldInput} placeholder="Enter government organization name" placeholderTextColor="#9ca3af" value={verificationData.government.name} onChangeText={text => updateVerificationField('name', text)} />
+                  <Text style={styles.fieldLabel}>{t('profile.verificationModal.governmentName')} <Text style={styles.required}>*</Text></Text>
+                  <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.governmentNamePlaceholder')} placeholderTextColor="#9ca3af" value={verificationData.government.name} onChangeText={text => updateVerificationField('name', text)} />
                 </View>
 
                 {/* 机构ID */}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>机构ID</Text>
-                  <TextInput style={styles.fieldInput} placeholder="请输入机构ID" placeholderTextColor="#9ca3af" value={verificationData.government.creditCode} onChangeText={text => updateVerificationField('creditCode', text)} />
+                  <Text style={styles.fieldLabel}>{t('profile.verificationModal.governmentId')}</Text>
+                  <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.governmentIdPlaceholder')} placeholderTextColor="#9ca3af" value={verificationData.government.creditCode} onChangeText={text => updateVerificationField('creditCode', text)} />
                 </View>
 
                 {/* 部门名称 */}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>部门名称 <Text style={styles.required}>*</Text></Text>
-                  <TextInput style={styles.fieldInput} placeholder="Enter department name" placeholderTextColor="#9ca3af" value={verificationData.government.department} onChangeText={text => updateVerificationField('department', text)} />
+                  <Text style={styles.fieldLabel}>{t('profile.verificationModal.department')} <Text style={styles.required}>*</Text></Text>
+                  <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.departmentPlaceholder')} placeholderTextColor="#9ca3af" value={verificationData.government.department} onChangeText={text => updateVerificationField('department', text)} />
                 </View>
 
                 {/* 授权�?*/}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>授权�?<Text style={styles.required}>*</Text></Text>
-                  <TextInput style={styles.fieldInput} placeholder="请输入授权人姓名" placeholderTextColor="#9ca3af" value={verificationData.government.authorizerName} onChangeText={text => updateVerificationField('authorizerName', text)} />
+                  <Text style={styles.fieldLabel}>{t('profile.verificationModal.authorizer')}<Text style={styles.required}>*</Text></Text>
+                  <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.authorizerPlaceholder')} placeholderTextColor="#9ca3af" value={verificationData.government.authorizerName} onChangeText={text => updateVerificationField('authorizerName', text)} />
                 </View>
 
                 {/* 上传授权人身份证 */}
                 <View style={styles.uploadSection}>
-                  <Text style={styles.uploadSectionTitle}>上传授权人身份证 <Text style={styles.required}>*</Text></Text>
+                  <Text style={styles.uploadSectionTitle}>{t('profile.verificationModal.authorizerIdPhotos')} <Text style={styles.required}>*</Text></Text>
                   
                   <View style={styles.uploadGrid}>
                     {/* 身份证正�?*/}
                     <View style={styles.uploadItemWrapper}>
-                      <Text style={styles.uploadLabel}>身份证正�?<Text style={styles.required}>*</Text></Text>
+                      <Text style={styles.uploadLabel}>{t('profile.verificationModal.authorizerIdFront')}<Text style={styles.required}>*</Text></Text>
                       <TouchableOpacity style={styles.uploadBox} onPress={() => handleImageUpload('authorizerIdFront')}>
                         {verificationData.government.authorizerIdFront ? <Image source={{
                       uri: verificationData.government.authorizerIdFront
                     }} style={styles.uploadedImage} /> : <View style={styles.uploadPlaceholder}>
                             <Ionicons name="camera-outline" size={40} color="#d1d5db" />
-                            <Text style={styles.uploadPlaceholderText}>点击上传</Text>
+                            <Text style={styles.uploadPlaceholderText}>{t('profile.verificationModal.clickUpload')}</Text>
                           </View>}
                       </TouchableOpacity>
                     </View>
 
                     {/* 身份证反�?*/}
                     <View style={styles.uploadItemWrapper}>
-                      <Text style={styles.uploadLabel}>身份证反�?<Text style={styles.required}>*</Text></Text>
+                      <Text style={styles.uploadLabel}>{t('profile.verificationModal.authorizerIdBack')}<Text style={styles.required}>*</Text></Text>
                       <TouchableOpacity style={styles.uploadBox} onPress={() => handleImageUpload('authorizerIdBack')}>
                         {verificationData.government.authorizerIdBack ? <Image source={{
                       uri: verificationData.government.authorizerIdBack
                     }} style={styles.uploadedImage} /> : <View style={styles.uploadPlaceholder}>
                             <Ionicons name="camera-outline" size={40} color="#d1d5db" />
-                            <Text style={styles.uploadPlaceholderText}>点击上传</Text>
+                            <Text style={styles.uploadPlaceholderText}>{t('profile.verificationModal.clickUpload')}</Text>
                           </View>}
                       </TouchableOpacity>
                     </View>
@@ -2247,53 +2258,53 @@ export default function ProfileScreen({
 
                   <View style={styles.uploadTip}>
                     <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
-                    <Text style={styles.uploadTipText}>Please upload clear front and back photos of the authorizer ID.</Text>
+                    <Text style={styles.uploadTipText}>{t('profile.verificationModal.authorizerIdTip')}</Text>
                   </View>
                 </View>
 
                 {/* 职位 */}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>职位 <Text style={styles.required}>*</Text></Text>
-                  <TextInput style={styles.fieldInput} placeholder="请输入授权人职位" placeholderTextColor="#9ca3af" value={verificationData.government.authorizerPosition} onChangeText={text => updateVerificationField('authorizerPosition', text)} />
+                  <Text style={styles.fieldLabel}>{t('profile.verificationModal.position')} <Text style={styles.required}>*</Text></Text>
+                  <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.positionPlaceholder')} placeholderTextColor="#9ca3af" value={verificationData.government.authorizerPosition} onChangeText={text => updateVerificationField('authorizerPosition', text)} />
                 </View>
 
                 {/* 联系方式说明 */}
                 <View style={styles.contactMethodSection}>
-                  <Text style={styles.contactMethodTitle}>联系方式 <Text style={styles.required}>*</Text></Text>
-                  <Text style={styles.contactMethodDesc}>Please provide at least one contact method.</Text>
+                  <Text style={styles.contactMethodTitle}>{t('profile.verificationModal.contactMethod')} <Text style={styles.required}>*</Text></Text>
+                  <Text style={styles.contactMethodDesc}>{t('profile.verificationModal.contactMethodDesc')}</Text>
                 </View>
 
                 {/* 联系电话 */}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>联系电话</Text>
-                  <TextInput style={styles.fieldInput} placeholder="Enter phone number" placeholderTextColor="#9ca3af" keyboardType="phone-pad" maxLength={11} value={verificationData.government.contactPhone} onChangeText={text => updateVerificationField('contactPhone', text)} />
+                  <Text style={styles.fieldLabel}>{t('profile.verificationModal.contactPhone')}</Text>
+                  <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.contactPhonePlaceholder')} placeholderTextColor="#9ca3af" keyboardType="phone-pad" maxLength={11} value={verificationData.government.contactPhone} onChangeText={text => updateVerificationField('contactPhone', text)} />
                 </View>
 
                 {/* 联系邮箱 */}
                 <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>联系邮箱</Text>
-                  <TextInput style={styles.fieldInput} placeholder="请输入邮箱地址" placeholderTextColor="#9ca3af" keyboardType="email-address" autoCapitalize="none" value={verificationData.government.contactEmail} onChangeText={text => updateVerificationField('contactEmail', text)} />
+                  <Text style={styles.fieldLabel}>{t('profile.verificationModal.contactEmail')}</Text>
+                  <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.contactEmailPlaceholder')} placeholderTextColor="#9ca3af" keyboardType="email-address" autoCapitalize="none" value={verificationData.government.contactEmail} onChangeText={text => updateVerificationField('contactEmail', text)} />
                 </View>
 
                 {/* 上传官方文件 */}
                 <View style={styles.uploadSection}>
-                  <Text style={styles.uploadSectionTitle}>上传官方文件</Text>
+                  <Text style={styles.uploadSectionTitle}>{t('profile.verificationModal.uploadCertificate')}</Text>
                   
                   <View style={styles.uploadSingleWrapper}>
-                    <Text style={styles.uploadLabel}>官方文件 <Text style={styles.required}>*</Text></Text>
+                    <Text style={styles.uploadLabel}>{t('profile.verificationModal.certificate')} <Text style={styles.required}>*</Text></Text>
                     <TouchableOpacity style={styles.uploadBoxLarge} onPress={() => handleImageUpload('certificate')}>
                       {verificationData.government.certificate ? <Image source={{
                     uri: verificationData.government.certificate
                   }} style={styles.uploadedImage} /> : <View style={styles.uploadPlaceholder}>
                           <Ionicons name="camera-outline" size={40} color="#d1d5db" />
-                          <Text style={styles.uploadPlaceholderText}>点击上传</Text>
+                          <Text style={styles.uploadPlaceholderText}>{t('profile.verificationModal.clickUpload')}</Text>
                         </View>}
                     </TouchableOpacity>
                   </View>
 
                   <View style={styles.uploadTip}>
                     <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
-                    <Text style={styles.uploadTipText}>请上传加盖公章的官方文件，如：组织机构代码证、事业单位法人证书等</Text>
+                    <Text style={styles.uploadTipText}>{t('profile.verificationModal.certificateTip')}</Text>
                   </View>
                 </View>
               </View>}
@@ -2403,12 +2414,13 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   },
   userId: {
-    fontSize: scaleFont(12),
+    fontSize: scaleFont(14),
+    fontWeight: '400',
     color: '#9ca3af',
     marginTop: 4
   },
   userBio: {
-    fontSize: scaleFont(13),
+    fontSize: scaleFont(14),
     color: '#4b5563',
     marginTop: 12,
     lineHeight: scaleFont(18)
@@ -2424,7 +2436,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   metaText: {
-    fontSize: scaleFont(12),
+    fontSize: scaleFont(14),
     color: '#9ca3af'
   },
   indexRow: {
@@ -2492,7 +2504,8 @@ const styles = StyleSheet.create({
     color: '#1f2937'
   },
   statLabel: {
-    fontSize: scaleFont(11),
+    fontSize: scaleFont(14),
+    fontWeight: '400',
     color: '#9ca3af',
     marginTop: 2
   },

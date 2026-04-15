@@ -246,7 +246,7 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
       ) : null}
 
       {!loadingLevel1 ? (
-        <View style={styles.body}>
+        <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
           <TextInput
             style={styles.searchInput}
             placeholder="Search major categories"
@@ -259,16 +259,21 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
             <Text style={styles.selectedSummaryText}>Selected {selectedLevel1Ids.length} major categories</Text>
           </View>
 
-          <FlatList
-            data={filteredLevel1Categories}
-            renderItem={renderLevel1Card}
-            keyExtractor={(item) => String(item.id)}
-            numColumns={2}
-            columnWrapperStyle={styles.level1Row}
-            style={styles.level1ListView}
-            contentContainerStyle={styles.level1List}
-            showsVerticalScrollIndicator={false}
-          />
+          <View style={styles.level1List}>
+            {filteredLevel1Categories.map((item, index) => {
+              if (index % 2 === 0) {
+                const nextItem = filteredLevel1Categories[index + 1];
+                return (
+                  <View key={`row-${item.id}`} style={styles.level1Row}>
+                    {renderLevel1Card({ item })}
+                    {nextItem ? renderLevel1Card({ item: nextItem }) : <View style={{ width: '48.4%' }} />}
+                  </View>
+                );
+              }
+              return null;
+            })}
+          </View>
+
           <Text style={styles.sectionTitle}>Subcategories</Text>
           <ScrollView
             horizontal
@@ -306,12 +311,7 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
           </View>
 
           {selectedLevel2List.length > 0 ? (
-            <ScrollView
-              style={styles.selectedLevel2Scroll}
-              showsVerticalScrollIndicator={false}
-              nestedScrollEnabled
-              contentContainerStyle={styles.selectedLevel2Chips}
-            >
+            <View style={styles.selectedLevel2Chips}>
               {selectedLevel2List.map((item) => (
                 <TouchableOpacity
                   key={item.id}
@@ -322,7 +322,7 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
                   <Ionicons name="close" size={14} color="#ef4444" />
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+            </View>
           ) : null}
 
           {activeLevel1Id && loadingLevel2Map[activeLevel1Id] ? (
@@ -332,7 +332,7 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
             </View>
           ) : null}
 
-          <ScrollView style={styles.level2List} contentContainerStyle={styles.level2ListContent}>
+          <View style={styles.level2ListContent}>
             {activeLevel2List.map((item) => {
               const selected = Boolean(selectedLevel2Map[String(item.id)]);
               return (
@@ -353,8 +353,8 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
             {activeLevel1Id && !loadingLevel2Map[activeLevel1Id] && activeLevel2List.length === 0 ? (
               <Text style={styles.emptyText}>No subcategories found.</Text>
             ) : null}
-          </ScrollView>
-        </View>
+          </View>
+        </ScrollView>
       ) : null}
 
       <View style={styles.footer}>
@@ -452,11 +452,10 @@ const styles = StyleSheet.create({
   level1List: {
     paddingBottom: 6,
   },
-  level1ListView: {
-    maxHeight: 224,
-  },
   level1Row: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
+    marginBottom: 0,
   },
   sectionTitle: {
     marginTop: 4,
@@ -528,17 +527,13 @@ const styles = StyleSheet.create({
   level1TabTextActive: {
     color: '#991b1b',
   },
-  selectedLevel2Scroll: {
-    flexGrow: 0,
-    maxHeight: 132,
-    marginBottom: 10,
-  },
   selectedLevel2Chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: 8,
     paddingBottom: 4,
+    marginBottom: 10,
   },
   selectedLevel2Chip: {
     flexDirection: 'row',
@@ -556,9 +551,6 @@ const styles = StyleSheet.create({
     color: '#991b1b',
     fontSize: 12,
     fontWeight: '600',
-  },
-  level2List: {
-    flex: 1,
   },
   level2ListContent: {
     flexDirection: 'row',

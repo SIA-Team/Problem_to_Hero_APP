@@ -1,6 +1,6 @@
-import { Linking } from 'react-native';
+﻿import { Linking } from 'react-native';
 
-export const APP_SHARE_SCHEME = 'problemtohero://';
+export const APP_SHARE_SCHEME = 'problemvshero://';
 const TWITTER_APP_SCHEME = 'twitter://';
 
 const pickFirstNumberLike = (...values) => {
@@ -157,13 +157,13 @@ export const buildTwitterShareText = (shareData = {}) => {
 
   if (leadText) {
     const shortened = leadText.length > 80 ? `${leadText.slice(0, 77)}...` : leadText;
-    return `Check this out on Problem to Hero: ${shortened}`;
+    return `Check this out on Problem vs Hero: ${shortened}`;
   }
 
-  return 'Check this out on Problem to Hero';
+  return 'Check this out on Problem vs Hero';
 };
 
-const normalizeTwitterHandle = (value, fallback = '@ProblemToHero') => {
+const normalizeTwitterHandle = (value, fallback = '@ProblemVsHero') => {
   const normalized = String(value ?? '').trim();
   const source = normalized || fallback;
 
@@ -176,22 +176,45 @@ export const buildProblemToHeroInviteText = ({
   title,
 } = {}) => {
   const normalizedTwitterHandle = String(twitterHandle ?? '').trim();
-  const normalizedInviterHandle = normalizeTwitterHandle(inviterUsername, '@ProblemToHero');
+  const normalizedInviterHandle = normalizeTwitterHandle(inviterUsername, '@ProblemVsHero');
   const normalizedTitle = String(title ?? '').trim();
 
   if (normalizedTwitterHandle && normalizedTitle) {
-    return `${normalizeTwitterHandle(normalizedTwitterHandle)} ${normalizedInviterHandle} on Problem to Hero invited you to answer: ${normalizedTitle}`;
+    return `${normalizeTwitterHandle(normalizedTwitterHandle)} ${normalizedInviterHandle} on Problem vs Hero invited you to answer: ${normalizedTitle}`;
   }
 
   if (normalizedTwitterHandle) {
-    return `${normalizeTwitterHandle(normalizedTwitterHandle)} ${normalizedInviterHandle} on Problem to Hero invited you to answer this question.`;
+    return `${normalizeTwitterHandle(normalizedTwitterHandle)} ${normalizedInviterHandle} on Problem vs Hero invited you to answer this question.`;
   }
 
   if (normalizedTitle) {
-    return `${normalizedInviterHandle} on Problem to Hero invited you to answer: ${normalizedTitle}`;
+    return `${normalizedInviterHandle} on Problem vs Hero invited you to answer: ${normalizedTitle}`;
   }
 
-  return `${normalizedInviterHandle} on Problem to Hero invited you to answer this question.`;
+  return `${normalizedInviterHandle} on Problem vs Hero invited you to answer this question.`;
+};
+
+export const buildProblemToHeroLocalInviteText = ({
+  inviterName,
+  targetName,
+  title,
+  shareUrl,
+} = {}) => {
+  const normalizedInviterName = String(inviterName ?? '').trim() || 'Problem vs Hero 用户';
+  const normalizedTargetName = String(targetName ?? '').trim() || '你好';
+  const normalizedTitle = String(title ?? '').trim() || '这个问题';
+  const normalizedShareUrl = String(shareUrl ?? '').trim();
+
+  const greeting = `${normalizedTargetName}，你好：`;
+  const intro = `我是 ${normalizedInviterName}，在 Problem vs Hero 上看到一个问题，觉得你可能很有经验，想邀请你来回答。`;
+  const titleLine = `问题：${normalizedTitle}`;
+  const closing = '如果你方便，期待你的分享，感谢支持。';
+
+  if (normalizedShareUrl) {
+    return `${greeting}\n${intro}\n${titleLine}\n查看问题：${normalizedShareUrl}\n${closing}`;
+  }
+
+  return `${greeting}\n${intro}\n${titleLine}\n${closing}`;
 };
 
 export const buildTwitterIntentUrl = (shareData = {}) => {
@@ -239,3 +262,4 @@ export const openTwitterShare = async (shareData = {}) => {
     openedVia: 'browser',
   };
 };
+

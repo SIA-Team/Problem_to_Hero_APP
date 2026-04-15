@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "Problem to Hero",
+    "name": "Problem vs Hero",
     "slogan": "将问题转化为英雄解决方案"
   },
   "tabs": {
@@ -38,7 +38,10 @@
     "answers": "回答",
     "shares": "分享",
     "bookmarks": "收藏",
+    "bookmark": "收藏",
+    "bookmarked": "已收藏",
     "solvedPercent": "已解决",
+    "solved": "已解决",
     "viewDetails": "查看详情",
     "global": "全球",
     "loading": "加载中...",
@@ -73,7 +76,31 @@
     "collectFailed": "操作失败，请重试",
     "dislikeSuccess": "已踩",
     "undislikeSuccess": "已取消踩",
-    "dislikeFailed": "操作失败，请重试"
+    "dislikeFailed": "操作失败，请重试",
+    "shareQuestionMissing": "当前问题信息缺失，暂时无法分享到 Twitter",
+    "twitterOpenedInBrowser": "未安装 Twitter，已为您打开网页版分享",
+    "twitterOpenFailed": "无法打开 Twitter",
+    "socialInviteSent": "已向 {name} 发送私信，邀请回答问题：{title}...",
+    "insufficientBalanceTitle": "钱包余额不足",
+    "insufficientBalanceMessage": "当前余额 ${balance}，不足以支付本次查看费用 ${amount}，是否前往充值？",
+    "payToViewSuccess": "已支付 ${amount}，现在可以查看完整内容。",
+    "payToViewFailedTitle": "支付失败",
+    "payToViewFailedMessage": "本次付费查看处理失败，请稍后重试。",
+    "joinTeam": "加入团队",
+    "joinTeamFeature": "加入团队功能开发中",
+    "writeAnswer": "写回答",
+    "supplementQuestion": "补充问题",
+    "startActivity": "发起活动",
+    "commentPublishSuccess": "评论发布成功",
+    "commentPlaceholder": "写下你的评论...",
+    "commentTitle": "写评论",
+    "socialSearchPlaceholder": "搜索用户...",
+    "socialRecommendedUsers": "推荐用户",
+    "socialFollowers": "粉丝",
+    "socialInviteAnswer": "邀请回答",
+    "twitterInviteEditorTitle": "编辑 Twitter 邀请文案",
+    "twitterInviteEditorPlaceholder": "请输入要分享到 Twitter 的文案，可手动添加 {handle}",
+    "twitterInviteEditorHint": "链接会自动追加到文案后面"
   },
   "emergency": {
     "title": "紧急求助",
@@ -172,6 +199,7 @@
     "privateAnswerTip": "答案将仅对你可见，其他用户无法查看",
     "moreSettings": "更多设置",
     "addLocation": "添加位置",
+    "selectCategoryFirstHint": "请先选择分类后再查看该领域的专家",
     "whoCanSee": "谁可以看",
     "visibility": {
       "everyone": "所有人",
@@ -219,7 +247,10 @@
       "networkError": "网络错误，请检查网络连接后重试",
       "serverError": "服务器错误，请稍后重试",
       "requestTimeout": "网络请求超时，请检查网络连接",
-      "maxExperts": "最多邀请5位专家"
+      "maxExperts": "最多邀请5位专家",
+      "customSubcategoryRequired": "请输入自定义二级分类",
+      "subcategoryExists": "该二级分类已存在并已选中",
+      "loadExpertsFailed": "加载专家失败"
     }
   },
   "profile": {
@@ -284,10 +315,18 @@
     "likesStats": "您的内容共获得 {count} 个赞",
     "incomeDetails": "收入明细",
     "expenseDetails": "支出明细",
+    "incomeDetailSummary": "本月回答收入：$320.00\n\n- 被采纳回答 x 8 $280\n- 优质回答奖励 $40",
+    "expenseDetailSummary": "本月悬赏支出：$150.00\n\n- Python学习问题 $50\n- 职业规划问题 $100",
     "pendingAnswers": "您有{count}个回答等待被采纳",
     "deleteDraft": "删除草稿",
     "deleteDraftConfirm": "确定要删除这个草稿吗？",
     "draftDeleted": "草稿已删除",
+    "draftLoadFailedTitle": "获取草稿失败",
+    "draftLoadFailedMessage": "无法加载草稿数据",
+    "draftLoadFailedNetwork": "网络错误，请稍后重试",
+    "draftLoading": "加载中...",
+    "noDrafts": "暂无草稿",
+    "noDraftsHint": "您还没有保存任何草稿",
     "continueEditing": "继续编辑您的回答草稿",
     "clearHistory": "清空历史",
     "clearHistoryConfirm": "确定要清空浏览历史吗？",
@@ -328,6 +367,20 @@
     "verificationInfo": "认证信息",
     "verificationTime": "认证时间：",
     "verificationOrg": "认证机构：官方认证中心",
+    "commentDetailTitle": "评论详情",
+    "commentDetailMessage": "评论详情功能开发中",
+    "likeFeatureTitle": "点赞",
+    "likeFeatureMessage": "点赞功能开发中",
+    "replyFeatureTitle": "回复",
+    "replyFeatureMessage": "回复功能开发中",
+    "shareFeatureTitle": "转发",
+    "shareFeatureMessage": "转发功能开发中",
+    "bookmarkFeatureTitle": "收藏",
+    "bookmarkFeatureMessage": "收藏功能开发中",
+    "removeBookmarkFeatureTitle": "取消收藏",
+    "removeBookmarkFeatureMessage": "取消收藏功能开发中",
+    "dislikeFeatureTitle": "点踩",
+    "dislikeFeatureMessage": "点踩功能开发中",
     "verificationModal": {
       "title": "身份认证",
       "selectType": "请选择您的认证类型",
@@ -538,6 +591,46 @@
         "clearHistoryMessage": "确定要清空搜索历史吗？",
         "viewMoreTitle": "查看更多",
         "viewMoreMessage": "更多热门话题功能开发中..."
+      }
+    },
+    "login": {
+      "title": "登录",
+      "usernameLabel": "用户名",
+      "usernamePlaceholder": "请输入用户名",
+      "passwordLabel": "密码",
+      "passwordPlaceholder": "请输入密码",
+      "submit": "登录",
+      "dividerOr": "或",
+      "deviceLogin": "使用设备登录",
+      "firstUseHint": "首次使用将自动创建账号，默认密码为 12345678。",
+      "networkDiagnosis": "网络诊断",
+      "validation": {
+        "usernameRequired": "请输入用户名",
+        "usernameMin": "用户名至少 3 个字符",
+        "passwordRequired": "请输入密码",
+        "passwordMin": "密码至少 6 个字符"
+      },
+      "toasts": {
+        "loginSuccess": "登录成功",
+        "invalidCredentials": "用户名或密码错误",
+        "networkError": "网络错误，请检查连接后重试",
+        "deviceLoginSuccess": "登录成功，您的用户名是 {username}",
+        "deviceLoginFailed": "设备登录失败，请检查网络后重试"
+      },
+      "server": {
+        "title": "切换服务器",
+        "enterCustomServer": "请先输入自定义服务器地址",
+        "confirmMessage": "确定要切换到 {name} ({url}) 吗？\n\n切换后将立即生效，无需重启应用。",
+        "successTitle": "切换成功",
+        "successMessage": "服务器已切换并立即生效，您可以继续使用。",
+        "failureTitle": "切换失败",
+        "failureMessage": "无法切换服务器，请重试",
+        "settingsTitle": "服务器设置",
+        "current": "当前",
+        "customPlaceholder": "输入自定义服务器地址，例如 http://192.168.1.100:8080",
+        "unset": "未设置",
+        "switching": "正在切换服务器...",
+        "switchHint": "切换服务器后会立即生效，无需重启应用。"
       }
     },
     "teamDetail": {
@@ -1213,13 +1306,15 @@
       "profile": {
         "groupTitle": "编辑资料",
         "nickname": "昵称",
+        "username": "用户名",
         "bio": "个人简介",
         "gender": "性别",
         "birthday": "生日",
         "location": "所在地",
         "occupation": "职业",
         "expertise": "\u64c5\u957f\u9886\u57df",
-        "userId": "用户ID"
+        "userId": "用户ID",
+        "notSet": "未设置"
       },
       "account": {
         "groupTitle": "账号与安全",
@@ -1249,7 +1344,8 @@
         "groupTitle": "通用设置",
         "clearCache": "清除缓存",
         "language": "语言",
-        "languageChinese": "简体中文"
+        "languageChinese": "简体中文",
+        "languageEnglish": "English"
       },
       "wallet": {
         "groupTitle": "钱包与超级赞",
@@ -1268,10 +1364,32 @@
         "checkUpdate": "检查更新",
         "userAgreement": "用户协议",
         "privacyPolicy": "隐私政策",
+        "connectionStatus": "连接状态",
+        "updateDebug": "热更新调试",
         "deviceInfo": "设备信息",
         "aboutUs": "关于我们"
       },
       "logout": "退出登录",
+      "toasts": {
+        "updateFailed": "更新失败，请重试",
+        "selectLocation": "请选择所在地",
+        "occupationUpdated": "职业已更新",
+        "userInfoLoading": "用户信息加载中，请稍后重试",
+        "expertiseUpdated": "擅长领域已更新",
+        "saveFailed": "保存失败，请稍后重试",
+        "locationUpdated": "所在地已更新",
+        "profileUpdated": "{title}已更新",
+        "usernameUpdated": "用户名已更新",
+        "bindPhoneSuccess": "手机号已成功绑定",
+        "bindEmailSuccess": "邮箱已成功绑定",
+        "cacheCleared": "缓存已清除",
+        "cacheClearFailed": "清除缓存失败，请重试",
+        "switchedZh": "已切换到简体中文",
+        "switchedEn": "已切换到 English",
+        "avatarUpdated": "头像更新成功",
+        "networkRetry": "网络错误，请稍后重试",
+        "uploadFailed": "上传失败"
+      },
       "editModal": {
         "cancel": "取消",
         "save": "保存",
@@ -1329,8 +1447,16 @@
           "success": "缓存已清除"
         },
         "language": {
-          "title": "选择语言",
-          "message": "打开语言选择页面"
+          "title": "切换语言",
+          "message": "开发阶段可以自由切换中英文，正式生产包会固定为英文。"
+        },
+        "genericError": {
+          "title": "错误",
+          "unknownFieldType": "未知的字段类型"
+        },
+        "imageTooLarge": {
+          "title": "图片过大",
+          "message": "请选择小于 5MB 的图片"
         },
         "checkUpdate": {
           "title": "检查更新",
@@ -1346,7 +1472,7 @@
         },
         "aboutUs": {
           "title": "关于我们",
-          "message": "Problem to Hero v1.0.0\n\n一个帮助人们解决问题的社区平台"
+          "message": "Problem vs Hero v1.0.0\n\n一个帮助人们解决问题的社区平台"
         },
         "faq": {
           "title": "常见问题",

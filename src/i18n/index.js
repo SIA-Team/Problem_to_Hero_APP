@@ -1,11 +1,17 @@
 import * as Localization from 'expo-localization';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import en from './locales/en.json';
 import zh from './locales/zh.json';
+import { SIMULATE_PRODUCTION } from '../config/debugMode';
+
+const LANGUAGE_OVERRIDE_KEY = '@app_language_override';
 
 const translations = {
   en,
   zh,
 };
+
+const isDevelopmentLanguageSwitchEnabled = __DEV__ && !SIMULATE_PRODUCTION;
 
 class SimpleI18n {
   constructor() {
@@ -20,38 +26,83 @@ class SimpleI18n {
     this.locale = this.detectLanguage();
     this.initialized = true;
 
+    if (this.isLanguageSelectionEnabled()) {
+      this.loadStoredLanguageOverride();
+    }
+
     console.log('SimpleI18n initialized, locale:', this.locale);
   }
 
+  isLanguageSelectionEnabled() {
+    return isDevelopmentLanguageSwitchEnabled;
+  }
+
+  normalizeLocale(locale) {
+    return String(locale || '')
+      .split('-')[0]
+      .trim()
+      .toLowerCase();
+  }
+
+  getLocaleDisplayName(locale) {
+    switch (this.normalizeLocale(locale)) {
+      case 'zh':
+        return '简体中文';
+      case 'en':
+      default:
+        return 'English';
+    }
+  }
+
+  getSupportedLocales() {
+    return Object.keys(this.translations);
+  }
+
   detectLanguage() {
+    if (!this.isLanguageSelectionEnabled()) {
+      return this.defaultLocale;
+    }
+
     try {
       const locales = Localization.getLocales();
-      if (!locales || locales.length === 0) {
-        console.log('No locales detected, using default:', this.defaultLocale);
-        return this.defaultLocale;
-      }
-
-      const deviceLanguage = locales[0]?.languageCode || this.defaultLocale;
-      const normalizedLanguage = deviceLanguage.split('-')[0];
+      const normalizedLanguage = this.normalizeLocale(
+        locales?.[0]?.languageCode || locales?.[0]?.languageTag || this.defaultLocale
+      );
 
       if (this.translations[normalizedLanguage]) {
-        console.log('Language detected:', normalizedLanguage);
         return normalizedLanguage;
       }
-
-      console.log('Language not supported, using default:', this.defaultLocale);
-      return this.defaultLocale;
     } catch (error) {
       console.warn('Failed to detect system language:', error);
-      return this.defaultLocale;
+    }
+
+    return this.defaultLocale;
+  }
+
+  async loadStoredLanguageOverride() {
+    try {
+      const storedLocale = await AsyncStorage.getItem(LANGUAGE_OVERRIDE_KEY);
+      const normalizedLocale = this.normalizeLocale(storedLocale);
+
+      if (!normalizedLocale || !this.translations[normalizedLocale]) {
+        return;
+      }
+
+      if (this.locale !== normalizedLocale) {
+        this.locale = normalizedLocale;
+        this.notifyListeners();
+      }
+    } catch (error) {
+      console.warn('Failed to load stored language override:', error);
     }
   }
 
   applyLanguage(locale) {
-    const normalizedLocale = (locale || '').split('-')[0];
-    const nextLocale = this.translations[normalizedLocale]
-      ? normalizedLocale
-      : this.defaultLocale;
+    const normalizedLocale = this.normalizeLocale(locale);
+    const nextLocale =
+      this.isLanguageSelectionEnabled() && this.translations[normalizedLocale]
+        ? normalizedLocale
+        : this.defaultLocale;
 
     if (this.locale === nextLocale) {
       return nextLocale;
@@ -63,11 +114,37 @@ class SimpleI18n {
   }
 
   refreshFromSystemLanguage() {
-    return this.applyLanguage(this.detectLanguage());
+    const nextLocale = this.applyLanguage(this.detectLanguage());
+    return nextLocale;
   }
 
-  async setLanguage() {
-    console.warn('Manual language switching is disabled. Following system language only.');
+  async setLanguage(locale) {
+    const nextLocale = this.applyLanguage(locale);
+
+    if (!this.isLanguageSelectionEnabled()) {
+      return nextLocale;
+    }
+
+    try {
+      await AsyncStorage.setItem(LANGUAGE_OVERRIDE_KEY, nextLocale);
+    } catch (error) {
+      console.warn('Failed to persist selected language:', error);
+    }
+
+    return nextLocale;
+  }
+
+  async clearLanguageOverride() {
+    if (!this.isLanguageSelectionEnabled()) {
+      return this.defaultLocale;
+    }
+
+    try {
+      await AsyncStorage.removeItem(LANGUAGE_OVERRIDE_KEY);
+    } catch (error) {
+      console.warn('Failed to clear language override:', error);
+    }
+
     return this.refreshFromSystemLanguage();
   }
 

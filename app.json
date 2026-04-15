@@ -1,14 +1,16 @@
 {
   "expo": {
-    "name": "Problem to Hero",
+    "name": "Problem vs Hero",
     "slug": "qa-native-app",
-    "scheme": "problemtohero",
+    "scheme": "problemvshero",
     "version": "1.0.2",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/app-logo.png",
     "splash": {
+      "image": "./assets/app-logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ef4444"
+      "backgroundColor": "#ffffff"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -47,6 +49,7 @@
     "android": {
       "package": "com.qa.app",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/app-logo.png",
         "backgroundColor": "#ef4444"
       },
       "statusBar": {
@@ -72,7 +75,8 @@
       "minSdkVersion": 24
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "favicon": "./assets/app-logo.png"
     },
     "androidStatusBar": {
       "backgroundColor": "#ffffff",

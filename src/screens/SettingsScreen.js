@@ -33,8 +33,11 @@ export default function SettingsScreen({
   navigation
 }) {
   const {
-    t
+    t,
+    i18n
   } = useTranslation();
+  const isLanguageSelectionEnabled = typeof i18n?.isLanguageSelectionEnabled === 'function' && i18n.isLanguageSelectionEnabled();
+  const currentLanguageLabel = typeof i18n?.getLocaleDisplayName === 'function' ? i18n.getLocaleDisplayName(i18n.locale) : String(i18n?.locale || 'en').toUpperCase();
   // Toast 状态
   const [toast, setToast] = useState({
     visible: false,
@@ -327,11 +330,11 @@ export default function SettingsScreen({
         }
       } else {
         console.error('❌ 更新消息通知设置失败:', response);
-        showToast('更新失败，请重试', 'error');
+        showToast(t('screens.settings.toasts.updateFailed'), 'error');
       }
     } catch (error) {
       console.error('❌ 更新消息通知设置异常:', error);
-      showToast('更新失败，请重试', 'error');
+      showToast(t('screens.settings.toasts.updateFailed'), 'error');
     }
   };
   const handleEditProfile = (field, title, currentValue) => {
@@ -438,7 +441,7 @@ export default function SettingsScreen({
     console.log('=====================');
     
     if (!locationString) {
-      showToast('请选择所在地', 'error');
+      showToast(t('screens.settings.toasts.selectLocation'), 'error');
       return;
     }
 
@@ -481,11 +484,11 @@ export default function SettingsScreen({
           email: updatedProfile.email || '',
           phone: updatedProfile.phonenumber || ''
         });
-        showToast('职业已更新', 'success');
+        showToast(t('screens.settings.toasts.occupationUpdated'), 'success');
       }
     } catch (error) {
       console.error('❌ 更新职业失败:', error);
-      showToast(error.message || '更新失败，请重试', 'error');
+      showToast(error.message || t('screens.settings.toasts.updateFailed'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -493,7 +496,7 @@ export default function SettingsScreen({
 
   const handleSaveExpertise = async payload => {
     if (!userProfile.userId) {
-      showToast('用户信息加载中，请稍后重试', 'error');
+      showToast(t('screens.settings.toasts.userInfoLoading'), 'error');
       return;
     }
 
@@ -527,10 +530,10 @@ export default function SettingsScreen({
         });
       }
       setShowExpertiseModal(false);
-      showToast('擅长领域已更新', 'success');
+      showToast(t('screens.settings.toasts.expertiseUpdated'), 'success');
     } catch (saveError) {
       console.error('Failed to save expertise preferences:', saveError);
-      showToast('保存失败，请稍后重试', 'error');
+      showToast(t('screens.settings.toasts.saveFailed'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -555,7 +558,7 @@ export default function SettingsScreen({
     
     if (!apiFieldName) {
       console.error('❌ 未找到字段映射，field:', field);
-      showAppAlert('错误', '未知的字段类型');
+      showAppAlert(t('screens.settings.alerts.genericError.title'), t('screens.settings.alerts.genericError.unknownFieldType'));
       return;
     }
 
@@ -594,12 +597,12 @@ export default function SettingsScreen({
           email: updatedProfile.email || '',
           phone: updatedProfile.phonenumber || ''
         });
-        showToast('所在地已更新', 'success');
+        showToast(t('screens.settings.toasts.locationUpdated'), 'success');
       }
     } catch (error) {
       // 只记录错误类型，不显示详细信息
       console.error('❌ 更新资料失败:', error);
-      showToast(error.message || '更新失败，请重试', 'error');
+      showToast(error.message || t('screens.settings.toasts.updateFailed'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -628,7 +631,7 @@ export default function SettingsScreen({
     
     if (!apiFieldName) {
       console.error('❌ 未找到字段映射，field:', field);
-      showAppAlert('错误', '未知的字段类型');
+      showAppAlert(t('screens.settings.alerts.genericError.title'), t('screens.settings.alerts.genericError.unknownFieldType'));
       return;
     }
 
@@ -667,12 +670,15 @@ export default function SettingsScreen({
           email: updatedProfile.email || '',
           phone: updatedProfile.phonenumber || ''
         });
-        showToast(`${textModalConfig.title || '信息'}已更新`, 'success');
+        showToast(
+          t('screens.settings.toasts.profileUpdated').replace('{title}', textModalConfig.title || t('screens.settings.title')),
+          'success'
+        );
       }
     } catch (error) {
       // 只记录错误类型，不显示详细信息
       console.error('❌ 更新资料失败:', error);
-      showToast(error.message || '更新失败，请重试', 'error');
+      showToast(error.message || t('screens.settings.toasts.updateFailed'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -716,7 +722,7 @@ export default function SettingsScreen({
 
         // 成功后关闭弹窗
         setShowUsernameModal(false);
-        showToast('用户名已更新', 'success');
+        showToast(t('screens.settings.toasts.usernameUpdated'), 'success');
       }
     } catch (error) {
       // 只记录错误类型，不显示详细信息
@@ -726,7 +732,7 @@ export default function SettingsScreen({
       setShowUsernameModal(false);
 
       // 显示友好的错误提示
-      showToast(error.message || '更新失败，请重试', 'error');
+      showToast(error.message || t('screens.settings.toasts.updateFailed'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -760,7 +766,12 @@ export default function SettingsScreen({
     // 刷新用户信息
     try {
       await UserCacheService.forceRefresh();
-      showToast(`${bindType === 'phone' ? '手机号' : '邮箱'}已成功绑定`, 'success');
+      showToast(
+        bindType === 'phone'
+          ? t('screens.settings.toasts.bindPhoneSuccess')
+          : t('screens.settings.toasts.bindEmailSuccess'),
+        'success'
+      );
     } catch (error) {
       // 只记录错误类型，不显示详细信息
       console.error('❌ 刷新用户信息失败');
@@ -783,10 +794,10 @@ export default function SettingsScreen({
       // 清除后重新计算缓存大小
       await calculateCacheSize();
       
-      showToast('缓存已清除', 'success');
+      showToast(t('screens.settings.toasts.cacheCleared'), 'success');
     } catch (error) {
       console.error('❌ 清除缓存失败:', error);
-      showToast('清除缓存失败，请重试', 'error');
+      showToast(t('screens.settings.toasts.cacheClearFailed'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -825,6 +836,37 @@ export default function SettingsScreen({
   /**
    * 处理退出登录确认
    */
+  const handleChangeLanguage = () => {
+    if (!isLanguageSelectionEnabled) {
+      return;
+    }
+
+    showAppAlert(
+      t('screens.settings.alerts.language.title'),
+      t('screens.settings.alerts.language.message'),
+      [
+        {
+          text: t('screens.settings.general.languageChinese'),
+          onPress: async () => {
+            await i18n.setLanguage('zh');
+            showToast(t('screens.settings.toasts.switchedZh'), 'success');
+          }
+        },
+        {
+          text: 'English',
+          onPress: async () => {
+            await i18n.setLanguage('en');
+            showToast(t('screens.settings.toasts.switchedEn'), 'success');
+          }
+        },
+        {
+          text: t('common.cancel'),
+          style: 'cancel'
+        }
+      ]
+    );
+  };
+
   const handleConfirmLogout = async () => {
     setIsLoggingOut(true);
     try {
@@ -875,7 +917,7 @@ export default function SettingsScreen({
       const sizeInMB = blob.size / (1024 * 1024);
       console.log(`📊 图片大小: ${sizeInMB.toFixed(2)} MB`);
       if (sizeInMB > 5) {
-        showAppAlert('图片过大', '请选择小于 5MB 的图片');
+        showAppAlert(t('screens.settings.alerts.imageTooLarge.title'), t('screens.settings.alerts.imageTooLarge.message'));
         return null;
       }
 
@@ -887,13 +929,13 @@ export default function SettingsScreen({
           resolve(reader.result);
         };
         reader.onerror = () => {
-          reject(new Error('读取图片失败'));
+          reject(new Error(t('screens.settings.toasts.uploadFailed')));
         };
         reader.readAsDataURL(blob);
       });
     } catch (error) {
       console.error('转换图片为 Base64 失败:', error);
-      throw new Error('图片处理失败');
+      throw new Error(t('screens.settings.toasts.uploadFailed'));
     }
   };
 
@@ -1056,18 +1098,18 @@ export default function SettingsScreen({
             avatar: newAvatarUrl
           }));
         }
-        showToast('头像更新成功', 'success');
+        showToast(t('screens.settings.toasts.avatarUpdated'), 'success');
       } else {
         console.error('❌ 上传失败 - 响应码:', response.code);
         console.error('❌ 错误信息:', response.msg);
-        throw new Error(response.msg || '上传失败');
+        throw new Error(response.msg || t('screens.settings.toasts.uploadFailed'));
       }
     } catch (error) {
       // 只记录错误类型，不显示详细信息
       console.error('❌ 上传头像失败');
 
       // 更详细的错误提示
-      let errorMessage = '网络错误，请稍后重试';
+      let errorMessage = t('screens.settings.toasts.networkRetry');
       if (error.response) {
         // 服务器返回了错误响应
         errorMessage = `服务器错误: ${error.response.data?.msg || '请稍后重试'}`;
@@ -1113,7 +1155,7 @@ export default function SettingsScreen({
           </TouchableOpacity>
           <View style={styles.accountText}>
             <Text style={styles.accountName}>{userProfile.name}</Text>
-            <Text style={styles.accountId}>{t('screens.settings.profile.userId')}: {userProfile.userId || '加载中...'}</Text>
+            <Text style={styles.accountId}>{t('screens.settings.profile.userId')}: {userProfile.userId || t('common.loading')}</Text>
           </View>
         </View>
 
@@ -1121,10 +1163,10 @@ export default function SettingsScreen({
         <View style={styles.sectionGroup}>
           <Text style={styles.groupTitle}>{t('screens.settings.profile.groupTitle')}</Text>
           <View style={styles.section}>
-            <TouchableOpacity style={styles.menuItem} onPress={() => openTextModal('name', '修改昵称', userProfile.name, {
+            <TouchableOpacity style={styles.menuItem} onPress={() => openTextModal('name', t('screens.settings.profile.nickname'), userProfile.name, {
             minLength: 2,
             maxLength: 20,
-            hint: '2-20个字符，可包含中英文、数字'
+            hint: t('screens.settings.editModal.hints.nickname')
           })}>
               <View style={styles.menuLeft}>
                 <Ionicons name="person-outline" size={22} color="#6b7280" />
@@ -1144,21 +1186,21 @@ export default function SettingsScreen({
           }}>
               <View style={styles.menuLeft}>
                 <Ionicons name="at-outline" size={22} color="#6b7280" />
-                <Text style={styles.menuLabel}>用户名</Text>
+                <Text style={styles.menuLabel}>{t('screens.settings.profile.username')}</Text>
               </View>
               <View style={styles.menuRight}>
                 <Text style={styles.menuValue}>
-                  {userProfile.username || '未设置'}
+                  {userProfile.username || t('screens.settings.profile.notSet')}
                 </Text>
                 <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem} onPress={() => openTextModal('bio', '修改个人简介', userProfile.bio, {
+            <TouchableOpacity style={styles.menuItem} onPress={() => openTextModal('bio', t('screens.settings.profile.bio'), userProfile.bio, {
             minLength: 0,
             maxLength: 100,
             multiline: true,
-            hint: '介绍一下自己吧'
+            hint: t('screens.settings.editModal.hints.bio')
           })}>
               <View style={styles.menuLeft}>
                 <Ionicons name="document-text-outline" size={22} color="#6b7280" />
@@ -1403,6 +1445,17 @@ export default function SettingsScreen({
                 <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
               </TouchableOpacity>
 
+            {isLanguageSelectionEnabled && <TouchableOpacity style={styles.menuItem} onPress={handleChangeLanguage}>
+              <View style={styles.menuLeft}>
+                <Ionicons name="language-outline" size={22} color="#6b7280" />
+                <Text style={styles.menuLabel}>{t('screens.settings.general.language')}</Text>
+              </View>
+              <View style={styles.menuRight}>
+                <Text style={styles.menuValue}>{currentLanguageLabel}</Text>
+                <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
+              </View>
+            </TouchableOpacity>}
+
             <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]} onPress={() => showAppAlert(
               t('screens.settings.alerts.clearCache.title'), 
               t('screens.settings.alerts.clearCache.message'), 
@@ -1508,7 +1561,7 @@ export default function SettingsScreen({
             <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('ConnectionStatus')}>
               <View style={styles.menuLeft}>
                 <Ionicons name="wifi-outline" size={22} color="#6b7280" />
-                <Text style={styles.menuLabel}>连接状态</Text>
+                <Text style={styles.menuLabel}>{t('screens.settings.about.connectionStatus')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
             </TouchableOpacity>
@@ -1516,7 +1569,7 @@ export default function SettingsScreen({
             <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('UpdateDebug')}>
               <View style={styles.menuLeft}>
                 <Ionicons name="cloud-download-outline" size={22} color="#6b7280" />
-                <Text style={styles.menuLabel}>热更新调试</Text>
+                <Text style={styles.menuLabel}>{t('screens.settings.about.updateDebug')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
             </TouchableOpacity>
@@ -1575,7 +1628,7 @@ export default function SettingsScreen({
       <ExpertisePickerModal visible={showExpertiseModal} currentValue={expertisePreferences} onClose={() => setShowExpertiseModal(false)} onConfirm={handleSaveExpertise} />
 
       {/* 头像操作弹窗 */}
-      <AvatarActionSheet visible={showAvatarSheet} onClose={() => setShowAvatarSheet(false)} onImageSelected={uploadImageToServer} title="更换头像" />
+      <AvatarActionSheet visible={showAvatarSheet} onClose={() => setShowAvatarSheet(false)} onImageSelected={uploadImageToServer} title={t('screens.settings.alerts.changeAvatar.title')} />
 
       {/* 绑定联系方式弹窗 */}
       <BindContactModal visible={showBindModal} onClose={() => setShowBindModal(false)} type={bindType} currentValue={bindType === 'phone' ? userProfile.phone : userProfile.email} onSubmit={handleBindSuccess} />
@@ -1759,7 +1812,8 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   accountId: {
-    fontSize: scaleFont(13),
+    fontSize: scaleFont(14),
+    fontWeight: '400',
     color: '#9ca3af'
   },
   // 分组标题
