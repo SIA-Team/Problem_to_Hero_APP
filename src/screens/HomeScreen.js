@@ -1587,6 +1587,11 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.paidAlertDesc}>
               {t('home.payToView').replace('${amount}', paidAlertAmount)}
             </Text>
+            <View style={styles.paidAlertTips}>
+              <Text style={styles.paidAlertTip}>{t('home.payToViewExtraLine1')}</Text>
+              <Text style={styles.paidAlertTip}>{t('home.payToViewExtraLine2')}</Text>
+              <Text style={styles.paidAlertTip}>{t('home.payToViewExtraLine3')}</Text>
+            </View>
             <View style={styles.paidAlertActions}>
               <TouchableOpacity
                 style={styles.paidAlertCancelBtn}
@@ -2000,6 +2005,8 @@ const styles = StyleSheet.create({
   paidAlertHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   paidAlertTitle: { fontSize: scaleFont(20), fontWeight: '700', color: modalTokens.textPrimary },
   paidAlertDesc: { fontSize: scaleFont(17), color: modalTokens.textSecondary, lineHeight: scaleFont(26), marginBottom: 20 },
+  paidAlertTips: { marginBottom: 20, gap: 6 },
+  paidAlertTip: { fontSize: scaleFont(14), color: modalTokens.textSecondary, lineHeight: scaleFont(21) },
   paidAlertActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 12 },
   paidAlertCancelBtn: {
     alignSelf: 'flex-end',

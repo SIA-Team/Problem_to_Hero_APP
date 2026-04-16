@@ -60,6 +60,9 @@
     "unfollowTopic": "已关注",
     "paidViewContent": "付费查看完整内容",
     "payToView": "支付 $${amount} 查看完整内容",
+    "payToViewExtraLine1": "查看该内容需消耗一定金额",
+    "payToViewExtraLine2": "金额将用于支持内容创作者",
+    "payToViewExtraLine3": "平台将根据规则进行收益分配",
     "selectRegion": "选择区域",
     "confirm": "确定",
     "city": "城市",
@@ -1067,7 +1070,7 @@
         "placeholder": "最低 $0.01"
       },
       "tips": {
-        "text": "追加的悬赏将与原悬赏合并，吸引更多优质回答"
+        "text": "用户可对问题进行悬赏，以激励优质回答的产生。\n\n悬赏金额将根据平台规则，在问题解决后自动进行分配：\n- 被采纳的回答者将获得相应比例的奖励\n- 平台将收取一定比例的服务费用\n- 剩余奖励将根据采纳情况与贡献情况进行分配\n\n用户在进行悬赏后，将获得对应的采纳次数，可对满意的回答进行采纳。被采纳的回答将参与悬赏金额的分配。"
       },
         "insufficientBalance": {
           "title": "钱包余额不足",

@@ -60,6 +60,9 @@
     "unfollowTopic": "Unfollow",
     "paidViewContent": "Pay to View Full Content",
     "payToView": "Pay ${amount} to view full content",
+    "payToViewExtraLine1": "Viewing this content requires a payment.",
+    "payToViewExtraLine2": "The payment supports the content creator.",
+    "payToViewExtraLine3": "The platform distributes earnings according to its rules.",
     "selectRegion": "Select Region",
     "confirm": "Confirm",
     "city": "City",
@@ -1040,7 +1043,7 @@
         "placeholder": "Minimum $0.01"
       },
       "tips": {
-        "text": "Added rewards will be combined with the original reward to attract more quality answers"
+        "text": "Users can add rewards to encourage high-quality answers.\n\nAfter the question is resolved, the reward amount will be automatically distributed according to platform rules:\n- Accepted answerers receive a corresponding share of the reward\n- The platform charges a certain service fee\n- The remaining reward is distributed based on acceptance and contribution\n\nAfter adding a reward, users receive corresponding acceptance quotas and can accept satisfactory answers. Accepted answers participate in reward distribution."
       },
         "insufficientBalance": {
           "title": "Insufficient Wallet Balance",

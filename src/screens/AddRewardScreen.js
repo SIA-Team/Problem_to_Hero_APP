@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
+import { AppState, View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView } from 'react-native';
 import { CommonActions, useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -293,7 +293,12 @@ export default function AddRewardScreen({ navigation, route }) {
         <View style={{ width: 44 }} />
       </View>
 
-      <View style={[styles.content, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* 当前悬赏信息 */}
         <View style={styles.currentRewardInfo}>
           <View style={styles.currentRewardRow}>
@@ -380,7 +385,7 @@ export default function AddRewardScreen({ navigation, route }) {
         >
           <Text style={styles.cancelBtnText}>{t('screens.addRewardScreen.cancelButton')}</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -487,7 +492,7 @@ const styles = StyleSheet.create({
   },
   tips: { 
     flexDirection: 'row', 
-    alignItems: 'center', 
+    alignItems: 'flex-start', 
     backgroundColor: '#fef3c7', // 浅黄色背景
     padding: 12, 
     borderRadius: 8, 
