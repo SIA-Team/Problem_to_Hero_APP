@@ -92,7 +92,7 @@ export const useTabData = (tabKey, fetchFunction, isActive, options = {}) => {
       
     } catch (err) {
       if (err.name !== 'AbortError') {
-        console.error(`❌ 加载失败: ${tabKey}`, err);
+      console.warn(`加载失败: ${tabKey}`, err);
         setError(err);
       }
     } finally {

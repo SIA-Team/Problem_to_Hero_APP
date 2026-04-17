@@ -2,6 +2,24 @@ import apiClient from './apiClient';
 import { API_ENDPOINTS } from '../../config/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+const MANUAL_LOGOUT_STORAGE_KEY = '@manual_logout';
+
+const clearManualLogoutFlag = async () => {
+  try {
+    await AsyncStorage.removeItem(MANUAL_LOGOUT_STORAGE_KEY);
+  } catch (error) {
+    console.warn('Failed to clear manual logout flag:', error);
+  }
+};
+
+const markManualLogout = async () => {
+  try {
+    await AsyncStorage.setItem(MANUAL_LOGOUT_STORAGE_KEY, 'true');
+  } catch (error) {
+    console.warn('Failed to persist manual logout flag:', error);
+  }
+};
+
 /**
  * 认证相关 API
  */
@@ -28,6 +46,10 @@ const authApi = {
       }
     }
     
+    if (response.code === 200 && response.data) {
+      await clearManualLogoutFlag();
+    }
+
     return response;
   },
 
@@ -53,6 +75,10 @@ const authApi = {
       await AsyncStorage.setItem('userInfo', JSON.stringify(response.user));
     }
     
+    if (response.token || response.refreshToken || response.user) {
+      await clearManualLogoutFlag();
+    }
+
     return response;
   },
 
@@ -126,6 +152,11 @@ const authApi = {
       
       console.log('═══════════════════════════════════════════════════════════════\n');
       
+      if (response.code === 200 && response.data) {
+        await clearManualLogoutFlag();
+      }
+
+      await clearManualLogoutFlag();
       return response;
     } catch (error) {
       console.log('\n❌ Token 自动登录失败');
@@ -262,6 +293,7 @@ const authApi = {
       // 即使 API 失败，也继续清除本地数据
       return { code: 500, msg: '退出登录失败' };
     } finally {
+      await markManualLogout();
       // 清除本地存储（保留 deviceFingerprint，避免重复注册）
       console.log('🗑️ 清除本地存储数据...');
       

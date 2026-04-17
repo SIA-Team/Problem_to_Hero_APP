@@ -3,7 +3,7 @@
     "name": "Problem vs Hero",
     "slug": "qa-native-app",
     "scheme": "problemvshero",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/app-logo.png",
@@ -26,8 +26,8 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.problemtohero.app",
-      "buildNumber": "6",
+      "bundleIdentifier": "com.problemvshero.app",
+      "buildNumber": "2",
       "infoPlist": {
         "UIViewControllerBasedStatusBarAppearance": false,
         "NSPhotoLibraryUsageDescription": "允许访问您的相册以上传图片和更换头像",
@@ -47,7 +47,7 @@
       }
     },
     "android": {
-      "package": "com.qa.app",
+      "package": "com.problemvshero.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/app-logo.png",
         "backgroundColor": "#ef4444"

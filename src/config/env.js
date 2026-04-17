@@ -18,6 +18,7 @@ const buildServicePath = (serviceName, path) => `/${serviceName}${path}`;
 let DYNAMIC_SERVER = 'server2'; // 默认使用生产服务器
 let CUSTOM_SERVER_URL = '';
 let serverLoaded = false;
+let serverSelectionPromise = null;
 
 const normalizeServerUrl = (url) => {
   if (!url) {
@@ -67,6 +68,20 @@ const loadServerSelection = async () => {
   }
 };
 
+export const ensureServerSelectionLoaded = async () => {
+  if (serverLoaded) {
+    return;
+  }
+
+  if (!serverSelectionPromise) {
+    serverSelectionPromise = loadServerSelection().finally(() => {
+      serverSelectionPromise = null;
+    });
+  }
+
+  await serverSelectionPromise;
+};
+
 // 获取当前服务器配置（同步版本，用于配置中的函数调用）
 const getCurrentServerSync = () => {
   return DYNAMIC_SERVER;
@@ -77,7 +92,7 @@ const getCustomServerUrlSync = () => {
 };
 
 // 立即加载服务器选择
-loadServerSelection();
+void ensureServerSelectionLoaded();
 
 // 导出函数供外部更新
 export const updateDynamicServer = (server, customUrl = '') => {
@@ -85,6 +100,7 @@ export const updateDynamicServer = (server, customUrl = '') => {
   if (server === 'custom') {
     CUSTOM_SERVER_URL = normalizeServerUrl(customUrl);
   }
+  serverLoaded = true;
   console.log('📡 切换服务器:', getServerLabel(server));
 };
 
@@ -120,6 +136,7 @@ const API_SERVER_CONFIG = {
   [buildServicePath(SERVICES.USER, '/app/group/public/question/*')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/team/public/question/*')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/group/public/ids/question/*')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/group/*/join')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/group-message/list')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/group-message/create')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/content/emergency-help/quota')]: getCurrentServerSync,

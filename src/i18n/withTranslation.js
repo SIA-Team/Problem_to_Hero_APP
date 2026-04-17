@@ -15,8 +15,8 @@ export const withTranslation = (Component) => {
   return (props) => {
     useI18nSubscription();
 
-    const t = (key) => {
-      return i18n.t(key);
+    const t = (key, params) => {
+      return i18n.t(key, params);
     };
 
     return <Component {...props} t={t} i18n={i18n} />;
@@ -26,8 +26,8 @@ export const withTranslation = (Component) => {
 export const useTranslation = () => {
   useI18nSubscription();
 
-  const t = (key) => {
-    return i18n.t(key);
+  const t = (key, params) => {
+    return i18n.t(key, params);
   };
 
   return { t, i18n };

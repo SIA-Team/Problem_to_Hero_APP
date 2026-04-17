@@ -14,12 +14,12 @@ const ANSWER_SUPPLEMENT_UNDISLIKE_ENDPOINT = '/qa-hero-content/app/content/answe
  */
 const answerApi = {
   /**
-   * 获取问题的回答列�?
-   * @param {string} questionId - 问题ID
+   * 获取问题的回答列表
+   * @param {string} questionId - 问题 ID
    * @param {Object} params - 查询参数
-   * @param {string} params.sortBy - 排序方式（featured=精选，latest=最新），默认featured
-   * @param {number} params.pageNum - 页码，默�?
-   * @param {number} params.pageSize - 每页数量，默�?0
+   * @param {string} params.sortBy - 排序方式（featured=精选，latest=最新），默认 featured
+   * @param {number} params.pageNum - 页码，默认 1
+   * @param {number} params.pageSize - 每页数量，默认 10
    * @returns {Promise<Object>}
    */
   getAnswers: (questionId, params = {}) => {
@@ -41,12 +41,12 @@ const answerApi = {
   },
 
   /**
-   * 获取回答的补充回答列�?
-   * @param {string|number} answerId - 回答ID
+   * 获取回答的补充回答列表
+   * @param {string|number} answerId - 回答 ID
    * @param {Object} params - 查询参数
-   * @param {string} params.sortBy - 排序方式（featured=精选，newest=最新），默认featured
-   * @param {number} params.pageNum - 页码，默�?
-   * @param {number} params.pageSize - 每页数量，默�?0
+   * @param {string} params.sortBy - 排序方式（featured=精选，newest=最新），默认 featured
+   * @param {number} params.pageNum - 页码，默认 1
+   * @param {number} params.pageSize - 每页数量，默认 10
    * @returns {Promise<Object>}
    */
   getSupplementAnswers: (answerId, params = {}) => {
@@ -69,9 +69,9 @@ const answerApi = {
 
   /**
    * 发布补充回答
-   * @param {string|number} answerId - 回答ID
+   * @param {string|number} answerId - 回答 ID
    * @param {Object} data - 补充回答数据
-   * @param {string} data.content - 补充回答内容（必传）
+   * @param {string} data.content - 补充回答内容（必填）
    * @returns {Promise<Object>}
    */
   publishSupplementAnswer: async (answerId, data) => {
@@ -85,24 +85,23 @@ const answerApi = {
 
     const url = replaceUrlParams(API_ENDPOINTS.ANSWER.SUPPLEMENT_PUBLISH, { answerId });
     
-    console.log('📤 发布补充回答 API调用:');
+    console.log('发布补充回答 API 调用:');
     console.log('  answerId:', answerId);
     console.log('  请求数据:', JSON.stringify(data, null, 2));
     console.log('  URL:', url);
     
     try {
       const response = await contentApiClient.post(url, data);
-      console.log('✅ 补充回答发布成功:', response);
+      console.log('补充回答发布成功:', response);
       return response;
     } catch (error) {
-      console.error('❌ 补充回答发布失败:', error);
       throw error;
     }
   },
 
   /**
    * 获取回答详情
-   * @param {string} answerId - 回答ID
+   * @param {string} answerId - 回答 ID
    * @returns {Promise<Object>}
    */
   getAnswerDetail: (answerId) => {
@@ -112,12 +111,12 @@ const answerApi = {
 
   /**
    * 发布回答
-   * @param {string} questionId - 问题ID
+   * @param {string} questionId - 问题 ID
    * @param {Object} answerCreateRequest - 回答数据
-   * @param {string} answerCreateRequest.content - 回答内容（必传）
-   * @param {number} answerCreateRequest.supplementId - 补充ID（非必传�?
-   * @param {number} answerCreateRequest.invitedBy - 邀请人ID（非必传�?
-   * @param {Array<string>} answerCreateRequest.imageUrls - 图片URL数组（非必传�?
+   * @param {string} answerCreateRequest.content - 回答内容（必填）
+   * @param {number} answerCreateRequest.supplementId - 补充 ID（非必传）
+   * @param {number} answerCreateRequest.invitedBy - 邀请人 ID（非必传）
+   * @param {Array<string>} answerCreateRequest.imageUrls - 图片 URL 数组（非必传）
    * @returns {Promise<Object>}
    */
   publishAnswer: (questionId, answerCreateRequest) => {
@@ -128,7 +127,7 @@ const answerApi = {
   /**
    * 创建回答
    * @param {Object} data - 回答数据
-   * @param {string} data.questionId - 问题ID
+   * @param {string} data.questionId - 问题 ID
    * @param {string} data.content - 回答内容
    * @param {Array} data.images - 图片列表
    * @returns {Promise<Object>}
@@ -139,8 +138,8 @@ const answerApi = {
 
   /**
    * 更新回答
-   * @param {string} answerId - 回答ID
-   * @param {Object} data - 更新的数�?
+   * @param {string} answerId - 回答 ID
+   * @param {Object} data - 更新的数据
    * @returns {Promise<Object>}
    */
   updateAnswer: (answerId, data) => {
@@ -150,7 +149,7 @@ const answerApi = {
 
   /**
    * 删除回答
-   * @param {string} answerId - 回答ID
+   * @param {string} answerId - 回答 ID
    * @returns {Promise<Object>}
    */
   deleteAnswer: (answerId) => {
@@ -160,22 +159,22 @@ const answerApi = {
 
   /**
    * 采纳回答
-   * @param {string|number} questionId - 问题ID
-   * @param {string|number} answerId - 回答ID
+   * @param {string|number} questionId - 问题 ID
+   * @param {string|number} answerId - 回答 ID
    * @returns {Promise<Object>}
    */
   adoptAnswer: async (questionId, answerId) => {
-    // 确保参数为数字类�?
+    // 确保参数为数字类型
     const numQuestionId = parseInt(questionId, 10);
     const numAnswerId = parseInt(answerId, 10);
     
     
-    // 参数验证
+    // 参数校验
     if (!Number.isInteger(numQuestionId) || numQuestionId <= 0) {
-      throw new Error('无效的问题ID');
+      throw new Error('无效的问题 ID');
     }
     if (!Number.isInteger(numAnswerId) || numAnswerId <= 0) {
-      throw new Error('无效的回答ID');
+      throw new Error('无效的回答 ID');
     }
     
     const url = replaceUrlParams(API_ENDPOINTS.ANSWER.ADOPT, { 
@@ -185,11 +184,11 @@ const answerApi = {
     
     
     try {
-      // 尝试PUT请求
+      // 先尝试 PUT 请求
       return await contentApiClient.put(url);
     } catch (error) {
       
-      // 如果PUT失败，尝试POST请求
+      // 如果 PUT 失败，则回退到 POST 请求
       try {
         return await contentApiClient.post(url);
       } catch (postError) {
@@ -200,7 +199,7 @@ const answerApi = {
 
   /**
    * 收藏回答
-   * @param {string} answerId - 回答ID
+   * @param {string} answerId - 回答 ID
    * @returns {Promise<Object>}
    */
   collectAnswer: async (answerId) => {
@@ -216,7 +215,7 @@ const answerApi = {
 
   /**
    * 取消收藏回答
-   * @param {string} answerId - 回答ID
+   * @param {string} answerId - 回答 ID
    * @returns {Promise<Object>}
    */
   uncollectAnswer: async (answerId) => {
@@ -232,7 +231,7 @@ const answerApi = {
 
   /**
    * 点赞回答
-   * @param {string} answerId - 回答ID
+   * @param {string} answerId - 回答 ID
    * @returns {Promise<Object>}
    */
   likeAnswer: async (answerId) => {
@@ -248,7 +247,7 @@ const answerApi = {
 
   /**
    * 取消点赞回答
-   * @param {string} answerId - 回答ID
+   * @param {string} answerId - 回答 ID
    * @returns {Promise<Object>}
    */
   unlikeAnswer: async (answerId) => {
@@ -264,7 +263,7 @@ const answerApi = {
 
   /**
    * 点踩回答
-   * @param {string} answerId - 回答ID
+   * @param {string} answerId - 回答 ID
    * @returns {Promise<Object>}
    */
   dislikeAnswer: async (answerId) => {
@@ -279,8 +278,8 @@ const answerApi = {
   },
 
   /**
-   * 取消踩回�?
-   * @param {string} answerId - 回答ID
+   * 取消点踩回答
+   * @param {string} answerId - 回答 ID
    * @returns {Promise<Object>}
    */
   undislikeAnswer: async (answerId) => {
@@ -296,7 +295,7 @@ const answerApi = {
 
   /**
    * 收藏补充回答
-   * @param {string|number} supplementAnswerId - 补充回答ID
+   * @param {string|number} supplementAnswerId - 补充回答 ID
    * @returns {Promise<Object>}
    */
   collectSupplementAnswer: async (supplementAnswerId) => {
@@ -310,7 +309,7 @@ const answerApi = {
 
   /**
    * 取消收藏补充回答
-   * @param {string|number} supplementAnswerId - 补充回答ID
+   * @param {string|number} supplementAnswerId - 补充回答 ID
    * @returns {Promise<Object>}
    */
   uncollectSupplementAnswer: async (supplementAnswerId) => {
@@ -324,7 +323,7 @@ const answerApi = {
 
   /**
    * 点踩补充回答
-   * @param {string|number} supplementAnswerId - 补充回答ID
+   * @param {string|number} supplementAnswerId - 补充回答 ID
    * @returns {Promise<Object>}
    */
   dislikeSupplementAnswer: async (supplementAnswerId) => {
@@ -338,7 +337,7 @@ const answerApi = {
 
   /**
    * 取消点踩补充回答
-   * @param {string|number} supplementAnswerId - 补充回答ID
+   * @param {string|number} supplementAnswerId - 补充回答 ID
    * @returns {Promise<Object>}
    */
   undislikeSupplementAnswer: async (supplementAnswerId) => {
@@ -352,7 +351,7 @@ const answerApi = {
 
   /**
    * 点赞补充回答
-   * @param {string|number} supplementAnswerId - 补充回答ID
+   * @param {string|number} supplementAnswerId - 补充回答 ID
    * @returns {Promise<Object>}
    */
   likeSupplementAnswer: async (supplementAnswerId) => {
@@ -366,7 +365,7 @@ const answerApi = {
 
   /**
    * 取消点赞补充回答
-   * @param {string|number} supplementAnswerId - 补充回答ID
+   * @param {string|number} supplementAnswerId - 补充回答 ID
    * @returns {Promise<Object>}
    */
   unlikeSupplementAnswer: async (supplementAnswerId) => {

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_CONFIG, API_ENDPOINTS, getFullApiUrl } from '../../config/api';
-import ENV, { getApiServerUrl } from '../../config/env';
+import ENV, { ensureServerSelectionLoaded, getApiServerUrl } from '../../config/env';
 import { showToast } from '../../utils/toast';
 import { createTransformResponsePreservingLongIds } from '../../utils/jsonLongId';
 import { logApiRequest, logApiResponse } from '../../screens/ApiDebugScreen';
@@ -64,6 +64,7 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use(
   async (config) => {
     try {
+      await ensureServerSelectionLoaded();
       // 璁板綍 API 璇锋眰鏃ュ織
 
       // 鍔ㄦ€佽缃?baseURL

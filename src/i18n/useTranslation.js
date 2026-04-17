@@ -10,8 +10,8 @@ export const useTranslation = () => {
     });
   }, []);
 
-  const t = (key) => {
-    return i18n.t(key);
+  const t = (key, params) => {
+    return i18n.t(key, params);
   };
   
   return { t, i18n };

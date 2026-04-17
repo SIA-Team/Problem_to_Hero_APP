@@ -30,16 +30,21 @@ const getAndroidNavigationBarInsetFallback = () => {
   return navigationOnlyInset;
 };
 
-export default function useBottomSafeInset(minimumInset = 12) {
+export default function useBottomSafeInset(minimumInset = 12, options = {}) {
+  const { maxAndroidInset = null } = options;
   const insets = useSafeAreaInsets();
   const androidNavigationInsetFallback = useMemo(
     () => getAndroidNavigationBarInsetFallback(),
     []
   );
   const initialBottomInset = initialWindowMetrics?.insets?.bottom ?? 0;
+  const normalizedBottomInset =
+    Platform.OS === 'android' && typeof maxAndroidInset === 'number'
+      ? Math.min(insets.bottom, maxAndroidInset)
+      : insets.bottom;
 
   return Math.max(
-    insets.bottom,
+    normalizedBottomInset,
     initialBottomInset,
     androidNavigationInsetFallback,
     minimumInset

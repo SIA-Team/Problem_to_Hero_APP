@@ -1186,7 +1186,17 @@
           "emptyCommentsTitle": "暂无评论",
           "emptyCommentsDescription": "快来发表第一条评论吧",
           "loadingMore": "加载中...",
-          "unknownLocation": "未知"
+          "unknownLocation": "未知",
+          "allReplies": "全部回复",
+          "loadingReplies": "加载回复中...",
+          "emptyReplies": "暂无回复",
+          "loadingComments": "加载评论中...",
+          "loadMoreComments": "加载更多评论",
+          "noMoreComments": "没有更多评论了",
+          "loadMoreSupplements": "加载更多补充回答",
+          "noMoreSupplements": "没有更多补充回答了",
+          "expandReplies": "展开回复 ({count})",
+          "collapseReplies": "收起回复 ({count})"
         },
         "time": {
         "justNow": "刚刚",
@@ -1205,11 +1215,32 @@
         "invite": "邀请"
       },
       "actions": {
-        "follow": "关注"
+        "follow": "关注",
+        "following": "已关注",
+        "reply": "回复",
+        "dislike": "踩一下",
+        "removeDislike": "取消踩",
+        "reportQuestion": "举报问题",
+        "reportSupplement": "举报补充",
+        "inviteTwitterUser": "@推特用户",
+        "viewArbitration": "查看仲裁",
+        "details": "详情"
+      },
+      "filter": {
+        "featured": "精选",
+        "latest": "最新"
       },
       "reward": {
         "add": "追加",
-        "contributors": "人追加"
+        "contributors": "人追加",
+        "paidDetails": "查看付费明细",
+        "paidUsers": "{count}人已付费",
+        "totalSupplements": "共 {count} 条补充",
+        "totalAnswers": "共 {count} 条回答",
+        "totalComments": "共 {count} 条评论",
+        "contributorsTitle": "追加悬赏名单",
+        "currentTotal": "当前总悬赏",
+        "contributorsSummary": "共 {count} 人追加悬赏"
       },
       "stats": {
         "views": "浏览"
@@ -1224,12 +1255,18 @@
         "adopted": "已采纳",
         "adopt": "采纳",
         "supplement": "补充回答",
+        "replyCount": "回答 ({count})",
         "authorAdopted": "作者采纳",
         "adoptedCount": "被采纳",
         "invitedBy": "由",
         "invited": "邀请",
         "collapse": "收起",
-        "expand": "展开"
+        "expand": "展开",
+        "loading": "加载回答中...",
+        "emptyTitle": "暂无回答，快来抢沙发吧~",
+        "emptyDescription": "成为第一个回答问题的人",
+        "loadMore": "加载更多回答",
+        "noMore": "没有更多回答了"
       },
       "comment": {
         "replies": "回复"
@@ -1238,7 +1275,24 @@
         "local": "本站",
         "twitter": "推特",
         "searchUser": "搜索用户",
-        "searchTwitterUser": "搜索推特用户"
+        "searchTwitterUser": "搜索推特用户",
+        "localEmptySearch": "没有找到匹配的用户",
+        "localEmptyAvailable": "暂无可邀请的本站用户",
+        "localInvitedTitle": "已邀请",
+        "localInviteEmptySearch": "没有匹配的邀请记录",
+        "localInviteEmptyDesc": "私信发送成功后，会显示在这里",
+        "invited": "已邀请",
+        "loading": "加载中...",
+        "collapse": "收起",
+        "twitterEmptySearch": "没有匹配的推特用户",
+        "twitterInvitedTitle": "已发起邀请",
+        "twitterInviteEmptySearch": "没有匹配的邀请记录",
+        "twitterInviteEmptyDesc": "保存文案并跳转到推特后，会展示在这里",
+        "twitterInvited": "已发起邀请",
+        "viewMoreInvites": "查看更多邀请 ({count})",
+        "twitterEditorTitle": "编辑推特邀请文案",
+        "twitterEditorPlaceholder": "请输入要分享到推特的文案，可手动添加 {name}",
+        "twitterEditorHint": "链接会自动追加到文案后面"
       },
       "loading": "加载中...",
       "loadMoreSupplements": "查看更多补充",
@@ -1249,6 +1303,87 @@
         "title": "推荐问题",
         "subtitle": "根据当前问题为您推荐相关内容",
         "hot": "热"
+      },
+      "placeholders": {
+        "writeComment": "写评论",
+        "writeCommentContent": "写下你的评论...",
+        "writeReply": "写回复",
+        "writeReplyContent": "写下你的回复...",
+        "writeAnswerTitle": "写回答",
+        "writeAnswerContent": "写下你的回答，帮助有需要的人...",
+        "writeSupplementTitle": "补充问题",
+        "writeSupplementContent": "对这个问题还有疑问？写下你的补充问题..."
+      },
+      "modals": {
+        "replyTitle": "写回复{mention}",
+        "unitPrice": "单价",
+        "unitPriceValue": "$2 / 个",
+        "purchaseQuantity": "购买数量",
+        "quantityValue": "{count} 个",
+        "superLikeTips": "购买超级赞后，您的回答将获得更高的排名权重，增加曝光机会",
+        "buySuperLikeNow": "立即购买 {count} 个超级赞"
+      },
+      "alerts": {
+        "hint": "提示",
+        "noAdoptPermission": "当前账号没有采纳权限，只有提问者或追加悬赏用户可以采纳回答。",
+        "insufficientSuperLikeTitle": "超级赞次数不足",
+        "insufficientSuperLikeMessage": "您的超级赞次数不足，是否购买？",
+        "goPurchase": "去购买",
+        "reportSubmitted": "已提交举报：{reason}"
+      },
+      "report": {
+        "spam": "垃圾广告",
+        "illegal": "违法违规",
+        "explicit": "低俗色情",
+        "infringement": "侵权",
+        "misinformation": "不实信息",
+        "other": "其他"
+      },
+      "arbitrationStatus": {
+        "overturned": "仲裁推翻",
+        "upheld": "仲裁维持",
+        "voting": "投票中",
+        "votingDetailsTitle": "仲裁投票详情",
+        "agreeOverturn": "同意推翻：{count} 票",
+        "agreeOverturnLabel": "同意推翻",
+        "upholdOriginal": "维持原判：{count} 票",
+        "upholdOriginalLabel": "维持原判",
+        "agreeRate": "{rate}% 同意推翻",
+        "waitingVotes": "等待专家投票中...",
+        "simulateVotes": "模拟投票结果",
+        "approvedTitle": "仲裁通过",
+        "approvedDescription": "超过50%的专家同意推翻原采纳答案，问题状态已回到PK状态",
+        "rejectedTitle": "仲裁未通过",
+        "rejectedDescription": "未达到50%同意率，维持原采纳答案",
+        "approvedShortDescription": "超过50%的专家同意推翻原采纳答案",
+        "rejectedShortDescription": "未达到50%同意率，维持原答案",
+        "expertVotesTitle": "专家投票详情",
+        "voteReason": "投票理由：",
+        "resultTitle": "仲裁结果"
+      },
+      "states": {
+        "retry": "重试",
+        "allComments": "全部评论",
+        "allReplies": "全部回复",
+        "loadingSupplements": "加载补充中...",
+        "emptySupplementsTitle": "暂无补充问题",
+        "emptySupplementsDescription": "成为第一个提出补充问题的人",
+        "loadingComments": "加载评论中...",
+        "emptyCommentsTitle": "暂无评论",
+        "emptyCommentsDescription": "成为第一个评论的人",
+        "loadingReplies": "加载回复中...",
+        "emptyReplies": "暂无回复",
+        "loadMore": "加载更多...",
+        "loadMoreSupplementItems": "加载更多补充",
+        "noMoreSupplements": "没有更多补充了",
+        "noMoreComments": "没有更多评论了",
+        "buySuperLikeBanner": "购买超级赞提升排名",
+        "expandReplies": "展开回复 ({count})",
+        "collapseReplies": "收起回复 ({count})",
+        "replyCount": "{count}条回复",
+        "totalLabel": "总计",
+        "anonymousUser": "匿名用户",
+        "unknownLocation": "未知"
       }
     },
     "paidUsersList": {
@@ -1451,7 +1586,7 @@
         },
         "language": {
           "title": "切换语言",
-          "message": "开发阶段可以自由切换中英文，正式生产包会固定为英文。"
+      "message": "开发包和 Android 测试包可以自由切换中英文，正式生产包会固定为英文。"
         },
         "genericError": {
           "title": "错误",
@@ -1497,6 +1632,7 @@
       }
     },
     "activity": {
+      "title": "活动",
       "myActivities": "我的活动",
       "create": "创建",
       "empty": "暂无活动",

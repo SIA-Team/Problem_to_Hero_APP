@@ -1,21 +1,26 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, View, Platform } from 'react-native';
+import * as Updates from 'expo-updates';
 import { Ionicons } from '@expo/vector-icons';
 import DebugToken from '../utils/debugToken';
+import { SIMULATE_PRODUCTION } from '../config/debugMode';
+import { isDevPreviewFeatureEnabled } from '../utils/devPreviewGate';
 
-/**
- * 调试按钮组件
- * 用于在应用中快速查看 Token 状态
- */
 export default function DebugButton() {
+  const isDebugButtonEnabled = isDevPreviewFeatureEnabled({
+    isDev: __DEV__,
+    simulateProduction: SIMULATE_PRODUCTION,
+    platformOS: Platform.OS,
+    updatesChannel: Updates.channel,
+  });
+
   const handlePress = async () => {
-    console.log('\n🔧 手动触发调试检查...\n');
+    console.log('\nDebug button pressed, checking token state...\n');
     await DebugToken.checkTokenStatus();
     await DebugToken.testTokenInRequest();
   };
 
-  // 仅在开发环境显示
-  if (!__DEV__) {
+  if (!isDebugButtonEnabled) {
     return null;
   }
 
@@ -27,7 +32,7 @@ export default function DebugButton() {
     >
       <View style={styles.buttonContent}>
         <Ionicons name="bug" size={20} color="#fff" />
-        <Text style={styles.buttonText}>检查 Token</Text>
+        <Text style={styles.buttonText}>Check Token</Text>
       </View>
     </TouchableOpacity>
   );

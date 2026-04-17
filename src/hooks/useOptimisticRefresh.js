@@ -64,7 +64,7 @@ export const useOptimisticRefresh = (activeTab, allTabs = []) => {
       
       return data || [];
     } catch (error) {
-      console.error(`❌ 加载数据失败: ${tabType} - 第${pageNum}页`, error);
+      console.warn(`加载数据失败: ${tabType} - 第${pageNum}页`, error);
       return [];
     }
   }, []);
@@ -133,7 +133,7 @@ export const useOptimisticRefresh = (activeTab, allTabs = []) => {
         console.log(`✅ 静默更新完成: ${data.length} 条`);
       }
     } catch (error) {
-      console.error('静默更新失败:', error);
+      console.warn('静默更新失败:', error);
     }
   }, [loadData]);
   

@@ -14,7 +14,8 @@ set ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk
 set PATH=%PATH%;%ANDROID_HOME%\platform-tools
 
 echo [3/5] Uninstalling app from emulator...
-adb uninstall com.qa.app
+adb uninstall com.problemvshero.app.dev
+adb uninstall com.problemvshero.app
 echo OK App uninstalled
 
 echo [4/5] Clearing Metro cache...

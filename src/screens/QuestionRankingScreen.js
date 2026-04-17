@@ -180,11 +180,13 @@ export default function QuestionRankingScreen({ navigation }) {
                     <Text style={styles.mainStatLabel}>{statInfo.label}</Text>
                   </View>
 
-                  {/* 浏览数 */}
-                  <View style={styles.secondaryStat}>
-                    <Ionicons name="eye-outline" size={14} color="#9ca3af" />
-                    <Text style={styles.secondaryStatText}>{formatNumber(item.viewsCount)}</Text>
-                  </View>
+                  {/* 浏览数 - 只在非浏览量tab中显示 */}
+                  {activeTab !== 'views' && (
+                    <View style={styles.secondaryStat}>
+                      <Ionicons name="eye-outline" size={14} color="#9ca3af" />
+                      <Text style={styles.secondaryStatText}>{formatNumber(item.viewsCount)}</Text>
+                    </View>
+                  )}
                 </View>
               </View>
 

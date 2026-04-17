@@ -29,6 +29,12 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6762328037",
+        "appleTeamId": "RQ66NFT7M5",
+        "bundleIdentifier": "com.problemvshero.app"
+      }
+    }
   }
 }

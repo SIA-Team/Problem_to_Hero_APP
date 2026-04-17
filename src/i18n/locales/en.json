@@ -1159,7 +1159,17 @@
           "emptyCommentsTitle": "No comments yet",
           "emptyCommentsDescription": "Be the first to post a comment",
           "loadingMore": "Loading...",
-          "unknownLocation": "Unknown"
+          "unknownLocation": "Unknown",
+          "allReplies": "All Replies",
+          "loadingReplies": "Loading replies...",
+          "emptyReplies": "No replies yet",
+          "loadingComments": "Loading comments...",
+          "loadMoreComments": "Load more comments",
+          "noMoreComments": "No more comments",
+          "loadMoreSupplements": "Load more supplement answers",
+          "noMoreSupplements": "No more supplement answers",
+          "expandReplies": "Expand replies ({count})",
+          "collapseReplies": "Collapse replies ({count})"
         },
         "time": {
         "justNow": "Just now",
@@ -1178,11 +1188,32 @@
         "invite": "Invite"
       },
       "actions": {
-        "follow": "Follow"
+        "follow": "Follow",
+        "following": "Following",
+        "reply": "Reply",
+        "dislike": "Dislike",
+        "removeDislike": "Remove Dislike",
+        "reportQuestion": "Report Question",
+        "reportSupplement": "Report Supplement",
+        "inviteTwitterUser": "@Twitter User",
+        "viewArbitration": "View arbitration",
+        "details": "Details"
+      },
+      "filter": {
+        "featured": "Featured",
+        "latest": "Latest"
       },
       "reward": {
         "add": "Add Reward",
-        "contributors": "contributors"
+        "contributors": "contributors",
+        "paidDetails": "View paid details",
+        "paidUsers": "{count} users paid",
+        "totalSupplements": "{count} supplements",
+        "totalAnswers": "{count} answers",
+        "totalComments": "{count} comments",
+        "contributorsTitle": "Reward contributors",
+        "currentTotal": "Current total reward",
+        "contributorsSummary": "{count} people added reward"
       },
       "stats": {
         "views": "views"
@@ -1197,12 +1228,18 @@
         "adopted": "Adopted",
         "adopt": "Adopt",
         "supplement": "Supplement Answer",
+        "replyCount": "Answers ({count})",
         "authorAdopted": "Author Adopted",
         "adoptedCount": "Adopted",
         "invitedBy": "by",
         "invited": "invited",
         "collapse": "Collapse",
-        "expand": "Expand"
+        "expand": "Expand",
+        "loading": "Loading answers...",
+        "emptyTitle": "No answers yet, be the first to respond",
+        "emptyDescription": "Become the first person to answer this question",
+        "loadMore": "Load more answers",
+        "noMore": "No more answers"
       },
       "comment": {
         "replies": "replies"
@@ -1211,7 +1248,24 @@
         "local": "Local",
         "twitter": "Twitter",
         "searchUser": "Search users",
-        "searchTwitterUser": "Search Twitter users"
+        "searchTwitterUser": "Search Twitter users",
+        "localEmptySearch": "No matching users found",
+        "localEmptyAvailable": "No local users available to invite right now",
+        "localInvitedTitle": "Invited",
+        "localInviteEmptySearch": "No matching invite records",
+        "localInviteEmptyDesc": "Sent direct messages will appear here",
+        "invited": "Invited",
+        "loading": "Loading...",
+        "collapse": "Collapse",
+        "twitterEmptySearch": "No matching Twitter users found",
+        "twitterInvitedTitle": "Invites Sent",
+        "twitterInviteEmptySearch": "No matching invite records",
+        "twitterInviteEmptyDesc": "Saved drafts that jump to Twitter will appear here",
+        "twitterInvited": "Invite Started",
+        "viewMoreInvites": "View more invites ({count})",
+        "twitterEditorTitle": "Edit Twitter invite text",
+        "twitterEditorPlaceholder": "Enter the text to share on Twitter. You can manually add {name}",
+        "twitterEditorHint": "The link will be appended automatically after the text"
       },
       "loading": "Loading...",
       "loadMoreSupplements": "Load More Supplements",
@@ -1222,6 +1276,87 @@
         "title": "Recommended Questions",
         "subtitle": "Related content based on current question",
         "hot": "Hot"
+      },
+      "placeholders": {
+        "writeComment": "Write a comment",
+        "writeCommentContent": "Write your comment...",
+        "writeReply": "Write a reply",
+        "writeReplyContent": "Write your reply...",
+        "writeAnswerTitle": "Write Answer",
+        "writeAnswerContent": "Write your answer to help people in need...",
+        "writeSupplementTitle": "Supplement Question",
+        "writeSupplementContent": "Still have questions about this issue? Add your supplement..."
+      },
+      "modals": {
+        "replyTitle": "Write a reply{mention}",
+        "unitPrice": "Unit price",
+        "unitPriceValue": "$2 / item",
+        "purchaseQuantity": "Quantity",
+        "quantityValue": "{count} items",
+        "superLikeTips": "After purchasing Super Likes, your answer will receive higher ranking weight and more exposure.",
+        "buySuperLikeNow": "Buy {count} Super Likes now"
+      },
+      "alerts": {
+        "hint": "Hint",
+        "noAdoptPermission": "This account cannot adopt answers. Only the question author or users who added reward can adopt an answer.",
+        "insufficientSuperLikeTitle": "Not enough Super Likes",
+        "insufficientSuperLikeMessage": "You do not have enough Super Likes. Buy more now?",
+        "goPurchase": "Buy now",
+        "reportSubmitted": "Report submitted: {reason}"
+      },
+      "report": {
+        "spam": "Spam ads",
+        "illegal": "Illegal content",
+        "explicit": "Explicit content",
+        "infringement": "Infringement",
+        "misinformation": "False information",
+        "other": "Other"
+      },
+      "arbitrationStatus": {
+        "overturned": "Overturned by arbitration",
+        "upheld": "Arbitration upheld",
+        "voting": "Voting in progress",
+        "votingDetailsTitle": "Arbitration vote details",
+        "agreeOverturn": "Agree to overturn: {count} votes",
+        "agreeOverturnLabel": "Agree to overturn",
+        "upholdOriginal": "Uphold original ruling: {count} votes",
+        "upholdOriginalLabel": "Uphold original ruling",
+        "agreeRate": "{rate}% agree to overturn",
+        "waitingVotes": "Waiting for expert votes...",
+        "simulateVotes": "Simulate vote result",
+        "approvedTitle": "Arbitration approved",
+        "approvedDescription": "More than 50% of experts agreed to overturn the adopted answer, and the question has returned to PK status.",
+        "rejectedTitle": "Arbitration rejected",
+        "rejectedDescription": "The agreement rate did not reach 50%, and the adopted answer remains unchanged.",
+        "approvedShortDescription": "More than 50% of experts agreed to overturn the adopted answer.",
+        "rejectedShortDescription": "The agreement rate did not reach 50%, so the original answer remains.",
+        "expertVotesTitle": "Expert vote details",
+        "voteReason": "Reason:",
+        "resultTitle": "Arbitration result"
+      },
+      "states": {
+        "retry": "Retry",
+        "allComments": "All Comments",
+        "allReplies": "All Replies",
+        "loadingSupplements": "Loading supplements...",
+        "emptySupplementsTitle": "No supplements yet",
+        "emptySupplementsDescription": "Be the first to add a supplement",
+        "loadingComments": "Loading comments...",
+        "emptyCommentsTitle": "No comments yet",
+        "emptyCommentsDescription": "Be the first to comment",
+        "loadingReplies": "Loading replies...",
+        "emptyReplies": "No replies yet",
+        "loadMore": "Loading more...",
+        "loadMoreSupplementItems": "Load more supplements",
+        "noMoreSupplements": "No more supplements",
+        "noMoreComments": "No more comments",
+        "buySuperLikeBanner": "Buy Super Likes to boost ranking",
+        "expandReplies": "Expand replies ({count})",
+        "collapseReplies": "Collapse replies ({count})",
+        "replyCount": "{count} replies",
+        "totalLabel": "Total",
+        "anonymousUser": "Anonymous User",
+        "unknownLocation": "Unknown"
       }
     },
     "paidUsersList": {
@@ -1708,7 +1843,7 @@
         },
         "language": {
           "title": "Switch Language",
-          "message": "During development, you can switch freely between Chinese and English. Production builds stay in English."
+      "message": "Development builds and Android preview builds can switch freely between Chinese and English. Production builds stay in English."
         },
         "genericError": {
           "title": "Error",

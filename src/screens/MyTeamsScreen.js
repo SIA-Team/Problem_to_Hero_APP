@@ -9,7 +9,7 @@ import { modalTokens } from '../components/modalTokens';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import teamApi from '../services/api/teamApi';
 import { showAppAlert } from '../utils/appAlert';
-import { mapTeamToDetailRoute, normalizeMyTeam } from '../utils/teamTransforms';
+import { isVisibleMyTeam, mapTeamToDetailRoute, normalizeMyTeam } from '../utils/teamTransforms';
 import { executeTeamExitFlow, getTransferLeaderCandidates } from '../utils/teamExit';
 
 import { scaleFont } from '../utils/responsive';
@@ -75,7 +75,7 @@ export default function MyTeamsScreen({
   const transferLeaderCandidates = React.useMemo(() => getTransferLeaderCandidates([selectedExitTeam?.teamMembers, selectedExitTeam?.memberList, selectedExitTeam?.members]), [selectedExitTeam]);
   const selectedNewLeaderMember = React.useMemo(() => transferLeaderCandidates.find(member => String(member.userId) === String(selectedNewLeader)) || null, [selectedNewLeader, transferLeaderCandidates]);
   const isTeamLeader = team => Boolean(team?.isLeader) || team?.role === '\u961f\u957f' || team?.role === '闃熼暱' || Number(team?.userRole) === 3;
-  const visibleTeams = React.useMemo(() => teams.filter(team => team?.isJoined && !team?.isPending && !team?.isRejected && !team?.isExited && !team?.isFrozen), [teams]);
+  const visibleTeams = React.useMemo(() => teams.filter(isVisibleMyTeam), [teams]);
   const createdTeamCount = React.useMemo(() => visibleTeams.filter(team => isTeamLeader(team)).length, [visibleTeams]);
   const totalTeamMembers = React.useMemo(() => visibleTeams.reduce((sum, team) => sum + (Number(team?.members) || 0), 0), [visibleTeams]);
   useFocusEffect(React.useCallback(() => {

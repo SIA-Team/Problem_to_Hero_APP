@@ -89,7 +89,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
       
       return data || [];
     } catch (error) {
-      console.error(`❌ 加载数据失败: ${tabType} - 第${pageNum}页`, error);
+      console.warn(`加载数据失败: ${tabType} - 第${pageNum}页`, error);
       return [];
     }
   }, [onDebugUpdate]);

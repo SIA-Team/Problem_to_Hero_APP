@@ -13,7 +13,7 @@ import WriteCommentModal from '../components/WriteCommentModal';
 import EmptyState from '../components/EmptyState';
 import { toast } from '../utils/toast';
 import { useTranslation } from '../i18n/withTranslation';
-import { showAppAlert } from '../utils/appAlert';
+import { showAppAlert, showPublishFailureAlert } from '../utils/appAlert';
 import { normalizeEntityId } from '../utils/jsonLongId';
 import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
@@ -1074,11 +1074,17 @@ export default function AnswerDetailScreen({
           }
         }
       } else {
-        toast.error(response?.msg || t('screens.answerDetail.alerts.operationFailed'));
+        showPublishFailureAlert(response?.msg, {
+          title: '评论发布失败',
+          fallbackMessage: t('screens.answerDetail.alerts.networkError'),
+        });
       }
     } catch (error) {
       console.error('发布回答评论失败:', error);
-      toast.error(error?.message || t('screens.answerDetail.alerts.networkError'));
+      showPublishFailureAlert(error, {
+        title: '评论发布失败',
+        fallbackMessage: t('screens.answerDetail.alerts.networkError'),
+      });
     }
   };
   const handleSubmitArbitration = () => {
@@ -2102,11 +2108,17 @@ export default function AnswerDetailScreen({
           setShowSupplementCommentListModal(true);
         }
       } else {
-        toast.error(response?.msg || t('screens.answerDetail.alerts.operationFailed'));
+        showPublishFailureAlert(response?.msg, {
+          title: '评论发布失败',
+          fallbackMessage: t('screens.answerDetail.alerts.networkError'),
+        });
       }
     } catch (error) {
       console.error('发布补充回答评论失败:', error);
-      toast.error(error?.message || t('screens.answerDetail.alerts.networkError'));
+      showPublishFailureAlert(error, {
+        title: '评论发布失败',
+        fallbackMessage: t('screens.answerDetail.alerts.networkError'),
+      });
     }
   };
   const handleSupplementCommentsLoadMore = () => {
@@ -2278,7 +2290,7 @@ export default function AnswerDetailScreen({
             <View style={styles.replyAuthorLine}>
               <Text style={styles.replyAuthor}>{reply.userName || reply.userNickname || reply.author}</Text>
               {shouldShowReplyRelation ? <>
-                  <Text style={styles.replyAuthorRelation}> 回复 </Text>
+                  <Text style={styles.replyAuthorRelation}> {t('screens.answerDetail.actions.reply')} </Text>
                   <Text style={styles.replyReplyTarget}>{relationUserName}</Text>
                 </> : null}
             </View>
@@ -2338,7 +2350,7 @@ export default function AnswerDetailScreen({
             <View style={styles.replyAuthorLine}>
               <Text style={styles.replyAuthor}>{reply.userName || reply.userNickname || reply.author}</Text>
               {shouldShowReplyRelation ? <>
-                  <Text style={styles.replyAuthorRelation}> 回复 </Text>
+                  <Text style={styles.replyAuthorRelation}> {t('screens.answerDetail.actions.reply')} </Text>
                   <Text style={styles.replyReplyTarget}>{relationUserName}</Text>
                 </> : null}
             </View>
@@ -2393,7 +2405,7 @@ export default function AnswerDetailScreen({
           ...prev,
           [reply.id]: !isExpanded
         }))}>
-              <Text style={styles.replyChildrenToggleText}>{isExpanded ? `收起回复 (${descendantReplies.length})` : `展开回复 (${descendantReplies.length})`}</Text>
+              <Text style={styles.replyChildrenToggleText}>{isExpanded ? t('screens.answerDetail.states.collapseReplies').replace('{count}', descendantReplies.length) : t('screens.answerDetail.states.expandReplies').replace('{count}', descendantReplies.length)}</Text>
             </TouchableOpacity>
             {isExpanded ? descendantReplies.map(childReply => renderAnswerCommentReplyCard(childReply, {
           ...options,
@@ -2414,7 +2426,7 @@ export default function AnswerDetailScreen({
           ...prev,
           [reply.id]: !isExpanded
         }))}>
-              <Text style={styles.replyChildrenToggleText}>{isExpanded ? `收起回复 (${descendantReplies.length})` : `展开回复 (${descendantReplies.length})`}</Text>
+              <Text style={styles.replyChildrenToggleText}>{isExpanded ? t('screens.answerDetail.states.collapseReplies').replace('{count}', descendantReplies.length) : t('screens.answerDetail.states.expandReplies').replace('{count}', descendantReplies.length)}</Text>
             </TouchableOpacity>
             {isExpanded ? descendantReplies.map(childReply => renderSupplementCommentReplyCard(childReply, {
           ...options,
@@ -2778,11 +2790,11 @@ export default function AnswerDetailScreen({
                   <Text style={styles.loadingMoreText}>{t('screens.answerDetail.states.loadingMore')}</Text>
                 </View>}
               {Boolean(supplementPagination.hasMore && !supplementLoading && supplementAnswers.length > 0) && <TouchableOpacity style={styles.loadMoreBtn} onPress={handleSupplementAnswersLoadMore}>
-                  <Text style={styles.loadMoreText}>加载更多补充回答</Text>
+                  <Text style={styles.loadMoreText}>{t('screens.answerDetail.states.loadMoreSupplements')}</Text>
                   <Ionicons name="chevron-down" size={16} color="#ef4444" />
                 </TouchableOpacity>}
               {!supplementPagination.hasMore && supplementAnswers.length > 0 && <View style={styles.loadingIndicator}>
-                  <Text style={styles.loadingText}>没有更多补充回答了</Text>
+                  <Text style={styles.loadingText}>{t('screens.answerDetail.states.noMoreSupplements')}</Text>
                 </View>}
             </>
           : (
@@ -2859,14 +2871,14 @@ export default function AnswerDetailScreen({
                 </View>;
               })}
                   {Boolean(answerCommentListState.loadingMore) && <View style={styles.loadingIndicator}>
-                      <Text style={styles.loadingText}>加载更多评论中...</Text>
+                      <Text style={styles.loadingText}>{t('screens.answerDetail.states.loadingMore')}</Text>
                     </View>}
                   {Boolean(answerCommentListState.hasMore && !answerCommentListState.loadingMore && answerCommentsList.length > 0) && <TouchableOpacity style={styles.loadMoreBtn} onPress={handleAnswerCommentsLoadMore}>
-                      <Text style={styles.loadMoreText}>加载更多评论</Text>
+                      <Text style={styles.loadMoreText}>{t('screens.answerDetail.states.loadMoreComments')}</Text>
                       <Ionicons name="chevron-down" size={16} color="#ef4444" />
                     </TouchableOpacity>}
                   {!answerCommentListState.hasMore && answerCommentsList.length > 0 && <View style={styles.loadingIndicator}>
-                      <Text style={styles.loadingText}>没有更多评论了</Text>
+                      <Text style={styles.loadingText}>{t('screens.answerDetail.states.noMoreComments')}</Text>
                     </View>}
                 </>
               )}
@@ -2938,19 +2950,19 @@ export default function AnswerDetailScreen({
               </View>}
 
             <View style={styles.repliesSectionHeader}>
-              <Text style={styles.repliesSectionTitle}>全部回复</Text>
+              <Text style={styles.repliesSectionTitle}>{t('screens.answerDetail.states.allReplies')}</Text>
             </View>
 
             <ScrollView style={styles.commentListScroll} showsVerticalScrollIndicator={false}>
               {currentAnswerCommentId && answerCommentRepliesMap[currentAnswerCommentId]?.loading && !answerCommentRepliesMap[currentAnswerCommentId]?.loaded ? <View style={styles.loadingIndicator}>
                   <ActivityIndicator size="large" color="#ef4444" />
-                  <Text style={styles.loadingText}>加载回复中...</Text>
+                  <Text style={styles.loadingText}>{t('screens.answerDetail.states.loadingReplies')}</Text>
                 </View> : null}
               {currentAnswerCommentId && answerCommentRepliesMap[currentAnswerCommentId]?.list ? renderAnswerCommentReplyTreeNodes(buildCommentReplyTree(answerCommentRepliesMap[currentAnswerCommentId].list, currentAnswerCommentId), {
             rootCommentId: currentAnswerCommentId
           }) : null}
               {currentAnswerCommentId && answerCommentRepliesMap[currentAnswerCommentId]?.loaded && (!answerCommentRepliesMap[currentAnswerCommentId]?.list || answerCommentRepliesMap[currentAnswerCommentId].list.length === 0) && <View style={styles.loadingIndicator}>
-                  <Text style={styles.loadingText}>暂无回复</Text>
+                  <Text style={styles.loadingText}>{t('screens.answerDetail.states.emptyReplies')}</Text>
                 </View>}
             </ScrollView>
 
@@ -2960,7 +2972,7 @@ export default function AnswerDetailScreen({
               openAnswerCommentComposer(buildAnswerCommentReplyTarget(currentAnswerReplyComment));
             }}>
                 <Ionicons name="create-outline" size={18} color="#6b7280" />
-                <Text style={styles.commentListWriteText}>写回复...</Text>
+                <Text style={styles.commentListWriteText}>{t('screens.answerDetail.placeholders.writeReply')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2974,7 +2986,7 @@ export default function AnswerDetailScreen({
             <View style={styles.commentListModalHandle} />
             <View style={styles.commentListModalHeader}>
               <View style={styles.commentListHeaderLeft} />
-              <Text style={styles.commentListModalTitle}>全部评论</Text>
+              <Text style={styles.commentListModalTitle}>{t('screens.answerDetail.tabs.comments')}</Text>
               <TouchableOpacity onPress={() => setShowSupplementCommentListModal(false)} style={styles.commentListCloseBtn}>
                 <Ionicons name="close" size={26} color="#1f2937" />
               </TouchableOpacity>
@@ -2983,9 +2995,9 @@ export default function AnswerDetailScreen({
             <ScrollView style={styles.commentListScroll} showsVerticalScrollIndicator={false}>
               {(supplementCommentListState.loading || supplementCommentListState.refreshing) && supplementCommentsList.length === 0 ? <View style={styles.loadingIndicator}>
                   <ActivityIndicator size="large" color="#ef4444" />
-                  <Text style={styles.loadingText}>加载评论中...</Text>
+                  <Text style={styles.loadingText}>{t('screens.answerDetail.states.loadingComments')}</Text>
                 </View> : supplementCommentsList.length === 0 ? <View style={styles.loadingIndicator}>
-                  <Text style={styles.loadingText}>暂无评论</Text>
+                  <Text style={styles.loadingText}>{t('screens.answerDetail.states.emptyCommentsTitle')}</Text>
                 </View> : supplementCommentsList.map(comment => {
               const isCommentLiked = supplementCommentLiked[comment.id] !== undefined ? supplementCommentLiked[comment.id] : !!comment.liked;
               const isCommentCollected = supplementCommentCollected[comment.id] !== undefined ? supplementCommentCollected[comment.id] : !!comment.collected;
@@ -3036,14 +3048,14 @@ export default function AnswerDetailScreen({
                   </View>;
             })}
               {Boolean(supplementCommentListState.loadingMore) && <View style={styles.loadingIndicator}>
-                  <Text style={styles.loadingText}>加载更多评论中...</Text>
+                  <Text style={styles.loadingText}>{t('screens.answerDetail.states.loadingMore')}</Text>
                 </View>}
               {Boolean(supplementCommentListState.hasMore && !supplementCommentListState.loadingMore && supplementCommentsList.length > 0) && <TouchableOpacity style={styles.loadMoreBtn} onPress={handleSupplementCommentsLoadMore}>
-                  <Text style={styles.loadMoreText}>加载更多评论</Text>
+                  <Text style={styles.loadMoreText}>{t('screens.answerDetail.states.loadMoreComments')}</Text>
                   <Ionicons name="chevron-down" size={16} color="#ef4444" />
                 </TouchableOpacity>}
               {!supplementCommentListState.hasMore && supplementCommentsList.length > 0 && <View style={styles.loadingIndicator}>
-                  <Text style={styles.loadingText}>没有更多评论了</Text>
+                  <Text style={styles.loadingText}>{t('screens.answerDetail.states.noMoreComments')}</Text>
                 </View>}
             </ScrollView>
 
@@ -3056,7 +3068,7 @@ export default function AnswerDetailScreen({
               });
             }}>
                 <Ionicons name="create-outline" size={18} color="#6b7280" />
-                <Text style={styles.commentListWriteText}>写评论...</Text>
+                <Text style={styles.commentListWriteText}>{t('screens.answerDetail.placeholders.writeComment')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -3098,7 +3110,7 @@ export default function AnswerDetailScreen({
               </View>}
 
             <View style={styles.repliesSectionHeader}>
-              <Text style={styles.repliesSectionTitle}>全部回复</Text>
+              <Text style={styles.repliesSectionTitle}>{t('screens.answerDetail.states.allReplies')}</Text>
             </View>
 
             <ScrollView style={styles.commentListScroll} showsVerticalScrollIndicator={false}>
@@ -3106,7 +3118,7 @@ export default function AnswerDetailScreen({
             rootCommentId: currentSupplementCommentId
           }) : null}
               {currentSupplementCommentId && supplementCommentRepliesMap[currentSupplementCommentId]?.loaded && (!supplementCommentRepliesMap[currentSupplementCommentId]?.list || supplementCommentRepliesMap[currentSupplementCommentId].list.length === 0) && <View style={styles.loadingIndicator}>
-                  <Text style={styles.loadingText}>暂无回复</Text>
+                  <Text style={styles.loadingText}>{t('screens.answerDetail.states.emptyReplies')}</Text>
                 </View>}
             </ScrollView>
 
@@ -3116,7 +3128,7 @@ export default function AnswerDetailScreen({
               openSupplementCommentComposer(buildSupplementCommentReplyTarget(currentSupplementReplyComment, currentSupplementCommentTargetId));
             }}>
                 <Ionicons name="create-outline" size={18} color="#6b7280" />
-                <Text style={styles.commentListWriteText}>写回复...</Text>
+                <Text style={styles.commentListWriteText}>{t('screens.answerDetail.placeholders.writeReply')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -3129,8 +3141,8 @@ export default function AnswerDetailScreen({
       fetchSupplementAnswers(true);
     }} />
       <ShareModal visible={showShareModal} onClose={closeShareModal} shareData={currentShareData || buildAnswerSharePayload()} onShare={handleShare} />
-      <WriteCommentModal visible={showSupplementCommentComposerModal} onClose={closeSupplementCommentComposer} onPublish={handleSubmitSupplementComment} originalComment={supplementCommentTarget.originalComment} publishInFooter closeOnRight title={supplementCommentTarget.parentId ? `写回复${supplementCommentTarget.replyToUserName ? ` @${supplementCommentTarget.replyToUserName}` : ''}` : '写评论'} placeholder={supplementCommentTarget.parentId ? '写下你的回复...' : '写下你的评论...'} />
-      <WriteCommentModal visible={showWriteCommentModal} onClose={closeAnswerCommentComposer} onPublish={handlePublishComment} originalComment={answerCommentTarget.originalComment} publishInFooter closeOnRight title={answerCommentTarget.parentId ? t('screens.answerDetail.modals.replyTitle').replace('{author}', answerCommentTarget.replyToUserName || '') : t('screens.answerDetail.modals.writeCommentTitle')} placeholder={answerCommentTarget.parentId ? t('screens.answerDetail.placeholders.writeReply') : t('screens.answerDetail.placeholders.writeCommentContent')} />
+      <WriteCommentModal visible={showSupplementCommentComposerModal} onClose={closeSupplementCommentComposer} onPublish={handleSubmitSupplementComment} originalComment={supplementCommentTarget.originalComment} title={supplementCommentTarget.parentId ? t('screens.answerDetail.modals.replyTitle').replace('{author}', supplementCommentTarget.replyToUserName || '') : t('screens.answerDetail.modals.writeCommentTitle')} placeholder={supplementCommentTarget.parentId ? t('screens.answerDetail.placeholders.writeReply') : t('screens.answerDetail.placeholders.writeCommentContent')} />
+      <WriteCommentModal visible={showWriteCommentModal} onClose={closeAnswerCommentComposer} onPublish={handlePublishComment} originalComment={answerCommentTarget.originalComment} title={answerCommentTarget.parentId ? t('screens.answerDetail.modals.replyTitle').replace('{author}', answerCommentTarget.replyToUserName || '') : t('screens.answerDetail.modals.writeCommentTitle')} placeholder={answerCommentTarget.parentId ? t('screens.answerDetail.placeholders.writeReply') : t('screens.answerDetail.placeholders.writeCommentContent')} />
     </SafeAreaView>;
 }
 const styles = StyleSheet.create({

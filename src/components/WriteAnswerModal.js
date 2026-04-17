@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,20 +6,29 @@ import {
   TouchableOpacity,
   TextInput,
   StyleSheet,
-  Modal,
   Image,
-  KeyboardAvoidingView,
-  Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
-import KeyboardDismissView from './KeyboardDismissView';
-import ModalSafeAreaView from './ModalSafeAreaView';
+import ComposerModalScaffold from './ComposerModalScaffold';
+import MentionSuggestionsPanel from './MentionSuggestionsPanel';
+import userApi from '../services/api/userApi';
 import { showToast } from '../utils/toast';
+import {
+  mergeLocalInviteUsers,
+  normalizeFollowingInviteUsers,
+  normalizePublicUserSearchResponse,
+} from '../utils/localInviteUsers';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
-
+import useMentionComposer from '../hooks/useMentionComposer';
+import {
+  DEFAULT_MENTION_PANEL_BASE_OFFSET,
+  DEFAULT_MENTION_SEARCH_LIMIT,
+} from '../utils/mentionComposer';
 import { scaleFont } from '../utils/responsive';
+
 export default function WriteAnswerModal({
   visible,
   onClose,
@@ -40,68 +49,181 @@ export default function WriteAnswerModal({
   onChangeImages,
   wordLimit = 2000,
   submitting = false,
+  submitDisabled = false,
+  headerNotice = null,
+  showTagTool = true,
 }) {
-  const bottomSafeInset = useBottomSafeInset();
+  const bottomSafeInset = useBottomSafeInset(12, { maxAndroidInset: 24 });
+  const { height: answerWindowHeight } = useWindowDimensions();
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const [recommendedMentionUsers, setRecommendedMentionUsers] = useState([]);
+  const answerInputRef = React.useRef(null);
 
-  const canSubmit = !!text.trim() && !submitting;
+  const currentImages = Array.isArray(images) ? images : [];
+  const canSubmit = !!text.trim() && !submitting && !submitDisabled;
+  const {
+    activeMention,
+    candidateUsers,
+    focusInput,
+    handleMentionPress,
+    handleMentionSelect,
+    handleSelectionChange,
+    listMaxHeight,
+    mentionBottomInset,
+    mentionLoading,
+    panelAnimatedStyle,
+    panelBottomOffset,
+    panelMaxHeight,
+    renderMentionPanel,
+    selection,
+    shouldShowMentionPanel,
+  } = useMentionComposer({
+    visible,
+    text,
+    onChangeText,
+    inputRef: answerInputRef,
+    windowHeight: answerWindowHeight,
+    bottomInset: bottomSafeInset,
+    recommendedUsers: recommendedMentionUsers,
+    baseBottomOffset: DEFAULT_MENTION_PANEL_BASE_OFFSET,
+    onInvalidMention: () => showToast('该用户缺少可用名称', 'warning'),
+  });
+
+  useEffect(() => {
+    if (!visible) {
+      setRecommendedMentionUsers([]);
+      return undefined;
+    }
+
+    let isActive = true;
+    const fallbackSearchKeywords = ['a', 'e', 'm', '1', '8'];
+
+    const loadRecommendedUsers = async () => {
+      try {
+        let mergedUsers = [];
+
+        try {
+          const response = await userApi.getFollowing({
+            pageNum: 1,
+            page: 1,
+            pageSize: 20,
+            size: 20,
+            limit: 20,
+          });
+          mergedUsers = mergeLocalInviteUsers(normalizeFollowingInviteUsers(response));
+        } catch (followError) {
+          console.warn('Failed to load answer mention following users:', followError);
+        }
+
+        if (mergedUsers.length < 6) {
+          const fallbackResults = await Promise.allSettled(
+            fallbackSearchKeywords.map(keyword => userApi.searchPublicProfiles(keyword, 10))
+          );
+
+          fallbackResults.forEach(result => {
+            if (result.status !== 'fulfilled') {
+              return;
+            }
+
+            mergedUsers = mergeLocalInviteUsers([
+              ...mergedUsers,
+              ...normalizePublicUserSearchResponse(result.value),
+            ]);
+          });
+        }
+
+        if (isActive) {
+          setRecommendedMentionUsers(mergedUsers.slice(0, DEFAULT_MENTION_SEARCH_LIMIT));
+        }
+      } catch (error) {
+        if (isActive) {
+          console.warn('Failed to load answer mention recommended users:', error);
+          setRecommendedMentionUsers([]);
+        }
+      }
+    };
+
+    loadRecommendedUsers();
+
+    return () => {
+      isActive = false;
+    };
+  }, [visible]);
 
   const handleAddImage = imageUri => {
-    const currentImages = Array.isArray(images) ? images : [];
     if (currentImages.length >= 9) {
       showToast('最多只能添加9张图片', 'warning');
       return;
     }
+
     onChangeImages?.([...currentImages, imageUri]);
     setShowImagePicker(false);
   };
 
   const handleRemoveImage = index => {
-    const currentImages = Array.isArray(images) ? images : [];
     onChangeImages?.(currentImages.filter((_, imageIndex) => imageIndex !== index));
   };
 
   const handleOpenImagePicker = () => {
-    const currentImages = Array.isArray(images) ? images : [];
     if (currentImages.length >= 9) {
       showToast('最多只能添加9张图片', 'warning');
       return;
     }
+
     setShowImagePicker(true);
   };
 
   return (
     <>
-      <Modal
+      <ComposerModalScaffold
         visible={visible}
-        animationType="slide"
-        statusBarTranslucent
-        navigationBarTranslucent
-      >
-        <KeyboardAvoidingView
-          style={styles.keyboardAvoidingView}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-        <KeyboardDismissView>
-        <ModalSafeAreaView style={styles.answerModal} edges={['top']}>
-          <View style={styles.answerModalHeader}>
-            <TouchableOpacity onPress={onClose} style={styles.answerCloseBtn}>
-              <Ionicons name="close" size={26} color="#333" />
+        onClose={onClose}
+        title={title}
+        onSubmit={onSubmit}
+        submitText={publishText}
+        submitDisabled={!canSubmit}
+        footerPaddingBottom={bottomSafeInset + 8}
+        footerBottomInset={bottomSafeInset}
+        footerLeft={
+          <View style={styles.answerToolsLeft}>
+            <TouchableOpacity style={styles.answerToolItem} onPress={handleOpenImagePicker}>
+              <Ionicons name="image-outline" size={24} color="#666" />
             </TouchableOpacity>
-            <View style={styles.answerHeaderCenter}>
-              <Text style={styles.answerModalTitle}>{title}</Text>
-            </View>
-            <TouchableOpacity
-              style={[styles.answerPublishBtn, !canSubmit && styles.answerPublishBtnDisabled]}
-              onPress={onSubmit}
-              disabled={!canSubmit}
-            >
-              <Text style={[styles.answerPublishText, !canSubmit && styles.answerPublishTextDisabled]}>
-                {publishText}
-              </Text>
+            <TouchableOpacity style={styles.answerToolItem} onPress={handleMentionPress}>
+              <Ionicons name="at-outline" size={24} color="#666" />
             </TouchableOpacity>
+            {showTagTool ? (
+              <TouchableOpacity style={styles.answerToolItem}>
+                <Ionicons name="pricetag-outline" size={24} color="#666" />
+              </TouchableOpacity>
+            ) : null}
           </View>
+        }
+        footerRight={
+          <Text style={styles.answerWordCount}>
+            {text.length}/{wordLimit}
+          </Text>
+        }
+        floatingOverlay={
+          renderMentionPanel ? (
+            <MentionSuggestionsPanel
+              activeKeyword={activeMention?.keyword ?? ''}
+              animatedStyle={panelAnimatedStyle}
+              bottomInset={mentionBottomInset}
+              bottomOffset={panelBottomOffset}
+              listMaxHeight={listMaxHeight}
+              loading={mentionLoading}
+              onBackdropPress={focusInput}
+              onSelect={handleMentionSelect}
+              panelMaxHeight={panelMaxHeight}
+              users={candidateUsers}
+            />
+          ) : null
+        }
+      >
+        {headerNotice}
 
+        <View style={styles.answerContentRoot}>
           <View style={styles.answerQuestionCard}>
             <View style={styles.answerQuestionIcon}>
               <Ionicons name="help-circle" size={20} color="#ef4444" />
@@ -110,7 +232,7 @@ export default function WriteAnswerModal({
               <Text style={styles.answerQuestionText} numberOfLines={2}>
                 {questionTitle || '无标题'}
               </Text>
-              {Boolean(supplementText) && (
+              {Boolean(supplementText) ? (
                 <View style={styles.answerSupplementInfo}>
                   <Ionicons name="arrow-forward" size={14} color="#f59e0b" />
                   <Text style={styles.answerSupplementLabel}>{supplementLabel}</Text>
@@ -118,38 +240,47 @@ export default function WriteAnswerModal({
                     {supplementText}
                   </Text>
                 </View>
-              )}
+              ) : null}
             </View>
           </View>
 
           <ScrollView
             style={styles.answerContentArea}
+            scrollEnabled={!shouldShowMentionPanel}
             keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
+            keyboardDismissMode={shouldShowMentionPanel ? 'none' : 'interactive'}
           >
             <TextInput
+              ref={answerInputRef}
               style={styles.answerTextInput}
               placeholder={placeholder}
               placeholderTextColor="#bbb"
               value={text}
               onChangeText={onChangeText}
+              onSelectionChange={handleSelectionChange}
+              selection={selection}
               multiline
               autoFocus
+              maxLength={wordLimit}
+              selectionColor="#ef4444"
               textAlignVertical="top"
             />
 
-            {images.length > 0 && (
+            {currentImages.length > 0 ? (
               <View style={styles.answerImagesPreview}>
-                {images.map((imageUri, index) => (
+                {currentImages.map((imageUri, index) => (
                   <View key={`${imageUri}_${index}`} style={styles.answerImagePreviewItem}>
                     <Image source={{ uri: imageUri }} style={styles.answerImagePreview} />
-                    <TouchableOpacity style={styles.answerImageRemoveBtn} onPress={() => handleRemoveImage(index)}>
+                    <TouchableOpacity
+                      style={styles.answerImageRemoveBtn}
+                      onPress={() => handleRemoveImage(index)}
+                    >
                       <Ionicons name="close-circle" size={20} color="#ef4444" />
                     </TouchableOpacity>
                   </View>
                 ))}
               </View>
-            )}
+            ) : null}
 
             <View style={styles.answerIdentitySection}>
               <IdentitySelector
@@ -160,34 +291,8 @@ export default function WriteAnswerModal({
               />
             </View>
           </ScrollView>
-
-          <View
-            style={[
-              styles.answerToolbar,
-              {
-                paddingBottom: bottomSafeInset + 8,
-              },
-            ]}
-          >
-            <View style={styles.answerToolsLeft}>
-              <TouchableOpacity style={styles.answerToolItem} onPress={handleOpenImagePicker}>
-                <Ionicons name="image-outline" size={24} color="#666" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.answerToolItem}>
-                <Ionicons name="at-outline" size={24} color="#666" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.answerToolItem}>
-                <Ionicons name="pricetag-outline" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.answerWordCount}>
-              {text.length}/{wordLimit}
-            </Text>
-          </View>
-        </ModalSafeAreaView>
-        </KeyboardDismissView>
-        </KeyboardAvoidingView>
-      </Modal>
+        </View>
+      </ComposerModalScaffold>
 
       <ImagePickerSheet
         visible={showImagePicker}
@@ -199,52 +304,8 @@ export default function WriteAnswerModal({
 }
 
 const styles = StyleSheet.create({
-  keyboardAvoidingView: {
+  answerContentRoot: {
     flex: 1,
-  },
-  answerModal: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  answerModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  answerCloseBtn: {
-    padding: 4,
-    zIndex: 10,
-  },
-  answerHeaderCenter: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  answerModalTitle: {
-    fontSize: scaleFont(17),
-    fontWeight: '600',
-    color: '#222',
-  },
-  answerPublishBtn: {
-    backgroundColor: '#ef4444',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 4,
-    zIndex: 1,
-  },
-  answerPublishBtnDisabled: {
-    backgroundColor: '#ffcdd2',
-  },
-  answerPublishText: {
-    fontSize: scaleFont(14),
-    color: '#fff',
-    fontWeight: '600',
-  },
-  answerPublishTextDisabled: {
-    color: '#fff',
   },
   answerQuestionCard: {
     flexDirection: 'row',
@@ -327,16 +388,6 @@ const styles = StyleSheet.create({
     right: -8,
     backgroundColor: '#fff',
     borderRadius: 10,
-  },
-  answerToolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    backgroundColor: '#fff',
   },
   answerToolsLeft: {
     flexDirection: 'row',

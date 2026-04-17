@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { View, Text, Modal, TouchableOpacity, TextInput, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,7 +19,7 @@ import UserCacheService from './src/services/UserCacheService';
 import ToastContainer from './src/components/ToastContainer';
 import AppAlertContainer from './src/components/AppAlertContainer';
 import RootErrorBoundary from './src/components/RootErrorBoundary';
-import { setToastRef, showToast } from './src/utils/toast';
+import { showToast } from './src/utils/toast';
 import { setAppAlertRef, showAppAlert } from './src/utils/appAlert';
 import { syncCacheIdentity } from './src/utils/cacheManager';
 import UpdateChecker from './src/components/UpdateChecker';
@@ -34,6 +35,11 @@ import {
   getOtaLaunchInfo,
   loadRecentOtaErrors,
 } from './src/utils/otaDiagnostics';
+import {
+  resolveInterestOnboardingUserId,
+  shouldPreservePreparedInterestOnboarding,
+} from './src/utils/interestOnboardingGate';
+import { canHideNativeSplashScreen } from './src/utils/nativeSplashGate';
 import { EmergencyProvider } from './src/contexts/EmergencyContext';
 
 import HomeScreen from './src/screens/HomeScreen';
@@ -106,11 +112,68 @@ import {
   saveComboChannels,
 } from './src/services/channelSubscriptionService';
 
+const DEV_CONSOLE_ERROR_SILENCE_PATTERNS = [
+  /API调用失败/i,
+  /接口调用失败/i,
+];
+
+const stringifyDevConsoleArg = (value) => {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (value instanceof Error) {
+    return `${value.name}: ${value.message || ''}`;
+  }
+
+  if (value === undefined) {
+    return 'undefined';
+  }
+
+  if (value === null) {
+    return 'null';
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    return String(value);
+  }
+};
+
+const shouldSilenceDevConsoleError = (args = []) => {
+  const normalizedMessage = args.map(stringifyDevConsoleArg).join(' ');
+
+  if (!normalizedMessage) {
+    return false;
+  }
+
+  return DEV_CONSOLE_ERROR_SILENCE_PATTERNS.some((pattern) => pattern.test(normalizedMessage));
+};
+
+if (__DEV__ && !global.__QA_NATIVE_APP_DEV_ERROR_FILTER_INSTALLED__) {
+  global.__QA_NATIVE_APP_DEV_ERROR_FILTER_INSTALLED__ = true;
+
+  const originalConsoleError = console.error.bind(console);
+  const originalConsoleLog = console.log.bind(console);
+
+  console.error = (...args) => {
+    if (shouldSilenceDevConsoleError(args)) {
+      originalConsoleLog('[DevSilencedError]', ...args);
+      return;
+    }
+
+    originalConsoleError(...args);
+  };
+}
+
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 const SERVER_SELECTION_STORAGE_KEY = '@app_server_selection';
+const MANUAL_LOGOUT_STORAGE_KEY = '@manual_logout';
 const INITIAL_CREDENTIALS_NOTICE_STORAGE_KEY = '@initial_credentials_notice';
 const INITIAL_CREDENTIALS_DEFAULT_PASSWORD = '12345678';
+const STARTUP_AUTH_REQUEST_TIMEOUT_MS = 4000;
 const APP_LINKING = {
   prefixes: ['problemvshero://'],
   config: {
@@ -148,6 +211,10 @@ const APP_LINKING = {
   },
 };
 
+void SplashScreen.preventAutoHideAsync().catch((error) => {
+  console.warn('Native splash screen auto-hide was already configured:', error);
+});
+
 const extractInterestChannels = (payload) => {
   const level2 = Array.isArray(payload?.level2) ? payload.level2 : [];
 
@@ -155,6 +222,29 @@ const extractInterestChannels = (payload) => {
     .map((item) => (typeof item?.name === 'string' ? item.name.trim() : ''))
     .filter(Boolean);
 };
+
+function StartupLoadingScreen({ title, message, notice = '', accent = '正在启动' }) {
+  return (
+    <View style={startupStyles.screen}>
+      <View style={startupStyles.glowPrimary} />
+      <View style={startupStyles.glowSecondary} />
+      <View style={startupStyles.card}>
+        <View style={startupStyles.badge}>
+          <Ionicons name="sparkles" size={22} color="#ef4444" />
+        </View>
+        <Text style={startupStyles.accent}>{accent}</Text>
+        <Text style={startupStyles.title}>{title}</Text>
+        <Text style={startupStyles.message}>{message}</Text>
+        <View style={startupStyles.progressRow}>
+          <View style={[startupStyles.progressDot, startupStyles.progressDotActive]} />
+          <View style={[startupStyles.progressDot, startupStyles.progressDotActiveSoft]} />
+          <View style={startupStyles.progressDot} />
+        </View>
+        {notice ? <Text style={startupStyles.notice}>{notice}</Text> : null}
+      </View>
+    </View>
+  );
+}
 
 // Emergency Help Modal Component
 function EmergencyModal({ visible, onClose, onSubmit }) {
@@ -549,6 +639,54 @@ function AppContent() {
   const [interestOnboardingUserId, setInterestOnboardingUserId] = useState(null);
   const [otaRecoveryNotice, setOtaRecoveryNotice] = useState(null);
   const [startupRecoveryNotice, setStartupRecoveryNotice] = useState(null);
+  const [startupStatus, setStartupStatus] = useState({
+    title: '正在准备应用',
+    message: '正在加载基础资源，请稍候...',
+  });
+  const nativeSplashStateRef = React.useRef('pending');
+  const startupAuthInFlightRef = React.useRef(false);
+  const startupTimeoutDeferCountRef = React.useRef(0);
+
+  const updateStartupStatus = React.useCallback((title, message) => {
+    setStartupStatus((prev) =>
+      prev.title === title && prev.message === message ? prev : { title, message }
+    );
+  }, []);
+
+  const canHideSplashScreen = canHideNativeSplashScreen({
+    fontsLoaded,
+    isInitializing,
+    isLoggedIn,
+    isCheckingInterestOnboarding,
+  });
+
+  const hideNativeSplashScreen = React.useCallback(async () => {
+    if (!canHideSplashScreen || nativeSplashStateRef.current !== 'pending') {
+      return;
+    }
+
+    nativeSplashStateRef.current = 'hiding';
+
+    try {
+      await SplashScreen.hideAsync();
+      nativeSplashStateRef.current = 'hidden';
+    } catch (error) {
+      nativeSplashStateRef.current = 'pending';
+      console.error('Failed to hide native splash screen:', error);
+    }
+  }, [canHideSplashScreen]);
+
+  useEffect(() => {
+    if (!canHideSplashScreen || nativeSplashStateRef.current === 'hidden') {
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      hideNativeSplashScreen();
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [canHideSplashScreen, hideNativeSplashScreen]);
 
   useEffect(() => {
     let mounted = true;
@@ -604,31 +742,50 @@ function AppContent() {
 
   useEffect(() => {
     if (!isInitializing) {
+      startupTimeoutDeferCountRef.current = 0;
       return;
     }
 
-    const timer = setTimeout(() => {
-      console.error('App initialization timed out, switching to safe login mode');
-      setStartupRecoveryNotice(getStartupRecoveryNotice());
-      setShouldShowInterestOnboardingScreen(false);
-      setIsCheckingInterestOnboarding(false);
-      setInterestOnboardingUserId(null);
-      setIsLoggedIn(false);
-      setIsInitializing(false);
-    }, STARTUP_INIT_TIMEOUT_MS);
+    let cancelled = false;
+    let timer = null;
 
-    return () => clearTimeout(timer);
+    const scheduleTimeout = (delayMs) => {
+      timer = setTimeout(() => {
+        if (cancelled) {
+          return;
+        }
+
+        if (startupAuthInFlightRef.current && startupTimeoutDeferCountRef.current < 2) {
+          startupTimeoutDeferCountRef.current += 1;
+          console.warn(
+            `Startup timeout deferred while auth bootstrap is still running (${startupTimeoutDeferCountRef.current})`
+          );
+          scheduleTimeout(STARTUP_STEP_TIMEOUT_MS);
+          return;
+        }
+
+        console.error('App initialization timed out, switching to safe login mode');
+        setStartupRecoveryNotice(getStartupRecoveryNotice());
+        setShouldShowInterestOnboardingScreen(false);
+        setIsCheckingInterestOnboarding(false);
+        setInterestOnboardingUserId(null);
+        setIsLoggedIn(false);
+        setIsInitializing(false);
+      }, delayMs);
+    };
+
+    scheduleTimeout(STARTUP_INIT_TIMEOUT_MS);
+
+    return () => {
+      cancelled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
   }, [isInitializing]);
   
   console.log('📱 App state:', { isLoggedIn, isInitializing, fontsLoaded });
   
-  // 使用回调 ref 确保 Toast 引用在组件挂载时立即设置
-  const toastRef = React.useCallback((ref) => {
-    if (ref) {
-      setToastRef(ref);
-    }
-  }, []);
-
   const appAlertRef = React.useCallback((ref) => {
     if (ref) {
       setAppAlertRef(ref);
@@ -651,6 +808,7 @@ function AppContent() {
   // 预加载字体
   useEffect(() => {
     console.log('🔤 开始加载字体...');
+    updateStartupStatus('正在准备应用', '正在加载界面资源，请稍候...');
     async function loadFonts() {
       try {
         console.log('🔤 正在加载字体...');
@@ -675,16 +833,27 @@ function AppContent() {
   // 初始化服务和检查登录状态
   useEffect(() => {
     // 自动注册重试函数（开发和生产环境都使用）
-    const autoRegisterWithRetry = async (fingerprint, maxRetries = 3) => {
+    const autoRegisterWithRetry = async (
+      fingerprint,
+      { maxRetries = 2, timeoutMs = STARTUP_AUTH_REQUEST_TIMEOUT_MS } = {}
+    ) => {
+      startupAuthInFlightRef.current = true;
+
       for (let i = 0; i < maxRetries; i++) {
         try {
           console.log(`🔄 尝试自动注册 (${i + 1}/${maxRetries})...`);
-          const response = await authApi.registerByFingerprint(fingerprint);
+          const response = await withTimeout(
+            () => authApi.registerByFingerprint(fingerprint),
+            timeoutMs,
+            'fingerprint auth'
+          );
           
           if (response.code === 200 && response.data) {
             console.log('✅ 自动注册成功！');
+            startupAuthInFlightRef.current = false;
             return { success: true, data: response.data };
           } else {
+            updateStartupStatus('正在创建账号', '首次启动正在为你准备默认账号...');
             console.error(`⚠️ 第 ${i + 1} 次尝试返回错误:`, response.msg);
           }
         } catch (error) {
@@ -692,13 +861,14 @@ function AppContent() {
           
           if (i < maxRetries - 1) {
             // 指数退避：1s, 2s, 4s
-            const delay = Math.pow(2, i) * 1000;
+            const delay = Math.min(600 * Math.pow(2, i), 1200);
             console.log(`⏳ 等待 ${delay}ms 后重试...`);
             await new Promise(resolve => setTimeout(resolve, delay));
           }
         }
       }
       
+      startupAuthInFlightRef.current = false;
       return { success: false };
     };
 
@@ -707,10 +877,17 @@ function AppContent() {
         console.log('🚀 应用启动中...');
         console.log('⚙️  环境:', __DEV__ ? '开发环境' : '生产环境');
         console.log('');
+        updateStartupStatus('正在初始化应用', '正在校验启动环境并连接服务...');
         
         // 初始化超级赞积分系统（异步，不阻塞）
-        const selectedServer =
-          (await AsyncStorage.getItem(SERVER_SELECTION_STORAGE_KEY)) || 'server2';
+        const startupStorageValues = await AsyncStorage.multiGet([
+          SERVER_SELECTION_STORAGE_KEY,
+          'authToken',
+          MANUAL_LOGOUT_STORAGE_KEY,
+          'deviceFingerprint',
+        ]);
+        const startupStorageMap = Object.fromEntries(startupStorageValues);
+        const selectedServer = startupStorageMap[SERVER_SELECTION_STORAGE_KEY] || 'server2';
         const cacheIdentity = `${selectedServer}|${getCurrentBundleFingerprint()}`;
         const cacheIdentityResult = await syncCacheIdentity(cacheIdentity);
 
@@ -725,21 +902,31 @@ function AppContent() {
         });
         
         // 检查是否有保存的 token（自动登录）
-        const savedToken = await AsyncStorage.getItem('authToken');
+        const savedToken = startupStorageMap.authToken;
+        const hasManualLogoutMarker =
+          startupStorageMap[MANUAL_LOGOUT_STORAGE_KEY] === 'true';
+        const initialSavedFingerprint = startupStorageMap.deviceFingerprint;
         
         if (savedToken) {
+          updateStartupStatus('正在恢复登录', '正在验证你的账号状态...');
           console.log('✅ 检测到已保存的 token，尝试 token 自动登录');
           console.log('   Token (前20字符):', savedToken.substring(0, 20) + '...');
           
           try {
             // 尝试使用 token 自动登录
-            const tokenLoginResponse = await authApi.tokenLogin();
+            startupAuthInFlightRef.current = true;
+            const tokenLoginResponse = await withTimeout(
+              () => authApi.tokenLogin(),
+              STARTUP_AUTH_REQUEST_TIMEOUT_MS,
+              'token login'
+            );
+            startupAuthInFlightRef.current = false;
             
             if (tokenLoginResponse.code === 200) {
               console.log('✅ Token 自动登录成功');
               
               // 立即设置登录状态，让用户进入应用
-              setIsLoggedIn(true);
+              enterAuthenticatedApp();
               setIsInitializing(false);
               
               // 后台加载用户信息（不阻塞UI）
@@ -764,6 +951,7 @@ function AppContent() {
               await AsyncStorage.multiRemove(['authToken', 'refreshToken', 'userInfo']);
             }
           } catch (tokenLoginError) {
+            startupAuthInFlightRef.current = false;
             console.error('❌ Token 自动登录异常:', tokenLoginError.message);
             console.log('   尝试设备指纹重新注册...');
             
@@ -772,15 +960,36 @@ function AppContent() {
           }
           
           // Token 登录失败，尝试使用设备指纹重新注册
-          const savedFingerprint = await AsyncStorage.getItem('deviceFingerprint');
+          const savedFingerprint = initialSavedFingerprint;
+
+          if (savedFingerprint && hasManualLogoutMarker) {
+            console.log('鈿狅笍 妫€娴嬪埌涓绘姩閫€鍑烘爣璁帮紝鐩存帴鏄剧ず鐧诲綍椤甸潰');
+            setIsInitializing(false);
+            return;
+          }
+
+          if (savedFingerprint && !hasManualLogoutMarker) {
+            updateStartupStatus('正在恢复登录', '正在通过设备身份恢复账号...');
+            console.log('馃攧 妫€娴嬪埌璁惧鎸囩汗浣嗘棤 token锛屽皾璇曞揩閫熸仮澶嶈嚜鍔ㄧ櫥褰?..');
+            const recoveredSession = await autoRegisterWithRetry(savedFingerprint, { maxRetries: 1 });
+
+            if (recoveredSession.success) {
+              console.log('鉁?閫氳繃璁惧鎸囩汗鎭㈠鐧诲綍鎴愬姛');
+              await AsyncStorage.removeItem(MANUAL_LOGOUT_STORAGE_KEY);
+              enterAuthenticatedApp();
+              setIsInitializing(false);
+              return;
+            }
+          }
           
           if (savedFingerprint) {
             console.log('🔄 使用已保存的设备指纹重新注册...');
-            const result = await autoRegisterWithRetry(savedFingerprint);
+            const result = await autoRegisterWithRetry(savedFingerprint, { maxRetries: 1 });
             
             if (result.success) {
+              await AsyncStorage.removeItem(MANUAL_LOGOUT_STORAGE_KEY);
               console.log('✅ 自动重新注册成功！');
-              setIsLoggedIn(true);
+              enterAuthenticatedApp();
               setIsInitializing(false);
               showToast('登录已更新', 'success');
             } else {
@@ -799,7 +1008,25 @@ function AppContent() {
           console.log('📱 未检测到 token，检查设备指纹...');
           
           // 检查是否有保存的设备指纹
-          const savedFingerprint = await AsyncStorage.getItem('deviceFingerprint');
+          const savedFingerprint = initialSavedFingerprint;
+
+          if (savedFingerprint && hasManualLogoutMarker) {
+            console.log('鈿狅笍 妫€娴嬪埌涓绘姩閫€鍑烘爣璁帮紝鐩存帴鏄剧ず鐧诲綍椤甸潰');
+            setIsInitializing(false);
+            return;
+          }
+
+          if (savedFingerprint && !hasManualLogoutMarker) {
+            console.log('馃攧 妫€娴嬪埌璁惧鎸囩汗浣嗘棤 token锛屽皾璇曞揩閫熸仮澶嶈嚜鍔ㄧ櫥褰?..');
+            const recoveredSession = await autoRegisterWithRetry(savedFingerprint, { maxRetries: 1 });
+
+            if (recoveredSession.success) {
+              console.log('鉁?閫氳繃璁惧鎸囩汗鎭㈠鐧诲綍鎴愬姛');
+              enterAuthenticatedApp();
+              setIsInitializing(false);
+              return;
+            }
+          }
           
           if (savedFingerprint) {
             console.log('⚠️ 检测到设备指纹但无 token，可能是用户退出登录');
@@ -818,11 +1045,12 @@ function AppContent() {
               
               // 使用重试机制调用自动注册接口
               console.log('\n📡 步骤 2: 调用自动注册接口（带重试）');
-              const result = await autoRegisterWithRetry(fingerprint);
+              const result = await autoRegisterWithRetry(fingerprint, { maxRetries: 2 });
               
               console.log('\n📊 步骤 3: 处理注册结果');
               
               if (result.success && result.data) {
+                await AsyncStorage.removeItem(MANUAL_LOGOUT_STORAGE_KEY);
                 console.log('\n✅ 自动注册成功！');
                 console.log('═══════════════════════════════════════════════════════════════');
                 console.log('👤 用户信息:');
@@ -848,7 +1076,9 @@ function AppContent() {
                 }
 
                 // 自动登录进入应用
-                setIsLoggedIn(true);
+                const shouldShowStartupOnboarding =
+                  primeInterestOnboardingForCurrentUser(registeredUserId);
+                enterAuthenticatedApp({ skipInterestCheck: shouldShowStartupOnboarding });
                 setIsInitializing(false);
               } else {
                 console.error('\n❌ 自动注册失败（已重试3次）');
@@ -928,12 +1158,45 @@ function AppContent() {
         return;
       }
 
+      if (
+        shouldPreservePreparedInterestOnboarding({
+          shouldShowInterestOnboardingScreen,
+          interestOnboardingUserId,
+        })
+      ) {
+        if (!mounted) return;
+        setIsCheckingInterestOnboarding(false);
+        return;
+      }
+
+      updateStartupStatus('正在准备兴趣引导', '正在检查你的兴趣设置...');
       setIsCheckingInterestOnboarding(true);
 
       try {
-        const currentUser = await authApi.getCurrentUser();
-        const currentUserId = currentUser?.userId ? String(currentUser.userId) : null;
-        const shouldShow = await shouldShowInterestOnboarding(currentUserId);
+        const currentUser = await withTimeout(
+          () => authApi.getCurrentUser(),
+          STARTUP_STEP_TIMEOUT_MS,
+          'interest onboarding user'
+        );
+        const currentUserId = resolveInterestOnboardingUserId({
+          interestOnboardingUserId,
+          currentUser,
+        });
+
+        if (!currentUserId) {
+          console.warn('Skip interest onboarding because current user id is unavailable');
+          if (mounted) {
+            setInterestOnboardingUserId(null);
+            setShouldShowInterestOnboardingScreen(false);
+          }
+          return;
+        }
+
+        const shouldShow = await withTimeout(
+          () => shouldShowInterestOnboarding(currentUserId),
+          STARTUP_STEP_TIMEOUT_MS,
+          'interest onboarding status'
+        );
 
         if (!mounted) return;
 
@@ -956,19 +1219,53 @@ function AppContent() {
     return () => {
       mounted = false;
     };
-  }, [isLoggedIn]);
+  }, [interestOnboardingUserId, isLoggedIn, shouldShowInterestOnboardingScreen]);
 
   // 显示加载界面直到字体和初始化完成
-  if (!fontsLoaded || isInitializing) {
-    console.log('🔄 App loading state:', { fontsLoaded, isInitializing });
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
-        <ActivityIndicator size="large" color="#ef4444" />
-        <Text style={{ marginTop: 16, fontSize: 14, color: '#6b7280' }}>
-          {!fontsLoaded ? '加载中...' : '正在初始化...'}
-        </Text>
-      </View>
-    );
+  const enterAuthenticatedApp = ({ skipInterestCheck = false } = {}) => {
+    setIsCheckingInterestOnboarding(!skipInterestCheck);
+    setIsLoggedIn(true);
+  };
+
+  const primeInterestOnboardingForCurrentUser = (userId) => {
+    if (userId === undefined || userId === null || userId === '') {
+      return false;
+    }
+
+    updateStartupStatus('即将进入兴趣引导', '正在为你打开个性化设置...');
+    const normalizedUserId = String(userId);
+    setInterestOnboardingUserId(normalizedUserId);
+    setShouldShowInterestOnboardingScreen(true);
+    setIsCheckingInterestOnboarding(false);
+    return true;
+  };
+
+  const initialLoadingView =
+    !fontsLoaded || isInitializing ? (
+      <StartupLoadingScreen
+        title={!fontsLoaded ? '正在加载应用资源' : startupStatus.title}
+        message={!fontsLoaded ? '正在准备界面资源，请稍候...' : startupStatus.message}
+        notice={startupRecoveryNotice || ''}
+        accent={!fontsLoaded ? '资源加载中' : '初始化中'}
+      />
+    ) : null;
+
+  if (initialLoadingView) {
+    console.log('馃攧 App loading state:', { fontsLoaded, isInitializing });
+    return initialLoadingView;
+  }
+
+  const onboardingCheckingView =
+    isLoggedIn && isCheckingInterestOnboarding ? (
+      <StartupLoadingScreen
+        title={startupStatus.title}
+        message={startupStatus.message}
+        accent="个性化设置中"
+      />
+    ) : null;
+
+  if (onboardingCheckingView) {
+    return onboardingCheckingView;
   }
 
   console.log('✅ App ready, isLoggedIn:', isLoggedIn);
@@ -978,7 +1275,7 @@ function AppContent() {
   );
 
   const handleLogin = () => {
-    setIsLoggedIn(true);
+    enterAuthenticatedApp();
   };
 
   const handleLogout = () => {
@@ -1028,65 +1325,59 @@ function AppContent() {
     setShouldShowInterestOnboardingScreen(false);
   };
 
-  if (isLoggedIn && isCheckingInterestOnboarding) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
-        <ActivityIndicator size="large" color="#ef4444" />
-        <Text style={{ marginTop: 16, fontSize: 14, color: '#6b7280' }}>
-          Preparing personalized setup...
-        </Text>
-      </View>
-    );
-  }
-
   if (isLoggedIn && shouldShowInterestOnboardingScreen) {
     return (
-      <EmergencyProvider>
-        <SafeAreaProvider>
-          <StatusBar style="dark" />
-          {updateChecker}
-          <InterestOnboardingScreen
-            userId={interestOnboardingUserId}
-            onComplete={handleInterestOnboardingComplete}
-            onSkip={handleInterestOnboardingSkip}
-          />
-          <AppAlertContainer ref={appAlertRef} />
-          <ToastContainer ref={toastRef} />
-        </SafeAreaProvider>
-      </EmergencyProvider>
+      <View style={{ flex: 1, backgroundColor: '#fff' }} onLayout={hideNativeSplashScreen}>
+        <EmergencyProvider>
+          <SafeAreaProvider>
+            <StatusBar style="dark" />
+            {updateChecker}
+            <InterestOnboardingScreen
+              userId={interestOnboardingUserId}
+              onComplete={handleInterestOnboardingComplete}
+              onSkip={handleInterestOnboardingSkip}
+            />
+            <AppAlertContainer ref={appAlertRef} />
+            <ToastContainer />
+          </SafeAreaProvider>
+        </EmergencyProvider>
+      </View>
     );
   }
 
   if (!isLoggedIn) {
     return (
-      <EmergencyProvider>
-        <SafeAreaProvider>
-          {startupRecoveryNotice ? (
-            <View style={{ backgroundColor: '#fff1f2', paddingHorizontal: 16, paddingVertical: 10 }}>
-              <Text style={{ color: '#b91c1c', fontSize: 13, lineHeight: 18 }}>
-                {startupRecoveryNotice}
-              </Text>
-            </View>
-          ) : null}
-          {updateChecker}
-          <NavigationContainer>
-            <StatusBar style="dark" />
-            <Stack.Navigator screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="Login">
-                {(props) => <LoginScreen {...props} onLogin={handleLogin} />}
-              </Stack.Screen>
-              <Stack.Screen name="NetworkTest" component={NetworkTestScreen} />
-            </Stack.Navigator>
-            <AppAlertContainer ref={appAlertRef} />
-            <ToastContainer ref={toastRef} />
-          </NavigationContainer>
-        </SafeAreaProvider>
-      </EmergencyProvider>
+      <View style={{ flex: 1, backgroundColor: '#fff' }} onLayout={hideNativeSplashScreen}>
+        <EmergencyProvider>
+          <SafeAreaProvider>
+            {startupRecoveryNotice ? (
+              <View style={{ backgroundColor: '#fff1f2', paddingHorizontal: 16, paddingVertical: 10 }}>
+                <Text style={{ color: '#b91c1c', fontSize: 13, lineHeight: 18 }}>
+                  {startupRecoveryNotice}
+                </Text>
+              </View>
+            ) : null}
+            {updateChecker}
+            <NavigationContainer>
+              <StatusBar style="dark" />
+              <Stack.Navigator screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="Login">
+                  {(props) => <LoginScreen {...props} onLogin={handleLogin} />}
+                </Stack.Screen>
+                <Stack.Screen name="NetworkTest" component={NetworkTestScreen} />
+              </Stack.Navigator>
+              <AppAlertContainer ref={appAlertRef} />
+              <ToastContainer />
+            </NavigationContainer>
+          </SafeAreaProvider>
+        </EmergencyProvider>
+      </View>
     );
   }
 
   return (
-    <EmergencyProvider>
+    <View style={{ flex: 1, backgroundColor: '#fff' }} onLayout={hideNativeSplashScreen}>
+      <EmergencyProvider>
       <SafeAreaProvider>
         {updateChecker}
         <NavigationContainer linking={APP_LINKING}>
@@ -1147,12 +1438,114 @@ function AppContent() {
         <Stack.Screen name="WalletDetail" component={WalletDetailScreen} />
         </Stack.Navigator>
           <AppAlertContainer ref={appAlertRef} />
-          <ToastContainer ref={toastRef} />
+          <ToastContainer />
       </NavigationContainer>
-    </SafeAreaProvider>
-    </EmergencyProvider>
+      </SafeAreaProvider>
+      </EmergencyProvider>
+    </View>
   );
 }
+
+const startupStyles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff7f7',
+    paddingHorizontal: 24,
+  },
+  glowPrimary: {
+    position: 'absolute',
+    top: 120,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+  },
+  glowSecondary: {
+    position: 'absolute',
+    bottom: 120,
+    right: -20,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(248, 113, 113, 0.08)',
+  },
+  card: {
+    width: '100%',
+    maxWidth: 340,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+    borderRadius: 24,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#fee2e2',
+    alignItems: 'center',
+    shadowColor: '#ef4444',
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6,
+  },
+  badge: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fef2f2',
+    marginBottom: 14,
+  },
+  accent: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#ef4444',
+    letterSpacing: 1,
+    marginBottom: 10,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
+  },
+  message: {
+    marginTop: 10,
+    fontSize: 14,
+    lineHeight: 21,
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 18,
+  },
+  progressDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#e5e7eb',
+  },
+  progressDotActive: {
+    backgroundColor: '#ef4444',
+  },
+  progressDotActiveSoft: {
+    backgroundColor: '#fca5a5',
+  },
+  notice: {
+    marginTop: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#fff1f2',
+    color: '#b91c1c',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+});
 
 export default function App() {
   return (

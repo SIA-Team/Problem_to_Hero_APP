@@ -15,7 +15,7 @@ if "%choice%"=="1" (
     echo 正在启动 LAN 模式...
     echo 确保手机和电脑连接到同一个 WiFi
     echo.
-    npx expo start --dev-client
+    npx expo start --dev-client --lan
 ) else if "%choice%"=="2" (
     echo.
     echo 正在启动 Tunnel 模式...
@@ -26,7 +26,7 @@ if "%choice%"=="1" (
     echo.
     echo 无效的选择，默认使用 LAN 模式
     echo.
-    npx expo start --dev-client
+    npx expo start --dev-client --lan
 )
 
 pause

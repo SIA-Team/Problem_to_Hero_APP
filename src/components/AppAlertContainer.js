@@ -2,13 +2,45 @@ import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef,
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { modalTokens } from './modalTokens';
 
-const defaultButtons = [{ text: 'OK' }];
+const defaultButtons = [{ text: '我知道了' }];
+
+function normalizeButtons(buttons) {
+  const normalizedButtons =
+    Array.isArray(buttons) && buttons.length > 0 ? buttons : defaultButtons;
+
+  return normalizedButtons.map((button, index) => {
+    if (!button || typeof button !== 'object') {
+      return {
+        text: index === 0 && normalizedButtons.length === 1 ? '我知道了' : '确定',
+      };
+    }
+
+    const nextText =
+      typeof button.text === 'string' && button.text.trim()
+        ? button.text.trim()
+        : normalizedButtons.length === 1
+          ? '我知道了'
+          : '确定';
+
+    if (normalizedButtons.length === 1 && /^ok$/i.test(nextText)) {
+      return {
+        ...button,
+        text: '我知道了',
+      };
+    }
+
+    return {
+      ...button,
+      text: nextText,
+    };
+  });
+}
 
 function normalizeAlertConfig(title, message, buttons, options) {
   return {
     title: title || '提示',
     message: typeof message === 'string' ? message : '',
-    buttons: Array.isArray(buttons) && buttons.length > 0 ? buttons : defaultButtons,
+    buttons: normalizeButtons(buttons),
     options: options || {},
   };
 }
@@ -83,7 +115,7 @@ const AppAlertContainer = forwardRef((_, ref) => {
           }}
         />
         <View style={styles.card}>
-          <Text style={styles.title}>{currentAlert?.title}</Text>
+          <Text style={styles.title}>{currentAlert?.title || '提示'}</Text>
           {!!currentAlert?.message && <Text style={styles.message}>{currentAlert.message}</Text>}
 
           <View style={[styles.buttons, verticalButtons && styles.buttonsVertical]}>
@@ -110,7 +142,7 @@ const AppAlertContainer = forwardRef((_, ref) => {
                       isDestructive && styles.buttonTextDestructive,
                     ]}
                   >
-                    {button?.text || 'OK'}
+                    {button?.text || '我知道了'}
                   </Text>
                 </TouchableOpacity>
               );

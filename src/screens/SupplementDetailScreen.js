@@ -11,6 +11,7 @@ import WriteAnswerModal from '../components/WriteAnswerModal';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import { showToast } from '../utils/toast';
+import { showPublishFailureAlert } from '../utils/appAlert';
 import { formatNumber } from '../utils/numberFormatter';
 import { formatTime } from '../utils/timeFormatter';
 import { normalizeEntityId } from '../utils/jsonLongId';
@@ -1783,10 +1784,16 @@ export default function SupplementDetailScreen({
         return;
       }
 
-      showToast(response?.msg || '评论发布失败', 'error');
+      showPublishFailureAlert(response?.msg, {
+        title: '评论发布失败',
+        fallbackMessage: '评论发布失败，请稍后重试',
+      });
     } catch (error) {
       console.error('发布补充问题评论失败:', error);
-      showToast('评论发布失败，请稍后重试', 'error');
+      showPublishFailureAlert(error, {
+        title: '评论发布失败',
+        fallbackMessage: '评论发布失败，请稍后重试',
+      });
     }
   };
   const handleCommentLike = async commentId => {
@@ -2214,10 +2221,16 @@ export default function SupplementDetailScreen({
         return;
       }
 
-      showToast(response?.msg || '回答发布失败', 'error');
+      showPublishFailureAlert(response?.msg, {
+        title: '回答发布失败',
+        fallbackMessage: '回答发布失败，请稍后重试',
+      });
     } catch (error) {
       console.error('补充问题详情页发布回答失败:', error);
-      showToast('回答发布失败，请稍后重试', 'error');
+      showPublishFailureAlert(error, {
+        title: '回答发布失败',
+        fallbackMessage: '回答发布失败，请稍后重试',
+      });
     } finally {
       setAnswerSubmitting(false);
     }
@@ -2308,10 +2321,16 @@ export default function SupplementDetailScreen({
         return;
       }
 
-      showToast(response?.msg || '鍥炵瓟鍙戝竷澶辫触', 'error');
+      showPublishFailureAlert(response?.msg, {
+        title: '回答发布失败',
+        fallbackMessage: '回答发布失败，请稍后重试',
+      });
     } catch (error) {
       console.error('琛ュ厖闂璇︽儏椤靛彂甯冨洖绛斿け璐?', error);
-      showToast('鍥炵瓟鍙戝竷澶辫触锛岃绋嶅悗閲嶈瘯', 'error');
+      showPublishFailureAlert(error, {
+        title: '回答发布失败',
+        fallbackMessage: '回答发布失败，请稍后重试',
+      });
     } finally {
       setAnswerSubmitting(false);
     }
@@ -2946,8 +2965,6 @@ export default function SupplementDetailScreen({
         originalComment={commentComposerTarget.originalComment}
         placeholder={commentComposerTarget.parentId ? '写下你的回复...' : '写下你的评论...'}
         title={commentComposerTarget.parentId ? `写回复${commentComposerTarget.replyToUserName ? ` @${commentComposerTarget.replyToUserName}` : ''}` : '写评论'}
-        publishInFooter={true}
-        closeOnRight
       />
       <ShareModal
         visible={showShareModal}

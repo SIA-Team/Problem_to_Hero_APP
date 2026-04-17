@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Keyboard, Platform } from 'react-native';
+import { Dimensions, Keyboard, Platform } from 'react-native';
 
 export default function useKeyboardBottomOffset({
   enabled = true,
-  bottomInset = 0,
-  extraOffset = 12,
+  bottomInset: _bottomInset = 0,
+  extraOffset = 20,
 } = {}) {
   const [keyboardOffset, setKeyboardOffset] = useState(0);
 
@@ -16,7 +16,15 @@ export default function useKeyboardBottomOffset({
 
     const showSubscription = Keyboard.addListener('keyboardDidShow', event => {
       const keyboardHeight = event?.endCoordinates?.height || 0;
-      setKeyboardOffset(Math.max(keyboardHeight - bottomInset + extraOffset, 0));
+      const keyboardScreenY = event?.endCoordinates?.screenY;
+      const windowHeight = Dimensions.get('window').height;
+      const obscuredWindowHeight =
+        typeof keyboardScreenY === 'number'
+          ? Math.max(windowHeight - keyboardScreenY, 0)
+          : 0;
+      const resolvedKeyboardHeight = Math.max(keyboardHeight, obscuredWindowHeight);
+
+      setKeyboardOffset(Math.max(resolvedKeyboardHeight + extraOffset, 0));
     });
 
     const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
@@ -27,7 +35,7 @@ export default function useKeyboardBottomOffset({
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, [bottomInset, enabled, extraOffset]);
+  }, [enabled, extraOffset]);
 
   return Platform.OS === 'android' ? keyboardOffset : 0;
 }

@@ -65,7 +65,7 @@ class ErrorHandler {
 
     // 记录错误日志
     if (__DEV__) {
-      console.error('API Error:', error);
+      console.warn('API Error:', error);
     }
 
     return message;

@@ -1,4 +1,5 @@
 import React from 'react';
+import * as SplashScreen from 'expo-splash-screen';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 class RootErrorBoundary extends React.Component {
@@ -19,6 +20,9 @@ class RootErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     console.error('RootErrorBoundary caught a fatal render error:', error, errorInfo);
+    SplashScreen.hideAsync().catch(() => {
+      // Ignore "already hidden" errors so the fallback screen can render.
+    });
   }
 
   handleReset = () => {

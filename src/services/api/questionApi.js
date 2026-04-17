@@ -2,6 +2,86 @@ import apiClient from './apiClient';
 import contentApiClient from './contentApiClient';
 import { API_ENDPOINTS, replaceUrlParams } from '../../config/api';
 
+const LEGACY_QUESTION_DETAIL_ENDPOINT = '/qa-hero-content/app/content/question/detail';
+
+const extractRequestErrorMessage = error => {
+  if (!error) {
+    return '';
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  const candidates = [
+    error.message,
+    error?.msg,
+    error?.data?.msg,
+    error?.data?.message,
+    error?.response?.data?.msg,
+    error?.response?.data?.message,
+  ];
+
+  return candidates.find(candidate => typeof candidate === 'string' && candidate.trim()) || '';
+};
+
+const isStaticResourceNotFoundError = error => {
+  const message = extractRequestErrorMessage(error);
+  return /No static resource|404_NOT_FOUND|404 NOT_FOUND/i.test(message);
+};
+
+const isQuestionApiSuccessResponse = response => !!response && response.code === 200;
+
+const shouldFallbackQuestionRequest = result => {
+  if (isQuestionApiSuccessResponse(result)) {
+    return false;
+  }
+
+  return isStaticResourceNotFoundError(result);
+};
+
+const executeQuestionRequestWithFallback = async ({
+  primaryRequest,
+  fallbackRequests = [],
+  debugLabel,
+}) => {
+  try {
+    const primaryResponse = await primaryRequest();
+
+    if (shouldFallbackQuestionRequest(primaryResponse)) {
+      throw primaryResponse;
+    }
+
+    return primaryResponse;
+  } catch (error) {
+    if (!isStaticResourceNotFoundError(error)) {
+      throw error;
+    }
+
+    if (__DEV__ && debugLabel) {
+      console.warn(`[questionApi] ${debugLabel} 主路径不可用，尝试备用路径:`, extractRequestErrorMessage(error));
+    }
+
+    let lastFallbackError = error;
+
+    for (const request of fallbackRequests) {
+      try {
+        const fallbackResponse = await request();
+
+        if (!shouldFallbackQuestionRequest(fallbackResponse)) {
+          return fallbackResponse;
+        }
+
+        lastFallbackError = fallbackResponse;
+      } catch (fallbackError) {
+        lastFallbackError = fallbackError;
+      }
+    }
+
+    throw lastFallbackError;
+  }
+};
+
 /**
  * 问题相关 API
  */
@@ -31,7 +111,11 @@ const questionApi = {
       },
     };
     
-    const response = await contentApiClient.get(API_ENDPOINTS.QUESTION.LIST, { params: requestParams });
+    const response = await executeQuestionRequestWithFallback({
+      primaryRequest: () =>
+        contentApiClient.get(API_ENDPOINTS.QUESTION.LIST, { params: requestParams }),
+      debugLabel: '问题列表',
+    });
     
     if (response && response.data && response.data.rows) {
       const originalCount = response.data.rows.length;
@@ -57,9 +141,22 @@ const questionApi = {
    * @param {string} questionId - 问题ID
    * @returns {Promise<Object>}
    */
-  getQuestionDetail: (questionId) => {
+  getQuestionDetail: async (questionId) => {
     const url = replaceUrlParams(API_ENDPOINTS.QUESTION.DETAIL, { id: questionId });
-    return contentApiClient.get(url);
+    return executeQuestionRequestWithFallback({
+      primaryRequest: () => contentApiClient.get(url),
+      fallbackRequests: [
+        () =>
+          contentApiClient.get(LEGACY_QUESTION_DETAIL_ENDPOINT, {
+            params: { id: questionId },
+          }),
+        () =>
+          contentApiClient.get(LEGACY_QUESTION_DETAIL_ENDPOINT, {
+            params: { questionId },
+          }),
+      ],
+      debugLabel: '问题详情',
+    });
   },
 
   getCommunitySolveVoteSummary: (questionId) => {
@@ -106,6 +203,29 @@ const questionApi = {
       questionId: String(questionId ?? '').trim(),
     });
     return apiClient.get(url);
+  },
+
+  /**
+   * 加入问题群组
+   * @param {string|number} groupId - 群组ID
+   * @returns {Promise<Object>}
+   */
+  joinQuestionGroup: (groupId) => {
+    const normalizedGroupId = Number(groupId);
+
+    if (!Number.isInteger(normalizedGroupId) || normalizedGroupId <= 0) {
+      const invalidGroupError = new Error('群组ID无效');
+      invalidGroupError.code = 'INVALID_GROUP_ID';
+      throw invalidGroupError;
+    }
+
+    const url = replaceUrlParams(API_ENDPOINTS.GROUP.JOIN, {
+      groupId: String(normalizedGroupId),
+    });
+
+    return apiClient.post(url, {
+      groupId: normalizedGroupId,
+    });
   },
 
   /**

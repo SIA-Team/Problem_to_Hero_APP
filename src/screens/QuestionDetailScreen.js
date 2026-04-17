@@ -1,15 +1,18 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, TextInput, StyleSheet, Modal, Alert, RefreshControl, ActivityIndicator, Animated, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, ScrollView, FlatList, TouchableOpacity, Pressable, Image, TextInput, StyleSheet, Modal, Alert, RefreshControl, ActivityIndicator, Animated, Platform, Keyboard, KeyboardAvoidingView, Dimensions } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import ComposerModalScaffold from '../components/ComposerModalScaffold';
 import IdentitySelector from '../components/IdentitySelector';
 import ImagePickerSheet from '../components/ImagePickerSheet';
 import KeyboardDismissView from '../components/KeyboardDismissView';
+import MentionSuggestionsPanel from '../components/MentionSuggestionsPanel';
 import ModalSafeAreaView from '../components/ModalSafeAreaView';
 import WriteAnswerModal from '../components/WriteAnswerModal';
 import WriteCommentModal from '../components/WriteCommentModal';
+import SupplementAnswerModal from '../components/SupplementAnswerModal';
 import QuestionDetailSkeleton from '../components/QuestionDetailSkeleton';
 import ShareModal from '../components/ShareModal';
 import EditTextModal from '../components/EditTextModal';
@@ -29,12 +32,22 @@ import {
 } from '../services/questionDetailCache';
 import { loadQuestionSupplements } from '../utils/dataLoader';
 import { showToast } from '../utils/toast';
-import { showAppAlert } from '../utils/appAlert';
+import {
+  showAppAlert,
+  showPublishBlockedAlert,
+  showPublishFailureAlert,
+} from '../utils/appAlert';
+import { sanitizeUserFacingMessage } from '../utils/userFacingMessage';
 import { formatNumber } from '../utils/numberFormatter';
 import { formatTime } from '../utils/timeFormatter';
 import { normalizeEntityId } from '../utils/jsonLongId';
 import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
+import useMentionComposer from '../hooks/useMentionComposer';
+import {
+  DEFAULT_MENTION_PANEL_BASE_OFFSET,
+  DEFAULT_MENTION_SEARCH_LIMIT,
+} from '../utils/mentionComposer';
 import { scaleFont } from '../utils/responsive';
 import { buildProblemToHeroInviteText, buildProblemToHeroLocalInviteText, buildShareUrl, openTwitterShare } from '../utils/shareService';
 import twitterInviteUsers from '../utils/twitterInviteUsers';
@@ -392,6 +405,8 @@ export default function QuestionDetailScreen({
   const {
     t
   } = useTranslation();
+  const windowWidth = Dimensions.get('window').width;
+  const isCompactAuthorActionRow = windowWidth <= 360;
 
   // 淡入动画
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
@@ -482,6 +497,7 @@ export default function QuestionDetailScreen({
   const [answerImages, setAnswerImages] = useState([]); // 回答图片
   const [supplementText, setSupplementText] = useState('');
   const [supplementImages, setSupplementImages] = useState([]);
+  const supplementInputRef = React.useRef(null);
   const [showSupplementImagePicker, setShowSupplementImagePicker] = useState(false);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [activityForm, setActivityForm] = useState({
@@ -543,6 +559,7 @@ export default function QuestionDetailScreen({
   const [answerLikeDebounce, setAnswerLikeDebounce] = useState({}); // 点赞防抖定时器
   const [answerAdopted, setAnswerAdopted] = useState({}); // 记录每个回答的采纳状态
   const [answerAdoptLoading, setAnswerAdoptLoading] = useState({}); // 采纳请求中状态
+  const [adoptPermissionUnavailable, setAdoptPermissionUnavailable] = useState(false); // 当前账号在本题下无采纳权限
   const [showAnswerCommentListModal, setShowAnswerCommentListModal] = useState(false);
   const [answerCommentListState, setAnswerCommentListState] = useState({
     list: [],
@@ -589,7 +606,6 @@ export default function QuestionDetailScreen({
   const [showSupplementAnswerModal, setShowSupplementAnswerModal] = useState(false); // 补充回答弹窗
   const [showSupplementAnswerSuccessModal, setShowSupplementAnswerSuccessModal] = useState(false);
   const [currentAnswer, setCurrentAnswer] = useState(null); // 当前要补充回答的答案
-  const [supplementAnswerText, setSupplementAnswerText] = useState(''); // 补充回答内容
 
   // 身份选择
   const [answerIdentity, setAnswerIdentity] = useState('personal'); // 回答身份
@@ -609,8 +625,6 @@ export default function QuestionDetailScreen({
   const [answerSelectedTeams, setAnswerSelectedTeams] = useState([]); // 回答选中的团队
   const [supplementQuestionIdentity, setSupplementQuestionIdentity] = useState('personal'); // 补充问题身份
   const [supplementQuestionSelectedTeams, setSupplementQuestionSelectedTeams] = useState([]); // 补充问题选中的团队
-  const [supplementIdentity, setSupplementIdentity] = useState('personal'); // 补充回答身份
-  const [supplementSelectedTeams, setSupplementSelectedTeams] = useState([]); // 补充回答选中的团队
   const [commentIdentity, setCommentIdentity] = useState('personal'); // 评论身份
   const [commentSelectedTeams, setCommentSelectedTeams] = useState([]); // 评论选中的团队
 
@@ -631,6 +645,10 @@ export default function QuestionDetailScreen({
   // 获取安全区域
   const insets = useSafeAreaInsets();
   const bottomSafeInset = useBottomSafeInset(20);
+  const windowHeight = Dimensions.get('window').height;
+  const [composerKeyboardOffset, setComposerKeyboardOffset] = useState(0);
+  const composerToolbarBottomPadding = composerKeyboardOffset > 0 ? 8 : bottomSafeInset;
+  const composerContentBottomPadding = 24;
   const commentSheetBottomSpacing = Math.max(insets.bottom, 16) + 12;
   const [commentsPage, setCommentsPage] = useState(1);
   const [recommendedLocalUsers, setRecommendedLocalUsers] = useState([]);
@@ -650,6 +668,109 @@ export default function QuestionDetailScreen({
     const normalizedQuestionId = String(candidateQuestionId ?? '').trim();
     return normalizedQuestionId || null;
   }, [route?.params?.id, questionData?.id, questionData?.questionId]);
+  const normalizedCurrentUserId = React.useMemo(() => String(currentInviteUserId || '').trim(), [currentInviteUserId]);
+  const {
+    activeMention: supplementActiveMention,
+    candidateUsers: supplementMentionCandidateUsers,
+    focusInput: focusSupplementInput,
+    handleMentionPress: handleSupplementMentionPress,
+    handleMentionSelect: handleSupplementMentionSelect,
+    handleSelectionChange: handleSupplementSelectionChange,
+    listMaxHeight: supplementMentionListMaxHeight,
+    mentionBottomInset: supplementMentionBottomInset,
+    panelAnimatedStyle: supplementMentionPanelAnimatedStyle,
+    panelBottomOffset: supplementMentionPanelBottomOffset,
+    panelMaxHeight: supplementMentionPanelMaxHeight,
+    renderMentionPanel: renderSupplementMentionPanel,
+    selection: supplementSelection,
+    shouldShowMentionPanel: shouldShowSupplementMentionPanel,
+    mentionLoading: supplementMentionLoading,
+  } = useMentionComposer({
+    visible: showSupplementModal,
+    text: supplementText,
+    onChangeText: setSupplementText,
+    inputRef: supplementInputRef,
+    windowHeight,
+    bottomInset: bottomSafeInset,
+    recommendedUsers: recommendedLocalUsers,
+    currentUserId: normalizedCurrentUserId,
+    baseBottomOffset: DEFAULT_MENTION_PANEL_BASE_OFFSET,
+    onInvalidMention: () => showToast('该用户缺少可用名称', 'warning'),
+  });
+  const canCurrentUserAdoptQuestion = React.useMemo(() => {
+    if (adoptPermissionUnavailable) {
+      return false;
+    }
+
+    if (!questionData || typeof questionData !== 'object') {
+      return false;
+    }
+
+    if (normalizeFlag(questionData?.canAdoptAnswer, questionData?.canAcceptAnswer)) {
+      return true;
+    }
+
+    if (!normalizedCurrentUserId) {
+      return false;
+    }
+
+    const questionAuthorUserId = String(
+      questionData?.publicUserId ?? questionData?.authorId ?? questionData?.userId ?? ''
+    ).trim();
+    if (questionAuthorUserId && questionAuthorUserId === normalizedCurrentUserId) {
+      return true;
+    }
+
+    const rewardContributorUserIds = Array.isArray(questionData?.rewardContributorUserIds)
+      ? questionData.rewardContributorUserIds
+          .map(userId => String(userId ?? '').trim())
+          .filter(Boolean)
+      : [];
+
+    return rewardContributorUserIds.includes(normalizedCurrentUserId);
+  }, [adoptPermissionUnavailable, normalizedCurrentUserId, questionData]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const frameChangeEvent = Platform.OS === 'ios' ? 'keyboardWillChangeFrame' : null;
+    const resolveKeyboardOverlap = event => {
+      const windowHeight = Dimensions.get('window').height;
+      const keyboardHeight = event?.endCoordinates?.height || 0;
+      const keyboardScreenY = event?.endCoordinates?.screenY ?? windowHeight;
+      const overlapFromScreenY = Math.max(windowHeight - keyboardScreenY, 0);
+      const effectiveKeyboardHeight = Math.max(keyboardHeight, overlapFromScreenY);
+      return Platform.OS === 'ios'
+        ? Math.max(effectiveKeyboardHeight - insets.bottom, 0)
+        : effectiveKeyboardHeight;
+    };
+    const syncKeyboardOffset = event => {
+      setComposerKeyboardOffset(resolveKeyboardOverlap(event));
+    };
+    const resetKeyboardOffset = () => {
+      setComposerKeyboardOffset(0);
+    };
+    const showSubscription = Keyboard.addListener(showEvent, syncKeyboardOffset);
+    const hideSubscription = Keyboard.addListener(hideEvent, resetKeyboardOffset);
+    const frameChangeSubscription = frameChangeEvent
+      ? Keyboard.addListener(frameChangeEvent, syncKeyboardOffset)
+      : null;
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+      frameChangeSubscription?.remove();
+    };
+  }, [insets.bottom]);
+
+  useEffect(() => {
+    if (!showSupplementModal && !showSupplementAnswerModal) {
+      setComposerKeyboardOffset(0);
+    }
+  }, [showSupplementModal, showSupplementAnswerModal]);
+
+  useEffect(() => {
+    setAdoptPermissionUnavailable(false);
+  }, [currentQuestionId]);
 
   useEffect(() => {
     const cachedLists = normalizeCachedQuestionDetailLists(
@@ -691,7 +812,7 @@ export default function QuestionDetailScreen({
       const storedInvites = await loadQuestionTwitterInvites(currentQuestionId);
       setInvitedTwitterUsersState(storedInvites);
     } catch (error) {
-      console.error('Failed to load invited twitter users:', error);
+      console.warn('Failed to load invited twitter users:', error);
       setInvitedTwitterUsersState([]);
     } finally {
       setLoadingTwitterInvites(false);
@@ -709,7 +830,7 @@ export default function QuestionDetailScreen({
       const storedInvites = await loadQuestionLocalInvites(currentQuestionId);
       setInvitedLocalUsersState(storedInvites);
     } catch (error) {
-      console.error('Failed to load invited local users:', error);
+      console.warn('Failed to load invited local users:', error);
       setInvitedLocalUsersState([]);
     } finally {
       setLoadingLocalInviteUsers(false);
@@ -726,13 +847,13 @@ export default function QuestionDetailScreen({
         const response = await userApi.getFollowing({
           pageNum: 1,
           page: 1,
-          pageSize: 10,
-          size: 10,
-          limit: 10,
+          pageSize: 20,
+          size: 20,
+          limit: 20,
         });
         mergedUsers = mergeLocalInviteUsers(normalizeFollowingInviteUsers(response));
       } catch (followError) {
-        console.error('Failed to load following users for local invite recommendation:', followError);
+        console.warn('Failed to load following users for local invite recommendation:', followError);
       }
 
       if (mergedUsers.length < 6) {
@@ -752,9 +873,9 @@ export default function QuestionDetailScreen({
         });
       }
 
-      setRecommendedLocalUsers(mergedUsers.slice(0, 10));
+      setRecommendedLocalUsers(mergedUsers.slice(0, DEFAULT_MENTION_SEARCH_LIMIT));
     } catch (error) {
-      console.error('Failed to load recommended local invite users:', error);
+      console.warn('Failed to load recommended local invite users:', error);
       setRecommendedLocalUsers([]);
     }
   }, []);
@@ -855,7 +976,7 @@ export default function QuestionDetailScreen({
               userInfo?.name
             );
           } catch (parseError) {
-            console.error('Failed to parse current user info for Twitter invite copy:', parseError);
+            console.warn('Failed to parse current user info for Twitter invite copy:', parseError);
           }
         }
 
@@ -869,7 +990,7 @@ export default function QuestionDetailScreen({
           setCurrentInviteUsername(normalizedName.startsWith('@') ? normalizedName : `@${normalizedName}`);
         }
       } catch (storageError) {
-        console.error('Failed to load current user name for Twitter invite copy:', storageError);
+        console.warn('Failed to load current user name for Twitter invite copy:', storageError);
       }
     };
 
@@ -918,7 +1039,7 @@ export default function QuestionDetailScreen({
         if (!isActive) {
           return;
         }
-        console.error('Failed to search local invite users:', error);
+        console.warn('Failed to search local invite users:', error);
         setSearchedLocalUsers([]);
       } finally {
         if (isActive) {
@@ -980,7 +1101,7 @@ export default function QuestionDetailScreen({
       setQuestionAuthorIsFollowing(nextFollowState);
       setFollowState(targetUserId, nextFollowState);
     }).catch(error => {
-      console.error('Failed to load question author follow status:', error);
+      console.warn('Failed to load question author follow status:', error);
       if (isActive) {
         setQuestionAuthorIsFollowing(false);
       }
@@ -1072,7 +1193,7 @@ export default function QuestionDetailScreen({
       await refreshCommunitySolveVoteSummary(questionId);
       setShowProgressBar(true);
     } catch (error) {
-      console.error('❌ 社区已解决投票失败:', error);
+      console.warn('社区已解决投票失败:', error);
       showToast(error?.response?.data?.msg || error?.message || '投票失败，请稍后重试', 'error');
     } finally {
       setCommunitySolveVoteSubmitting(false);
@@ -1198,11 +1319,20 @@ export default function QuestionDetailScreen({
     time: '30分钟前'
   }]);
 
-  // 格式化数量显示，超过 999 显示 "999+"
+  // 格式化数量显示，超过 1000 显示简写（如 1K, 1.2K, 10K, 1M）
   const formatCount = (count) => {
     const num = Number(count);
     if (!Number.isFinite(num) || num < 0) return 0;
-    return num > 999 ? '999+' : num;
+    
+    if (num >= 1000000) {
+      // 百万以上显示 M
+      return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+    } else if (num >= 1000) {
+      // 千以上显示 K
+      return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+    }
+    
+    return num;
   };
 
   const invitedTwitterUsersMap = React.useMemo(() => {
@@ -1633,7 +1763,7 @@ export default function QuestionDetailScreen({
     return null;
   })();
   const hasCountValue = (...values) => values.some(value => value !== undefined && value !== null && value !== '');
-  const normalizeFlag = (...values) => {
+  function normalizeFlag(...values) {
     for (const value of values) {
       if (value === undefined || value === null) {
         continue;
@@ -1655,11 +1785,51 @@ export default function QuestionDetailScreen({
       }
     }
     return false;
-  };
+  }
   const normalizeQuestionDetail = question => {
     if (!question || typeof question !== 'object') {
       return question;
     }
+    const extractUserIdsFromCandidates = (...candidates) => {
+      const normalizedIds = new Set();
+      candidates.forEach(candidate => {
+        if (!candidate) {
+          return;
+        }
+
+        if (Array.isArray(candidate)) {
+          candidate.forEach(item => {
+            if (item === null || item === undefined) {
+              return;
+            }
+
+            if (typeof item === 'object') {
+              const resolvedId = item.userId ?? item.publicUserId ?? item.authorId ?? item.id ?? item.uid ?? null;
+              const normalizedId = String(resolvedId ?? '').trim();
+              if (normalizedId) {
+                normalizedIds.add(normalizedId);
+              }
+              return;
+            }
+
+            const normalizedId = String(item).trim();
+            if (normalizedId) {
+              normalizedIds.add(normalizedId);
+            }
+          });
+          return;
+        }
+
+        if (typeof candidate === 'object') {
+          const resolvedId = candidate.userId ?? candidate.publicUserId ?? candidate.authorId ?? candidate.id ?? candidate.uid ?? null;
+          const normalizedId = String(resolvedId ?? '').trim();
+          if (normalizedId) {
+            normalizedIds.add(normalizedId);
+          }
+        }
+      });
+      return Array.from(normalizedIds);
+    };
     const normalizedPublicUserId = question.publicUserId ?? question.authorUserId ?? question.authorId ?? question.author_id ?? question.userId ?? question.user_id ?? question.createBy ?? question.create_by ?? question.creatorId ?? question.creator_id ?? question.uid ?? null;
     const hasLikeCountField = hasCountValue(question.likeCount, question.likes);
     const hasCollectCountField = hasCountValue(question.collectCount, question.bookmarkCount, question.bookmarks);
@@ -1684,6 +1854,24 @@ export default function QuestionDetailScreen({
     const normalizedLiked = !!(question.liked ?? question.isLiked);
     const normalizedCollected = !!(question.collected ?? question.isCollected ?? question.bookmarked ?? question.isBookmarked);
     const normalizedDisliked = !!(question.disliked ?? question.isDisliked);
+    const normalizedQuestionCanAdopt = normalizeFlag(
+      question.canAdoptAnswer,
+      question.canAcceptAnswer,
+      question.canAdopt,
+      question.canAccept,
+      question.acceptable,
+      question.allowAdopt
+    );
+    const normalizedRewardContributorUserIds = extractUserIdsFromCandidates(
+      question.rewardContributorUserIds,
+      question.rewardContributorIds,
+      question.rewardUserIds,
+      question.bountyUserIds,
+      question.rewardContributors,
+      question.contributors,
+      question.rewardUsers,
+      question.bountyUsers
+    );
     const normalizedDisplayType = normalizedPayViewAmount > 0 ? 'paid' : normalizedRawType === 1 || normalizedRawType === '1' || normalizedRawType === 'reward' ? normalizedBountyAmount > 0 ? 'reward' : 'free' : normalizedRawType === 2 || normalizedRawType === '2' || normalizedRawType === 'targeted' ? 'targeted' : 'free';
     const normalizedReward = normalizedBountyAmount > 0 ? Math.floor(normalizedBountyAmount / 100) : 0;
     return {
@@ -1734,7 +1922,10 @@ export default function QuestionDetailScreen({
       __likeCountResolved: question.__likeCountResolved ?? hasLikeCountField,
       __collectCountResolved: question.__collectCountResolved ?? hasCollectCountField,
       __dislikeCountResolved: question.__dislikeCountResolved ?? hasDislikeCountField,
-      isResolved: question.isResolved ?? question.resolved ?? normalizedStatus === 2
+      isResolved: question.isResolved ?? question.resolved ?? normalizedStatus === 2,
+      canAdoptAnswer: normalizedQuestionCanAdopt,
+      canAcceptAnswer: normalizedQuestionCanAdopt,
+      rewardContributorUserIds: normalizedRewardContributorUserIds
     };
   };
   const normalizeCommunitySolveVoteSummary = summary => {
@@ -1872,7 +2063,10 @@ export default function QuestionDetailScreen({
   const openSupplementComposer = () => {
     const blockedReason = getSupplementPublishBlockedReason();
     if (blockedReason) {
-      showToast(blockedReason, 'warning');
+      showPublishBlockedAlert(blockedReason, {
+        title: '暂时无法发布补充问题',
+        fallbackMessage: '当前问题暂不支持补充问题',
+      });
       return;
     }
     setShowSupplementModal(true);
@@ -1889,7 +2083,10 @@ export default function QuestionDetailScreen({
 
     const blockedReason = getSupplementPublishBlockedReason();
     if (blockedReason) {
-      showToast(blockedReason, 'warning');
+      showPublishBlockedAlert(blockedReason, {
+        title: '暂时无法发布补充问题',
+        fallbackMessage: '当前问题暂不支持补充问题',
+      });
     } else {
       setShowSupplementModal(true);
     }
@@ -1950,7 +2147,7 @@ export default function QuestionDetailScreen({
         }
 
         if (!detailResponse || detailResponse.code !== 200 || !detailResponse.data) {
-          console.error('❌ 问题详情获取失败:', detailResponse);
+          console.warn('问题详情获取失败:', detailResponse);
           setQuestionData(null);
           setError('获取问题详情失败');
           return;
@@ -1981,7 +2178,7 @@ export default function QuestionDetailScreen({
         void refreshCommunitySolveVoteSummary(questionId);
       } catch (error) {
         if (!isCancelled) {
-          console.error('❌ 问题详情获取异常:', error);
+          console.warn('问题详情获取异常:', error);
           setQuestionData(null);
           setError('网络错误，请稍后重试');
         }
@@ -2153,7 +2350,7 @@ export default function QuestionDetailScreen({
       });
       hydrateSupplementCommentCounts(newSupplements);
     } catch (error) {
-      console.error('❌ 加载补充列表失败:', error);
+      console.warn('加载补充列表失败:', error);
       if (isRefresh && cacheData.list.length === 0) {
         Alert.alert('加载失败', '获取补充列表失败，请稍后重试');
       }
@@ -2393,6 +2590,58 @@ export default function QuestionDetailScreen({
     });
     syncAnswerInteractionStates([normalizedAnswer]);
   };
+  const disableAdoptForCurrentQuestion = React.useCallback(() => {
+    setAdoptPermissionUnavailable(true);
+    setQuestionData(prevQuestionData => {
+      if (!prevQuestionData || typeof prevQuestionData !== 'object') {
+        return prevQuestionData;
+      }
+
+      return normalizeQuestionDetail({
+        ...prevQuestionData,
+        canAdoptAnswer: false,
+        canAcceptAnswer: false,
+        canAdopt: false,
+        canAccept: false,
+        acceptable: false,
+        allowAdopt: false
+      });
+    });
+    setAnswersCache(prevCache => {
+      let hasChanges = false;
+      const nextCache = {
+        ...prevCache
+      };
+      Object.keys(prevCache).forEach(sortBy => {
+        const cacheData = prevCache[sortBy];
+        if (!cacheData?.list?.length) {
+          return;
+        }
+        let updated = false;
+        const nextList = cacheData.list.map(item => {
+          if (!normalizeFlag(item?.canAdopt)) {
+            return item;
+          }
+          updated = true;
+          return normalizeAnswerItem({
+            ...item,
+            canAdopt: false
+          });
+        });
+        if (updated) {
+          hasChanges = true;
+          nextCache[sortBy] = {
+            ...cacheData,
+            list: nextList,
+            lastUpdated: Date.now()
+          };
+        }
+      });
+      return hasChanges ? nextCache : prevCache;
+    });
+  }, []);
+  const resolveAdoptErrorMessage = React.useCallback((rawMessage, fallback) => sanitizeUserFacingMessage(rawMessage, fallback, 'error'), []);
+  const isAdoptPermissionError = React.useCallback((message) => /仅提问者|仅提问者或打赏|打赏用户|无权.*采纳|无权限.*采纳|无采纳权限|forbidden|not\s+allowed/i.test(String(message || '')), []);
   const mergeUpdatedSupplementIntoCaches = updatedSupplement => {
     if (!updatedSupplement) {
       return;
@@ -3861,7 +4110,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }
       }
     } catch (error) {
-      console.error('❌ 加载回答列表失败:', error);
+      console.warn('加载回答列表失败:', error);
       if (isRefresh && cacheData.list.length === 0) {
         Alert.alert('加载失败', '获取回答列表失败，请稍后重试');
       }
@@ -3968,7 +4217,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }
       }
     } catch (error) {
-      console.error('❌ 加载评论列表失败:', error);
+      console.warn('加载评论列表失败:', error);
       if (isRefresh && cacheData.list.length === 0) {
         showToast('获取评论列表失败', 'error');
       }
@@ -4042,7 +4291,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }));
       }
     } catch (error) {
-      console.error('❌ 加载更多评论失败:', error);
+      console.warn('加载更多评论失败:', error);
       showToast('加载更多评论失败', 'error');
     } finally {
       setCommentsLoadingMore(false);
@@ -4109,7 +4358,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         showToast(response?.msg || '加载补充评论失败', 'error');
       }
     } catch (error) {
-      console.error('❌ 加载补充评论失败:', error);
+      console.warn('加载补充评论失败:', error);
       setSuppCommentListState(prevState => ({
         ...prevState,
         loading: false,
@@ -4178,7 +4427,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         showToast(response?.msg || '加载回答评论失败', 'error');
       }
     } catch (error) {
-      console.error('❌ 加载回答评论失败:', error);
+      console.warn('加载回答评论失败:', error);
       setAnswerCommentListState(prevState => ({
         ...prevState,
         loading: false,
@@ -4294,7 +4543,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }));
       }
     } catch (error) {
-      console.error('❌ 加载问题评论回复失败:', error);
+      console.warn('加载问题评论回复失败:', error);
       setQuestionCommentRepliesMap(prevMap => ({
         ...prevMap,
         [parentCommentId]: {
@@ -4411,7 +4660,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }));
       }
     } catch (error) {
-      console.error('❌ 加载回答评论回复失败:', error);
+      console.warn('加载回答评论回复失败:', error);
       setAnswerCommentRepliesMap(prevMap => ({
         ...prevMap,
         [parentCommentId]: {
@@ -4528,7 +4777,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }));
       }
     } catch (error) {
-      console.error('❌ 加载补充评论回复失败:', error);
+      console.warn('加载补充评论回复失败:', error);
       setSuppCommentRepliesMap(prevMap => ({
         ...prevMap,
         [parentCommentId]: {
@@ -4756,12 +5005,18 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           }
         }
       } else {
-        showToast(response?.msg || '评论发布失败', 'error');
+        showPublishFailureAlert(response?.msg, {
+          title: '评论发布失败',
+          fallbackMessage: '评论发布失败，请稍后重试',
+        });
         restoreCommentComposerContext(composerTarget);
       }
     } catch (error) {
-      console.error('❌ 评论发布失败:', error);
-      showToast(error?.message || '网络错误，请稍后重试', 'error');
+      console.warn('评论发布失败:', error);
+      showPublishFailureAlert(error, {
+        title: '评论发布失败',
+        fallbackMessage: '评论发布失败，请稍后重试',
+      });
       restoreCommentComposerContext(composerTarget);
     } finally {
       setCommentSubmitting(false);
@@ -4825,7 +5080,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         showToast(response?.msg || '操作失败', 'error');
       }
     } catch (error) {
-      console.error('❌ 评论点踩请求异常:', error);
+      console.warn('评论点踩请求异常:', error);
       setCommentDisliked(prev => ({
         ...prev,
         [commentId]: currentState
@@ -4896,7 +5151,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         showToast(response?.msg || '操作失败', 'error');
       }
     } catch (error) {
-      console.error('❌ 评论点赞请求异常:', error);
+      console.warn('评论点赞请求异常:', error);
       setCommentLiked(prev => ({
         ...prev,
         [commentId]: currentState
@@ -4968,7 +5223,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         showToast(response?.msg || '操作失败', 'error');
       }
     } catch (error) {
-      console.error('❌ 评论收藏请求异常:', error);
+      console.warn('评论收藏请求异常:', error);
       setCommentCollected(prev => ({
         ...prev,
         [commentId]: currentState
@@ -5038,7 +5293,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     console.log('🔍 收藏操作:');
     console.log('  answerId:', answerId);
     if (!answerId) {
-      console.error('❌ 回答ID不存在');
+      console.warn('回答ID不存在');
       showToast('操作失败：回答ID不存在', 'error');
       return;
     }
@@ -5102,7 +5357,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           }
 
           // 服务器返回失败，回滚UI状态
-          console.error('❌ 收藏操作失败:', response);
+          console.warn('收藏操作失败:', response);
           setAnswerBookmarked(prev => ({
             ...prev,
             [answerId]: currentState // 回滚到原状态
@@ -5110,7 +5365,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           showToast(response?.msg || '操作失败', 'error');
         }
       } catch (error) {
-        console.error('❌ 收藏请求异常:', error);
+        console.warn('收藏请求异常:', error);
 
         // 网络错误，回滚UI状态
         setAnswerBookmarked(prev => ({
@@ -5149,7 +5404,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     console.log('🔍 点赞操作:');
     console.log('  answerId:', answerId);
     if (!answerId) {
-      console.error('❌ 回答ID不存在');
+      console.warn('回答ID不存在');
       showToast('操作失败：回答ID不存在', 'error');
       return;
     }
@@ -5195,7 +5450,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           showToast(newState ? '已点赞' : '已取消点赞', 'success');
         } else {
           // 服务器返回失败，回滚UI状态
-          console.error('❌ 点赞操作失败:', response);
+          console.warn('点赞操作失败:', response);
           setAnswerLiked(prev => ({
             ...prev,
             [answerId]: currentState // 回滚到原状态
@@ -5203,7 +5458,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           showToast(response?.msg || '操作失败', 'error');
         }
       } catch (error) {
-        console.error('❌ 点赞请求异常:', error);
+        console.warn('点赞请求异常:', error);
 
         // 网络错误，回滚UI状态
         setAnswerLiked(prev => ({
@@ -5242,7 +5497,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     console.log('🔍 点踩操作:');
     console.log('  answerId:', answerId);
     if (!answerId) {
-      console.error('❌ 回答ID不存在');
+      console.warn('回答ID不存在');
       showToast('操作失败：回答ID不存在', 'error');
       return;
     }
@@ -5288,7 +5543,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           showToast(newState ? '已踩' : '已取消踩', 'success');
         } else {
           // 服务器返回失败，回滚UI状态
-          console.error('❌ 点踩操作失败:', response);
+          console.warn('点踩操作失败:', response);
           setAnswerDisliked(prev => ({
             ...prev,
             [answerId]: currentState // 回滚到原状态
@@ -5296,7 +5551,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           showToast(response?.msg || '操作失败', 'error');
         }
       } catch (error) {
-        console.error('❌ 点踩请求异常:', error);
+        console.warn('点踩请求异常:', error);
 
         // 网络错误，回滚UI状态
         setAnswerDisliked(prev => ({
@@ -5369,7 +5624,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       question_id: answer.question_id
     } : null);
     if (!answerId) {
-      console.error('❌ 回答ID不存在');
+      console.warn('回答ID不存在');
       showToast('操作失败：回答ID不存在', 'error');
       return;
     }
@@ -5378,12 +5633,20 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     console.log('  routeQuestionId:', routeQuestionId, typeof routeQuestionId);
     console.log('  answerQuestionId:', answerQuestionId, typeof answerQuestionId);
     if (!questionId) {
-      console.error('❌ 问题ID不存在');
+      console.warn('问题ID不存在');
       showToast('操作失败：问题ID不存在', 'error');
       return;
     }
+    if (!canCurrentUserAdoptQuestion) {
+      disableAdoptForCurrentQuestion();
+      showAppAlert(
+        t('screens.questionDetail.alerts.hint'),
+        t('screens.questionDetail.alerts.noAdoptPermission')
+      );
+      return;
+    }
     if (answerQuestionId !== null && answerQuestionId !== undefined && routeQuestionId !== null && routeQuestionId !== undefined && String(answerQuestionId) !== String(routeQuestionId)) {
-      console.error('❌ 回答所属问题与当前页面不一致:', {
+      console.warn('回答所属问题与当前页面不一致:', {
         routeQuestionId,
         answerQuestionId,
         answerId
@@ -5442,29 +5705,45 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           loadAnswersList(questionId, true, answersSortBy);
         }
       } else {
-        console.error('❌ 采纳操作失败:', response);
-        const errorMsg = response?.msg || '采纳失败';
-        showToast(errorMsg, 'error');
+        const errorMsg = resolveAdoptErrorMessage(
+          response?.msg ?? response?.message ?? response?.data ?? response,
+          '采纳失败，请稍后重试'
+        );
+
+        if (isAdoptPermissionError(errorMsg)) {
+          disableAdoptForCurrentQuestion();
+          showAppAlert(
+            t('screens.questionDetail.alerts.hint'),
+            t('screens.questionDetail.alerts.noAdoptPermission')
+          );
+          return;
+        }
+
+        console.warn('采纳操作失败:', {
+          questionId,
+          answerId,
+          errorMsg,
+          response
+        });
+
+        showAppAlert(t('screens.questionDetail.alerts.hint'), errorMsg);
 
         // 如果是"问题与回答不匹配"错误，提供更详细的信息
         if (errorMsg.includes('不匹配')) {
-          console.error('🔍 详细错误信息:');
-          console.error('  - 可能原因1: 问题ID或回答ID无效');
-          console.error('  - 可能原因2: 该回答不属于当前问题');
-          console.error('  - 可能原因3: 参数类型错误');
-          console.error('  - 当前参数:', {
-            questionId,
-            answerId
+          console.warn('采纳失败详细信息:', {
+            possibleReasons: [
+              '问题ID或回答ID无效',
+              '该回答不属于当前问题',
+              '参数类型错误'
+            ],
+            currentParams: {
+              questionId,
+              answerId
+            }
           });
         }
       }
     } catch (error) {
-      console.error('❌ 采纳请求异常:', error);
-      console.error('  错误详情:', {
-        message: error.message,
-        status: error.response?.status,
-        data: error.response?.data
-      });
       let errorMessage = '网络错误，请稍后重试';
 
       // 根据具体错误提供更准确的提示
@@ -5472,10 +5751,35 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         errorMessage = '服务器错误，请检查参数是否正确';
       } else if (error.response?.status === 404) {
         errorMessage = '接口不存在，请检查接口地址';
-      } else if (error.response?.data?.msg) {
-        errorMessage = error.response.data.msg;
+      } else if (error.response?.data?.msg || error.response?.data?.message || error?.data?.msg || error?.data?.message || error.message) {
+        errorMessage = resolveAdoptErrorMessage(
+          error?.data?.msg ??
+          error?.data?.message ??
+          error?.response?.data?.msg ??
+          error?.response?.data?.message ??
+          error?.message,
+          errorMessage
+        );
       }
-      showToast(errorMessage, 'error');
+
+      if (isAdoptPermissionError(errorMessage)) {
+        disableAdoptForCurrentQuestion();
+        showAppAlert(
+          t('screens.questionDetail.alerts.hint'),
+          t('screens.questionDetail.alerts.noAdoptPermission')
+        );
+        return;
+      }
+
+      console.warn('采纳请求异常:', {
+        questionId,
+        answerId,
+        errorMessage,
+        message: error?.message,
+        status: error?.response?.status,
+        data: error?.response?.data
+      });
+      showAppAlert(t('screens.questionDetail.alerts.hint'), errorMessage);
     } finally {
       // 清除加载状态
       setAnswerAdoptLoading(prev => ({
@@ -5529,14 +5833,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               imageUrls.push(result.data);
               console.log(`  ✅ 第 ${i + 1} 张图片上传成功:`, result.data);
             } else {
-              console.error(`  ❌ 第 ${i + 1} 张图片上传失败:`, result);
+              console.warn(`第 ${i + 1} 张图片上传失败:`, result);
               showToast(`第 ${i + 1} 张图片上传失败`, 'error');
               return;
             }
           }
           console.log('✅ 所有图片上传成功，URLs:', imageUrls);
         } catch (uploadError) {
-          console.error('图片上传失败:', uploadError);
+          console.warn('图片上传失败:', uploadError);
           showToast('图片上传失败，请重试', 'error');
           return;
         }
@@ -5596,11 +5900,17 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         setAnswersSortBy('newest');
         loadAnswersList(questionId, true, 'newest');
       } else {
-        showToast(response?.msg || '发布失败', 'error');
+        showPublishFailureAlert(response?.msg, {
+          title: '回答发布失败',
+          fallbackMessage: '回答发布失败，请稍后重试',
+        });
       }
     } catch (error) {
-      console.error('发布回答失败:', error);
-      showToast('网络错误，请稍后重试', 'error');
+      console.warn('发布回答失败:', error);
+      showPublishFailureAlert(error, {
+        title: '回答发布失败',
+        fallbackMessage: '回答发布失败，请稍后重试',
+      });
     }
   };
   const handleSubmitSupplement = async () => {
@@ -5610,7 +5920,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     }
     const blockedReason = getSupplementPublishBlockedReason();
     if (blockedReason) {
-      showToast(blockedReason, 'warning');
+      showPublishBlockedAlert(blockedReason, {
+        title: '暂时无法发布补充问题',
+        fallbackMessage: '当前问题暂不支持补充问题',
+      });
       return;
     }
     try {
@@ -5638,14 +5951,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               imageUrls.push(result.data);
               console.log(`  ✅ 第 ${i + 1} 张图片上传成功:`, result.data);
             } else {
-              console.error(`  ❌ 第 ${i + 1} 张图片上传失败:`, result);
+              console.warn(`第 ${i + 1} 张图片上传失败:`, result);
               showToast(`第 ${i + 1} 张图片上传失败`, 'error');
               return;
             }
           }
           console.log('✅ 所有图片上传成功，URLs:', imageUrls);
         } catch (uploadError) {
-          console.error('图片上传失败:', uploadError);
+          console.warn('图片上传失败:', uploadError);
           showToast('图片上传失败，请重试', 'error');
           return;
         }
@@ -5694,26 +6007,34 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         const responseMessage = response?.msg || response?.message || rawResponse?.msg || rawResponse?.message || '发布失败';
         if (isSupplementPublishBlockedMessage(responseMessage)) {
           setSupplementPublishBlockedMessage(responseMessage);
+          showPublishBlockedAlert(responseMessage, {
+            title: '暂时无法发布补充问题',
+            fallbackMessage: '当前问题暂不支持补充问题',
+          });
+          return;
         }
-        showToast(responseMessage, 'error');
+        showPublishFailureAlert(responseMessage, {
+          title: '补充问题发布失败',
+          fallbackMessage: '补充问题发布失败，请稍后重试',
+        });
       }
     } catch (error) {
-      console.error('发布补充问题失败:', error);
+      console.warn('发布补充问题失败:', error);
       const errorMessage = error?.data?.msg || error?.response?.data?.msg || error?.message || '网络错误，请稍后重试';
       if (isSupplementPublishBlockedMessage(errorMessage)) {
         setSupplementPublishBlockedMessage(errorMessage);
+        showPublishBlockedAlert(errorMessage, {
+          title: '暂时无法发布补充问题',
+          fallbackMessage: '当前问题暂不支持补充问题',
+        });
+        return;
       }
-      showToast(errorMessage, 'error');
+      showPublishFailureAlert(error, {
+        title: '补充问题发布失败',
+        fallbackMessage: '补充问题发布失败，请稍后重试',
+      });
     }
   };
-  const handleSubmitSupplementAnswer = () => {
-    if (!supplementAnswerText.trim()) return;
-    setSupplementAnswerText('');
-    setShowSupplementAnswerModal(false);
-    setCurrentAnswer(null);
-    setShowSupplementAnswerSuccessModal(true);
-  };
-
   // 处理补充问题的踩一下/取消踩一下
   const handleSupplementDislike = async supplementId => {
     try {
@@ -5752,7 +6073,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         showToast(response?.msg || '操作失败', 'error');
       }
     } catch (error) {
-      console.error('踩一下补充问题失败:', error);
+      console.warn('踩一下补充问题失败:', error);
       showToast('网络错误，请稍后重试', 'error');
     }
   };
@@ -5792,7 +6113,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         showToast(response?.msg || '操作失败', 'error');
       }
     } catch (error) {
-      console.error('点赞补充问题失败:', error);
+      console.warn('点赞补充问题失败:', error);
       showToast('网络错误，请稍后重试', 'error');
     }
   };
@@ -5832,7 +6153,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         showToast(response?.msg || '操作失败', 'error');
       }
     } catch (error) {
-      console.error('收藏补充问题失败:', error);
+      console.warn('收藏补充问题失败:', error);
       showToast('网络错误，请稍后重试', 'error');
     }
   };
@@ -6008,7 +6329,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           inviteText,
         });
       } catch (storageError) {
-        console.error('Failed to persist local invite state:', storageError);
+        console.warn('Failed to persist local invite state:', storageError);
         savedInvite = {
           ...targetUser,
           id: String(targetUser.userId),
@@ -6036,7 +6357,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             inviteText,
           });
         } catch (storageError) {
-          console.error('Failed to persist retryable local invite state:', storageError);
+          console.warn('Failed to persist retryable local invite state:', storageError);
           retryInviteRecord = {
             ...targetUser,
             id: String(targetUser.userId),
@@ -6056,7 +6377,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         return;
       }
 
-      console.error('Failed to send local invite:', error);
+      console.warn('Failed to send local invite:', error);
       showToast(error?.message || '发送邀请失败', 'error');
     } finally {
       setSendingLocalInviteUserId(null);
@@ -6137,7 +6458,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           ...previousItems.filter(item => item.id !== savedInvite.id),
         ]);
       } catch (storageError) {
-        console.error('Failed to persist twitter invite state:', storageError);
+        console.warn('Failed to persist twitter invite state:', storageError);
         setInvitedTwitterUsersState(previousItems => [
           nextInviteFallbackRecord,
           ...previousItems.filter(item => item.id !== nextInviteFallbackRecord.id),
@@ -6148,7 +6469,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       setShowAllInvited(false);
       showToast('已发起邀请', 'success');
     } catch (error) {
-      console.error('Failed to invite via twitter:', error);
+      console.warn('Failed to invite via twitter:', error);
       showToast('Unable to open Twitter', 'error');
     } finally {
       setPendingTwitterInvitePlatform(null);
@@ -6253,7 +6574,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         showToast(response?.msg || '操作失败', 'error');
       }
     } catch (error) {
-      console.error('问题点赞失败:', error);
+      console.warn('问题点赞失败:', error);
       showToast('网络错误，请稍后重试', 'error');
     }
   };
@@ -6281,7 +6602,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         showToast(response?.msg || '操作失败', 'error');
       }
     } catch (error) {
-      console.error('问题收藏失败:', error);
+      console.warn('问题收藏失败:', error);
       showToast('网络错误，请稍后重试', 'error');
     }
   };
@@ -6316,7 +6637,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         showToast(response?.msg || '操作失败', 'error');
       }
     } catch (error) {
-      console.error('问题点踩失败:', error);
+      console.warn('问题点踩失败:', error);
       showToast('网络错误，请稍后重试', 'error');
     }
   };
@@ -6581,6 +6902,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         </ScrollView>
       </SafeAreaView>;
   }
+  const supplementPublishBlockedReason = getSupplementPublishBlockedReason();
   return <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{
@@ -6658,11 +6980,15 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <Avatar uri={questionData.userAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${questionData.publicUserId ?? questionData.userId}`} name={questionData.userName || questionData.userNickname || '匿名用户'} size={32} />
               <View style={styles.authorMetaInfo}>
                 <View style={styles.authorNameRow}>
-                  <Text style={styles.smallAuthorName}>
+                  <Text style={styles.smallAuthorName} numberOfLines={1}>
                     {questionData.isAnonymous === 1 ? '匿名用户' : questionData.userName || questionData.userNickname || '匿名用户'}
                   </Text>
                   {canFollowAuthor && <TouchableOpacity
-                    style={[styles.followBtnSmall, questionAuthorIsFollowing && styles.followBtnSmallActive]}
+                    style={[
+                      styles.followBtnSmall,
+                      isCompactAuthorActionRow && styles.followBtnSmallCompact,
+                      questionAuthorIsFollowing && styles.followBtnSmallActive
+                    ]}
                     onPress={handleQuestionAuthorFollowPress}
                     disabled={questionAuthorFollowSubmitting || typeof questionAuthorIsFollowing !== 'boolean'}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -6682,35 +7008,44 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     )}
                   </TouchableOpacity>}
                 </View>
-                <Text style={styles.smallPostTime}>
+                <Text style={styles.smallPostTime} numberOfLines={1}>
                   {formatTime(questionData.createTime || questionData.createdAt)} · {questionData.location || '未知'}
                 </Text>
               </View>
             </TouchableOpacity>
-            <View style={styles.actionButtonsRight}>
-              <TouchableOpacity style={styles.smallActionBtn} onPress={() => navigation.navigate('InviteAnswer', {
+            <View style={[styles.actionButtonsRight, isCompactAuthorActionRow && styles.actionButtonsRightCompact]}>
+              <TouchableOpacity
+                style={[styles.smallActionBtn, isCompactAuthorActionRow && styles.smallActionBtnCompact]}
+                onPress={() => navigation.navigate('InviteAnswer', {
               questionId: currentQuestionId || questionData?.id || questionData?.questionId || null,
               questionTitle: questionData?.title || '',
               questionContent: questionData?.content || '',
               participantUsers: questionParticipantInviteUsers.slice(0, 12),
               localInviteUsersSnapshot: displayedLocalUsers.slice(0, 12)
             })}>
-                <Ionicons name="at" size={18} color="#3b82f6" />
+                <Ionicons name="at" size={isCompactAuthorActionRow ? 17 : 18} color="#3b82f6" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.smallActionBtn} onPress={openQuestionGroupChat}>
-                <Ionicons name="chatbubbles-outline" size={18} color="#8b5cf6" />
+              <TouchableOpacity
+                style={[styles.smallActionBtn, isCompactAuthorActionRow && styles.smallActionBtnCompact]}
+                onPress={openQuestionGroupChat}
+              >
+                <Ionicons name="chatbubbles-outline" size={isCompactAuthorActionRow ? 17 : 18} color="#8b5cf6" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.smallActionBtn} onPress={() => navigation.navigate('QuestionTeams', {
+              <TouchableOpacity
+                style={[styles.smallActionBtn, isCompactAuthorActionRow && styles.smallActionBtnCompact]}
+                onPress={() => navigation.navigate('QuestionTeams', {
                 questionId: questionData.id,
                 questionTitle: questionData.title
               })}>
-                <Ionicons name="person-add-outline" size={18} color="#f59e0b" />
+                <Ionicons name="person-add-outline" size={isCompactAuthorActionRow ? 17 : 18} color="#f59e0b" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.smallActionBtn} onPress={() => navigation.navigate('QuestionActivityList', {
+              <TouchableOpacity
+                style={[styles.smallActionBtn, isCompactAuthorActionRow && styles.smallActionBtnCompact]}
+                onPress={() => navigation.navigate('QuestionActivityList', {
                 questionId: questionData.id,
                 questionTitle: questionData.title
               })}>
-                <Ionicons name="calendar-outline" size={18} color="#22c55e" />
+                <Ionicons name="calendar-outline" size={isCompactAuthorActionRow ? 17 : 18} color="#22c55e" />
               </TouchableOpacity>
             </View>
           </View>
@@ -7467,10 +7802,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     <Text style={styles.answerAuthor}>{answer.userName || answer.userNickname || answer.author || '匿名用户'}</Text>
                     {Boolean(answer.verified) && <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />}
                     
-                    {Boolean(canAdopt || isAdopted) && <TouchableOpacity style={[styles.adoptAnswerBtn, isAdopted && styles.adoptAnswerBtnActive, isAdoptLoading && styles.adoptAnswerBtnLoading]} onPress={e => {
+                    {Boolean((canCurrentUserAdoptQuestion && canAdopt) || isAdopted) && <TouchableOpacity style={[styles.adoptAnswerBtn, isAdopted && styles.adoptAnswerBtnActive, isAdoptLoading && styles.adoptAnswerBtnLoading]} onPress={e => {
                         e.stopPropagation();
                         handleAnswerAdopt(currentQuestionId, currentAnswerId);
-                      }} disabled={!canAdopt || isAdoptLoading || isAdopted}>
+                      }} disabled={!canCurrentUserAdoptQuestion || !canAdopt || isAdoptLoading || isAdopted}>
                         <Text style={[styles.adoptAnswerBtnText, isAdopted && styles.adoptAnswerBtnTextActive]}>
                           {isAdopted ? t('screens.questionDetail.answer.adopted') : t('screens.questionDetail.answer.adopt')}
                         </Text>
@@ -8388,86 +8723,132 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       />
 
       {/* 发布补充问题弹窗 */}
-      <Modal visible={showSupplementModal} animationType="slide" statusBarTranslucent>
-        <KeyboardAvoidingView
-          style={styles.modalKeyboardView}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <KeyboardDismissView>
-            <ModalSafeAreaView style={styles.answerModal} edges={['top']}>
-          <View style={styles.answerModalHeader}>
-            <TouchableOpacity onPress={() => setShowSupplementModal(false)} style={styles.answerCloseBtn}>
-              <Ionicons name="close" size={26} color="#333" />
-            </TouchableOpacity>
-            <View style={styles.answerHeaderCenter}>
-              <Text style={styles.answerModalTitle}>补充问题</Text>
-            </View>
-            <TouchableOpacity style={[styles.answerPublishBtn, (!supplementText.trim() || !!getSupplementPublishBlockedReason()) && styles.answerPublishBtnDisabled]} onPress={handleSubmitSupplement} disabled={!supplementText.trim() || !!getSupplementPublishBlockedReason()}>
-              <Text style={[styles.answerPublishText, (!supplementText.trim() || !!getSupplementPublishBlockedReason()) && styles.answerPublishTextDisabled]}>发布</Text>
-            </TouchableOpacity>
-          </View>
-          {Boolean(getSupplementPublishBlockedReason()) && <View style={styles.supplementBlockedBanner}>
+      <ComposerModalScaffold
+        visible={showSupplementModal}
+        onClose={() => setShowSupplementModal(false)}
+        title="补充问题"
+        onSubmit={handleSubmitSupplement}
+        submitText="发布"
+        submitDisabled={!supplementText.trim() || Boolean(supplementPublishBlockedReason)}
+        footerPaddingBottom={bottomSafeInset + 8}
+        footerBottomInset={bottomSafeInset}
+        headerNotice={
+          supplementPublishBlockedReason ? (
+            <View style={styles.supplementBlockedBanner}>
               <Ionicons name="information-circle-outline" size={16} color="#b45309" />
-              <Text style={styles.supplementBlockedBannerText}>{getSupplementPublishBlockedReason()}</Text>
-            </View>}
-
-          <View style={styles.answerQuestionCard}>
-            <View style={styles.answerQuestionIcon}>
-              <Ionicons name="help-circle" size={20} color="#ef4444" />
+              <Text style={styles.supplementBlockedBannerText}>
+                {supplementPublishBlockedReason}
+              </Text>
             </View>
-            <View style={styles.answerQuestionContent}>
-              <Text style={styles.answerQuestionText} numberOfLines={2}>{currentQuestion.title}</Text>
-            </View>
+          ) : null
+        }
+        footerLeft={
+          <View style={styles.answerToolsLeft}>
+            <TouchableOpacity
+              style={styles.answerToolItem}
+              onPress={() => {
+                if (supplementImages.length >= 9) {
+                  showToast('最多只能添加9张图片', 'warning');
+                  return;
+                }
+                setShowSupplementImagePicker(true);
+              }}
+            >
+              <Ionicons name="image-outline" size={24} color="#666" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.answerToolItem}
+              onPress={handleSupplementMentionPress}
+            >
+              <Ionicons name="at-outline" size={24} color="#666" />
+            </TouchableOpacity>
           </View>
-
-          <ScrollView style={styles.answerContentArea} contentContainerStyle={[styles.answerContentContainer, {
-          paddingBottom: bottomSafeInset + 16
-        }]} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
-            <TextInput style={styles.answerTextInput} placeholder="对这个问题还有疑问？写下你的补充问题..." placeholderTextColor="#bbb" value={supplementText} onChangeText={setSupplementText} multiline autoFocus textAlignVertical="top" />
-            
-            {/* 图片预览区域 */}
-            {supplementImages.length > 0 && <View style={styles.answerImagesPreview}>
-                {supplementImages.map((imageUri, index) => <View key={index} style={styles.answerImagePreviewItem}>
-                    <Image source={{
-                uri: imageUri
-              }} style={styles.answerImagePreview} />
-                    <TouchableOpacity style={styles.answerImageRemoveBtn} onPress={() => {
-                setSupplementImages(supplementImages.filter((_, i) => i !== index));
-              }}>
-                      <Ionicons name="close-circle" size={20} color="#ef4444" />
-                    </TouchableOpacity>
-                  </View>)}
-              </View>}
-            
-            {/* 身份选择器 */}
-            <View style={styles.answerIdentitySection}>
-              <IdentitySelector selectedIdentity={supplementQuestionIdentity} selectedTeams={supplementQuestionSelectedTeams} onIdentityChange={setSupplementQuestionIdentity} onTeamsChange={setSupplementQuestionSelectedTeams} />
-            </View>
-          </ScrollView>
-
-          <View style={[styles.answerToolbar, {
-          paddingBottom: bottomSafeInset
-        }]}>
-            <View style={styles.answerToolsLeft}>
-              <TouchableOpacity style={styles.answerToolItem} onPress={() => {
-              if (supplementImages.length >= 9) {
-                showToast('最多只能添加9张图片', 'warning');
-                return;
-              }
-              setShowSupplementImagePicker(true);
-            }}>
-                <Ionicons name="image-outline" size={24} color="#666" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.answerToolItem}>
-                <Ionicons name="at-outline" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.answerWordCount}>{supplementText.length}/500</Text>
+        }
+        footerRight={<Text style={styles.answerWordCount}>{supplementText.length}/500</Text>}
+        floatingOverlay={
+          renderSupplementMentionPanel ? (
+            <MentionSuggestionsPanel
+              activeKeyword={supplementActiveMention?.keyword ?? ''}
+              animatedStyle={supplementMentionPanelAnimatedStyle}
+              bottomInset={supplementMentionBottomInset}
+              bottomOffset={supplementMentionPanelBottomOffset}
+              listMaxHeight={supplementMentionListMaxHeight}
+              loading={supplementMentionLoading}
+              onBackdropPress={focusSupplementInput}
+              onSelect={handleSupplementMentionSelect}
+              panelMaxHeight={supplementMentionPanelMaxHeight}
+              users={supplementMentionCandidateUsers}
+            />
+          ) : null
+        }
+      >
+        <View style={styles.answerQuestionCard}>
+          <View style={styles.answerQuestionIcon}>
+            <Ionicons name="help-circle" size={20} color="#ef4444" />
           </View>
-            </ModalSafeAreaView>
-          </KeyboardDismissView>
-        </KeyboardAvoidingView>
-      </Modal>
+          <View style={styles.answerQuestionContent}>
+            <Text style={styles.answerQuestionText} numberOfLines={2}>
+              {currentQuestion.title}
+            </Text>
+          </View>
+        </View>
+
+        <ScrollView
+          style={styles.answerContentArea}
+          contentContainerStyle={[
+            styles.answerContentContainer,
+            {
+              paddingBottom: composerContentBottomPadding,
+            },
+          ]}
+          scrollEnabled={!shouldShowSupplementMentionPanel}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={shouldShowSupplementMentionPanel ? 'none' : 'interactive'}
+        >
+          <TextInput
+            ref={supplementInputRef}
+            style={styles.answerTextInput}
+            placeholder="对这个问题还有疑问？写下你的补充问题..."
+            placeholderTextColor="#bbb"
+            value={supplementText}
+            onChangeText={setSupplementText}
+            onSelectionChange={handleSupplementSelectionChange}
+            selection={supplementSelection}
+            multiline
+            autoFocus
+            maxLength={500}
+            selectionColor="#ef4444"
+            textAlignVertical="top"
+          />
+
+          {supplementImages.length > 0 ? (
+            <View style={styles.answerImagesPreview}>
+              {supplementImages.map((imageUri, index) => (
+                <View key={index} style={styles.answerImagePreviewItem}>
+                  <Image source={{ uri: imageUri }} style={styles.answerImagePreview} />
+                  <TouchableOpacity
+                    style={styles.answerImageRemoveBtn}
+                    onPress={() => {
+                      setSupplementImages(supplementImages.filter((_, i) => i !== index));
+                    }}
+                  >
+                    <Ionicons name="close-circle" size={20} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          <View style={styles.answerIdentitySection}>
+            <IdentitySelector
+              selectedIdentity={supplementQuestionIdentity}
+              selectedTeams={supplementQuestionSelectedTeams}
+              onIdentityChange={setSupplementQuestionIdentity}
+              onTeamsChange={setSupplementQuestionSelectedTeams}
+            />
+          </View>
+        </ScrollView>
+      </ComposerModalScaffold>
 
       {/* 补充问题图片选择器 */}
       <ImagePickerSheet visible={showSupplementImagePicker} onClose={() => setShowSupplementImagePicker(false)} onImageSelected={imageUri => {
@@ -8765,70 +9146,21 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* 补充回答弹窗 */}
-      <Modal visible={showSupplementAnswerModal} animationType="slide" statusBarTranslucent>
-        <KeyboardAvoidingView
-          style={styles.modalKeyboardView}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <KeyboardDismissView>
-            <SafeAreaView style={styles.answerModal} edges={['top']}>
-          <View style={styles.answerModalHeader}>
-            <TouchableOpacity onPress={() => {
-            setShowSupplementAnswerModal(false);
-            setCurrentAnswer(null);
-            setSupplementAnswerText('');
-          }} style={styles.answerCloseBtn}>
-              <Ionicons name="close" size={26} color="#333" />
-            </TouchableOpacity>
-            <View style={styles.answerHeaderCenter}>
-              <Text style={styles.answerModalTitle}>补充回答</Text>
-            </View>
-            <TouchableOpacity style={[styles.answerPublishBtn, !supplementAnswerText.trim() && styles.answerPublishBtnDisabled]} onPress={handleSubmitSupplementAnswer} disabled={!supplementAnswerText.trim()}>
-              <Text style={[styles.answerPublishText, !supplementAnswerText.trim() && styles.answerPublishTextDisabled]}>发布</Text>
-            </TouchableOpacity>
-          </View>
-
-          {Boolean(currentAnswer) && <View style={styles.supplementAnswerContext}>
-              <View style={styles.supplementAnswerHeader}>
-                <Ionicons name="document-text" size={18} color="#3b82f6" />
-                <Text style={styles.supplementAnswerLabel}>原回答</Text>
-              </View>
-              <View style={styles.supplementAnswerAuthor}>
-                <Avatar uri={currentAnswer.avatar} name={currentAnswer.author} size={24} />
-                <Text style={styles.supplementAnswerAuthorName}>{currentAnswer.author}</Text>
-              </View>
-              <Text style={styles.supplementAnswerContent} numberOfLines={3}>{currentAnswer.content}</Text>
-            </View>}
-
-          <ScrollView style={styles.answerContentArea} contentContainerStyle={[styles.answerContentContainer, {
-          paddingBottom: bottomSafeInset + 16
-        }]} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
-            <TextInput style={styles.answerTextInput} placeholder="补充你的回答，提供更多信息..." placeholderTextColor="#bbb" value={supplementAnswerText} onChangeText={setSupplementAnswerText} multiline autoFocus textAlignVertical="top" />
-            
-            {/* 身份选择器 */}
-            <View style={styles.answerIdentitySection}>
-              <IdentitySelector selectedIdentity={supplementIdentity} selectedTeams={supplementSelectedTeams} onIdentityChange={setSupplementIdentity} onTeamsChange={setSupplementSelectedTeams} />
-            </View>
-          </ScrollView>
-
-          <View style={[styles.answerToolbar, {
-          paddingBottom: bottomSafeInset
-        }]}>
-            <View style={styles.answerToolsLeft}>
-              <TouchableOpacity style={styles.answerToolItem}>
-                <Ionicons name="image-outline" size={24} color="#666" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.answerToolItem}>
-                <Ionicons name="at-outline" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.answerWordCount}>{supplementAnswerText.length}/2000</Text>
-          </View>
-            </SafeAreaView>
-          </KeyboardDismissView>
-        </KeyboardAvoidingView>
-      </Modal>
+      <SupplementAnswerModal
+        visible={showSupplementAnswerModal}
+        onClose={() => {
+          setShowSupplementAnswerModal(false);
+          setCurrentAnswer(null);
+        }}
+        answer={currentAnswer}
+        questionId={currentQuestionId}
+        onSuccess={() => {
+          if (currentQuestionId) {
+            loadAnswersList(currentQuestionId, true, answersSortBy);
+          }
+          setShowSupplementAnswerSuccessModal(true);
+        }}
+      />
 
       <Modal visible={showSupplementAnswerSuccessModal} transparent animationType="fade" onRequestClose={() => setShowSupplementAnswerSuccessModal(false)}>
         <View style={styles.successModalOverlay}>
@@ -9638,6 +9970,7 @@ const styles = StyleSheet.create({
   },
   questionContent: {
     fontSize: scaleFont(14),
+    fontWeight: '400',
     color: '#4b5563',
     lineHeight: scaleFont(22),
     marginTop: -3,
@@ -9683,7 +10016,7 @@ const styles = StyleSheet.create({
   // 作者信息和操作按钮行
   authorActionsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingVertical: 10,
     borderBottomWidth: 1,
@@ -9693,7 +10026,10 @@ const styles = StyleSheet.create({
   authorInfoLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    marginRight: 12
   },
   smallAvatar: {
     width: 32,
@@ -9702,67 +10038,96 @@ const styles = StyleSheet.create({
   },
   authorMetaInfo: {
     marginLeft: 8,
-    flex: 1
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 2
   },
   authorNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6
+    flexWrap: 'wrap',
+    columnGap: 6,
+    rowGap: 6
   },
   smallAuthorName: {
-    fontSize: scaleFont(13),
-    fontWeight: '500',
-    color: '#1f2937'
+    fontSize: scaleFont(14),
+    fontWeight: 'bold',
+    color: '#1f2937',
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%'
   },
   followBtnSmall: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fef2f2',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     borderRadius: 10,
-    gap: 2
+    gap: 2,
+    maxWidth: 108,
+    flexShrink: 0
+  },
+  followBtnSmallCompact: {
+    paddingHorizontal: 6,
+    maxWidth: 98
   },
   followBtnSmallActive: {
     backgroundColor: '#f3f4f6'
   },
   followBtnSmallText: {
-    fontSize: scaleFont(10),
+    fontSize: scaleFont(12),
     color: '#ef4444',
-    fontWeight: '500'
+    fontWeight: '500',
+    flexShrink: 0
   },
   followBtnSmallTextActive: {
     color: '#6b7280'
   },
   followCountText: {
-    fontSize: scaleFont(10),
+    fontSize: scaleFont(12),
     color: '#ef4444',
-    fontWeight: '400',
-    marginLeft: 2
+    fontWeight: '500',
+    marginLeft: 1,
+    flexShrink: 1
   },
   followCountTextActive: {
     color: '#6b7280'
   },
   smallPostTime: {
-    fontSize: scaleFont(11),
+    fontSize: scaleFont(14),
+    fontWeight: '400',
     color: '#9ca3af',
-    marginTop: 2
+    marginTop: 2,
+    flexShrink: 1
   },
   actionButtonsRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6
+    gap: 4,
+    flexShrink: 0,
+    alignSelf: 'center',
+    marginLeft: 4
+  },
+  actionButtonsRightCompact: {
+    gap: 3,
+    marginLeft: 2
   },
   smallActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#f9fafb',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     borderWidth: 1,
     borderColor: '#e5e7eb'
+  },
+  smallActionBtnCompact: {
+    width: 28,
+    height: 28,
+    borderRadius: 14
   },
   pkSection: {
     marginTop: 6,

@@ -1,28 +1,36 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
-  Modal,
   TouchableOpacity,
   TextInput,
   StyleSheet,
   ScrollView,
   Image,
-  KeyboardAvoidingView,
-  Platform,
-  useWindowDimensions
+  useWindowDimensions,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from './Avatar';
 import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
-import KeyboardDismissView from './KeyboardDismissView';
-import ModalSafeAreaView from './ModalSafeAreaView';
+import ComposerModalScaffold from './ComposerModalScaffold';
+import MentionSuggestionsPanel from './MentionSuggestionsPanel';
+import userApi from '../services/api/userApi';
+import { showToast } from '../utils/toast';
+import {
+  mergeLocalInviteUsers,
+  normalizeFollowingInviteUsers,
+  normalizePublicUserSearchResponse,
+} from '../utils/localInviteUsers';
+import { modalTokens } from './modalTokens';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
-import useKeyboardBottomOffset from '../hooks/useKeyboardBottomOffset';
-
+import useMentionComposer from '../hooks/useMentionComposer';
+import {
+  DEFAULT_MENTION_PANEL_BASE_OFFSET,
+  DEFAULT_MENTION_SEARCH_LIMIT,
+} from '../utils/mentionComposer';
 import { scaleFont } from '../utils/responsive';
+
 const WriteCommentModal = ({
   visible,
   onClose,
@@ -30,43 +38,125 @@ const WriteCommentModal = ({
   originalComment = null,
   publishInFooter = false,
   closeOnRight = false,
-  placeholder = '写下你的评论...',
-  title = '写评论'
+  placeholder = '\u5199\u4e0b\u4f60\u7684\u8bc4\u8bba...',
+  title = '\u5199\u8bc4\u8bba',
 }) => {
-  const bottomSafeInset = useBottomSafeInset();
-  const insets = useSafeAreaInsets();
-  const keyboardOffset = useKeyboardBottomOffset({
-    enabled: visible,
-    bottomInset: bottomSafeInset,
-  });
-  const {
-    height: windowHeight
-  } = useWindowDimensions();
+  const bottomSafeInset = useBottomSafeInset(12, { maxAndroidInset: 24 });
+  const { height: commentWindowHeight } = useWindowDimensions();
   const [text, setText] = useState('');
   const [selectedIdentity, setSelectedIdentity] = useState('personal');
   const [selectedImages, setSelectedImages] = useState([]);
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const [recommendedMentionUsers, setRecommendedMentionUsers] = useState([]);
+  const commentInputRef = React.useRef(null);
 
-  const canPublish = text.trim() || selectedImages.length > 0;
-  const availableSheetHeight = Math.max(
-    windowHeight - Math.max(insets.top, 12) - keyboardOffset,
-    windowHeight * 0.45
-  );
-  const sheetMaxHeight = Math.min(availableSheetHeight, windowHeight * 0.9);
+  const canPublish = Boolean(text.trim() || selectedImages.length > 0);
+  const {
+    activeMention,
+    candidateUsers,
+    focusInput,
+    handleMentionPress,
+    handleMentionSelect,
+    handleSelectionChange,
+    listMaxHeight,
+    mentionBottomInset,
+    mentionLoading,
+    panelAnimatedStyle,
+    panelBottomOffset,
+    panelMaxHeight,
+    renderMentionPanel,
+    selection,
+    shouldShowMentionPanel,
+  } = useMentionComposer({
+    visible,
+    text,
+    onChangeText: setText,
+    inputRef: commentInputRef,
+    windowHeight: commentWindowHeight,
+    bottomInset: bottomSafeInset,
+    recommendedUsers: recommendedMentionUsers,
+    baseBottomOffset: DEFAULT_MENTION_PANEL_BASE_OFFSET,
+    onInvalidMention: () => showToast('\u8be5\u7528\u6237\u7f3a\u5c11\u53ef\u7528\u540d\u79f0', 'warning'),
+  });
+
+  useEffect(() => {
+    if (!visible) {
+      setRecommendedMentionUsers([]);
+      return undefined;
+    }
+
+    let isActive = true;
+    const fallbackSearchKeywords = ['a', 'e', 'm', '1', '8'];
+
+    const loadRecommendedUsers = async () => {
+      try {
+        let mergedUsers = [];
+
+        try {
+          const response = await userApi.getFollowing({
+            pageNum: 1,
+            page: 1,
+            pageSize: 20,
+            size: 20,
+            limit: 20,
+          });
+          mergedUsers = mergeLocalInviteUsers(normalizeFollowingInviteUsers(response));
+        } catch (followError) {
+          console.warn('Failed to load comment mention following users:', followError);
+        }
+
+        if (mergedUsers.length < 6) {
+          const fallbackResults = await Promise.allSettled(
+            fallbackSearchKeywords.map(keyword => userApi.searchPublicProfiles(keyword, 10))
+          );
+
+          fallbackResults.forEach(result => {
+            if (result.status !== 'fulfilled') {
+              return;
+            }
+
+            mergedUsers = mergeLocalInviteUsers([
+              ...mergedUsers,
+              ...normalizePublicUserSearchResponse(result.value),
+            ]);
+          });
+        }
+
+        if (isActive) {
+          setRecommendedMentionUsers(mergedUsers.slice(0, DEFAULT_MENTION_SEARCH_LIMIT));
+        }
+      } catch (error) {
+        if (isActive) {
+          console.warn('Failed to load comment mention recommended users:', error);
+          setRecommendedMentionUsers([]);
+        }
+      }
+    };
+
+    loadRecommendedUsers();
+
+    return () => {
+      isActive = false;
+    };
+  }, [visible]);
 
   const handlePublish = () => {
     if (!canPublish) {
       return;
     }
+
     onPublish(text.trim(), selectedIdentity === 'team', selectedImages);
     setText('');
     setSelectedIdentity('personal');
     setSelectedImages([]);
+    setRecommendedMentionUsers([]);
   };
 
   const handleImageSelected = imageUri => {
     if (selectedImages.length < 9) {
       setSelectedImages(prev => [...prev, imageUri]);
+    } else {
+      showToast('\u6700\u591a\u53ea\u80fd\u6dfb\u52a09\u5f20\u56fe\u7247', 'warning');
     }
     setShowImagePicker(false);
   };
@@ -75,313 +165,199 @@ const WriteCommentModal = ({
     setSelectedImages(prev => prev.filter((_, i) => i !== index));
   };
 
-  const renderHeaderSide = side => {
-    if (side === 'left') {
-      if (closeOnRight) {
-        return <View style={styles.headerSidePlaceholder} />;
-      }
-      return (
-        <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-          <Ionicons name="close" size={24} color="#1f2937" />
-        </TouchableOpacity>
-      );
-    }
-
-    if (closeOnRight) {
-      return (
-        <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-          <Ionicons name="close" size={24} color="#1f2937" />
-        </TouchableOpacity>
-      );
-    }
-
-    if (publishInFooter) {
-      return <View style={styles.headerSidePlaceholder} />;
-    }
-
-    return (
-      <TouchableOpacity
-        onPress={handlePublish}
-        style={[styles.publishBtn, !canPublish && styles.publishBtnDisabled]}
-        disabled={!canPublish}
-      >
-        <Text style={[styles.publishBtnText, !canPublish && styles.publishBtnTextDisabled]}>
-          发布
-        </Text>
-      </TouchableOpacity>
-    );
-  };
-
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      statusBarTranslucent
-      navigationBarTranslucent
-    >
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
-        <KeyboardDismissView>
-        <ModalSafeAreaView style={[styles.container, {
-          maxHeight: sheetMaxHeight,
-          marginBottom: keyboardOffset
-        }]} edges={['top']}>
-          <View style={styles.header}>
-            {renderHeaderSide('left')}
-            <Text style={styles.title}>{title}</Text>
-            {renderHeaderSide('right')}
+    <>
+      <ComposerModalScaffold
+        visible={visible}
+        onClose={onClose}
+        title={title}
+        onSubmit={handlePublish}
+        submitDisabled={!canPublish}
+        submitPlacement={publishInFooter ? 'footer' : 'header'}
+        closePlacement={closeOnRight ? 'right' : 'left'}
+        footerPaddingBottom={bottomSafeInset + 8}
+        footerBottomInset={bottomSafeInset}
+        footerLeft={
+          <View style={styles.toolbarLeft}>
+            <TouchableOpacity style={styles.toolbarBtn} onPress={() => setShowImagePicker(true)}>
+              <Ionicons name="image-outline" size={24} color="#6b7280" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.toolbarBtn} onPress={handleMentionPress}>
+              <Ionicons name="at-outline" size={24} color="#6b7280" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.toolbarBtn}>
+              <Ionicons name="happy-outline" size={24} color="#6b7280" />
+            </TouchableOpacity>
           </View>
-
-          <ScrollView
-            style={styles.content}
-            contentContainerStyle={[styles.contentContainer, {
-              paddingBottom: 24
-            }]}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-          >
-            {originalComment ? (
-              <View style={styles.originalCommentCard}>
-                <View style={styles.originalCommentHeader}>
-                  <Avatar
-                    uri={originalComment.userAvatar || originalComment.avatar}
-                    name={originalComment.userName || originalComment.userNickname || originalComment.author}
-                    size={32}
-                  />
+        }
+        footerRight={<Text style={styles.charCount}>{text.length}/500</Text>}
+        floatingOverlay={
+          renderMentionPanel ? (
+            <MentionSuggestionsPanel
+              activeKeyword={activeMention?.keyword ?? ''}
+              animatedStyle={panelAnimatedStyle}
+              bottomInset={mentionBottomInset}
+              bottomOffset={panelBottomOffset}
+              listMaxHeight={listMaxHeight}
+              loading={mentionLoading}
+              onBackdropPress={focusInput}
+              onSelect={handleMentionSelect}
+              panelMaxHeight={panelMaxHeight}
+              users={candidateUsers}
+            />
+          ) : null
+        }
+      >
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={!shouldShowMentionPanel}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={shouldShowMentionPanel ? 'none' : 'interactive'}
+        >
+          {originalComment ? (
+            <View style={styles.originalCommentCard}>
+              <View style={styles.originalCommentHeader}>
+                <Avatar
+                  uri={originalComment.userAvatar || originalComment.avatar}
+                  name={
+                    originalComment.userName ||
+                    originalComment.userNickname ||
+                    originalComment.author
+                  }
+                  size={28}
+                />
+                <View style={styles.originalCommentMeta}>
                   <Text style={styles.originalCommentAuthor}>
-                    {originalComment.userName || originalComment.userNickname || originalComment.author}
+                    {originalComment.userName ||
+                      originalComment.userNickname ||
+                      originalComment.author}
                   </Text>
-                  <View style={styles.flexSpacer} />
                   <Text style={styles.originalCommentTime}>{originalComment.time}</Text>
                 </View>
-                {originalComment.content ? (
-                  <Text style={styles.originalCommentText}>{originalComment.content}</Text>
-                ) : null}
               </View>
-            ) : null}
+              {originalComment.content ? (
+                <Text style={styles.originalCommentText}>{originalComment.content}</Text>
+              ) : null}
+            </View>
+          ) : null}
 
-            <TextInput
-              style={styles.textInput}
-              placeholder={placeholder}
-              placeholderTextColor="#9ca3af"
-              value={text}
-              onChangeText={setText}
-              multiline
-              autoFocus
-              maxLength={500}
-              textAlignVertical="top"
-            />
+          <TextInput
+            ref={commentInputRef}
+            style={styles.textInput}
+            placeholder={placeholder}
+            placeholderTextColor="#9ca3af"
+            value={text}
+            onChangeText={setText}
+            onSelectionChange={handleSelectionChange}
+            selection={selection}
+            multiline
+            autoFocus
+            maxLength={500}
+            selectionColor={modalTokens.danger}
+            textAlignVertical="top"
+          />
 
-            {selectedImages.length > 0 ? (
-              <View style={styles.imageGrid}>
-                {selectedImages.map((imageUri, index) => (
-                  <View key={`${imageUri}-${index}`} style={styles.imageItem}>
-                    <Image source={{ uri: imageUri }} style={styles.uploadedImage} />
-                    <TouchableOpacity style={styles.removeImage} onPress={() => removeImage(index)}>
-                      <Ionicons name="close-circle" size={20} color="#ef4444" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            ) : null}
+          {selectedImages.length > 0 ? (
+            <View style={styles.imageGrid}>
+              {selectedImages.map((imageUri, index) => (
+                <View key={`${imageUri}-${index}`} style={styles.imageItem}>
+                  <Image source={{ uri: imageUri }} style={styles.uploadedImage} />
+                  <TouchableOpacity style={styles.removeImage} onPress={() => removeImage(index)}>
+                    <Ionicons name="close-circle" size={20} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          ) : null}
 
+          <View style={styles.identitySection}>
             <IdentitySelector
               selectedIdentity={selectedIdentity}
               onIdentityChange={setSelectedIdentity}
             />
-          </ScrollView>
-
-          <View
-            style={[
-              styles.bottomToolbar,
-              {
-                paddingBottom: bottomSafeInset + 8
-              }
-            ]}
-          >
-            <View style={styles.toolbarLeft}>
-              <TouchableOpacity style={styles.toolbarBtn} onPress={() => setShowImagePicker(true)}>
-                <Ionicons name="image-outline" size={24} color="#6b7280" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.toolbarBtn}>
-                <Ionicons name="at" size={24} color="#6b7280" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.toolbarBtn}>
-                <Ionicons name="happy-outline" size={24} color="#6b7280" />
-              </TouchableOpacity>
-            </View>
-            {publishInFooter ? (
-              <TouchableOpacity
-                onPress={handlePublish}
-                style={[styles.footerPublishBtn, !canPublish && styles.publishBtnDisabled]}
-                disabled={!canPublish}
-              >
-                <Text style={[styles.publishBtnText, !canPublish && styles.publishBtnTextDisabled]}>
-                  发布
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <Text style={styles.charCount}>{text.length}/500</Text>
-            )}
           </View>
-        </ModalSafeAreaView>
-        </KeyboardDismissView>
-      </KeyboardAvoidingView>
+        </ScrollView>
+      </ComposerModalScaffold>
 
       <ImagePickerSheet
         visible={showImagePicker}
         onClose={() => setShowImagePicker(false)}
         onImageSelected={handleImageSelected}
-        title="添加图片"
+        title="\u6dfb\u52a0\u56fe\u7247"
       />
-    </Modal>
+    </>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(15, 23, 42, 0.25)'
-  },
-  backdrop: {
-    flex: 1
-  },
-  container: {
-    width: '100%',
-    minHeight: '60%',
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden'
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb'
-  },
-  headerSidePlaceholder: {
-    width: 40
-  },
-  closeBtn: {
-    width: 40,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  title: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: scaleFont(17),
-    fontWeight: '600',
-    color: '#1f2937'
-  },
-  publishBtn: {
-    backgroundColor: '#ef4444',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20
-  },
-  footerPublishBtn: {
-    backgroundColor: '#ef4444',
-    minWidth: 84,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  publishBtnDisabled: {
-    backgroundColor: '#fca5a5'
-  },
-  publishBtnText: {
-    color: '#ffffff',
-    fontSize: scaleFont(14),
-    fontWeight: '600'
-  },
-  publishBtnTextDisabled: {
-    color: '#ffffff'
-  },
   content: {
     flex: 1,
-    padding: 16
   },
   contentContainer: {
-    paddingBottom: 16
+    padding: 16,
+    paddingBottom: 24,
   },
   originalCommentCard: {
     padding: 14,
     borderRadius: 14,
-    backgroundColor: '#f9fafb',
+    backgroundColor: modalTokens.surfaceSoft,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    marginBottom: 16
+    borderColor: modalTokens.border,
+    marginBottom: 16,
   },
   originalCommentHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 10
+    marginBottom: 10,
   },
-  flexSpacer: {
-    flex: 1
+  originalCommentMeta: {
+    flex: 1,
+    marginLeft: 10,
   },
   originalCommentAuthor: {
     fontSize: scaleFont(14),
-    fontWeight: '500',
-    color: '#1f2937'
+    fontWeight: '600',
+    color: modalTokens.textPrimary,
   },
   originalCommentTime: {
+    marginTop: 2,
     fontSize: scaleFont(12),
-    color: '#9ca3af'
+    color: modalTokens.textMuted,
   },
   originalCommentText: {
     fontSize: scaleFont(14),
     lineHeight: scaleFont(20),
-    color: '#374151'
+    color: '#374151',
   },
   textInput: {
-    minHeight: 120,
+    minHeight: 240,
+    paddingVertical: 4,
     fontSize: scaleFont(16),
-    color: '#1f2937',
-    marginBottom: 16
+    color: modalTokens.textPrimary,
+    lineHeight: scaleFont(26),
+    marginBottom: 16,
   },
-  bottomToolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    backgroundColor: '#ffffff'
+  identitySection: {
+    paddingBottom: 8,
   },
   toolbarLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16
   },
   toolbarBtn: {
-    padding: 4
+    padding: 10,
   },
   charCount: {
-    fontSize: scaleFont(14),
-    color: '#6b7280'
+    fontSize: scaleFont(13),
+    color: modalTokens.textMuted,
   },
   imageGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 16
+    marginBottom: 16,
   },
   imageItem: {
     width: 80,
@@ -389,11 +365,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#e5e7eb',
     position: 'relative',
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
   uploadedImage: {
     width: '100%',
-    height: '100%'
+    height: '100%',
   },
   removeImage: {
     position: 'absolute',
@@ -401,8 +377,8 @@ const styles = StyleSheet.create({
     right: -8,
     zIndex: 10,
     backgroundColor: '#ffffff',
-    borderRadius: 10
-  }
+    borderRadius: 10,
+  },
 });
 
 export default WriteCommentModal;

@@ -412,7 +412,7 @@ const backgroundUpdateSupplements = async (questionId, sortBy, page) => {
       console.log(`✅ 后台更新补充完成: questionId=${questionId}, sortBy=${sortBy}, page=${page}`);
     }
   } catch (error) {
-    console.error(`❌ 后台更新补充失败: questionId=${questionId}, sortBy=${sortBy}, page=${page}`, error);
+    console.warn(`补充列表后台更新失败: questionId=${questionId}, sortBy=${sortBy}, page=${page}`, error);
   }
 };
 
@@ -468,7 +468,7 @@ const fetchSupplementsByQuestion = async (questionId, sortBy, page) => {
       return [];
     }
   } catch (error) {
-    console.error('❌ API调用失败:', error);
+    console.warn('补充列表接口调用失败:', error);
     console.log('🔍 ==================== API调用结束 ====================\n');
     throw error;
   }
@@ -560,7 +560,7 @@ const backgroundUpdate = async (tabType, page) => {
       console.log(`✅ 后台更新完成: ${tabType} - 第${page}页`);
     }
   } catch (error) {
-    console.error(`❌ 后台更新失败: ${tabType} - 第${page}页`, error);
+    console.warn(`问题列表后台更新失败: ${tabType} - 第${page}页`, error);
   }
 };
 
@@ -684,7 +684,7 @@ const processPrefetchQueue = async () => {
       console.log(`🔮 预加载 Tab: ${tabType}`);
       await loadQuestions(tabType, 1, false);
     } catch (error) {
-      console.error(`❌ 预加载失败: ${tabType}`, error);
+      console.warn(`问题列表预加载失败: ${tabType}`, error);
     }
     
     // 延迟一下，避免同时发起太多请求
@@ -707,7 +707,7 @@ export const prefetchNextPage = async (tabType, currentPage) => {
     console.log(`🔮 预加载下一页: ${tabType} - 第${nextPage}页`);
     await loadQuestions(tabType, nextPage, false);
   } catch (error) {
-    console.error(`❌ 预加载下一页失败: ${tabType} - 第${nextPage}页`, error);
+    console.warn(`问题列表预加载下一页失败: ${tabType} - 第${nextPage}页`, error);
   }
 };
 
@@ -729,7 +729,7 @@ export const batchLoadTabs = async (tabs) => {
         const { data } = await loadQuestions(tab, 1, false);
         results[tab] = data;
       } catch (error) {
-        console.error(`❌ 批量加载失败: ${tab}`, error);
+        console.warn(`问题列表批量加载失败: ${tab}`, error);
         results[tab] = [];
       }
     })
@@ -755,7 +755,7 @@ export const checkForNewContent = async (tabType, currentData) => {
     // 比较第一条数据的 ID
     return data[0].id !== currentData[0].id;
   } catch (error) {
-    console.error('检查新内容失败:', error);
+    console.warn('检查新内容失败:', error);
     return false;
   }
 };

@@ -1,8 +1,11 @@
 import * as Localization from 'expo-localization';
+import * as Updates from 'expo-updates';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import en from './locales/en.json';
 import zh from './locales/zh.json';
 import { SIMULATE_PRODUCTION } from '../config/debugMode';
+import { isLanguageSelectionEnabledForRuntime } from '../utils/languageSelectionGate';
 
 const LANGUAGE_OVERRIDE_KEY = '@app_language_override';
 
@@ -11,7 +14,12 @@ const translations = {
   zh,
 };
 
-const isDevelopmentLanguageSwitchEnabled = __DEV__ && !SIMULATE_PRODUCTION;
+const isDevelopmentLanguageSwitchEnabled = isLanguageSelectionEnabledForRuntime({
+  isDev: __DEV__,
+  simulateProduction: SIMULATE_PRODUCTION,
+  platformOS: Platform.OS,
+  updatesChannel: Updates.channel,
+});
 
 class SimpleI18n {
   constructor() {
@@ -166,7 +174,22 @@ class SimpleI18n {
     });
   }
 
-  t(key) {
+  interpolate(translation, params = {}) {
+    if (typeof translation !== 'string' || !params || typeof params !== 'object') {
+      return translation;
+    }
+
+    return translation.replace(/\{(\w+)\}/g, (match, token) => {
+      if (Object.prototype.hasOwnProperty.call(params, token)) {
+        const value = params[token];
+        return value === null || value === undefined ? '' : String(value);
+      }
+
+      return match;
+    });
+  }
+
+  t(key, params = undefined) {
     if (!this.initialized) {
       console.warn('i18n.t() called before initialization for key:', key);
     }
@@ -191,11 +214,11 @@ class SimpleI18n {
             return key;
           }
         }
-        return fallback || key;
+        return this.interpolate(fallback || key, params);
       }
     }
 
-    return translation || key;
+    return this.interpolate(translation || key, params);
   }
 }
 

@@ -418,7 +418,7 @@ export default function RelationUserList({
           return;
         }
 
-        console.error('[RelationUserList] failed to load relation list:', error);
+        console.warn('[RelationUserList] failed to load relation list:', error);
 
         if (pageNum === 1) {
           usersRef.current = [];

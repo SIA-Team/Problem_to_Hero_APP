@@ -13,8 +13,9 @@ import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import UserCacheService from '../services/UserCacheService';
-import { DEFAULT_MY_ACTIVITIES, DEFAULT_MY_GROUPS, DEFAULT_MY_TEAMS } from '../data/profileMenuMockData';
+import { DEFAULT_MY_ACTIVITIES, DEFAULT_MY_GROUPS } from '../data/profileMenuMockData';
 import authApi from '../services/api/authApi';
+import teamApi from '../services/api/teamApi';
 import userApi from '../services/api/userApi';
 import questionApi from '../services/api/questionApi';
 import { showAppAlert } from '../utils/appAlert';
@@ -22,6 +23,7 @@ import { openOfficialRechargePage } from '../utils/externalLinks';
 import { applyMockRecharge, getWalletBalanceWithMock } from '../utils/walletMock';
 import { formatTime } from '../utils/timeFormatter';
 import { formatNumber } from '../utils/numberFormatter';
+import { isVisibleMyTeam, normalizeMyTeam } from '../utils/teamTransforms';
 import ServerSwitcher from '../components/ServerSwitcher';
 
 import { scaleFont } from '../utils/responsive';
@@ -116,15 +118,15 @@ export default function ProfileScreen({
   const getLocationDisplay = (location) => {
     if (!location) return '';
     
-    // 按空格分�?
+    // 按空格分割
     const parts = location.split(' ').filter(Boolean);
     
-    // 如果有多级，只返回最后一�?
+    // 如果有多级，只返回最后一级
     if (parts.length >= 2) {
       return parts[parts.length - 1];
     }
     
-    // 如果只有一级，返回原�?
+    // 如果只有一级，返回原值
     return location;
   };
   
@@ -156,7 +158,7 @@ export default function ProfileScreen({
     return `${getCurrencySymbol(walletData.currency)}${safeAmount.toFixed(2)}`;
   }, [walletData.balance, walletData.currency, getCurrencySymbol]);
 
-  // 用户信息状�?
+  // 用户信息状态
   const [userProfile, setUserProfile] = useState({
     nickname: '',
     userId: '',
@@ -169,9 +171,10 @@ export default function ProfileScreen({
     followersCount: 0,
     followingCount: 0,
     friendCount: 0,
-    passwordChanged: false // 是否修改过密码（默认 false，表示未修改，会显示默认密码�?
+    passwordChanged: false // 是否修改过密码（默认 false，表示未修改，会显示默认密码）
   });
   const [draftsTotalCount, setDraftsTotalCount] = useState(0);
+  const [myTeamsCount, setMyTeamsCount] = useState(0);
 
   // 加载用户信息
   const loadUserProfile = React.useCallback(async () => {
@@ -213,7 +216,7 @@ export default function ProfileScreen({
         passwordChanged: cachedProfile.passwordChanged === true || hasChangedPassword
       }));
     },
-    // 最新数据加载完成回调（静默更新�?
+    // 最新数据加载完成回调（静默更新）
     freshProfile => {
       console.log('ProfileScreen: 从服务器更新用户信息', freshProfile);
       setUserProfile(prev => ({
@@ -270,7 +273,29 @@ export default function ProfileScreen({
         });
       }
     } catch (error) {
-      console.error('Failed to load wallet balance:', error);
+      console.log('Failed to load wallet balance:', error?.message || error);
+    }
+  }, []);
+
+  const loadMyTeamsCount = React.useCallback(async () => {
+    try {
+      const response = await teamApi.getMyTeams();
+      const isSuccess = response?.code === 0 || response?.code === 200;
+
+      if (!isSuccess) {
+        throw new Error(response?.msg || 'Failed to fetch my teams');
+      }
+
+      const teamList = Array.isArray(response?.data) ? response.data : [];
+      const visibleTeamCount = teamList
+        .map(team => normalizeMyTeam(team))
+        .filter(isVisibleMyTeam)
+        .length;
+
+      setMyTeamsCount(visibleTeamCount);
+    } catch (error) {
+      console.log('Failed to load my teams count:', error?.message || error);
+      setMyTeamsCount(0);
     }
   }, []);
 
@@ -298,7 +323,8 @@ export default function ProfileScreen({
   useEffect(() => {
     loadUserProfile();
     loadWalletBalance();
-  }, [loadUserProfile, loadWalletBalance]);
+    loadMyTeamsCount();
+  }, [loadMyTeamsCount, loadUserProfile, loadWalletBalance]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
@@ -326,7 +352,8 @@ export default function ProfileScreen({
     console.log('ProfileScreen: screen focused, reloading user profile');
     loadUserProfile();
     loadWalletBalance();
-  }, [loadUserProfile, loadWalletBalance]));
+    loadMyTeamsCount();
+  }, [loadMyTeamsCount, loadUserProfile, loadWalletBalance]));
   const stats = React.useMemo(() => [{
     label: t('profile.likes'),
     value: formatNumber(userProfile.likeCount),
@@ -357,7 +384,7 @@ export default function ProfileScreen({
   }, {
     icon: 'people-circle',
     label: t('profile.myTeams'),
-    value: String(DEFAULT_MY_TEAMS.length),
+    value: String(myTeamsCount),
     color: '#f59e0b'
   }, {
     icon: 'calendar',
@@ -374,7 +401,7 @@ export default function ProfileScreen({
     label: t('profile.verification'),
     value: '',
     color: '#3b82f6'
-  }], [draftsTotalCount, t]);
+  }], [draftsTotalCount, myTeamsCount, t]);
   const myQuestions = React.useMemo(() => [{
     id: 1,
     title: 'How to learn Python in three months?',
@@ -415,7 +442,7 @@ export default function ProfileScreen({
   const myAnswers = React.useMemo(() => [{
     id: 1,
     questionTitle: '如何高效学习一门新技能？',
-    content: '作为一个自学了多门技能的人，我来分享一下我的经�?..',
+    content: '作为一个自学了多门技能的人，我来分享一下我的经验...',
     likes: 256,
     comments: 23,
     shares: 45,
@@ -437,7 +464,7 @@ export default function ProfileScreen({
   }, {
     id: 3,
     questionTitle: 'Is it too late to switch into programming at 35?',
-    content: '完全来得及！我就�?5岁转行的，现在已经工�?年了...',
+    content: '完全来得及！我就是35岁转行的，现在已经工作3年了...',
     likes: 512,
     comments: 45,
     shares: 89,
@@ -448,7 +475,7 @@ export default function ProfileScreen({
   }, {
     id: 4,
     questionTitle: '如何克服拖延症？',
-    content: '拖延症的根本原因是对任务的恐惧，可以尝试番茄工作�?..',
+    content: '拖延症的根本原因是对任务的恐惧，可以尝试番茄工作法...',
     likes: 98,
     comments: 8,
     adopted: false,
@@ -518,7 +545,7 @@ export default function ProfileScreen({
       id: 3,
       type: 'supplement',
       questionTitle: 'Is it too late to switch into programming at 35?',
-      content: '补充一下，我当时转行时还参加了培训�?..',
+      content: '补充一下，我当时转行时还参加了培训...',
       author: '职场导师',
       time: '1天前',
       isSuperLike: true,
@@ -537,7 +564,7 @@ export default function ProfileScreen({
       id: 5,
       type: 'supplementAnswer',
       questionTitle: '如何克服拖延症？',
-      content: '补充回答：除了番茄工作法，还可以尝试时间块管�?..',
+      content: '补充回答：除了番茄工作法，还可以尝试时间块管理...',
       author: 'Counselor',
       time: '3天前',
       isSuperLike: true,
@@ -569,7 +596,7 @@ export default function ProfileScreen({
           setDraftsPageNum(1);
         }
 
-        // 检查是否还有更多数�?
+        // 检查是否还有更多数据
         const currentTotal = isLoadMore ? draftsList.length + rows.length : rows.length;
         setDraftsHasMore(currentTotal < total);
       }
@@ -595,7 +622,7 @@ export default function ProfileScreen({
   }, []);
   const [activeTab, setActiveTab] = useState('');
 
-  // 退出登录确认弹窗状�?
+  // 退出登录确认弹窗状态
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showFavoritesModal, setShowFavoritesModal] = useState(false);
@@ -609,7 +636,7 @@ export default function ProfileScreen({
     }
   }, [t, activeTab]);
 
-  // 草稿数据状�?
+  // 草稿数据状态
   const [draftsList, setDraftsList] = useState([]);
   const [draftsLoading, setDraftsLoading] = useState(false);
   const [draftsPageNum, setDraftsPageNum] = useState(1);
@@ -680,10 +707,10 @@ export default function ProfileScreen({
     loadDraftsCount();
   }, [loadDraftsCount]));
 
-  // 认证状�? 'none' | 'personal' | 'enterprise' | 'government'
-  const [verificationType, setVerificationType] = useState('none'); // 示例：未认证（显�?去认�?按钮�?
+  // 认证状态 'none' | 'personal' | 'enterprise' | 'government'
+  const [verificationType, setVerificationType] = useState('none'); // 示例：未认证（显示“去认证”按钮）
 
-  // 认证弹窗状�?
+  // 认证弹窗状态
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [verificationStep, setVerificationStep] = useState(0); // 0: 选择类型, 1: 填写信息, 2: 确认信息
   const [selectedVerificationType, setSelectedVerificationType] = useState(''); // 'personal' | 'enterprise' | 'government'
@@ -707,7 +734,7 @@ export default function ProfileScreen({
       legalName: '',
       legalIdNumber: '',
       contactPerson: '',
-      // 企业联系人（必填�?
+      // 企业联系人（必填）
       contactPhone: '',
       // 联系电话
       contactEmail: '' // 联系邮箱
@@ -733,7 +760,7 @@ export default function ProfileScreen({
     }
   });
 
-  // 获取认证图标和文字信�?
+  // 获取认证图标和文字信息
   const getVerificationInfo = () => {
     switch (verificationType) {
       case 'personal':
@@ -743,7 +770,7 @@ export default function ProfileScreen({
           text: t('profile.personalVerification'),
           verified: true
         };
-      // 黄色V�?- 个人认证
+      // 黄色 V - 个人认证
       case 'enterprise':
         return {
           color: '#3b82f6',
@@ -751,7 +778,7 @@ export default function ProfileScreen({
           text: t('profile.enterpriseVerification'),
           verified: true
         };
-      // 蓝色V�?- 企业认证
+      // 蓝色 V - 企业认证
       case 'government':
         return {
           color: '#ef4444',
@@ -759,7 +786,7 @@ export default function ProfileScreen({
           text: t('profile.governmentVerification'),
           verified: true
         };
-      // 红色V�?- 政府认证
+      // 红色 V - 政府认证
       case 'none':
       default:
         return {
@@ -768,7 +795,7 @@ export default function ProfileScreen({
           text: t('profile.notVerified'),
           verified: false
         };
-      // 未认�?- 灰色X�?
+      // 未认证 - 灰色 X
     }
   };
   const verificationInfo = getVerificationInfo();
@@ -848,7 +875,7 @@ export default function ProfileScreen({
         });
         break;
       case t('profile.viewPublicProfile'):
-        // 导航到公开主页（使用当前用户ID�?
+        // 导航到公开主页（使用当前用户 ID）
         navigation.navigate('PublicProfile', {
           userId: String(userProfile.userId || '')
         });
@@ -956,7 +983,7 @@ export default function ProfileScreen({
         console.log('分类名称:', draftData.categoryName);
         console.log('图片URLs:', draftData.imageUrls);
         console.log('图片URLs类型:', typeof draftData.imageUrls);
-        console.log('图片URLs是否为数�?', Array.isArray(draftData.imageUrls));
+        console.log('图片URLs是否为数组', Array.isArray(draftData.imageUrls));
         console.log('图片URLs长度:', draftData.imageUrls?.length);
         if (Array.isArray(draftData.imageUrls)) {
           draftData.imageUrls.forEach((url, index) => {
@@ -972,11 +999,11 @@ export default function ProfileScreen({
           draftData
         });
       } else {
-        console.error('�?获取草稿失败:', response);
+        console.error('获取草稿失败:', response);
         showAppAlert(t('profile.draftLoadFailedTitle'), response?.msg || t('profile.draftLoadFailedMessage'));
       }
     } catch (error) {
-      console.error('�?获取草稿详情失败:', error);
+      console.error('获取草稿详情失败:', error);
       showAppAlert(t('profile.draftLoadFailedTitle'), t('profile.draftLoadFailedNetwork'));
     }
   };
@@ -996,7 +1023,7 @@ export default function ProfileScreen({
   const handleConfirmLogout = async () => {
     setIsLoggingOut(true);
     try {
-      // 调用退出登�?API
+      // 调用退出登录 API
       const response = await authApi.logout();
       if (response.code === 200) {
         console.log('Logout succeeded');
@@ -1005,11 +1032,11 @@ export default function ProfileScreen({
           onLogout();
         }
       } else {
-        console.error('�?退出登录失�?', response.msg);
+        console.error('退出登录失败:', response.msg);
         showAppAlert('Logout failed', response.msg || 'Logout failed, please try again');
       }
     } catch (error) {
-      console.error('�?退出登录异�?', error);
+      console.error('退出登录异常:', error);
       showAppAlert('Logout failed', 'Network error, please check connection and try again');
     } finally {
       setIsLoggingOut(false);
@@ -1063,7 +1090,7 @@ export default function ProfileScreen({
         return;
       }
       // 专业资质认证改为可选，不再验证
-      // 如果用户上传了资质，检查是否所有资质都填写了名�?
+      // 如果用户上传了资质，检查是否所有资质都填写了名称
       if (data.qualifications && data.qualifications.length > 0) {
         const unnamedQualification = data.qualifications.find(q => !q.name || q.name.trim() === '');
         if (unnamedQualification) {
@@ -1084,12 +1111,12 @@ export default function ProfileScreen({
         showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.contactPersonRequired'));
         return;
       }
-      // 验证联系方式：邮箱或电话至少填写一�?
+      // 验证联系方式：邮箱或电话至少填写一项
       if ((!data.contactPhone || data.contactPhone.trim() === '') && (!data.contactEmail || data.contactEmail.trim() === '')) {
         showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.contactMethodRequired'));
         return;
       }
-      // 验证电话格式（如果填写了�?
+      // 验证电话格式（如果填写了）
       if (data.contactPhone && data.contactPhone.trim() !== '') {
         const phoneRegex = /^1[3-9]\d{9}$/;
         if (!phoneRegex.test(data.contactPhone.trim())) {
@@ -1097,7 +1124,7 @@ export default function ProfileScreen({
           return;
         }
       }
-      // 验证邮箱格式（如果填写了�?
+      // 验证邮箱格式（如果填写了）
       if (data.contactEmail && data.contactEmail.trim() !== '') {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(data.contactEmail.trim())) {
@@ -1114,12 +1141,12 @@ export default function ProfileScreen({
         showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.authorizerIdRequired'));
         return;
       }
-      // 验证联系方式：邮箱或电话至少填写一�?
+      // 验证联系方式：邮箱或电话至少填写一项
       if ((!data.contactPhone || data.contactPhone.trim() === '') && (!data.contactEmail || data.contactEmail.trim() === '')) {
         showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.contactMethodRequired'));
         return;
       }
-      // 验证电话格式（如果填写了�?
+      // 验证电话格式（如果填写了）
       if (data.contactPhone && data.contactPhone.trim() !== '') {
         const phoneRegex = /^1[3-9]\d{9}$/;
         if (!phoneRegex.test(data.contactPhone.trim())) {
@@ -1127,7 +1154,7 @@ export default function ProfileScreen({
           return;
         }
       }
-      // 验证邮箱格式（如果填写了�?
+      // 验证邮箱格式（如果填写了）
       if (data.contactEmail && data.contactEmail.trim() !== '') {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(data.contactEmail.trim())) {
@@ -1353,7 +1380,7 @@ export default function ProfileScreen({
                       {verificationInfo.text}
                     </Text>
                   </TouchableOpacity> :
-              // 未认证：显示"去认�?按钮
+              // 未认证：显示"去认证"按钮
               <TouchableOpacity style={styles.verifyButton} onPress={handleVerificationPress} activeOpacity={0.7}>
                     <Text style={styles.verifyButtonText}>{t('profile.goVerify')}</Text>
                   </TouchableOpacity>}
@@ -1420,10 +1447,6 @@ export default function ProfileScreen({
                 <Text style={styles.walletBalance}>{formattedWalletBalance}</Text>
               </TouchableOpacity>
             </View>
-            <View style={styles.walletActions}>
-              <TouchableOpacity style={styles.rechargeBtn} onPress={() => handleWalletAction('recharge')}><Text style={styles.rechargeBtnText}>{t('profile.recharge')}</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.withdrawBtn} onPress={() => handleWalletAction('withdraw')}><Text style={styles.withdrawBtnText}>{t('profile.withdraw')}</Text></TouchableOpacity>
-            </View>
           </View>
           <View style={styles.walletStats}>
             <TouchableOpacity style={styles.walletStatItem} onPress={() => handleWalletAction('income')}>
@@ -1432,18 +1455,30 @@ export default function ProfileScreen({
             }]}>$320.00</Text>
               <Text style={styles.walletStatLabel}>{t('profile.answerIncome')}</Text>
             </TouchableOpacity>
+            <View style={styles.walletStatDivider} />
             <TouchableOpacity style={styles.walletStatItem} onPress={() => handleWalletAction('expense')}>
               <Text style={styles.walletStatValue}>$150.00</Text>
               <Text style={styles.walletStatLabel}>{t('profile.rewardExpense')}</Text>
             </TouchableOpacity>
+            <View style={styles.walletStatDivider} />
             <TouchableOpacity style={styles.walletStatItem} onPress={() => handleWalletAction('pending')}>
               <Text style={styles.walletStatValue}>12</Text>
               <Text style={styles.walletStatLabel}>{t('profile.pendingAdoption')}</Text>
             </TouchableOpacity>
           </View>
+          <View style={styles.walletActions}>
+            <TouchableOpacity style={styles.rechargeBtn} onPress={() => handleWalletAction('recharge')}>
+              <Ionicons name="add-circle" size={18} color="#fff" />
+              <Text style={styles.rechargeBtnText}>{t('profile.recharge')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.withdrawBtn} onPress={() => handleWalletAction('withdraw')}>
+              <Ionicons name="cash-outline" size={18} color="#ef4444" />
+              <Text style={styles.withdrawBtnText}>{t('profile.withdraw')}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* 超级赞余额卡�?- 已隐�?*/}
+        {/* 超级赞余额卡片 - 已隐藏 */}
         {/* <View style={styles.superLikeCard}>
           <View style={styles.superLikeHeader}>
             <View style={styles.superLikeTitle}>
@@ -1476,7 +1511,7 @@ export default function ProfileScreen({
             </TouchableOpacity>)}
         </View>
 
-        {/* 服务器切�?*/}
+        {/* 服务器切换 */}
         <ServerSwitcher />
 
         {/* 我的内容 */}
@@ -1826,7 +1861,7 @@ export default function ProfileScreen({
           <TouchableOpacity style={styles.viewAllBtn} onPress={() => showAppAlert(t('profile.viewAll'), `${t('profile.viewAll')}${activeTab}`)}><Text style={styles.viewAllText}>{t('profile.viewAll')}</Text><Ionicons name="chevron-forward" size={16} color="#ef4444" /></TouchableOpacity>
         </View>
 
-        {/* 退出登�?*/}
+        {/* 退出登录 */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <Text style={styles.logoutText}>{t('profile.logout')}</Text>
         </TouchableOpacity>
@@ -1979,7 +2014,7 @@ export default function ProfileScreen({
           }} />
           </View>
 
-          {/* 进度�?- 移除，不再需�?*/}
+          {/* 进度条 - 移除，不再需要 */}
 
           <ScrollView style={styles.verificationContent} contentContainerStyle={[styles.verificationContentContainer, {
           paddingBottom: bottomSafeInset + 28
@@ -2133,7 +2168,7 @@ export default function ProfileScreen({
                   <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.enterpriseNamePlaceholder')} placeholderTextColor="#9ca3af" value={verificationData.enterprise.name} onChangeText={text => updateVerificationField('name', text)} />
                 </View>
 
-                {/* 注册�?*/}
+                {/* 注册号 */}
                 <View style={styles.fieldContainer}>
                   <Text style={styles.fieldLabel}>{t('profile.verificationModal.registrationNumber')}</Text>
                   <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.registrationNumberPlaceholder')} placeholderTextColor="#9ca3af" value={verificationData.enterprise.registrationNumber} onChangeText={text => updateVerificationField('registrationNumber', text)} />
@@ -2151,7 +2186,7 @@ export default function ProfileScreen({
                   <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.addressPlaceholder')} placeholderTextColor="#9ca3af" value={verificationData.enterprise.address} onChangeText={text => updateVerificationField('address', text)} />
                 </View>
 
-                {/* 企业联系�?*/}
+                {/* 企业联系人 */}
                 <View style={styles.fieldContainer}>
                   <Text style={styles.fieldLabel}>{t('profile.verificationModal.contactPerson')}<Text style={styles.required}>*</Text></Text>
                   <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.contactPersonPlaceholder')} placeholderTextColor="#9ca3af" value={verificationData.enterprise.contactPerson} onChangeText={text => updateVerificationField('contactPerson', text)} />
@@ -2218,7 +2253,7 @@ export default function ProfileScreen({
                   <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.departmentPlaceholder')} placeholderTextColor="#9ca3af" value={verificationData.government.department} onChangeText={text => updateVerificationField('department', text)} />
                 </View>
 
-                {/* 授权�?*/}
+                {/* 授权人 */}
                 <View style={styles.fieldContainer}>
                   <Text style={styles.fieldLabel}>{t('profile.verificationModal.authorizer')}<Text style={styles.required}>*</Text></Text>
                   <TextInput style={styles.fieldInput} placeholder={t('profile.verificationModal.authorizerPlaceholder')} placeholderTextColor="#9ca3af" value={verificationData.government.authorizerName} onChangeText={text => updateVerificationField('authorizerName', text)} />
@@ -2229,7 +2264,7 @@ export default function ProfileScreen({
                   <Text style={styles.uploadSectionTitle}>{t('profile.verificationModal.authorizerIdPhotos')} <Text style={styles.required}>*</Text></Text>
                   
                   <View style={styles.uploadGrid}>
-                    {/* 身份证正�?*/}
+                    {/* 身份证正面 */}
                     <View style={styles.uploadItemWrapper}>
                       <Text style={styles.uploadLabel}>{t('profile.verificationModal.authorizerIdFront')}<Text style={styles.required}>*</Text></Text>
                       <TouchableOpacity style={styles.uploadBox} onPress={() => handleImageUpload('authorizerIdFront')}>
@@ -2242,7 +2277,7 @@ export default function ProfileScreen({
                       </TouchableOpacity>
                     </View>
 
-                    {/* 身份证反�?*/}
+                    {/* 身份证反面 */}
                     <View style={styles.uploadItemWrapper}>
                       <Text style={styles.uploadLabel}>{t('profile.verificationModal.authorizerIdBack')}<Text style={styles.required}>*</Text></Text>
                       <TouchableOpacity style={styles.uploadBox} onPress={() => handleImageUpload('authorizerIdBack')}>
@@ -2329,7 +2364,7 @@ export default function ProfileScreen({
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* 退出登录确认弹�?*/}
+      {/* 退出登录确认弹窗 */}
       <LogoutConfirmModal visible={showLogoutModal} onClose={() => setShowLogoutModal(false)} onConfirm={handleConfirmLogout} username={userProfile.username || userProfile.nickname} isLoading={isLoggingOut} showDefaultPassword={!userProfile.passwordChanged} />
     </SafeAreaView>;
 }
@@ -2518,7 +2553,8 @@ const styles = StyleSheet.create({
   },
   walletHeader: {
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
+    marginBottom: 16
   },
   walletIcon: {
     width: 40,
@@ -2541,42 +2577,22 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1f2937'
   },
-  walletActions: {
-    flexDirection: 'row',
-    gap: 8
-  },
-  rechargeBtn: {
-    backgroundColor: '#ef4444',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14
-  },
-  rechargeBtnText: {
-    fontSize: scaleFont(12),
-    color: '#fff',
-    fontWeight: '500'
-  },
-  withdrawBtn: {
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14
-  },
-  withdrawBtnText: {
-    fontSize: scaleFont(12),
-    color: '#6b7280'
-  },
   walletStats: {
     flexDirection: 'row',
-    marginTop: 16,
-    paddingTop: 12,
+    paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: '#f3f4f6'
+    borderTopColor: '#f3f4f6',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
   },
   walletStatItem: {
     flex: 1,
     alignItems: 'center'
+  },
+  walletStatDivider: {
+    width: 1,
+    backgroundColor: '#e5e7eb',
+    marginVertical: 4
   },
   walletStatValue: {
     fontSize: scaleFont(14),
@@ -2587,6 +2603,43 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(11),
     color: '#9ca3af',
     marginTop: 2
+  },
+  walletActions: {
+    flexDirection: 'row',
+    marginTop: 16,
+    gap: 12
+  },
+  rechargeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ef4444',
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 6
+  },
+  rechargeBtnText: {
+    fontSize: scaleFont(14),
+    color: '#fff',
+    fontWeight: '600'
+  },
+  withdrawBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ef4444',
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 6
+  },
+  withdrawBtnText: {
+    fontSize: scaleFont(14),
+    color: '#ef4444',
+    fontWeight: '600'
   },
   superLikeCard: {
     backgroundColor: '#fff',
@@ -3211,7 +3264,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff'
   },
-  // 字段容器（每个输入项�?
+  // 字段容器（每个输入项）
   fieldContainer: {
     backgroundColor: '#fff',
     paddingHorizontal: 16,
@@ -3519,7 +3572,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff'
   },
-  // 加载和空状态样�?
+  // 加载和空状态样式
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

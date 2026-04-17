@@ -80,6 +80,7 @@ export const API_ENDPOINTS = {
   GROUP: {
     PUBLIC_QUESTION: buildApiPath(SERVICES.USER, '/app/group/public/question/:questionId'),
     PUBLIC_QUESTION_IDS: buildApiPath(SERVICES.USER, '/app/group/public/ids/question/:questionId'),
+    JOIN: buildApiPath(SERVICES.USER, '/app/group/:groupId/join'),
     MESSAGE_PUBLIC_LIST: buildApiPath(SERVICES.USER, '/app/group-message/public/list'),
     MESSAGE_LIST: buildApiPath(SERVICES.USER, '/app/group-message/list'),
     MESSAGE_CREATE: buildApiPath(SERVICES.USER, '/app/group-message/create'),

@@ -3,7 +3,6 @@ import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, RefreshCon
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/useTranslation';
-import TranslateButton from '../components/TranslateButton';
 
 import { scaleFont } from '../utils/responsive';
 // 悬赏榜数据（示例数据）
@@ -148,13 +147,6 @@ const getRankBg = (rank) => {
 
 // 悬赏榜项组件
 function RewardItem({ item, onPress, t }) {
-  const [translatedTitle, setTranslatedTitle] = useState(null);
-  const hasTag = item.tag && item.tag !== '';
-
-  const handleTranslated = (translated, isTranslated) => {
-    setTranslatedTitle(isTranslated ? translated : null);
-  };
-
   return (
     <TouchableOpacity style={styles.rewardItem} onPress={onPress}>
       <View style={[styles.rankBadge, { backgroundColor: getRankBg(item.rank) }]}>
@@ -162,68 +154,23 @@ function RewardItem({ item, onPress, t }) {
       </View>
       
       <View style={styles.rewardContent}>
-        {/* 标题和标签 */}
+        {/* 标题 */}
         <View style={styles.titleRow}>
-          <View style={styles.titleWrapper}>
-            <Text style={styles.rewardTitle} numberOfLines={2}>
-              {translatedTitle || item.title}
-            </Text>
-            {hasTag && (
-              <View style={[styles.hotTag, { backgroundColor: item.tagColor }]}>
-                <Text style={styles.hotTagText}>{item.tag}</Text>
-              </View>
-            )}
-          </View>
+          <Text style={styles.rewardTitle} numberOfLines={2}>
+            {item.title}
+          </Text>
         </View>
 
-        {/* 翻译按钮 */}
-        <TranslateButton
-          text={item.title}
-          onTranslated={handleTranslated}
-          compact={true}
-          style={styles.translateButton}
-        />
-
-        {/* 悬赏金额和分类 */}
+        {/* 悬赏金额和热度 - 同一行显示 */}
         <View style={styles.rewardInfoRow}>
           <View style={styles.rewardAmountBadge}>
             <Ionicons name="cash" size={14} color="#fff" />
             <Text style={styles.rewardAmountText}>${item.reward}</Text>
           </View>
-          <View style={styles.categoryBadge}>
-            <Text style={styles.categoryText}>{item.category}</Text>
-          </View>
-          <View style={styles.timeLeftBadge}>
-            <Ionicons name="time-outline" size={12} color="#f59e0b" />
-            <Text style={styles.timeLeftText}>{item.timeLeft}</Text>
-          </View>
-        </View>
-
-        {/* 统计信息 */}
-        <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Ionicons name="flame" size={14} color="#ef4444" />
             <Text style={styles.statValue}>{item.hot}</Text>
-            <Ionicons
-              name={item.isUp ? 'trending-up' : 'trending-down'}
-              size={12}
-              color={item.isUp ? '#22c55e' : '#ef4444'}
-            />
           </View>
-          <View style={styles.statItem}>
-            <Ionicons name="eye-outline" size={14} color="#6b7280" />
-            <Text style={styles.statValue}>{item.viewCount}</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Ionicons name="chatbubble-outline" size={14} color="#6b7280" />
-            <Text style={styles.statValue}>{item.answers}</Text>
-          </View>
-        </View>
-
-        {/* 作者信息 */}
-        <View style={styles.authorRow}>
-          <Image source={{ uri: item.avatar }} style={styles.authorAvatar} />
-          <Text style={styles.authorName}>{item.author}</Text>
         </View>
       </View>
 
@@ -402,31 +349,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 8,
   },
-  titleWrapper: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
   rewardTitle: {
     flex: 1,
     fontSize: scaleFont(15),
     fontWeight: '500',
     color: '#1f2937',
     lineHeight: scaleFont(22),
-  },
-  hotTag: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginLeft: 8,
-  },
-  hotTagText: {
-    color: '#fff',
-    fontSize: scaleFont(10),
-    fontWeight: '600',
-  },
-  translateButton: {
-    marginBottom: 8,
   },
   rewardInfoRow: {
     flexDirection: 'row',
@@ -449,37 +377,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginLeft: 4,
   },
-  categoryBadge: {
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginRight: 8,
-  },
-  categoryText: {
-    color: '#6b7280',
-    fontSize: scaleFont(11),
-    fontWeight: '500',
-  },
-  timeLeftBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fef3c7',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  timeLeftText: {
-    color: '#f59e0b',
-    fontSize: scaleFont(11),
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
   statItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -490,19 +387,5 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginLeft: 4,
     marginRight: 4,
-  },
-  authorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  authorAvatar: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    marginRight: 6,
-  },
-  authorName: {
-    fontSize: scaleFont(12),
-    color: '#6b7280',
   },
 });

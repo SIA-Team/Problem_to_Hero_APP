@@ -7,12 +7,21 @@ import KeyboardDismissView from '../components/KeyboardDismissView';
 import { authApi } from '../services/api';
 import { showToast } from '../utils/toast';
 import { showAppAlert } from '../utils/appAlert';
+import * as Updates from 'expo-updates';
+import { SIMULATE_PRODUCTION } from '../config/debugMode';
+import { isDevPreviewFeatureEnabled } from '../utils/devPreviewGate';
 
 import { scaleFont } from '../utils/responsive';
 import { appLogo } from '../constants/appAssets';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation, onLogin }) {
+  const isDebugLoginShortcutEnabled = isDevPreviewFeatureEnabled({
+    isDev: __DEV__,
+    simulateProduction: SIMULATE_PRODUCTION,
+    platformOS: Platform.OS,
+    updatesChannel: Updates.channel,
+  });
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -51,7 +60,7 @@ export default function LoginScreen({ navigation, onLogin }) {
 
   const handleSubmit = async () => {
     // 涓存椂娴嬭瘯锛氱洿鎺ヨ缃竴涓祴璇?token锛堝紑鍙戠幆澧冿級
-    if (__DEV__) {
+    if (isDebugLoginShortcutEnabled) {
       try {
         // 璁剧疆娴嬭瘯 token - 璇锋浛鎹负浣犵殑鐪熷疄 token
         const testToken = 'test_token_please_replace_with_real_token';

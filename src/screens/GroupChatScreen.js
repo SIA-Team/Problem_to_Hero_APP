@@ -13,19 +13,35 @@ import {
   Keyboard,
   InteractionManager,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import ImagePickerSheet from '../components/ImagePickerSheet';
+import MentionSuggestionsPanel from '../components/MentionSuggestionsPanel';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
 import { showToast } from '../utils/toast';
 import apiClient from '../services/api/apiClient';
 import questionApi from '../services/api/questionApi';
+import userApi from '../services/api/userApi';
 import { API_ENDPOINTS } from '../config/api';
+import * as Updates from 'expo-updates';
+import { SIMULATE_PRODUCTION } from '../config/debugMode';
+import { isDevPreviewFeatureEnabled } from '../utils/devPreviewGate';
+import useMentionComposer from '../hooks/useMentionComposer';
+import {
+  mergeLocalInviteUsers,
+  normalizeFollowingInviteUsers,
+  normalizePublicUserSearchResponse,
+} from '../utils/localInviteUsers';
+import {
+  DEFAULT_MENTION_PANEL_BASE_OFFSET,
+  DEFAULT_MENTION_SEARCH_LIMIT,
+} from '../utils/mentionComposer';
 
 import { scaleFont } from '../utils/responsive';
 const DEFAULT_QUESTION = {
@@ -38,6 +54,7 @@ const DEFAULT_QUESTION = {
 const isSuccessResponse = response => response && (response.code === 200 || response.code === 0);
 const hasGroupIdValue = value => value !== null && value !== undefined && value !== '';
 const GROUP_CHAT_INTERNAL_ERROR_PATTERN = /No static resource|NOT_FOUND|SQLSyntaxErrorException|app_group/i;
+const GROUP_ALREADY_JOINED_PATTERN = /已加入该群组|已经加入该群组|already joined/i;
 
 const getGroupIdValue = group =>
   group?.resolvedGroupId ??
@@ -179,7 +196,11 @@ const areMessageItemsEqual = (prev = [], next = []) =>
       item?.likes === nextItem?.likes &&
       item?.replyCount === nextItem?.replyCount &&
       item?.liked === nextItem?.liked &&
-      item?.isFeatured === nextItem?.isFeatured
+      item?.isFeatured === nextItem?.isFeatured &&
+      item?.parentId === nextItem?.parentId &&
+      item?.replyToCommentId === nextItem?.replyToCommentId &&
+      item?.replyToUserName === nextItem?.replyToUserName &&
+      item?.structuralParentId === nextItem?.structuralParentId
     );
   });
 
@@ -195,6 +216,9 @@ const getGroupChatErrorMessage = (error, fallbackMessage) => {
 
   return rawMessage;
 };
+
+const isJoinGroupSuccessResponse = response =>
+  isSuccessResponse(response) || GROUP_ALREADY_JOINED_PATTERN.test(String(response?.msg ?? '').trim());
 
 const GROUP_API_REQUEST_CONFIG = {};
 const logGroupChatDebug = (...args) => {
@@ -295,6 +319,15 @@ const normalizeMessageItem = (item, index, t) => {
   const isFeatured =
     Boolean(item?.isFeatured ?? item?.featured ?? item?.essence) ||
     Number(item?.featuredFlag ?? item?.essenceFlag ?? item?.isEssence) === 1;
+  const parentId = toSafeNumber(item?.parentId ?? item?.parent_id ?? item?.parentMessageId);
+  const replyToCommentId = toSafeNumber(
+    item?.replyToCommentId ??
+      item?.replyCommentId ??
+      item?.toCommentId ??
+      item?.parentCommentId ??
+      item?.replyMessageId
+  );
+  const replyToUserName = normalizeReplyTargetUserName(item);
 
   return {
     id,
@@ -307,6 +340,9 @@ const normalizeMessageItem = (item, index, t) => {
     replyCount: toSafeNumber(item?.replyCount ?? item?.commentCount ?? item?.comments),
     liked: Boolean(item?.isLiked ?? item?.liked),
     isFeatured,
+    parentId,
+    replyToCommentId,
+    replyToUserName,
     raw: item,
   };
 };
@@ -317,7 +353,11 @@ const normalizeGroupMessagesResponse = (response, t) => {
     ? payload
     : payload?.rows || payload?.list || payload?.records || payload?.comments || payload?.messages || [];
   const messages = Array.isArray(candidateList)
-    ? candidateList.map((item, index) => normalizeMessageItem(item, index, t)).filter(item => Boolean(item.content))
+    ? hydrateThreadMessageItems(
+        candidateList
+          .map((item, index) => normalizeThreadMessageItem(item, index, t))
+          .filter(item => Boolean(item.content))
+      )
     : [];
 
   return {
@@ -327,6 +367,193 @@ const normalizeGroupMessagesResponse = (response, t) => {
     featuredCount:
       toSafeNumber(payload?.featuredCount ?? payload?.essenceCount) || messages.filter(item => item.isFeatured).length,
   };
+};
+
+const normalizeReplyTargetUserName = item =>
+  item?.replyToUserName ||
+  item?.replyUserName ||
+  item?.toUserName ||
+  item?.parentUserName ||
+  item?.replyNickName ||
+  '';
+
+const normalizeThreadMessageItem = (item, index, t, fallback = {}) => {
+  const normalized = normalizeMessageItem(item, index, t);
+  const parentId = toSafeNumber(item?.parentId ?? item?.parent_id ?? fallback.parentId);
+  const replyToCommentId = toSafeNumber(
+    item?.replyToCommentId ??
+      item?.replyCommentId ??
+      item?.toCommentId ??
+      item?.parentCommentId ??
+      fallback.replyToCommentId
+  );
+  const replyToUserName = normalizeReplyTargetUserName(item) || fallback.replyToUserName || '';
+
+  return {
+    ...normalized,
+    parentId,
+    replyToCommentId,
+    replyToUserName,
+    structuralParentId: fallback.structuralParentId ?? parentId,
+    threadRootId: fallback.threadRootId ?? null,
+    rootCommentId: fallback.rootCommentId ?? null,
+  };
+};
+
+const extractGroupMessageRows = response => {
+  const payload = response?.data;
+  const candidateList = Array.isArray(payload)
+    ? payload
+    : payload?.rows || payload?.list || payload?.records || payload?.comments || payload?.messages || [];
+
+  return Array.isArray(candidateList) ? candidateList : [];
+};
+
+const hydrateThreadMessageItems = (rows = [], rootMessageId = null) => {
+  if (!Array.isArray(rows) || !rows.length) {
+    return [];
+  }
+
+  const normalizedRootId =
+    rootMessageId !== undefined && rootMessageId !== null ? String(rootMessageId) : '';
+  const rowIdSet = new Set(rows.map(item => String(item?.id ?? '')).filter(Boolean));
+
+  const withStructuralParent = rows.map(item => {
+    const currentId = String(item?.id ?? '');
+    const directParentId =
+      item?.parentId !== undefined && item?.parentId !== null ? String(item.parentId) : '';
+    const replyTargetId =
+      item?.replyToCommentId !== undefined && item?.replyToCommentId !== null
+        ? String(item.replyToCommentId)
+        : '';
+
+    let structuralParentId = directParentId;
+
+    if (!structuralParentId || structuralParentId === '0') {
+      structuralParentId = normalizedRootId;
+    }
+
+    if (
+      replyTargetId &&
+      replyTargetId !== '0' &&
+      replyTargetId !== currentId &&
+      (
+        (normalizedRootId && directParentId === normalizedRootId) ||
+        (!normalizedRootId &&
+          directParentId &&
+          directParentId !== '0' &&
+          rowIdSet.has(replyTargetId))
+      )
+    ) {
+      structuralParentId = replyTargetId;
+    }
+
+    return {
+      ...item,
+      structuralParentId,
+    };
+  });
+
+  const itemMap = new Map(withStructuralParent.map(item => [String(item.id), item]));
+
+  const resolveThreadRootId = item => {
+    let currentItem = item;
+    let parentKey = String(currentItem?.structuralParentId ?? '');
+    let safetyCount = 0;
+
+    while (
+      parentKey &&
+      parentKey !== '0' &&
+      parentKey !== normalizedRootId &&
+      safetyCount < 100
+    ) {
+      const parentItem = itemMap.get(parentKey);
+
+      if (!parentItem || String(parentItem.id) === String(currentItem.id)) {
+        break;
+      }
+
+      currentItem = parentItem;
+      parentKey = String(currentItem?.structuralParentId ?? '');
+      safetyCount += 1;
+    }
+
+    return currentItem?.id ?? item?.id;
+  };
+
+  return withStructuralParent.map(item => {
+    const threadRootId = resolveThreadRootId(item);
+
+    return {
+      ...item,
+      threadRootId,
+      rootCommentId: threadRootId,
+    };
+  });
+};
+
+const buildThreadMessageTree = (rows = [], rootId = null) => {
+  if (!Array.isArray(rows) || !rows.length) {
+    return [];
+  }
+
+  const normalizedRootId =
+    rootId !== undefined && rootId !== null ? String(rootId) : null;
+  const nodeMap = new Map();
+  const roots = [];
+
+  rows.forEach(row => {
+    if (!row?.id) {
+      return;
+    }
+
+    nodeMap.set(String(row.id), {
+      ...row,
+      children: [],
+    });
+  });
+
+  rows.forEach(row => {
+    if (!row?.id) {
+      return;
+    }
+
+    const currentId = String(row.id);
+    const node = nodeMap.get(currentId);
+    const parentKey = String(row.structuralParentId ?? row.parentId ?? '');
+
+    if (
+      !parentKey ||
+      parentKey === '0' ||
+      parentKey === currentId ||
+      (normalizedRootId && parentKey === normalizedRootId)
+    ) {
+      roots.push(node);
+      return;
+    }
+
+    const parentNode = nodeMap.get(parentKey);
+
+    if (!parentNode) {
+      roots.push(node);
+      return;
+    }
+
+    parentNode.children.push(node);
+  });
+
+  return roots;
+};
+
+const flattenThreadMessageTree = (nodes = [], accumulator = []) => {
+  nodes.forEach(node => {
+    accumulator.push(node);
+    if (Array.isArray(node.children) && node.children.length > 0) {
+      flattenThreadMessageTree(node.children, accumulator);
+    }
+  });
+
+  return accumulator;
 };
 
 const getGroupRoleMeta = userRole => {
@@ -370,16 +597,34 @@ const getGroupStatusMeta = status => {
 export default function GroupChatScreen({ navigation, route }) {
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const isExpandedErrorDetailEnabled = isDevPreviewFeatureEnabled({
+    isDev: __DEV__,
+    simulateProduction: SIMULATE_PRODUCTION,
+    platformOS: Platform.OS,
+    updatesChannel: Updates.channel,
+  });
   const [messages, setMessages] = useState([]);
   const [liked, setLiked] = useState({});
   const [isJoined, setIsJoined] = useState(false);
   const [showReplyModal, setShowReplyModal] = useState(false);
+  const [showReplyListModal, setShowReplyListModal] = useState(false);
+  const [showReplyThreadModal, setShowReplyThreadModal] = useState(false);
   const [showWriteMessageModal, setShowWriteMessageModal] = useState(false);
   const [writeMessageText, setWriteMessageText] = useState('');
   const [showMessageImagePicker, setShowMessageImagePicker] = useState(false);
   const [selectedMessageImage, setSelectedMessageImage] = useState('');
+  const [recommendedMentionUsers, setRecommendedMentionUsers] = useState([]);
   const [replyTarget, setReplyTarget] = useState(null);
   const [replyText, setReplyText] = useState('');
+  const [replyParentMessageId, setReplyParentMessageId] = useState(null);
+  const [replyComposerReturnTarget, setReplyComposerReturnTarget] = useState(null);
+  const [replyKeyboardOffset, setReplyKeyboardOffset] = useState(0);
+  const [currentReplyMessageId, setCurrentReplyMessageId] = useState(null);
+  const [currentReplyRootId, setCurrentReplyRootId] = useState(null);
+  const [messageRepliesMap, setMessageRepliesMap] = useState({});
+  const [replyLoadingMap, setReplyLoadingMap] = useState({});
+  const [replyErrorMap, setReplyErrorMap] = useState({});
   const [activeTab, setActiveTab] = useState('all');
   const [questionGroups, setQuestionGroups] = useState([]);
   const [questionGroupIds, setQuestionGroupIds] = useState([]);
@@ -387,6 +632,14 @@ export default function GroupChatScreen({ navigation, route }) {
   const [groupLoadError, setGroupLoadError] = useState('');
   const [messageLoading, setMessageLoading] = useState(false);
   const [messageError, setMessageError] = useState('');
+  const hasActiveMessageLayer =
+    showReplyModal || showReplyListModal || showReplyThreadModal || showWriteMessageModal;
+  const replyModalBottomPadding = Math.max(insets.bottom, 16) + 12;
+  const replyModalMaxHeight = useMemo(() => {
+    const defaultHeight = Math.round(windowHeight * 0.58);
+    const availableHeight = Math.max(320, windowHeight - replyKeyboardOffset - 48);
+    return Math.min(defaultHeight, availableHeight);
+  }, [replyKeyboardOffset, windowHeight]);
   const [messageSummary, setMessageSummary] = useState({
     total: 0,
     featuredCount: 0,
@@ -398,7 +651,41 @@ export default function GroupChatScreen({ navigation, route }) {
   const composerInputRef = useRef(null);
   const showWriteMessageModalRef = useRef(false);
   const keepComposerOpenRef = useRef(false);
+  const autoJoinAttemptedGroupIdsRef = useRef(new Set());
+  const joinRequestMapRef = useRef(new Map());
   const getMessageLikedState = message => liked[message?.id] !== undefined ? liked[message.id] : !!message?.liked;
+  const currentReplyMessage =
+    messages.find(item => String(item.id) === String(currentReplyMessageId)) || null;
+  const currentMessageReplies = currentReplyMessageId ? messageRepliesMap[currentReplyMessageId] || [] : [];
+  const currentReplyLoading = currentReplyMessageId ? Boolean(replyLoadingMap[currentReplyMessageId]) : false;
+  const currentReplyError = currentReplyMessageId ? replyErrorMap[currentReplyMessageId] || '' : '';
+  const topLevelMessageNodes = useMemo(() => buildThreadMessageTree(messages), [messages]);
+  const {
+    activeMention,
+    candidateUsers,
+    focusInput: focusMentionInput,
+    handleMentionPress: triggerMentionPress,
+    handleMentionSelect,
+    handleSelectionChange: handleComposerSelectionChange,
+    listMaxHeight: composerMentionListMaxHeight,
+    mentionBottomInset: composerMentionBottomInset,
+    mentionLoading: composerMentionLoading,
+    panelAnimatedStyle: composerMentionPanelAnimatedStyle,
+    panelBottomOffset: composerMentionPanelBottomOffset,
+    panelMaxHeight: composerMentionPanelMaxHeight,
+    renderMentionPanel: shouldRenderComposerMentionPanel,
+    selection: composerSelection,
+  } = useMentionComposer({
+    visible: showWriteMessageModal,
+    text: writeMessageText,
+    onChangeText: setWriteMessageText,
+    inputRef: composerInputRef,
+    windowHeight,
+    bottomInset: Math.max(insets.bottom, 12),
+    recommendedUsers: recommendedMentionUsers,
+    baseBottomOffset: DEFAULT_MENTION_PANEL_BASE_OFFSET,
+    onInvalidMention: () => showToast('该用户缺少可用名称', 'warning'),
+  });
 
   const focusComposerInput = () => {
     const triggerFocus = () => {
@@ -414,6 +701,67 @@ export default function GroupChatScreen({ navigation, route }) {
 
   useEffect(() => {
     showWriteMessageModalRef.current = showWriteMessageModal;
+  }, [showWriteMessageModal]);
+
+  useEffect(() => {
+    if (!showWriteMessageModal) {
+      setRecommendedMentionUsers([]);
+      return undefined;
+    }
+
+    let isActive = true;
+    const fallbackSearchKeywords = ['a', 'e', 'm', '1', '8'];
+
+    const loadRecommendedUsers = async () => {
+      try {
+        let mergedUsers = [];
+
+        try {
+          const response = await userApi.getFollowing({
+            pageNum: 1,
+            page: 1,
+            pageSize: 20,
+            size: 20,
+            limit: 20,
+          });
+          mergedUsers = mergeLocalInviteUsers(normalizeFollowingInviteUsers(response));
+        } catch (followError) {
+          console.warn('[GroupChat] Failed to load mention following users:', followError);
+        }
+
+        if (mergedUsers.length < 6) {
+          const fallbackResults = await Promise.allSettled(
+            fallbackSearchKeywords.map(keyword => userApi.searchPublicProfiles(keyword, 10))
+          );
+
+          fallbackResults.forEach(result => {
+            if (result.status !== 'fulfilled') {
+              return;
+            }
+
+            mergedUsers = mergeLocalInviteUsers([
+              ...mergedUsers,
+              ...normalizePublicUserSearchResponse(result.value),
+            ]);
+          });
+        }
+
+        if (isActive) {
+          setRecommendedMentionUsers(mergedUsers.slice(0, DEFAULT_MENTION_SEARCH_LIMIT));
+        }
+      } catch (error) {
+        if (isActive) {
+          console.warn('[GroupChat] Failed to load mention recommended users:', error);
+          setRecommendedMentionUsers([]);
+        }
+      }
+    };
+
+    loadRecommendedUsers();
+
+    return () => {
+      isActive = false;
+    };
   }, [showWriteMessageModal]);
 
   useEffect(() => {
@@ -592,13 +940,109 @@ export default function GroupChatScreen({ navigation, route }) {
     return groupIds;
   };
 
+  const applyJoinedStateForGroup = targetGroupId => {
+    const normalizedTargetGroupId = String(targetGroupId ?? '').trim();
+
+    if (!normalizedTargetGroupId) {
+      return;
+    }
+
+    setIsJoined(true);
+    setQuestionGroups(prevGroups =>
+      prevGroups.map(group =>
+        String(getGroupIdValue(group) ?? '').trim() === normalizedTargetGroupId
+          ? {
+              ...group,
+              isJoined: true,
+            }
+          : group
+      )
+    );
+  };
+
+  const ensureJoinedGroup = async (targetGroupId, { refreshOnSuccess = true } = {}) => {
+    const normalizedGroupId = Number(targetGroupId);
+
+    if (!Number.isInteger(normalizedGroupId) || normalizedGroupId <= 0) {
+      throw new Error(t('screens.groupChat.groupInfoUnavailable'));
+    }
+
+    const groupIdKey = String(normalizedGroupId);
+    const matchedGroup = questionGroups.find(
+      group => String(getGroupIdValue(group) ?? '').trim() === groupIdKey
+    );
+
+    if (
+      matchedGroup?.isJoined ||
+      (isJoined && String(currentGroupId ?? '').trim() === groupIdKey)
+    ) {
+      return matchedGroup;
+    }
+
+    const inFlightRequest = joinRequestMapRef.current.get(groupIdKey);
+    if (inFlightRequest) {
+      return inFlightRequest;
+    }
+
+    const joinRequest = (async () => {
+      const response = await questionApi.joinQuestionGroup(normalizedGroupId);
+
+      if (!isJoinGroupSuccessResponse(response)) {
+        throw new Error(getGroupChatErrorMessage(response, t('screens.groupChat.groupInfoUnavailable')));
+      }
+
+      applyJoinedStateForGroup(groupIdKey);
+
+      if (refreshOnSuccess) {
+        try {
+          await fetchQuestionGroups();
+        } catch (refreshError) {}
+      }
+
+      return response?.data ?? {};
+    })();
+
+    joinRequestMapRef.current.set(groupIdKey, joinRequest);
+
+    try {
+      return await joinRequest;
+    } finally {
+      joinRequestMapRef.current.delete(groupIdKey);
+    }
+  };
+
+  useEffect(() => {
+    if (!hasGroupIdValue(currentGroupId)) {
+      return undefined;
+    }
+
+    const groupIdKey = String(currentGroupId).trim();
+    if (!groupIdKey || autoJoinAttemptedGroupIdsRef.current.has(groupIdKey)) {
+      return undefined;
+    }
+
+    autoJoinAttemptedGroupIdsRef.current.add(groupIdKey);
+
+    ensureJoinedGroup(currentGroupId).catch(() => {});
+
+    return undefined;
+  }, [currentGroupId]);
+
   useEffect(() => {
     setMessages(prev => {
       if (!prev.length) {
         return prev;
       }
 
-      const localizedMessages = prev.map((item, index) => normalizeMessageItem(item?.raw ?? item, index, t));
+      const localizedMessages = hydrateThreadMessageItems(
+        prev.map((item, index) =>
+          normalizeThreadMessageItem(item?.raw ?? item, index, t, {
+            parentId: item?.parentId,
+            replyToCommentId: item?.replyToCommentId,
+            replyToUserName: item?.replyToUserName,
+          })
+        )
+      );
       return areMessageItemsEqual(prev, localizedMessages) ? prev : localizedMessages;
     });
   }, [locale]);
@@ -706,6 +1150,48 @@ export default function GroupChatScreen({ navigation, route }) {
   }, [showWriteMessageModal]);
 
   useEffect(() => {
+    if (!showReplyModal) {
+      setReplyKeyboardOffset(0);
+      return undefined;
+    }
+
+    const resolveReplyKeyboardOffset = event => {
+      const keyboardTop = Number(event?.endCoordinates?.screenY);
+      const occupiedHeight = Number.isFinite(keyboardTop) ? Math.max(0, windowHeight - keyboardTop) : 0;
+      const keyboardHeight = Math.max(occupiedHeight, Math.max(0, event?.endCoordinates?.height || 0));
+      if (!keyboardHeight) {
+        setReplyKeyboardOffset(0);
+        return;
+      }
+
+      setReplyKeyboardOffset(
+        Platform.OS === 'ios'
+          ? Math.max(0, keyboardHeight - insets.bottom)
+          : Math.max(0, keyboardHeight)
+      );
+    };
+
+    const handleReplyKeyboardHide = () => {
+      setReplyKeyboardOffset(0);
+    };
+
+    const subscriptions = [
+      Keyboard.addListener('keyboardDidShow', resolveReplyKeyboardOffset),
+      Keyboard.addListener('keyboardDidHide', handleReplyKeyboardHide),
+    ];
+
+    if (Platform.OS === 'ios') {
+      subscriptions.push(Keyboard.addListener('keyboardWillChangeFrame', resolveReplyKeyboardOffset));
+      subscriptions.push(Keyboard.addListener('keyboardWillHide', handleReplyKeyboardHide));
+    }
+
+    return () => {
+      subscriptions.forEach(subscription => subscription.remove());
+      setReplyKeyboardOffset(0);
+    };
+  }, [insets.bottom, showReplyModal, windowHeight]);
+
+  useEffect(() => {
     const handleComposerKeyboardHide = () => {
       if (!showWriteMessageModalRef.current || keepComposerOpenRef.current) {
         return;
@@ -770,8 +1256,14 @@ export default function GroupChatScreen({ navigation, route }) {
     return targetGroupId;
   };
 
-  const createGroupMessage = async ({ content, parentId = 0 }) => {
+  const createGroupMessage = async ({
+    content,
+    parentId = 0,
+    replyToCommentId = 0,
+    replyToUserName = '',
+  }) => {
     const resolvedGroupId = await ensureCurrentGroupId();
+    await ensureJoinedGroup(resolvedGroupId, { refreshOnSuccess: !isJoined });
     const token = await AsyncStorage.getItem('authToken');
     logGroupChatDebug('createGroupMessage:payload', {
       resolvedGroupId,
@@ -804,7 +1296,11 @@ export default function GroupChatScreen({ navigation, route }) {
       throw new Error(getGroupChatErrorMessage(response, t('screens.groupChat.publishFailed')));
     }
 
-    return normalizeMessageItem(response.data, 0, t);
+    return normalizeThreadMessageItem(response.data, 0, t, {
+      parentId,
+      replyToCommentId,
+      replyToUserName,
+    });
   };
 
   const appendCreatedMessage = (createdMessage, parentMessageId = null) => {
@@ -838,6 +1334,284 @@ export default function GroupChatScreen({ navigation, route }) {
     }));
   };
 
+  const getThreadReplies = messageId => {
+    if (!messageId) {
+      return [];
+    }
+
+    return messageRepliesMap[messageId] || [];
+  };
+
+  const findReplyById = (messageId, replyId) => {
+    if (!messageId || !replyId) {
+      return null;
+    }
+
+    return getThreadReplies(messageId).find(item => String(item.id) === String(replyId)) || null;
+  };
+
+  const getTopLevelReplies = messageId =>
+    buildThreadMessageTree(getThreadReplies(messageId), messageId);
+
+  const getReplyThreadRootId = (messageId, replyId) => {
+    if (!messageId || !replyId) {
+      return null;
+    }
+
+    let currentReply = findReplyById(messageId, replyId);
+    let safetyCount = 0;
+    const normalizedMessageId = String(messageId);
+
+    while (
+      currentReply &&
+      currentReply?.structuralParentId &&
+      String(currentReply.structuralParentId) !== normalizedMessageId &&
+      String(currentReply.structuralParentId) !== '0' &&
+      safetyCount < 100
+    ) {
+      const parentReply = findReplyById(messageId, currentReply.structuralParentId);
+
+      if (!parentReply || String(parentReply.id) === String(currentReply.id)) {
+        break;
+      }
+
+      currentReply = parentReply;
+      safetyCount += 1;
+    }
+
+    return currentReply?.id ?? replyId;
+  };
+
+  const currentTopLevelReplies = currentReplyMessageId ? getTopLevelReplies(currentReplyMessageId) : [];
+  const currentThreadRootReply =
+    currentReplyMessageId && currentReplyRootId
+      ? findReplyById(currentReplyMessageId, currentReplyRootId)
+      : null;
+  const currentThreadReplyNodes = currentThreadRootReply
+    ? buildThreadMessageTree(
+        currentMessageReplies.filter(
+          item =>
+            String(item.threadRootId) === String(currentThreadRootReply.id) &&
+            String(item.id) !== String(currentThreadRootReply.id)
+        ),
+        currentThreadRootReply.id
+      )
+    : [];
+
+  const loadMessageReplies = async (messageId, options = {}) => {
+    const { forceRefresh = false } = options;
+    const resolvedMessageId = Number(messageId) || 0;
+
+    if (!resolvedMessageId) {
+      return [];
+    }
+
+    if (replyLoadingMap[resolvedMessageId] && !forceRefresh) {
+      return getThreadReplies(resolvedMessageId);
+    }
+
+    if (getThreadReplies(resolvedMessageId).length > 0 && !forceRefresh) {
+      return getThreadReplies(resolvedMessageId);
+    }
+
+    try {
+      setReplyLoadingMap(prev => ({
+        ...prev,
+        [resolvedMessageId]: true,
+      }));
+      setReplyErrorMap(prev => ({
+        ...prev,
+        [resolvedMessageId]: '',
+      }));
+
+      const resolvedGroupId = await ensureCurrentGroupId();
+      const token = await AsyncStorage.getItem('authToken');
+      const requestParams = {
+        groupId: Number(resolvedGroupId) || 0,
+        parentId: resolvedMessageId,
+        pageNum: 1,
+        pageSize: 200,
+      };
+      const requestCandidates = [
+        {
+          endpoint: API_ENDPOINTS.GROUP.MESSAGE_PUBLIC_LIST,
+          params: {
+            ...requestParams,
+            isBoutique: 0,
+          },
+          headers: undefined,
+          // Some environments return reply rows without explicit relation fields.
+          // Since this request already filters by parentId, we can safely hydrate
+          // the missing parent relationship from the request parameters.
+          validateRows: rows => Array.isArray(rows),
+        },
+        {
+          endpoint: API_ENDPOINTS.GROUP.MESSAGE_LIST,
+          params: requestParams,
+          headers: token
+            ? {
+                token,
+              }
+            : undefined,
+        },
+      ];
+
+      let response = null;
+      let responseRows = [];
+      let lastLoadError = null;
+
+      for (const candidate of requestCandidates) {
+        try {
+          const nextResponse = await apiClient.get(candidate.endpoint, {
+            ...GROUP_API_REQUEST_CONFIG,
+            params: candidate.params,
+            headers: candidate.headers,
+          });
+
+          if (!isSuccessResponse(nextResponse)) {
+            throw new Error(getGroupChatErrorMessage(nextResponse, t('screens.groupChat.loadFailed')));
+          }
+
+          const nextRows = extractGroupMessageRows(nextResponse);
+          const isValidResponse = candidate.validateRows ? candidate.validateRows(nextRows) : true;
+
+          if (!isValidResponse) {
+            throw new Error('Reply list response did not contain threaded rows');
+          }
+
+          response = nextResponse;
+          responseRows = nextRows;
+          lastLoadError = null;
+          break;
+        } catch (candidateError) {
+          lastLoadError = candidateError;
+          console.warn('[GroupChat] Reply list request failed:', {
+            endpoint: candidate.endpoint,
+            params: candidate.params,
+            error: candidateError,
+          });
+        }
+      }
+
+      if (!response) {
+        throw lastLoadError || new Error(t('screens.groupChat.loadFailed'));
+      }
+
+      const hydratedReplies = hydrateThreadMessageItems(
+        responseRows
+          .map((item, index) =>
+            normalizeThreadMessageItem(item, index, t, {
+              parentId: item?.parentId ?? resolvedMessageId,
+            })
+          )
+          .filter(item => String(item.id) !== String(resolvedMessageId)),
+        resolvedMessageId
+      );
+
+      setMessageRepliesMap(prev => ({
+        ...prev,
+        [resolvedMessageId]: hydratedReplies,
+      }));
+
+      setMessages(prev =>
+        prev.map(message =>
+          String(message.id) === String(resolvedMessageId)
+            ? {
+                ...message,
+                replyCount: hydratedReplies.length,
+              }
+            : message
+        )
+      );
+
+      return hydratedReplies;
+    } catch (error) {
+      const currentMessageReplyCount =
+        Number(
+          messages.find(message => String(message.id) === String(resolvedMessageId))?.replyCount ?? 0
+        ) || 0;
+      const cachedReplies = getThreadReplies(resolvedMessageId);
+
+      if (cachedReplies.length === 0 && currentMessageReplyCount === 0) {
+        setMessageRepliesMap(prev => ({
+          ...prev,
+          [resolvedMessageId]: [],
+        }));
+        setReplyErrorMap(prev => ({
+          ...prev,
+          [resolvedMessageId]: '',
+        }));
+        return [];
+      }
+
+      const fallbackMessage = t('screens.groupChat.loadFailed');
+      const normalizedErrorMessage = getGroupChatErrorMessage(error, fallbackMessage);
+      const rawErrorMessage = String(error?.data?.msg || error?.msg || error?.message || '').trim();
+        const nextError =
+          isExpandedErrorDetailEnabled &&
+          rawErrorMessage &&
+          rawErrorMessage !== normalizedErrorMessage
+            ? `${normalizedErrorMessage}\n${rawErrorMessage}`
+            : normalizedErrorMessage;
+      setReplyErrorMap(prev => ({
+        ...prev,
+        [resolvedMessageId]: nextError,
+      }));
+      return [];
+    } finally {
+      setReplyLoadingMap(prev => ({
+        ...prev,
+        [resolvedMessageId]: false,
+      }));
+    }
+  };
+
+  const appendCreatedReply = (createdReply, messageId) => {
+    if (!messageId || !createdReply) {
+      return;
+    }
+
+    setMessages(prev => {
+      const nextMessages = [createdReply, ...prev].filter(
+        (item, index, list) => list.findIndex(candidate => String(candidate.id) === String(item.id)) === index
+      );
+
+      return nextMessages.map(message =>
+        String(message.id) === String(messageId)
+          ? {
+              ...message,
+              replyCount: Math.max((Number(message.replyCount) || 0) + 1, 1),
+            }
+          : message
+      );
+    });
+
+    setMessageRepliesMap(prev => {
+      const currentReplies = prev[messageId] || [];
+      const hydratedReplies = hydrateThreadMessageItems(
+        [...currentReplies, createdReply].filter(item => String(item.id) !== String(messageId)),
+        messageId
+      );
+
+      return {
+        ...prev,
+        [messageId]: hydratedReplies,
+      };
+    });
+
+    setLiked(prev => ({
+      ...prev,
+      [createdReply.id]: Boolean(createdReply.liked),
+    }));
+
+    setMessageSummary(prev => ({
+      ...prev,
+      total: Math.max((prev?.total ?? 0) + 1, 1),
+      featuredCount:
+        (prev?.featuredCount ?? 0) + (createdReply.isFeatured ? 1 : 0),
+    }));
+  };
+
   const handlePublishMessage = async (content = '') => {
     const trimmedContent = content.trim();
     if ((!trimmedContent && !selectedMessageImage) || publishingMessage) return;
@@ -858,10 +1632,11 @@ export default function GroupChatScreen({ navigation, route }) {
       setActiveTab('all');
       setWriteMessageText('');
       setSelectedMessageImage('');
+      setRecommendedMentionUsers([]);
       setShowWriteMessageModal(false);
       Keyboard.dismiss();
     } catch (error) {
-      console.error('[GroupChat] Failed to publish message:', error);
+      console.warn('[GroupChat] Failed to publish message:', error);
       showToast(getGroupChatErrorMessage(error, t('screens.groupChat.publishFailed')), 'error');
     } finally {
       setPublishingMessage(false);
@@ -885,6 +1660,7 @@ export default function GroupChatScreen({ navigation, route }) {
     setShowWriteMessageModal(false);
     setWriteMessageText('');
     setSelectedMessageImage('');
+    setRecommendedMentionUsers([]);
     Keyboard.dismiss();
   };
 
@@ -904,11 +1680,7 @@ export default function GroupChatScreen({ navigation, route }) {
   };
 
   const handleMentionPress = () => {
-    setWriteMessageText(prev => (prev.trim() ? `${prev} @` : '@'));
-    setTimeout(() => {
-      composerInputRef.current?.focus();
-    }, 60);
-    showToast(t('screens.groupChat.mentionHint'), 'info');
+    triggerMentionPress();
   };
 
   const handleExitGroup = () => {
@@ -928,10 +1700,105 @@ export default function GroupChatScreen({ navigation, route }) {
     ]);
   };
 
-  const openReplyModal = msg => {
-    setReplyTarget(msg);
+  const restoreReplyParentLayer = target => {
+    if (target === 'thread') {
+      setShowReplyThreadModal(true);
+      return;
+    }
+
+    if (target === 'list') {
+      setShowReplyListModal(true);
+    }
+  };
+
+  const closeReplyComposer = ({ restoreParent = true } = {}) => {
+    const returnTarget = restoreParent ? replyComposerReturnTarget : null;
+
+    setShowReplyModal(false);
     setReplyText('');
-    setShowReplyModal(true);
+    setReplyTarget(null);
+    setReplyParentMessageId(null);
+    setReplyComposerReturnTarget(null);
+    Keyboard.dismiss();
+
+    if (returnTarget) {
+      setTimeout(() => {
+        restoreReplyParentLayer(returnTarget);
+      }, 80);
+    }
+  };
+
+  const openReplyThreadLayer = replyId => {
+    setCurrentReplyRootId(replyId);
+    setShowReplyListModal(false);
+    setTimeout(() => {
+      setShowReplyThreadModal(true);
+    }, 80);
+  };
+
+  const returnFromReplyThreadToList = () => {
+    setShowReplyThreadModal(false);
+    setTimeout(() => {
+      setShowReplyListModal(true);
+    }, 80);
+  };
+
+  const openReplyComposer = (target, messageId) => {
+    const returnTarget = showReplyThreadModal ? 'thread' : showReplyListModal ? 'list' : null;
+
+    if (showReplyThreadModal) {
+      setShowReplyThreadModal(false);
+    }
+
+    if (showReplyListModal) {
+      setShowReplyListModal(false);
+    }
+
+    setReplyTarget(target);
+    setReplyParentMessageId(messageId ?? target?.raw?.id ?? target?.id ?? null);
+    setReplyComposerReturnTarget(returnTarget);
+    setReplyText('');
+    setTimeout(() => {
+      setShowReplyModal(true);
+    }, 80);
+  };
+
+  const openReplyModal = msg => {
+    const messageId = msg?.raw?.id ?? msg?.id ?? null;
+    const normalizedMessageId = Number(messageId) || 0;
+    const cachedReplies = normalizedMessageId ? getThreadReplies(normalizedMessageId) : [];
+    const knownReplyCount = Number(msg?.replyCount ?? msg?.raw?.replyCount ?? 0) || 0;
+
+    setCurrentReplyMessageId(messageId);
+    setCurrentReplyRootId(null);
+    setShowReplyThreadModal(false);
+    setShowReplyListModal(true);
+
+    if (!normalizedMessageId) {
+      return;
+    }
+
+    if (cachedReplies.length === 0 && knownReplyCount === 0) {
+      setReplyErrorMap(prev => ({
+        ...prev,
+        [normalizedMessageId]: '',
+      }));
+      setReplyLoadingMap(prev => ({
+        ...prev,
+        [normalizedMessageId]: false,
+      }));
+      setMessageRepliesMap(prev =>
+        prev[normalizedMessageId]
+          ? prev
+          : {
+              ...prev,
+              [normalizedMessageId]: [],
+            }
+      );
+      return;
+    }
+
+    void loadMessageReplies(messageId, { forceRefresh: true });
   };
 
   const handleReply = async () => {
@@ -941,24 +1808,168 @@ export default function GroupChatScreen({ navigation, route }) {
     try {
       setPublishingReply(true);
       const parentMessageId = replyTarget?.raw?.id ?? replyTarget?.id ?? 0;
+      const threadMessageId = replyParentMessageId || currentReplyMessageId || parentMessageId;
       const createdMessage = await createGroupMessage({
         content: trimmedReply,
         parentId: parentMessageId,
+        replyToCommentId: parentMessageId,
+        replyToUserName: replyTarget?.author || '',
       });
 
-      appendCreatedMessage(createdMessage, parentMessageId);
-      setActiveTab('all');
+      appendCreatedReply(createdMessage, threadMessageId);
       setReplyText('');
-      setShowReplyModal(false);
-      setReplyTarget(null);
-      Keyboard.dismiss();
+      closeReplyComposer({ restoreParent: true });
     } catch (error) {
-      console.error('[GroupChat] Failed to publish reply:', error);
+      console.warn('[GroupChat] Failed to publish reply:', error);
       showToast(getGroupChatErrorMessage(error, t('screens.groupChat.replyFailed')), 'error');
     } finally {
       setPublishingReply(false);
     }
   };
+
+  const renderThreadReplyCard = (reply, options = {}) => {
+    const rootReplyId = options.rootReplyId ?? null;
+    const contextReplyId = options.contextReplyId ?? null;
+    const relationReplyId = Number(reply?.replyToCommentId ?? 0) || 0;
+    const relationReply = relationReplyId ? findReplyById(currentReplyMessageId, relationReplyId) : null;
+    const relationUserName = reply?.replyToUserName || relationReply?.author || '';
+    const shouldHideContextRelation =
+      contextReplyId !== null && String(relationReplyId) === String(contextReplyId);
+    const shouldShowRelation =
+      !!relationUserName &&
+      !shouldHideContextRelation &&
+      rootReplyId !== null &&
+      String(relationReplyId) !== String(rootReplyId) &&
+      String(relationReplyId) !== String(reply?.id);
+
+    return (
+      <View key={reply.id} style={styles.threadReplyCard}>
+        <View style={styles.threadReplyHeader}>
+          <Avatar uri={reply.avatar} name={reply.author} size={24} />
+          <View style={styles.threadReplyHeaderMeta}>
+            <View style={styles.threadReplyAuthorRow}>
+              <Text style={styles.threadReplyAuthor}>{reply.author}</Text>
+              {shouldShowRelation ? (
+                <>
+                  <Text style={styles.threadReplyRelation}> 回复 </Text>
+                  <Text style={styles.threadReplyTarget}>{relationUserName}</Text>
+                </>
+              ) : null}
+            </View>
+          </View>
+          <View style={{ flex: 1 }} />
+          <Text style={styles.threadReplyTime}>{reply.timeLabel || t('screens.groupChat.justNow')}</Text>
+        </View>
+
+        <Text style={styles.threadReplyContent}>{reply.content}</Text>
+
+        <View style={styles.threadReplyActions}>
+          <View style={styles.threadReplyMetaGroup}>
+            <Ionicons name="heart-outline" size={12} color="#9ca3af" />
+            <Text style={styles.threadReplyMetaText}>{Number(reply.likes || 0)}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.threadReplyActionBtn}
+            onPress={() => openReplyComposer(reply, currentReplyMessageId)}
+          >
+            <Ionicons name="chatbubble-outline" size={12} color="#ef4444" />
+            <Text style={styles.threadReplyActionText}>{t('screens.groupChat.reply')}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  const renderInlineMessageReplyNodes = (nodes = [], options = {}) =>
+    nodes.map(reply => {
+      const depth = options.depth ?? 0;
+      const childNodes = Array.isArray(reply.children) ? reply.children : [];
+      const relationReplyId = Number(reply?.replyToCommentId ?? 0) || 0;
+      const relationReply =
+        relationReplyId && Array.isArray(options.flatReplies)
+          ? options.flatReplies.find(item => String(item.id) === String(relationReplyId))
+          : null;
+      const relationUserName = reply?.replyToUserName || relationReply?.author || '';
+      const shouldShowRelation =
+        !!relationUserName &&
+        String(relationReplyId) !== String(reply?.id) &&
+        String(relationReplyId) !== String(options.rootMessageId ?? '');
+
+      return (
+        <View
+          key={reply.id}
+          style={[
+            styles.inlineReplyCard,
+            depth > 0 && styles.inlineReplyCardNested,
+          ]}
+        >
+          <View style={styles.inlineReplyHeader}>
+            <Avatar uri={reply.avatar} name={reply.author} size={22} />
+            <View style={styles.inlineReplyHeaderMeta}>
+              <View style={styles.inlineReplyAuthorRow}>
+                <Text style={styles.inlineReplyAuthor}>{reply.author}</Text>
+                {shouldShowRelation ? (
+                  <>
+                    <Text style={styles.inlineReplyRelation}> 回复 </Text>
+                    <Text style={styles.inlineReplyTarget}>{relationUserName}</Text>
+                  </>
+                ) : null}
+              </View>
+              <Text style={styles.inlineReplyTime}>{reply.timeLabel || t('screens.groupChat.justNow')}</Text>
+            </View>
+          </View>
+
+          <Text style={styles.inlineReplyContent}>{reply.content}</Text>
+
+          <View style={styles.inlineReplyActions}>
+            <TouchableOpacity
+              style={styles.inlineReplyBtn}
+              onPress={() => openReplyComposer(reply, options.rootMessageId)}
+            >
+              <Ionicons name="chatbubble-outline" size={12} color="#ef4444" />
+              <Text style={styles.inlineReplyBtnText}>{t('screens.groupChat.reply')}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {childNodes.length > 0 ? (
+            <View style={styles.inlineReplyChildren}>
+              {renderInlineMessageReplyNodes(childNodes, {
+                ...options,
+                depth: depth + 1,
+              })}
+            </View>
+          ) : null}
+        </View>
+      );
+    });
+
+  const renderThreadReplyTreeNodes = (nodes = [], options = {}) =>
+    nodes.map(reply => {
+      const childNodes = Array.isArray(reply.children) ? reply.children : [];
+      const hasChildren = childNodes.length > 0;
+      const descendantReplies = hasChildren ? flattenThreadMessageTree(childNodes) : [];
+
+      return (
+        <View key={reply.id}>
+          {renderThreadReplyCard(reply, options)}
+          {hasChildren ? (
+            <View style={styles.threadReplyChildrenSection}>
+              <View style={styles.threadReplyChildrenToggle}>
+                <Text style={styles.threadReplyChildrenToggleText}>
+                  {`展开回复 (${descendantReplies.length})`}
+                </Text>
+              </View>
+              {descendantReplies.map(childReply =>
+                renderThreadReplyCard(childReply, {
+                  ...options,
+                  contextReplyId: reply.id,
+                })
+              )}
+            </View>
+          ) : null}
+        </View>
+      );
+    });
 
   const handleReport = () => {
     showAppAlert(t('screens.groupChat.reportTitle'), t('screens.groupChat.reportConfirm'), [
@@ -1023,16 +2034,20 @@ export default function GroupChatScreen({ navigation, route }) {
           </View>
           <Text style={styles.questionTitle}>{displayQuestionTitle}</Text>
           {Boolean(displayDescription) && <Text style={styles.groupDescription}>{displayDescription}</Text>}
-          {Boolean(displayCapacity) && <Text style={styles.groupCapacityText}>{displayCapacity}</Text>}
-          {Boolean(groupStatusText) && (
-            <Text
-              style={[
-                styles.groupStatusText,
-                groupStatusMeta?.color ? { color: groupStatusMeta.color } : null,
-              ]}
-            >
-              {groupStatusText}
-            </Text>
+          {(Boolean(displayCapacity) || Boolean(groupStatusText)) && (
+            <View style={styles.groupInfoRow}>
+              {Boolean(groupStatusText) && (
+                <Text
+                  style={[
+                    styles.groupStatusText,
+                    groupStatusMeta?.color ? { color: groupStatusMeta.color } : null,
+                  ]}
+                >
+                  {groupStatusText}
+                </Text>
+              )}
+              {Boolean(displayCapacity) && <Text style={styles.groupCapacityText}>{displayCapacity}</Text>}
+            </View>
           )}
           {groupLoading && !currentGroup && (
             <View style={styles.groupLoadingRow}>
@@ -1099,148 +2114,364 @@ export default function GroupChatScreen({ navigation, route }) {
           ) : null}
 
           {!messageLoading && !messageError
-            ? messages.map(msg => (
-                <View key={msg.id} style={styles.messageCard}>
-                  <View style={styles.msgHeader}>
-                    <Avatar uri={msg.avatar} name={msg.author} size={24} />
-                    <Text style={styles.msgAuthor}>{msg.author}</Text>
-                    <Text style={styles.msgTime}>{msg.timeLabel || t('screens.groupChat.justNow')}</Text>
+            ? topLevelMessageNodes.map(msg => {
+                const childNodes = Array.isArray(msg.children) ? msg.children : [];
+                const flatReplies = childNodes.length > 0 ? flattenThreadMessageTree(childNodes) : [];
+
+                return (
+                  <View key={msg.id} style={styles.messageCard}>
+                    <View style={styles.msgHeader}>
+                      <Avatar uri={msg.avatar} name={msg.author} size={24} />
+                      <Text style={styles.msgAuthor}>{msg.author}</Text>
+                      <Text style={styles.msgTime}>{msg.timeLabel || t('screens.groupChat.justNow')}</Text>
+                    </View>
+                    {msg.content ? <Text style={styles.msgText}>{msg.content}</Text> : null}
+                    {msg.imageUri ? <Image source={{ uri: msg.imageUri }} style={styles.msgImage} /> : null}
+
+                    {childNodes.length > 0 ? (
+                      <View style={styles.inlineRepliesContainer}>
+                        {renderInlineMessageReplyNodes(childNodes, {
+                          rootMessageId: msg.id,
+                          flatReplies,
+                        })}
+                      </View>
+                    ) : null}
+
+                    <View style={styles.msgActions}>
+                      <TouchableOpacity style={styles.replyBtn} onPress={() => openReplyModal(msg)}>
+                        <Ionicons name="chatbubble-outline" size={14} color="#ef4444" />
+                        <Text style={styles.replyBtnText}>
+                          {t('screens.groupChat.reply')}
+                          {msg.replyCount > 0 ? ` (${msg.replyCount})` : ''}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  {msg.content ? <Text style={styles.msgText}>{msg.content}</Text> : null}
-                  {msg.imageUri ? <Image source={{ uri: msg.imageUri }} style={styles.msgImage} /> : null}
-                  <View style={styles.msgActions}>
-                    {(() => {
-                      const isMessageLiked = getMessageLikedState(msg);
-                      return <>
-                    <TouchableOpacity
-                      style={styles.msgActionBtn}
-                      onPress={() =>
-                        setLiked(prev => ({
-                          ...prev,
-                          [msg.id]: !getMessageLikedState(msg),
-                        }))
-                      }
-                    >
-                      <Ionicons
-                        name={isMessageLiked ? 'thumbs-up' : 'thumbs-up-outline'}
-                        size={14}
-                        color={isMessageLiked ? '#ef4444' : '#6b7280'}
-                      />
-                      <Text style={[styles.msgActionText, isMessageLiked && styles.msgActionTextLiked]}>
-                        {msg.likes + (isMessageLiked ? 1 : 0)}
-                      </Text>
-                    </TouchableOpacity>
-                      </>;
-                    })()}
-                    <TouchableOpacity style={styles.msgActionBtn} onPress={handleReport}>
-                      <Ionicons name="flag-outline" size={14} color="#6b7280" />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.replyBtn} onPress={() => openReplyModal(msg)}>
-                      <Ionicons name="return-down-back-outline" size={14} color="#ef4444" />
-                      <Text style={styles.replyBtnText}>
-                        {t('screens.groupChat.reply')}
-                        {msg.replyCount > 0 ? ` (${msg.replyCount})` : ''}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))
+                );
+              })
             : null}
         </View>
       </ScrollView>
 
-      <Modal visible={showReplyModal} transparent animationType="slide" statusBarTranslucent>
-        <KeyboardAvoidingView
-          style={styles.replyKeyboardAvoidingView}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowReplyModal(false)}>
-          <TouchableOpacity activeOpacity={1} style={[styles.replyModal, { paddingBottom: Math.max(insets.bottom, 16) + 12 }]}>
-            <View style={styles.replyModalHeader}>
-              <Text style={styles.replyModalTitle}>{t('screens.groupChat.replyModalTitle')}</Text>
-              <TouchableOpacity onPress={() => setShowReplyModal(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
-              </TouchableOpacity>
-            </View>
-
-            {Boolean(replyTarget) ? (
-              <View style={styles.replyTargetCard}>
-                <Image source={{ uri: replyTarget.avatar }} style={styles.replyTargetAvatar} />
-                <View style={styles.replyTargetInfo}>
-                  <Text style={styles.replyTargetAuthor}>{replyTarget.author}</Text>
-                  <Text style={styles.replyTargetContent} numberOfLines={2}>
-                    {replyTarget.content}
-                  </Text>
-                </View>
+      <Modal
+        visible={showReplyListModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowReplyListModal(false)}
+        statusBarTranslucent
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowReplyListModal(false)}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              style={[styles.threadModal, { paddingBottom: Math.max(insets.bottom, 16) + 12 }]}
+            >
+              <View style={styles.threadModalHandle} />
+              <View style={styles.threadModalHeader}>
+                <View style={styles.threadModalHeaderPlaceholder} />
+                <Text style={styles.threadModalTitle}>
+                  {currentReplyMessage?.replyCount || currentMessageReplies.length || 0}条回复
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setShowReplyListModal(false)}
+                  style={styles.threadModalCloseBtn}
+                >
+                  <Ionicons name="close" size={24} color="#1f2937" />
+                </TouchableOpacity>
               </View>
-            ) : null}
 
-            <View style={styles.replyInputWrapper}>
-              <TextInput
-                style={styles.replyInput}
-                placeholder={t('screens.groupChat.replyPlaceholder').replace('{author}', replyTarget?.author || '')}
-                value={replyText}
-                onChangeText={setReplyText}
-                multiline
-                autoFocus
-              />
-            </View>
+              <ScrollView style={styles.threadScroll} showsVerticalScrollIndicator={false}>
+                {currentReplyLoading ? (
+                  <View style={styles.threadStateCard}>
+                    <ActivityIndicator size="small" color="#ef4444" />
+                    <Text style={styles.threadStateText}>{t('common.loading')}</Text>
+                  </View>
+                ) : null}
 
-            <View style={styles.replyModalFooter}>
-              <TouchableOpacity style={styles.replyCancelBtn} onPress={() => setShowReplyModal(false)}>
-                <Text style={styles.replyCancelText}>{t('screens.groupChat.cancel')}</Text>
-              </TouchableOpacity>
+                {!currentReplyLoading && currentReplyError ? (
+                  <View style={styles.threadStateCard}>
+                    <Text style={styles.threadStateErrorText}>{currentReplyError}</Text>
+                    <TouchableOpacity
+                      style={styles.retryBtn}
+                      onPress={() => void loadMessageReplies(currentReplyMessageId, { forceRefresh: true })}
+                    >
+                      <Text style={styles.retryBtnText}>{t('common.retry')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+
+                {!currentReplyLoading && !currentReplyError && currentTopLevelReplies.length === 0 ? (
+                  <View style={styles.threadStateCard}>
+                    <Text style={styles.threadStateText}>暂无回复</Text>
+                  </View>
+                ) : null}
+
+                {!currentReplyLoading && !currentReplyError
+                  ? currentTopLevelReplies.map(reply => (
+                      <View key={reply.id} style={styles.threadListCard}>
+                        <View style={styles.threadReplyHeader}>
+                          <Avatar uri={reply.avatar} name={reply.author} size={24} />
+                          <Text style={styles.threadReplyAuthor}>{reply.author}</Text>
+                          <View style={{ flex: 1 }} />
+                          <Text style={styles.threadReplyTime}>
+                            {reply.timeLabel || t('screens.groupChat.justNow')}
+                          </Text>
+                        </View>
+                        <Text style={styles.threadReplyContent}>{reply.content}</Text>
+                        <View style={styles.threadListActions}>
+                          <TouchableOpacity
+                            style={styles.threadReplyActionBtn}
+                            onPress={() => openReplyThreadLayer(reply.id)}
+                          >
+                            <Ionicons name="chatbubble-outline" size={12} color="#ef4444" />
+                            <Text style={styles.threadReplyActionText}>
+                              {t('screens.groupChat.reply')}
+                              {Number(reply.replyCount || 0) > 0 ? ` (${Number(reply.replyCount || 0)})` : ''}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))
+                  : null}
+              </ScrollView>
+
+              <View style={styles.threadModalBottomBar}>
+                <TouchableOpacity
+                  style={styles.threadWriteBtn}
+                  onPress={() => openReplyComposer(currentReplyMessage, currentReplyMessageId)}
+                >
+                  <Ionicons name="create-outline" size={18} color="#6b7280" />
+                  <Text style={styles.threadWriteBtnText}>写回复...</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showReplyThreadModal}
+        transparent
+        animationType="slide"
+        onRequestClose={returnFromReplyThreadToList}
+        statusBarTranslucent
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={returnFromReplyThreadToList}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              style={[styles.threadModal, { paddingBottom: Math.max(insets.bottom, 16) + 12 }]}
+            >
+              <View style={styles.threadModalHandle} />
+              <View style={styles.threadModalHeader}>
+                <TouchableOpacity
+                  onPress={returnFromReplyThreadToList}
+                  style={[styles.threadModalCloseBtn, { left: 16, right: 'auto' }]}
+                >
+                  <Ionicons name="arrow-back" size={24} color="#1f2937" />
+                </TouchableOpacity>
+                <Text style={styles.threadModalTitle}>
+                  {Math.max(
+                    Number(currentThreadRootReply?.replyCount || 0),
+                    currentThreadReplyNodes.length
+                  )}条回复
+                </Text>
+                <View style={styles.threadModalHeaderPlaceholder} />
+              </View>
+
+              {currentThreadRootReply ? (
+                <View style={styles.originalReplyCard}>
+                  <View style={styles.threadReplyHeader}>
+                    <Avatar uri={currentThreadRootReply.avatar} name={currentThreadRootReply.author} size={32} />
+                    <Text style={styles.threadReplyAuthor}>{currentThreadRootReply.author}</Text>
+                    <View style={{ flex: 1 }} />
+                    <Text style={styles.threadReplyTime}>
+                      {currentThreadRootReply.timeLabel || t('screens.groupChat.justNow')}
+                    </Text>
+                  </View>
+                  <Text style={styles.originalReplyContent}>{currentThreadRootReply.content}</Text>
+                </View>
+              ) : null}
+
+              <View style={styles.repliesSectionHeader}>
+                <Text style={styles.repliesSectionTitle}>全部回复</Text>
+              </View>
+
+              <ScrollView style={styles.threadScroll} showsVerticalScrollIndicator={false}>
+                {currentReplyLoading ? (
+                  <View style={styles.threadStateCard}>
+                    <ActivityIndicator size="small" color="#ef4444" />
+                    <Text style={styles.threadStateText}>{t('common.loading')}</Text>
+                  </View>
+                ) : null}
+
+                {!currentReplyLoading && currentThreadReplyNodes.length > 0
+                  ? renderThreadReplyTreeNodes(currentThreadReplyNodes, {
+                      rootReplyId: currentThreadRootReply?.id ?? null,
+                    })
+                  : null}
+
+                {!currentReplyLoading &&
+                !currentReplyError &&
+                currentThreadReplyNodes.length === 0 &&
+                currentThreadRootReply ? (
+                  <View style={styles.threadStateCard}>
+                    <Text style={styles.threadStateText}>暂无回复</Text>
+                  </View>
+                ) : null}
+              </ScrollView>
+
+              <View style={styles.threadModalBottomBar}>
+                <TouchableOpacity
+                  style={styles.threadWriteBtn}
+                  onPress={() => openReplyComposer(currentThreadRootReply, currentReplyMessageId)}
+                >
+                  <Ionicons name="create-outline" size={18} color="#6b7280" />
+                  <Text style={styles.threadWriteBtnText}>写回复...</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showReplyModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => closeReplyComposer({ restoreParent: true })}
+        statusBarTranslucent
+      >
+        <View style={styles.replyKeyboardAvoidingView}>
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => closeReplyComposer({ restoreParent: true })}
+          >
+            <View style={styles.replySheetContainer} pointerEvents="box-none">
               <TouchableOpacity
+                activeOpacity={1}
                 style={[
-                  styles.replySubmitBtn,
-                  (!replyText.trim() || publishingReply) && styles.replySubmitBtnDisabled,
+                  styles.replyModal,
+                  {
+                    paddingBottom: replyModalBottomPadding,
+                    marginBottom: replyKeyboardOffset,
+                    maxHeight: replyModalMaxHeight,
+                  },
                 ]}
-                onPress={handleReply}
-                disabled={!replyText.trim() || publishingReply}
               >
-                {publishingReply ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Text style={styles.replySubmitText}>{t('screens.groupChat.send')}</Text>
-                )}
+                <View style={styles.replyModalHandle} />
+                <View style={styles.replyModalHeader}>
+                  <Text style={styles.replyModalTitle}>{t('screens.groupChat.replyModalTitle')}</Text>
+                  <TouchableOpacity onPress={() => closeReplyComposer({ restoreParent: true })}>
+                    <Ionicons name="close" size={24} color="#6b7280" />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView
+                  style={styles.replyComposerScroll}
+                  contentContainerStyle={styles.replyComposerContent}
+                  keyboardShouldPersistTaps="handled"
+                  bounces={false}
+                >
+                  {Boolean(replyTarget) ? (
+                    <View style={styles.replyTargetCard}>
+                      <Avatar uri={replyTarget.avatar} name={replyTarget.author} size={32} />
+                      <View style={styles.replyTargetInfo}>
+                        <Text style={styles.replyTargetAuthor}>{replyTarget.author}</Text>
+                        <Text style={styles.replyTargetContent} numberOfLines={2}>
+                          {replyTarget.content}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
+
+                  <View
+                    style={[
+                      styles.replyInputWrapper,
+                      replyKeyboardOffset > 0 && styles.replyInputWrapperCompact,
+                    ]}
+                  >
+                    <TextInput
+                      style={[styles.replyInput, replyKeyboardOffset > 0 && styles.replyInputCompact]}
+                      placeholder={t('screens.groupChat.replyPlaceholder').replace('{author}', replyTarget?.author || '')}
+                      value={replyText}
+                      onChangeText={setReplyText}
+                      multiline
+                      autoFocus
+                    />
+                  </View>
+                </ScrollView>
+
+                <View style={styles.replyModalFooter}>
+                  <TouchableOpacity
+                    style={styles.replyCancelBtn}
+                    onPress={() => closeReplyComposer({ restoreParent: true })}
+                  >
+                    <Text style={styles.replyCancelText}>{t('screens.groupChat.cancel')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.replySubmitBtn,
+                      (!replyText.trim() || publishingReply) && styles.replySubmitBtnDisabled,
+                    ]}
+                    onPress={handleReply}
+                    disabled={!replyText.trim() || publishingReply}
+                  >
+                    {publishingReply ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <Text style={styles.replySubmitText}>{t('screens.groupChat.send')}</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
-        </TouchableOpacity>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
 
-      <View
-        style={[
-          styles.bottomBar,
-          {
-            paddingBottom: Math.max(insets.bottom, 8),
-          },
-        ]}
-      >
-        <TouchableOpacity
-          style={[styles.inputWrapper, !canOpenMessageComposer && styles.inputWrapperDisabled]}
-          activeOpacity={canOpenMessageComposer ? 0.85 : 1}
-          onPress={openWriteMessageModal}
-          disabled={!canOpenMessageComposer}
+      {!hasActiveMessageLayer ? (
+        <View
+          style={[
+            styles.bottomBar,
+            {
+              paddingBottom: Math.max(insets.bottom, 8),
+            },
+          ]}
         >
-          <Text
-            style={[
-              styles.inputPlaceholderText,
-              !canOpenMessageComposer && styles.inputPlaceholderTextDisabled,
-            ]}
+          <TouchableOpacity
+            style={[styles.inputWrapper, !canOpenMessageComposer && styles.inputWrapperDisabled]}
+            activeOpacity={canOpenMessageComposer ? 0.85 : 1}
+            onPress={openWriteMessageModal}
+            disabled={!canOpenMessageComposer}
           >
-            {canOpenMessageComposer ? t('screens.groupChat.inputPlaceholder') : disabledComposerHint}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.sendBtn, !canOpenMessageComposer && styles.sendBtnDisabled]}
-          onPress={openWriteMessageModal}
-          disabled={!canOpenMessageComposer}
-        >
-          <Ionicons name="send" size={18} color={canOpenMessageComposer ? '#fff' : '#fef2f2'} />
-        </TouchableOpacity>
-      </View>
+            <Text
+              style={[
+                styles.inputPlaceholderText,
+                !canOpenMessageComposer && styles.inputPlaceholderTextDisabled,
+              ]}
+            >
+              {canOpenMessageComposer ? t('screens.groupChat.inputPlaceholder') : disabledComposerHint}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.sendBtn, !canOpenMessageComposer && styles.sendBtnDisabled]}
+            onPress={openWriteMessageModal}
+            disabled={!canOpenMessageComposer}
+          >
+            <Ionicons name="send" size={18} color={canOpenMessageComposer ? '#fff' : '#fef2f2'} />
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {showWriteMessageModal ? (
         <View style={styles.composerPortal} pointerEvents="box-none">
@@ -1274,10 +2505,13 @@ export default function GroupChatScreen({ navigation, route }) {
                   placeholderTextColor="#9ca3af"
                   value={writeMessageText}
                   onChangeText={setWriteMessageText}
+                  onSelectionChange={handleComposerSelectionChange}
+                  selection={composerSelection}
                   multiline
                   autoFocus
                   showSoftInputOnFocus
                   maxLength={500}
+                  selectionColor={modalTokens.danger}
                   textAlignVertical="top"
                 />
                 {selectedMessageImage ? (
@@ -1321,6 +2555,20 @@ export default function GroupChatScreen({ navigation, route }) {
                 </View>
               </View>
             </TouchableOpacity>
+            {shouldRenderComposerMentionPanel ? (
+              <MentionSuggestionsPanel
+                activeKeyword={activeMention?.keyword ?? ''}
+                animatedStyle={composerMentionPanelAnimatedStyle}
+                bottomInset={composerMentionBottomInset}
+                bottomOffset={composerMentionPanelBottomOffset}
+                listMaxHeight={composerMentionListMaxHeight}
+                loading={composerMentionLoading}
+                onBackdropPress={focusMentionInput}
+                onSelect={handleMentionSelect}
+                panelMaxHeight={composerMentionPanelMaxHeight}
+                users={candidateUsers}
+              />
+            ) : null}
           </KeyboardAvoidingView>
         </View>
       ) : null}
@@ -1394,7 +2642,7 @@ const styles = StyleSheet.create({
   },
   questionAuthor: {
     fontSize: scaleFont(14),
-    fontWeight: '500',
+    fontWeight: 'bold',
     color: '#1f2937',
     marginLeft: 10,
   },
@@ -1421,26 +2669,32 @@ const styles = StyleSheet.create({
   },
   questionTitle: {
     fontSize: scaleFont(16),
-    fontWeight: '600',
+    fontWeight: '400',
     color: '#1f2937',
     lineHeight: scaleFont(24),
   },
   groupDescription: {
-    fontSize: scaleFont(13),
+    fontSize: scaleFont(14),
+    fontWeight: '400',
     color: '#6b7280',
     lineHeight: scaleFont(20),
     marginTop: 8,
   },
-  groupCapacityText: {
-    fontSize: scaleFont(12),
-    color: '#9ca3af',
+  groupInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginTop: 8,
   },
+  groupCapacityText: {
+    fontSize: scaleFont(14),
+    color: '#9ca3af',
+    fontWeight: '400',
+  },
   groupStatusText: {
-    fontSize: scaleFont(13),
+    fontSize: scaleFont(14),
     color: '#ef4444',
-    marginTop: 8,
-    lineHeight: 18,
+    fontWeight: '400',
   },
   groupLoadingRow: {
     marginTop: 12,
@@ -1572,6 +2826,87 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  inlineRepliesContainer: {
+    marginTop: 2,
+    marginBottom: 10,
+    paddingLeft: 14,
+    borderLeftWidth: 2,
+    borderLeftColor: '#f3d7da',
+    gap: 10,
+  },
+  inlineReplyCard: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#fafafa',
+    borderWidth: 1,
+    borderColor: '#f3f4f6',
+  },
+  inlineReplyCardNested: {
+    marginTop: 8,
+    backgroundColor: '#ffffff',
+  },
+  inlineReplyHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  inlineReplyHeaderMeta: {
+    flex: 1,
+  },
+  inlineReplyAuthorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  inlineReplyAuthor: {
+    fontSize: scaleFont(12),
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  inlineReplyRelation: {
+    fontSize: scaleFont(12),
+    color: '#9ca3af',
+  },
+  inlineReplyTarget: {
+    fontSize: scaleFont(12),
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  inlineReplyTime: {
+    marginTop: 2,
+    fontSize: scaleFont(11),
+    color: '#9ca3af',
+  },
+  inlineReplyContent: {
+    marginTop: 8,
+    fontSize: scaleFont(14),
+    lineHeight: scaleFont(20),
+    color: '#1f2937',
+  },
+  inlineReplyActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 8,
+  },
+  inlineReplyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  inlineReplyBtnText: {
+    fontSize: scaleFont(12),
+    color: '#ef4444',
+    fontWeight: '500',
+  },
+  inlineReplyChildren: {
+    marginTop: 8,
+    marginLeft: 10,
+    paddingLeft: 10,
+    borderLeftWidth: 1,
+    borderLeftColor: '#e5e7eb',
+    gap: 8,
+  },
   msgActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1607,6 +2942,203 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontWeight: '500',
   },
+  threadModal: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '85%',
+    overflow: 'hidden',
+  },
+  threadModalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  threadModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  threadModalHeaderPlaceholder: {
+    width: 40,
+  },
+  threadModalTitle: {
+    fontSize: scaleFont(17),
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  threadModalCloseBtn: {
+    position: 'absolute',
+    right: 16,
+    padding: 4,
+    zIndex: 10,
+  },
+  threadScroll: {
+    flexShrink: 1,
+    backgroundColor: '#fff',
+  },
+  threadStateCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  threadStateText: {
+    fontSize: scaleFont(14),
+    color: '#9ca3af',
+  },
+  threadStateErrorText: {
+    fontSize: scaleFont(14),
+    color: '#ef4444',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  threadListCard: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  threadListActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  threadModalBottomBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    backgroundColor: '#fff',
+  },
+  threadWriteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f9fafb',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  threadWriteBtnText: {
+    fontSize: scaleFont(14),
+    color: '#9ca3af',
+  },
+  originalReplyCard: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 8,
+    borderBottomColor: '#f9fafb',
+  },
+  originalReplyContent: {
+    fontSize: scaleFont(16),
+    color: '#1f2937',
+    lineHeight: scaleFont(24),
+  },
+  repliesSectionHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fafafa',
+  },
+  repliesSectionTitle: {
+    fontSize: scaleFont(13),
+    color: '#9ca3af',
+    fontWeight: '500',
+  },
+  threadReplyCard: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  threadReplyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 8,
+  },
+  threadReplyHeaderMeta: {
+    flexShrink: 1,
+  },
+  threadReplyAuthorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  threadReplyAuthor: {
+    fontSize: scaleFont(12),
+    fontWeight: '500',
+    color: '#9ca3af',
+  },
+  threadReplyRelation: {
+    fontSize: scaleFont(12),
+    color: '#9ca3af',
+  },
+  threadReplyTarget: {
+    fontSize: scaleFont(12),
+    fontWeight: '500',
+    color: '#6b7280',
+  },
+  threadReplyTime: {
+    fontSize: scaleFont(12),
+    color: '#9ca3af',
+  },
+  threadReplyContent: {
+    fontSize: scaleFont(15),
+    color: '#1f2937',
+    lineHeight: scaleFont(22),
+  },
+  threadReplyActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  threadReplyMetaGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  threadReplyMetaText: {
+    fontSize: scaleFont(12),
+    color: '#9ca3af',
+  },
+  threadReplyActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  threadReplyActionText: {
+    fontSize: scaleFont(12),
+    color: '#ef4444',
+    fontWeight: '500',
+  },
+  threadReplyChildrenSection: {
+    marginTop: 4,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+  },
+  threadReplyChildrenToggle: {
+    paddingBottom: 6,
+  },
+  threadReplyChildrenToggleText: {
+    fontSize: scaleFont(12),
+    color: '#6b7280',
+    fontWeight: '500',
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: modalTokens.overlay,
@@ -1615,14 +3147,36 @@ const styles = StyleSheet.create({
   replyKeyboardAvoidingView: {
     flex: 1,
   },
+  replySheetContainer: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  replyComposerScroll: {
+    flexShrink: 1,
+  },
+  replyComposerContent: {
+    paddingTop: 8,
+    backgroundColor: modalTokens.surface,
+    paddingBottom: 8,
+  },
   replyModal: {
     backgroundColor: modalTokens.surface,
     borderTopLeftRadius: modalTokens.sheetRadius,
     borderTopRightRadius: modalTokens.sheetRadius,
     borderTopWidth: 1,
     borderColor: modalTokens.border,
+    overflow: 'hidden',
     paddingBottom: 12,
-    maxHeight: '82%',
+    maxHeight: '58%',
+  },
+  replyModalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 4,
   },
   replyModalHeader: {
     flexDirection: 'row',
@@ -1672,19 +3226,29 @@ const styles = StyleSheet.create({
     backgroundColor: modalTokens.surfaceSoft,
     borderRadius: 12,
     padding: 12,
-    minHeight: 100,
+    minHeight: 120,
+    maxHeight: 220,
     borderWidth: 1,
     borderColor: modalTokens.border,
+  },
+  replyInputWrapperCompact: {
+    minHeight: 96,
+    maxHeight: 148,
   },
   replyInput: {
     fontSize: scaleFont(14),
     color: modalTokens.textPrimary,
     textAlignVertical: 'top',
+    minHeight: 96,
+  },
+  replyInputCompact: {
+    minHeight: 72,
   },
   replyModalFooter: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     paddingHorizontal: 16,
+    paddingTop: 4,
     gap: 12,
   },
   replyCancelBtn: {

@@ -222,6 +222,15 @@ export const syncCacheIdentity = async (identity) => {
   try {
     const previousIdentity = await AsyncStorage.getItem(CACHE_IDENTITY_KEY);
 
+    if (!previousIdentity) {
+      await AsyncStorage.setItem(CACHE_IDENTITY_KEY, identity);
+      return {
+        changed: false,
+        previousIdentity: null,
+        currentIdentity: identity,
+      };
+    }
+
     if (previousIdentity === identity) {
       return {
         changed: false,

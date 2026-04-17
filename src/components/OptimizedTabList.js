@@ -76,7 +76,7 @@ export default function OptimizedTabList({
       setHasMore(nextHasMore);
       persistCache(mergedItems, nextPage, nextHasMore);
     } catch (error) {
-      console.error('OptimizedTabList load failed:', error);
+      console.warn('OptimizedTabList load failed:', error);
       showToast(error?.message || '加载失败，请稍后重试', 'error');
     } finally {
       setRefreshing(false);

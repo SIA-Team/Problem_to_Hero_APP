@@ -182,8 +182,19 @@ export const normalizeMyTeam = (team) => {
     memberCount: normalized.memberCount,
     myMemberStatus: normalized.myMemberStatus,
     isJoined: normalized.isJoined,
+    isPending: normalized.isPending,
+    isRejected: normalized.isRejected,
+    isExited: normalized.isExited,
+    isFrozen: normalized.isFrozen,
   };
 };
+
+export const isVisibleMyTeam = (team) =>
+  Boolean(team?.isJoined) &&
+  !team?.isPending &&
+  !team?.isRejected &&
+  !team?.isExited &&
+  !team?.isFrozen;
 
 export const mapTeamToDetailRoute = (team) => {
   const memberCount = Number(team?.memberCount ?? team?.members) || 0;

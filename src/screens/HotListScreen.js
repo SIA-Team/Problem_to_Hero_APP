@@ -5,7 +5,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import i18n from '../i18n';
 import { getHotListData } from '../data/hotListData';
-import TranslateButton from '../components/TranslateButton';
 import { modalTokens } from '../components/modalTokens';
 
 import { scaleFont } from '../utils/responsive';
@@ -998,11 +997,8 @@ function HotItem({
   onPress,
   t
 }) {
-  const [translatedTitle, setTranslatedTitle] = useState(null);
   const hasTag = item.tag && item.tag !== '';
-  const handleTranslated = (translated, isTranslated) => {
-    setTranslatedTitle(isTranslated ? translated : null);
-  };
+  
   return <TouchableOpacity style={styles.hotItem} onPress={onPress}>
       <View style={[styles.rankBadge, {
       backgroundColor: getRankBg(item.rank)
@@ -1012,7 +1008,7 @@ function HotItem({
       <View style={styles.hotContent}>
         <View style={styles.hotTitleRow}>
           <Text style={styles.hotTitle} numberOfLines={2}>
-            {translatedTitle || item.title}
+            {item.title}
           </Text>
           {Boolean(hasTag) && <View style={[styles.hotTag, {
           backgroundColor: item.tagColor
@@ -1020,9 +1016,6 @@ function HotItem({
               <Text style={styles.hotTagText}>{item.tag}</Text>
             </View>}
         </View>
-        
-        {/* 翻译按钮 */}
-        <TranslateButton text={item.title} onTranslated={handleTranslated} compact={true} style={styles.translateButton} />
         
         <View style={styles.hotMeta}>
           <View style={styles.hotStats}>
@@ -1469,10 +1462,6 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(10),
     color: '#fff',
     fontWeight: '600'
-  },
-  translateButton: {
-    marginTop: -4,
-    marginBottom: 4
   },
   hotMeta: {
     flexDirection: 'row',

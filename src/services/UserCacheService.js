@@ -103,11 +103,9 @@ class UserCacheService {
         return null;
       }
     } catch (error) {
-      // 静默模式下不打印错误（除非是网络错误）
-      if (!silent || (error.message && !error.message.includes('登录状态已过期') && !error.message.includes('未授权'))) {
-        console.error('❌ 获取用户信息出错:', error);
-      }
+      // 静默刷新失败时不再打 error，避免触发 React Native LogBox 的底部黑条提示。
       if (!silent) {
+        console.error('❌ 获取用户信息出错:', error);
         throw error;
       }
       return null;
