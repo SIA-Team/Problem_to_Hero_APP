@@ -13,11 +13,12 @@ import { showAppAlert } from '../utils/appAlert';
 import { openMapChooser } from '../utils/mapChooser';
 import notificationApi from '../services/api/notificationApi';
 import userApi from '../services/api/userApi';
+import emergencyApi from '../services/api/emergencyApi';
 import { filterFriendUsers, normalizeFollowingResponse, sendPlainPrivateMessage } from '../utils/privateShareService';
 
 import { scaleFont } from '../utils/responsive';
 import { useEmergency } from '../contexts/EmergencyContext';
-// 顶部快捷入口数据
+// 椤堕儴蹇嵎鍏ュ彛鏁版嵁
 const BUCKET_EVENT_TYPE_MAP = {
   COMMENT_SHARE: ['COMMENT_REPLY', 'MENTION'],
   INVITE_ANSWER: ['INVITE_ANSWER', 'INVITER_GOT_ANSWER'],
@@ -63,19 +64,19 @@ const QUICK_ENTRY_CONFIGS = [{
 
 const CATEGORY_CONFIGS = [{
   key: 'INTERACTION',
-  title: '互动',
+  title: '浜掑姩',
   icon: 'chatbubble-ellipses',
   iconBg: '#dcfce7',
   iconColor: '#22c55e'
 }, {
   key: 'SYSTEM',
-  title: '系统',
+  title: '绯荤粺',
   icon: 'settings',
   iconBg: '#f3f4f6',
   iconColor: '#6b7280'
 }, {
   key: 'ACTIVITY',
-  title: '活动',
+  title: '娲诲姩',
   icon: 'megaphone',
   iconBg: '#dbeafe',
   iconColor: '#3b82f6'
@@ -101,7 +102,7 @@ const EMPTY_SUMMARY = {
 
 const DEFAULT_NOTIFICATION_FILTER = {
   mode: 'all',
-  title: '全部通知',
+  title: '鍏ㄩ儴閫氱煡',
   category: null,
   bucketKey: null,
   eventTypes: []
@@ -193,218 +194,234 @@ const normalizeSummary = summary => ({
   }
 });
 
-// 邀请回答数据
-const inviteAnswers = [{
-  id: 1,
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=invite1',
-  name: '张三丰',
-  question: '如何在三个月内从零基础学会Python编程？',
-  time: '10分钟前'
-}, {
-  id: 2,
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=invite2',
-  name: '李小龙',
-  question: '35岁程序员如何规划职业发展？',
-  time: '30分钟前'
-}];
+const extractEmergencyListRows = (response) => {
+  const data = response?.data;
+  const candidates = [
+    data,
+    data?.rows,
+    data?.list,
+    data?.records,
+    data?.items,
+    data?.content,
+    data?.data,
+    data?.data?.rows,
+    data?.data?.list,
+    data?.data?.records,
+    data?.page?.rows,
+    data?.page?.records,
+  ];
 
-// 仲裁邀请数据
-const arbitrationInvites = [{
-  id: 1,
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user1',
-  name: '张三丰',
-  question: '如何在三个月内从零基础学会Python编程？',
-  answer: 'Python老司机',
-  reason: '原答案中关于学习时间的估计不够准确，对于零基础学习者来说，3个月时间过于乐观...',
-  time: '5分钟前',
-  status: 'pending' // pending: 待投票, voted: 已投票
-}, {
-  id: 2,
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user2',
-  name: '李四',
-  question: 'React和Vue应该选择哪个？',
-  answer: '前端专家',
-  reason: '答案过于偏向React，没有客观分析两者的优劣...',
-  time: '1小时前',
-  status: 'voted'
-}];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate;
+    }
+  }
 
-// 紧急求助数据
-const emergencyRequests = [{
-  id: 1,
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=emergency1',
-  name: '王小明',
-  title: '车辆抛锚急需拖车救援',
-  location: '北京市朝阳区建国路88号',
-  latitude: 39.9144,
-  longitude: 116.4674,
-  distance: '2.3km',
-  time: '3分钟前',
-  timestamp: Date.now() - 3 * 60 * 1000, // 3分钟前
-  rescuerCount: 3,
-  respondedCount: 1, // 已响应人数
-  status: 'urgent',
-  urgencyLevel: 'high'
-}, {
-  id: 2,
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=emergency2',
-  name: '李华',
-  title: '突发疾病需要紧急送医',
-  location: '上海市浦东新区世纪大道1号',
-  latitude: 31.2362,
-  longitude: 121.4998,
-  distance: '5.8km',
-  time: '8分钟前',
-  timestamp: Date.now() - 8 * 60 * 1000, // 8分钟前
-  rescuerCount: 5,
-  respondedCount: 5, // 已响应人数等于需要人数，已完成
-  status: 'responding',
-  urgencyLevel: 'high'
-}, {
-  id: 3,
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=emergency3',
-  name: '张伟',
-  title: '钥匙锁车内需要开锁服务',
-  location: '广州市天河区珠江新城',
-  latitude: 23.1252,
-  longitude: 113.3249,
-  distance: '1.2km',
-  time: '15分钟前',
-  timestamp: Date.now() - 15 * 60 * 1000, // 15分钟前
-  rescuerCount: 2,
-  respondedCount: 0,
-  status: 'urgent',
-  urgencyLevel: 'medium'
-}, {
-  id: 4,
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=emergency4',
-  name: '赵敏',
-  title: '宠物走失急需帮助寻找',
-  location: '深圳市南山区科技园',
-  latitude: 22.5403,
-  longitude: 113.9545,
-  distance: '3.5km',
-  time: '45分钟前',
-  timestamp: Date.now() - 45 * 60 * 1000, // 45分钟前
-  rescuerCount: 2,
-  respondedCount: 2, // 已完成
-  status: 'urgent',
-  urgencyLevel: 'medium'
-}, {
-  id: 5,
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=emergency5',
-  name: '周杰',
-  title: '手机丢失需要帮助',
-  location: '杭州市西湖区文一路',
-  latitude: 30.2908,
-  longitude: 120.1210,
-  distance: '6.2km',
-  time: '2小时前',
-  timestamp: Date.now() - 2 * 60 * 60 * 1000, // 2小时前
-  rescuerCount: 1,
-  respondedCount: 0,
-  status: 'urgent',
-  urgencyLevel: 'low'
-}];
+  return [];
+};
 
-// 消息列表数据
-const messageGroups = [{
-  type: 'official',
-  icon: 'megaphone',
-  iconBg: '#dbeafe',
-  iconColor: '#3b82f6',
-  lastMessage: '平台新功能上线通知：现已支持视频回答...',
-  time: '1小时前',
-  unread: 2
-}, {
-  type: 'question',
-  icon: 'help-circle',
-  iconBg: '#dcfce7',
-  iconColor: '#22c55e',
-  lastMessage: '您关注的问题「如何学习Python」有3个新回答',
-  time: '2小时前',
-  unread: 3
-}, {
-  type: 'system',
-  icon: 'settings',
-  iconBg: '#f3f4f6',
-  iconColor: '#6b7280',
-  lastMessage: '您的账户安全设置已更新',
-  time: '昨天',
-  unread: 0
-}];
+const toNullableNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
-// 私信用户数据
-const privateMessages = [{
-  id: 1,
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=pm1',
-  name: 'Python老司机',
-  verified: true,
-  lastMessage: '谢谢你的回答，帮了我很大的忙！',
-  time: '30分钟前',
-  unread: 2
-}, {
-  id: 2,
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=pm2',
-  name: '数据分析师小王',
-  lastMessage: '请问你有时间交流一下吗？',
-  time: '1小时前',
-  unread: 1
-}, {
-  id: 3,
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=pm3',
-  name: '美食达人',
-  lastMessage: '好的，我会试试你推荐的方法',
-  time: '3小时前',
-  unread: 0
-}, {
-  id: 4,
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=pm4',
-  name: '编程新手',
-  lastMessage: '太感谢了！',
-  time: '昨天',
-  unread: 0
-}];
+const formatDistanceLabel = (distanceMeters, fallbackLabel = '') => {
+  const meters = Number(distanceMeters);
+  if (Number.isFinite(meters) && meters > 0) {
+    if (meters >= 1000) {
+      const km = meters / 1000;
+      const kmLabel = km >= 10 ? Math.round(km).toString() : km.toFixed(1).replace(/\.0$/, '');
+      return `${kmLabel}km`;
+    }
+    return `${Math.round(meters)}m`;
+  }
 
-// 可发私信的用户列表
-const allUsers = [{
-  id: 1,
-  name: 'Python老司机',
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=pm1',
-  title: '资深Python开发',
-  verified: true
-}, {
-  id: 2,
-  name: '数据分析师小王',
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=pm2',
-  title: '数据分析师'
-}, {
-  id: 3,
-  name: '美食达人',
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=pm3',
-  title: '美食博主'
-}, {
-  id: 4,
-  name: '编程新手',
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=pm4',
-  title: '学生'
-}, {
-  id: 5,
-  name: '王医生',
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=follow2',
-  title: '三甲医院主治医师',
-  verified: true
-}, {
-  id: 6,
-  name: '程序员小明',
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=follow4',
-  title: '全栈开发工程师'
-}, {
-  id: 7,
-  name: '设计师小李',
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=follow5',
-  title: 'UI/UX设计师'
-}];
+  if (typeof fallbackLabel === 'string' && fallbackLabel.trim()) {
+    return fallbackLabel.trim();
+  }
+
+  return '';
+};
+
+const normalizeEmergencyListItem = (item = {}, index = 0) => {
+  const id = item?.id ?? item?.helpId ?? item?.emergencyId ?? `emergency-${index}`;
+  const rescuerCount = Math.max(0, Math.round(toSafeNumber(item?.neededHelperCount ?? item?.rescuerCount)));
+  const respondedCount = Math.max(0, Math.round(toSafeNumber(item?.respondedHelperCount ?? item?.respondedCount ?? item?.currentHelperCount)));
+  const rawTimestamp = item?.createTime ?? item?.publishTime ?? item?.gmtCreate ?? item?.createdAt ?? item?.timestamp ?? null;
+  const parsedTimestamp = rawTimestamp ? new Date(rawTimestamp).getTime() : NaN;
+  const timestamp = Number.isFinite(parsedTimestamp) ? parsedTimestamp : Date.now();
+
+  return {
+    id,
+    avatar: item?.avatar || item?.avatarUrl || item?.userAvatar || '',
+    name: item?.nickname || item?.userName || item?.username || item?.name || `User ${id}`,
+    title: item?.title || item?.description || '紧急求助',
+    location: item?.regionDisplay || item?.addressText || item?.location || item?.locationText || '鏈煡浣嶇疆',
+    latitude: toNullableNumber(item?.latitude),
+    longitude: toNullableNumber(item?.longitude),
+    distance: formatDistanceLabel(item?.distanceMeters, item?.distanceText || item?.distance),
+    time: formatRelativeTime(rawTimestamp || timestamp),
+    timestamp,
+    rescuerCount,
+    respondedCount,
+    status: item?.status || '',
+    urgencyLevel: item?.urgencyLevel,
+  };
+};
+
+// 閭€璇峰洖绛旀暟鎹?
+const inviteAnswers = [
+  {
+    id: 1,
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=invite1',
+    name: '张三丰',
+    question: '如何在三个月内从零基础学会 Python 编程？',
+    time: '10分钟前',
+  },
+  {
+    id: 2,
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=invite2',
+    name: '李小龙',
+    question: '35 岁程序员如何规划职业发展？',
+    time: '30分钟前',
+  },
+];
+
+const arbitrationInvites = [
+  {
+    id: 1,
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user1',
+    name: '张三丰',
+    question: '如何在三个月内从零基础学会 Python 编程？',
+    answer: 'Python老司机',
+    reason: '原答案中的时间估计偏乐观，建议补充更细化的学习路径。',
+    time: '5分钟前',
+    status: 'pending',
+  },
+  {
+    id: 2,
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user2',
+    name: '李四',
+    question: 'React 和 Vue 应该选择哪个？',
+    answer: '前端专家',
+    reason: '建议从团队规模和生态维护成本两个维度来判断。',
+    time: '1小时前',
+    status: 'voted',
+  },
+];
+
+const messageGroups = [
+  {
+    type: 'official',
+    icon: 'megaphone',
+    iconBg: '#dbeafe',
+    iconColor: '#3b82f6',
+    lastMessage: '平台新功能上线通知：现已支持视频回答。',
+    time: '1小时前',
+    unread: 2,
+  },
+  {
+    type: 'question',
+    icon: 'help-circle',
+    iconBg: '#dcfce7',
+    iconColor: '#22c55e',
+    lastMessage: '您关注的问题有 3 个新回答。',
+    time: '2小时前',
+    unread: 3,
+  },
+  {
+    type: 'system',
+    icon: 'settings',
+    iconBg: '#f3f4f6',
+    iconColor: '#6b7280',
+    lastMessage: '您的账户安全设置已更新。',
+    time: '昨天',
+    unread: 0,
+  },
+];
+
+const privateMessages = [
+  {
+    id: 1,
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=pm1',
+    name: 'Python老司机',
+    verified: true,
+    lastMessage: '谢谢你的回答，帮了我很大的忙。',
+    time: '30分钟前',
+    unread: 2,
+  },
+  {
+    id: 2,
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=pm2',
+    name: '数据分析师小王',
+    lastMessage: '请问你有时间交流一下吗？',
+    time: '1小时前',
+    unread: 1,
+  },
+  {
+    id: 3,
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=pm3',
+    name: '美食达人',
+    lastMessage: '好的，我会试试你推荐的方法。',
+    time: '3小时前',
+    unread: 0,
+  },
+  {
+    id: 4,
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=pm4',
+    name: '编程新手',
+    lastMessage: '太感谢了！',
+    time: '昨天',
+    unread: 0,
+  },
+];
+
+const allUsers = [
+  {
+    id: 1,
+    name: 'Python老司机',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=pm1',
+    title: '资深Python开发',
+    verified: true,
+  },
+  {
+    id: 2,
+    name: '数据分析师小王',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=pm2',
+    title: '数据分析师',
+  },
+  {
+    id: 3,
+    name: '美食达人',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=pm3',
+    title: '美食博主',
+  },
+  {
+    id: 4,
+    name: '编程新手',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=pm4',
+    title: '学生',
+  },
+  {
+    id: 5,
+    name: '王医生',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=follow2',
+    title: '三甲医院主治医师',
+    verified: true,
+  },
+  {
+    id: 6,
+    name: '程序员小张',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=follow4',
+    title: '全栈开发工程师',
+  },
+  {
+    id: 7,
+    name: '设计师小陈',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=follow5',
+    title: 'UI/UX设计师',
+  },
+];
 export default function MessagesScreen({
   navigation
 }) {
@@ -439,6 +456,9 @@ export default function MessagesScreen({
   const [followingUsers, setFollowingUsers] = useState([]);
   const [followingUsersLoading, setFollowingUsersLoading] = useState(false);
   const [followingUsersLoadError, setFollowingUsersLoadError] = useState('');
+  const [emergencyRequestsData, setEmergencyRequestsData] = useState([]);
+  const [emergencyLoading, setEmergencyLoading] = useState(false);
+  const [emergencyLoadError, setEmergencyLoadError] = useState('');
 
   const quickEntryLabels = {
     comment: t('screens.messagesScreen.quickEntries.commentForward'),
@@ -452,12 +472,44 @@ export default function MessagesScreen({
     return {
       ...category,
       unread: toSafeNumber(notificationSummary.byCategory?.[category.key]),
-      lastMessage: preview?.summary || preview?.title || '暂无通知',
+      lastMessage: preview?.summary || preview?.title || '鏆傛棤閫氱煡',
       time: formatRelativeTime(preview?.createTime)
     };
   });
-  const currentFilterTitle = notificationFilter.title || '全部通知';
+  const currentFilterTitle = notificationFilter.title || '鍏ㄩ儴閫氱煡';
   const canLoadMoreNotifications = notificationFilter.mode !== 'bucket' && notificationItems.length < notificationTotal;
+  const respondedEmergencyIdSet = React.useMemo(() => new Set(respondedEmergencies.map(id => String(id))), [respondedEmergencies]);
+  const ignoredEmergencyIdSet = React.useMemo(() => new Set(ignoredEmergencies.map(id => String(id))), [ignoredEmergencies]);
+
+  const loadEmergencyRequests = async () => {
+    setEmergencyLoading(true);
+    setEmergencyLoadError('');
+
+    try {
+      const response = await emergencyApi.getList({
+        tab: 'all',
+        pageNum: 1,
+        pageSize: 20,
+      });
+
+      if (!isSuccessResponse(response)) {
+        throw new Error(response?.msg || '加载紧急求助失败');
+      }
+
+      const rows = extractEmergencyListRows(response);
+      const normalizedRows = rows.map((item, index) => normalizeEmergencyListItem(item, index))
+        .filter(item => item?.id !== undefined && item?.id !== null)
+        .sort((left, right) => toSafeNumber(right?.timestamp) - toSafeNumber(left?.timestamp));
+
+      setEmergencyRequestsData(normalizedRows);
+    } catch (error) {
+      console.error('鍔犺浇绱ф€ユ眰鍔╁垪琛ㄥけ璐?', error);
+      setEmergencyRequestsData([]);
+      setEmergencyLoadError(error?.message || '加载紧急求助失败');
+    } finally {
+      setEmergencyLoading(false);
+    }
+  };
 
   const applyNotificationReadLocally = notification => {
     if (!notification || toSafeNumber(notification.readFlag) === 1) {
@@ -492,7 +544,7 @@ export default function MessagesScreen({
         setNotificationSummary(normalizeSummary(response.data));
       }
     } catch (error) {
-      console.error('加载通知汇总失败:', error);
+      console.error('鍔犺浇閫氱煡姹囨€诲け璐?', error);
     }
   };
 
@@ -508,7 +560,7 @@ export default function MessagesScreen({
       }));
       setCategoryPreviewMap(Object.fromEntries(results));
     } catch (error) {
-      console.error('加载通知分类预览失败:', error);
+      console.error('鍔犺浇閫氱煡鍒嗙被棰勮澶辫触:', error);
     }
   };
 
@@ -522,7 +574,7 @@ export default function MessagesScreen({
         setPrivateConversations(response.data.conversations || []);
       }
     } catch (error) {
-      console.error('加载私信简表失败:', error);
+      console.error('鍔犺浇绉佷俊绠€琛ㄥけ璐?', error);
     } finally {
       setPrivateLoading(false);
     }
@@ -573,7 +625,7 @@ export default function MessagesScreen({
         return;
       }
 
-      console.error('加载关注列表失败:', error);
+      console.error('鍔犺浇鍏虫敞鍒楄〃澶辫触:', error);
       setFollowingUsers([]);
       setFollowingUsersLoadError(error.message || t('screens.privateConversation.loadFailed'));
     } finally {
@@ -599,8 +651,8 @@ export default function MessagesScreen({
         setNotificationTotal(total);
         setNotificationPage(1);
       } catch (error) {
-        console.error('加载桶通知失败:', error);
-        showAppAlert('提示', error.message || '加载通知失败，请稍后重试');
+        console.error('鍔犺浇妗堕€氱煡澶辫触:', error);
+        showAppAlert('鎻愮ず', error.message || '鍔犺浇閫氱煡澶辫触锛岃绋嶅悗閲嶈瘯');
       } finally {
         setNotificationLoading(false);
         setNotificationLoadingMore(false);
@@ -627,9 +679,9 @@ export default function MessagesScreen({
         setNotificationPage(pageNum);
       }
     } catch (error) {
-      console.error('加载通知列表失败:', error);
+      console.error('鍔犺浇閫氱煡鍒楄〃澶辫触:', error);
       if (pageNum === 1) {
-        showAppAlert('提示', error.message || '加载通知失败，请稍后重试');
+        showAppAlert('鎻愮ず', error.message || '鍔犺浇閫氱煡澶辫触锛岃绋嶅悗閲嶈瘯');
       }
     } finally {
       setNotificationLoading(false);
@@ -644,6 +696,7 @@ export default function MessagesScreen({
     loadNotificationSummary();
     loadCategoryPreviews();
     loadPrivateUnreadBrief();
+    loadEmergencyRequests();
   }, [isFocused]);
 
   useEffect(() => {
@@ -667,7 +720,7 @@ export default function MessagesScreen({
   const handleCategoryPress = group => {
     const nextFilter = notificationFilter.mode === 'category' && notificationFilter.category === group.key ? DEFAULT_NOTIFICATION_FILTER : {
       mode: 'category',
-      title: `${group.title}通知`,
+      title: `${group.title}閫氱煡`,
       category: group.key,
       bucketKey: null,
       eventTypes: []
@@ -683,7 +736,7 @@ export default function MessagesScreen({
           applyNotificationReadLocally(notification);
         }
       } catch (error) {
-        showAppAlert('提示', error.message || '标记已读失败，请稍后重试');
+        showAppAlert('鎻愮ず', error.message || '鏍囪宸茶澶辫触锛岃绋嶅悗閲嶈瘯');
         return;
       }
     }
@@ -724,7 +777,7 @@ export default function MessagesScreen({
       });
       return;
     }
-    showAppAlert(notification.title || '通知', notification.summary || '当前通知暂无可跳转的业务数据');
+    showAppAlert(notification.title || '閫氱煡', notification.summary || '褰撳墠閫氱煡鏆傛棤鍙烦杞殑涓氬姟鏁版嵁');
   };
 
   const handleMarkAllRead = () => {
@@ -746,7 +799,7 @@ export default function MessagesScreen({
             showAppAlert(t('screens.messagesScreen.alerts.success'), t('screens.messagesScreen.alerts.markAllReadSuccess'));
           }
         } catch (error) {
-          showAppAlert('提示', error.message || '全部已读失败，请稍后重试');
+          showAppAlert('鎻愮ず', error.message || '鍏ㄩ儴宸茶澶辫触锛岃绋嶅悗閲嶈瘯');
         }
       }
     }]);
@@ -825,26 +878,51 @@ export default function MessagesScreen({
     setVoteReason('');
   };
 
-  // 处理响应紧急求助
+  // 澶勭悊鍝嶅簲绱ф€ユ眰鍔?  // 处理响应紧急求助
   const handleRespondEmergency = (item) => {
     showAppAlert('确认响应', `确定要响应 ${item.name} 的紧急求助吗？`, [
       { text: '取消', style: 'cancel' },
-      { 
-        text: '立即响应', 
-        onPress: () => {
-          respondToEmergency(item.id);
-          showAppAlert('成功', '已响应求助，请尽快前往现场');
+      {
+        text: '立即响应',
+        onPress: async () => {
+          try {
+            const response = await emergencyApi.joinHelp(item.id);
+            if (!isSuccessResponse(response)) {
+              throw new Error(response?.msg || '加入救援失败');
+            }
+
+            respondToEmergency(String(item.id));
+            setEmergencyRequestsData(prev => prev.map(prevItem => {
+              if (String(prevItem.id) !== String(item.id)) {
+                return prevItem;
+              }
+
+              const nextCount = Math.max(0, toSafeNumber(prevItem.respondedCount)) + 1;
+              return {
+                ...prevItem,
+                respondedCount: nextCount,
+              };
+            }));
+            showAppAlert('成功', '已加入救援，请尽快前往现场');
+          } catch (error) {
+            console.error('加入救援失败:', error);
+            showAppAlert('失败', error?.message || '加入救援失败，请稍后重试');
+          }
         }
       }
     ]);
   };
 
-  // 处理忽略紧急求助
   const handleIgnoreEmergency = (item) => {
-    ignoreEmergency(item.id);
+    ignoreEmergency(String(item.id));
   };
 
   const handleOpenEmergencyLocation = (item) => {
+    if (!Number.isFinite(item.latitude) || !Number.isFinite(item.longitude)) {
+      showAppAlert('提示', '当前求助未提供可用坐标');
+      return;
+    }
+
     void openMapChooser({
       label: `${item.name} 的求助位置`,
       location: item.location,
@@ -854,18 +932,15 @@ export default function MessagesScreen({
     });
   };
 
-  // 判断紧急求助是否在1小时内
-  const isWithinOneHour = (timestamp) => {
-    return Date.now() - timestamp < 60 * 60 * 1000; // 1小时 = 60分钟 * 60秒 * 1000毫秒
-  };
+  const isWithinOneHour = (timestamp) => Number.isFinite(Number(timestamp)) && Date.now() - Number(timestamp) < 60 * 60 * 1000;
 
-  // 过滤紧急求助列表：排除已响应、已忽略和已满员的，只显示最新3条
-  const filteredEmergencyRequests = emergencyRequests
+  const filteredEmergencyRequests = emergencyRequestsData
     .filter(item => {
-      const isCompleted = item.respondedCount >= item.rescuerCount;
-      return !respondedEmergencies.includes(item.id) && 
-             !ignoredEmergencies.includes(item.id) && 
-             !isCompleted; // 排除已满员的
+      const isCompleted = toSafeNumber(item.respondedCount) >= toSafeNumber(item.rescuerCount) && toSafeNumber(item.rescuerCount) > 0;
+      const idKey = String(item.id);
+      return !respondedEmergencyIdSet.has(idKey) &&
+             !ignoredEmergencyIdSet.has(idKey) &&
+             !isCompleted;
     })
     .slice(0, 3);
 
@@ -908,7 +983,7 @@ export default function MessagesScreen({
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* 顶部快捷入口 */}
+        {/* 椤堕儴蹇嵎鍏ュ彛 */}
         <View style={styles.quickSection}>
           <View style={styles.quickGrid}>
             {quickEntries.map(entry => <TouchableOpacity key={entry.key} style={styles.quickItem} onPress={() => handleQuickEntryPress(entry)}>
@@ -929,7 +1004,7 @@ export default function MessagesScreen({
           </View>
         </View>
 
-        {/* 邀请回答模块 */}
+        {/* 閭€璇峰洖绛旀ā鍧?*/}
         <View style={styles.inviteSection}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
@@ -955,7 +1030,7 @@ export default function MessagesScreen({
             </TouchableOpacity>)}
         </View>
 
-        {/* 紧急求助模块 */}
+        {/* 绱ф€ユ眰鍔╂ā鍧?*/}
         <View style={styles.emergencySection}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
@@ -970,9 +1045,17 @@ export default function MessagesScreen({
             </TouchableOpacity>
           </View>
           
-          {filteredEmergencyRequests.map(item => {
+          {emergencyLoading ? (
+            <View style={styles.sectionLoading}>
+              <ActivityIndicator color="#ef4444" />
+            </View>
+          ) : filteredEmergencyRequests.length === 0 ? (
+            <View style={styles.sectionEmpty}>
+              <Text style={styles.sectionEmptyText}>{emergencyLoadError || '暂无紧急求助'}</Text>
+            </View>
+          ) : filteredEmergencyRequests.map(item => {
             const withinOneHour = isWithinOneHour(item.timestamp);
-            const isResponded = respondedEmergencies.includes(item.id);
+            const isResponded = respondedEmergencyIdSet.has(String(item.id));
             
             return (
               <View 
@@ -982,7 +1065,7 @@ export default function MessagesScreen({
                   withinOneHour && styles.emergencyItemHigh
                 ]}
               >
-                {/* 紧急标识条 - 只在1小时内显示 */}
+                {/* 绱ф€ユ爣璇嗘潯 - 鍙湪1灏忔椂鍐呮樉绀?*/}
                 {withinOneHour && (
                   <View style={styles.emergencyIndicator} />
                 )}
@@ -1020,7 +1103,7 @@ export default function MessagesScreen({
                   <View style={styles.emergencyRescuerInfo}>
                     <Ionicons name="people-outline" size={16} color="#6b7280" />
                     <Text style={styles.emergencyRescuerText}>
-                      需要 {item.rescuerCount} 人救援
+                      闇€瑕?{item.rescuerCount} 浜烘晳鎻?
                     </Text>
                   </View>
                   
@@ -1036,14 +1119,14 @@ export default function MessagesScreen({
                           style={styles.ignoreBtn}
                           onPress={() => handleIgnoreEmergency(item)}
                         >
-                          <Text style={styles.ignoreBtnText}>忽略</Text>
+                          <Text style={styles.ignoreBtnText}>蹇界暐</Text>
                         </TouchableOpacity>
                         <TouchableOpacity 
                           style={styles.respondBtn}
                           onPress={() => handleRespondEmergency(item)}
                         >
                           <Ionicons name="flash" size={14} color="#fff" />
-                          <Text style={styles.respondBtnText}>立即响应</Text>
+                          <Text style={styles.respondBtnText}>绔嬪嵆鍝嶅簲</Text>
                         </TouchableOpacity>
                       </>
                     )}
@@ -1054,7 +1137,7 @@ export default function MessagesScreen({
           })}
         </View>
 
-        {/* 仲裁邀请 - 已隐藏 */}
+        {/* 浠茶閭€璇?- 宸查殣钘?*/}
         {/* <View style={styles.arbitrationSection}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
@@ -1076,13 +1159,13 @@ export default function MessagesScreen({
                     </View>}
                 </View>
                 <Text style={styles.arbitrationQuestion} numberOfLines={1}>
-                  {t('screens.messagesScreen.arbitration.question')}：{item.question}
+                  {t('screens.messagesScreen.arbitration.question')}锛歿item.question}
                 </Text>
                 <Text style={styles.arbitrationAnswer} numberOfLines={1}>
-                  {t('screens.messagesScreen.arbitration.answerAuthor')}：{item.answer}
+                  {t('screens.messagesScreen.arbitration.answerAuthor')}锛歿item.answer}
                 </Text>
                 <Text style={styles.arbitrationReason} numberOfLines={2}>
-                  {t('screens.messagesScreen.arbitration.reason')}：{item.reason}
+                  {t('screens.messagesScreen.arbitration.reason')}锛歿item.reason}
                 </Text>
               </View>
               <View style={styles.arbitrationRight}>
@@ -1097,7 +1180,7 @@ export default function MessagesScreen({
             </View>)}
         </View> */}
 
-        {/* 消息分组 */}
+        {/* 娑堟伅鍒嗙粍 */}
         <View style={styles.messageGroupSection}>
           {notificationGroups.map(group => <TouchableOpacity key={group.key} style={[styles.messageGroupItem, notificationFilter.mode === 'category' && notificationFilter.category === group.key && styles.messageGroupItemActive]} onPress={() => handleCategoryPress(group)}>
               <View style={[styles.groupIcon, {
@@ -1118,7 +1201,7 @@ export default function MessagesScreen({
             </TouchableOpacity>)}
         </View>
 
-        {/* 私信列表 */}
+        {/* 绉佷俊鍒楄〃 */}
         <View style={styles.notificationSection}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
@@ -1126,26 +1209,26 @@ export default function MessagesScreen({
               <Text style={styles.sectionTitle}>{currentFilterTitle}</Text>
             </View>
             {notificationFilter.mode !== 'all' && <TouchableOpacity onPress={() => setNotificationFilter(DEFAULT_NOTIFICATION_FILTER)}>
-                <Text style={styles.sectionMore}>查看全部</Text>
+                <Text style={styles.sectionMore}>鏌ョ湅鍏ㄩ儴</Text>
               </TouchableOpacity>}
           </View>
           {notificationLoading ? <View style={styles.sectionLoading}>
               <ActivityIndicator color="#ef4444" />
             </View> : notificationItems.length === 0 ? <View style={styles.sectionEmpty}>
-              <Text style={styles.sectionEmptyText}>暂无通知</Text>
+              <Text style={styles.sectionEmptyText}>鏆傛棤閫氱煡</Text>
             </View> : <>
               {notificationItems.map(item => <TouchableOpacity key={item.id} style={[styles.notificationItem, toSafeNumber(item.readFlag) !== 1 && styles.notificationItemUnread]} onPress={() => handleNotificationPress(item)}>
                   <View style={styles.notificationBody}>
                     <View style={styles.notificationHeader}>
-                      <Text style={styles.notificationTitle} numberOfLines={1}>{item.title || '站内通知'}</Text>
+                      <Text style={styles.notificationTitle} numberOfLines={1}>{item.title || '绔欏唴閫氱煡'}</Text>
                       <Text style={styles.notificationTime}>{formatRelativeTime(item.createTime)}</Text>
                     </View>
-                    <Text style={styles.notificationSummary} numberOfLines={2}>{item.summary || item.eventType || '暂无摘要'}</Text>
+                    <Text style={styles.notificationSummary} numberOfLines={2}>{item.summary || item.eventType || '鏆傛棤鎽樿'}</Text>
                   </View>
                   {toSafeNumber(item.readFlag) !== 1 && <View style={styles.notificationUnreadDot} />}
                 </TouchableOpacity>)}
               {canLoadMoreNotifications && <TouchableOpacity style={styles.loadMoreButton} onPress={handleLoadMoreNotifications} disabled={notificationLoadingMore}>
-                  {notificationLoadingMore ? <ActivityIndicator size="small" color="#ef4444" /> : <Text style={styles.loadMoreText}>加载更多</Text>}
+                  {notificationLoadingMore ? <ActivityIndicator size="small" color="#ef4444" /> : <Text style={styles.loadMoreText}>鍔犺浇鏇村</Text>}
                 </TouchableOpacity>}
             </>}
         </View>
@@ -1195,15 +1278,15 @@ export default function MessagesScreen({
           {privateLoading ? <View style={styles.sectionLoading}>
               <ActivityIndicator color="#ef4444" />
             </View> : privateConversations.length === 0 ? <View style={styles.sectionEmpty}>
-              <Text style={styles.sectionEmptyText}>暂无未读私信</Text>
+              <Text style={styles.sectionEmptyText}>鏆傛棤鏈绉佷俊</Text>
             </View> : privateConversations.map(item => <TouchableOpacity key={item.conversationId} style={styles.privateItem} onPress={() => showAppAlert('私信', '当前版本暂未接入私信会话详情页')}>
               <Avatar uri={item.peerAvatar} name={item.peerNickName} size={48} />
               <View style={styles.privateContent}>
                 <View style={styles.privateTitleRow}>
-                  <Text style={styles.privateName}>{item.peerNickName || `用户${item.peerUserId}`}</Text>
+                  <Text style={styles.privateName}>{item.peerNickName || `鐢ㄦ埛${item.peerUserId}`}</Text>
                   <Text style={styles.privateTime}>{formatRelativeTime(item.lastMessageTime)}</Text>
                 </View>
-                <Text style={styles.privateMessage} numberOfLines={1}>{item.lastMessagePreview || '暂无消息内容'}</Text>
+                <Text style={styles.privateMessage} numberOfLines={1}>{item.lastMessagePreview || '鏆傛棤娑堟伅鍐呭'}</Text>
               </View>
               {toSafeNumber(item.unreadCount) > 0 && <View style={styles.privateBadge}>
                   <Text style={styles.privateBadgeText}>{toSafeNumber(item.unreadCount)}</Text>
@@ -1216,7 +1299,7 @@ export default function MessagesScreen({
       }} />
       </ScrollView>
 
-      {/* 发送私信弹窗 */}
+      {/* 鍙戦€佺淇″脊绐?*/}
       <Modal visible={showPrivateModal} animationType="slide" statusBarTranslucent>
         <KeyboardAvoidingView
           style={styles.privateModalKeyboardView}
@@ -1230,11 +1313,11 @@ export default function MessagesScreen({
             </TouchableOpacity>
             <Text style={styles.privateModalTitle}>{t('screens.messagesScreen.privateModal.title')}</Text>
             <TouchableOpacity style={[styles.sendBtn, (!selectedUser || !messageContent.trim() || privateSending) && styles.sendBtnDisabled]} onPress={handleSendMessage} disabled={!selectedUser || !messageContent.trim() || privateSending}>
-              <Text style={[styles.sendBtnText, (!selectedUser || !messageContent.trim() || privateSending) && styles.sendBtnTextDisabled]}>{privateSending ? '发送中...' : t('screens.messagesScreen.privateModal.send')}</Text>
+              <Text style={[styles.sendBtnText, (!selectedUser || !messageContent.trim() || privateSending) && styles.sendBtnTextDisabled]}>{privateSending ? '鍙戦€佷腑...' : t('screens.messagesScreen.privateModal.send')}</Text>
             </TouchableOpacity>
           </View>
 
-          {/* 搜索用户 */}
+          {/* 鎼滅储鐢ㄦ埛 */}
           <View style={styles.searchSection}>
             <View style={styles.searchBar}>
               <Ionicons name="search" size={18} color="#9ca3af" />
@@ -1245,7 +1328,7 @@ export default function MessagesScreen({
             </View>
           </View>
 
-          {/* 已选择的用户 */}
+          {/* 宸查€夋嫨鐨勭敤鎴?*/}
           <View style={[styles.selectedUserSection, {
           display: selectedUser ? 'flex' : 'none'
         }]}>
@@ -1259,7 +1342,7 @@ export default function MessagesScreen({
             </View>
           </View>
 
-          {/* 用户列表 */}
+          {/* 鐢ㄦ埛鍒楄〃 */}
           <View style={[styles.userListSection, {
           display: selectedUser ? 'none' : 'flex'
         }]}>
@@ -1288,7 +1371,7 @@ export default function MessagesScreen({
             </ScrollView>
           </View>
 
-          {/* 私信内容 */}
+          {/* 绉佷俊鍐呭 */}
           <View style={[styles.messageInputSection, {
           display: selectedUser ? 'flex' : 'none',
           paddingBottom: bottomSafeInset
@@ -1301,7 +1384,7 @@ export default function MessagesScreen({
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* 专家投票弹窗 */}
+      {/* 涓撳鎶曠エ寮圭獥 */}
       <Modal visible={showVoteModal} animationType="slide" transparent statusBarTranslucent>
         <KeyboardAvoidingView
           style={styles.voteModalKeyboardView}
@@ -1315,7 +1398,7 @@ export default function MessagesScreen({
             <Text style={styles.voteModalTitle}>{t('screens.messagesScreen.voteModal.title')}</Text>
 
             {Boolean(currentArbitration) && <ScrollView style={styles.voteModalContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
-                {/* 问题信息 */}
+                {/* 闂淇℃伅 */}
                 <View style={styles.voteQuestionCard}>
                   <Text style={styles.voteQuestionLabel}>{t('screens.messagesScreen.voteModal.questionLabel')}</Text>
                   <Text style={styles.voteQuestionText}>{currentArbitration.question}</Text>
@@ -1325,7 +1408,7 @@ export default function MessagesScreen({
                   </View>
                 </View>
 
-                {/* 仲裁理由 */}
+                {/* 浠茶鐞嗙敱 */}
                 <View style={styles.voteReasonCard}>
                   <Text style={styles.voteReasonLabel}>{t('screens.messagesScreen.voteModal.reasonLabel')}</Text>
                   <Text style={styles.voteReasonText}>{currentArbitration.reason}</Text>
@@ -1336,7 +1419,7 @@ export default function MessagesScreen({
                   </View>
                 </View>
 
-                {/* 投票选项 */}
+                {/* 鎶曠エ閫夐」 */}
                 <Text style={styles.voteChoiceTitle}>{t('screens.messagesScreen.voteModal.voteChoiceTitle')}</Text>
                 <View style={styles.voteChoices}>
                   <TouchableOpacity style={[styles.voteChoiceBtn, voteChoice === 'agree' && styles.voteChoiceBtnActive]} onPress={() => setVoteChoice('agree')}>
@@ -1364,7 +1447,7 @@ export default function MessagesScreen({
                   </TouchableOpacity>
                 </View>
 
-                {/* 投票理由 */}
+                {/* 鎶曠エ鐞嗙敱 */}
                 <Text style={styles.voteReasonInputLabel}>{t('screens.messagesScreen.voteModal.reasonInputLabel')}</Text>
                 <TextInput style={styles.voteReasonInput} placeholder={t('screens.messagesScreen.voteModal.reasonPlaceholder')} placeholderTextColor="#9ca3af" value={voteReason} onChangeText={setVoteReason} multiline numberOfLines={4} textAlignVertical="top" />
 
@@ -1430,7 +1513,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1
   },
-  // 快捷入口样式
+  // 蹇嵎鍏ュ彛鏍峰紡
   quickSection: {
     backgroundColor: '#fff',
     paddingVertical: 16
@@ -1485,7 +1568,7 @@ const styles = StyleSheet.create({
     color: '#4b5563',
     marginTop: 6
   },
-  // 邀请回答样式
+  // 閭€璇峰洖绛旀牱寮?
   inviteSection: {
     backgroundColor: '#fff',
     marginTop: 8,
@@ -1551,7 +1634,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '500'
   },
-  // 紧急求助样式
+  // 绱ф€ユ眰鍔╂牱寮?
   emergencySection: {
     backgroundColor: '#fff',
     marginTop: 8,
@@ -1788,7 +1871,7 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontWeight: '500'
   },
-  // 消息分组样式
+  // 娑堟伅鍒嗙粍鏍峰紡
   messageGroupSection: {
     backgroundColor: '#fff',
     marginTop: 8
@@ -1918,7 +2001,7 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontWeight: '500'
   },
-  // 私信列表样式
+  // 绉佷俊鍒楄〃鏍峰紡
   privateSection: {
     backgroundColor: '#fff',
     marginTop: 8,
@@ -1969,7 +2052,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600'
   },
-  // 发送私信弹窗样式
+  // 鍙戦€佺淇″脊绐楁牱寮?
   inlineCountBadge: {
     backgroundColor: '#ef4444',
     minWidth: 18,
@@ -2156,7 +2239,7 @@ const styles = StyleSheet.create({
     color: modalTokens.textPrimary,
     minHeight: 150
   },
-  // 仲裁邀请样式
+  // 浠茶閭€璇锋牱寮?
   arbitrationSection: {
     backgroundColor: '#fff',
     marginTop: 8,
@@ -2249,7 +2332,7 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontWeight: '500'
   },
-  // 专家投票弹窗样式
+  // 涓撳鎶曠エ寮圭獥鏍峰紡
   voteModalOverlay: {
     flex: 1,
     backgroundColor: modalTokens.overlay,
@@ -2468,3 +2551,4 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   }
 });
+
