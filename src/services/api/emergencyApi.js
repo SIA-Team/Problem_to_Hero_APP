@@ -1,39 +1,19 @@
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_CONFIG, API_ENDPOINTS, getFullApiUrl } from '../../config/api';
-
-const requestWithAuth = async ({ method, url, data }) => {
-  const token = await AsyncStorage.getItem('authToken');
-  const headers = {
-    ...API_CONFIG.HEADERS,
-  };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  try {
-    const response = await axios({
-      method,
-      url,
-      data,
-      timeout: API_CONFIG.TIMEOUT,
-      headers,
-    });
-
-    return response.data;
-  } catch (error) {
-    const responseData = error.response?.data;
-    const wrappedError = new Error(responseData?.msg || error.message || 'Request failed');
-    wrappedError.status = error.response?.status;
-    wrappedError.data = responseData;
-    throw wrappedError;
-  }
-};
+import apiClient from './apiClient';
+import { API_ENDPOINTS, replaceUrlParams } from '../../config/api';
 
 const emergencyApi = {
-  getQuota: () => requestWithAuth({ method: 'get', url: getFullApiUrl(API_ENDPOINTS.EMERGENCY.QUOTA) }),
-  publish: (data) => requestWithAuth({ method: 'post', url: getFullApiUrl(API_ENDPOINTS.EMERGENCY.PUBLISH), data }),
+  getList: (params) => apiClient.get(API_ENDPOINTS.EMERGENCY.HELP_LIST, { params }),
+  getDetail: (id) => apiClient.get(replaceUrlParams(API_ENDPOINTS.EMERGENCY.HELP_DETAIL, { id })),
+  getComments: (id) => apiClient.get(replaceUrlParams(API_ENDPOINTS.EMERGENCY.HELP_COMMENTS, { id })),
+  createComment: (id, data) => apiClient.post(replaceUrlParams(API_ENDPOINTS.EMERGENCY.HELP_COMMENTS, { id }), data),
+  getMaskedContact: (id) => apiClient.get(replaceUrlParams(API_ENDPOINTS.EMERGENCY.HELP_CONTACT, { id })),
+  joinHelp: (id) => apiClient.post(replaceUrlParams(API_ENDPOINTS.EMERGENCY.HELP_JOIN, { id })),
+  resolveHelp: (id) => apiClient.post(replaceUrlParams(API_ENDPOINTS.EMERGENCY.HELP_RESOLVE, { id })),
+  leaveHelp: (id) => apiClient.post(replaceUrlParams(API_ENDPOINTS.EMERGENCY.HELP_LEAVE, { id })),
+  getQuota: () => apiClient.get(API_ENDPOINTS.EMERGENCY.QUOTA),
+  getPublicSettings: () => apiClient.get(API_ENDPOINTS.EMERGENCY.SETTINGS_PUBLIC),
+  getFeeEstimate: (params) => apiClient.get(API_ENDPOINTS.EMERGENCY.FEE_ESTIMATE, { params }),
+  publish: (data) => apiClient.post(API_ENDPOINTS.EMERGENCY.PUBLISH, data),
 };
 
 export default emergencyApi;

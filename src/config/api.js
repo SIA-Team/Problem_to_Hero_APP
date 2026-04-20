@@ -181,11 +181,20 @@ export const API_ENDPOINTS = {
   
   // 紧急求助相关
   EMERGENCY: {
+    HELP_LIST: buildApiPath(SERVICES.USER, '/app/content/emergency-help/list'),
+    HELP_DETAIL: buildApiPath(SERVICES.USER, '/app/content/emergency-help/:id'),
+    HELP_COMMENTS: buildApiPath(SERVICES.USER, '/app/content/emergency-help/:id/comments'),
+    HELP_CONTACT: buildApiPath(SERVICES.USER, '/app/content/emergency-help/:id/contact'),
+    HELP_JOIN: buildApiPath(SERVICES.USER, '/app/content/emergency-help/:id/join'),
+    HELP_RESOLVE: buildApiPath(SERVICES.USER, '/app/content/emergency-help/:id/resolve'),
+    HELP_LEAVE: buildApiPath(SERVICES.USER, '/app/content/emergency-help/:id/leave'),
     LIST: '/emergency',
     CREATE: '/emergency',
     DETAIL: '/emergency/:id',
     RESPOND: '/emergency/:id/respond',
     QUOTA: buildApiPath(SERVICES.USER, '/app/content/emergency-help/quota'),
+    SETTINGS_PUBLIC: buildApiPath(SERVICES.USER, '/app/content/emergency-help/settings/public'),
+    FEE_ESTIMATE: buildApiPath(SERVICES.USER, '/app/content/emergency-help/fee-estimate'),
     PUBLISH: buildApiPath(SERVICES.USER, '/app/content/emergency-help/publish'),
   },
   
