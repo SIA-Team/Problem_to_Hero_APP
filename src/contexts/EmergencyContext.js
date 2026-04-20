@@ -7,7 +7,15 @@ export const EmergencyProvider = ({ children }) => {
   const [ignoredEmergencies, setIgnoredEmergencies] = useState([]);
 
   const respondToEmergency = (emergencyId) => {
-    setRespondedEmergencies(prev => [...prev, emergencyId]);
+    const normalizedId = String(emergencyId);
+    setRespondedEmergencies(prev => (
+      prev.some(id => String(id) === normalizedId) ? prev : [...prev, normalizedId]
+    ));
+  };
+
+  const cancelEmergencyResponse = (emergencyId) => {
+    const normalizedId = String(emergencyId);
+    setRespondedEmergencies(prev => prev.filter(id => String(id) !== normalizedId));
   };
 
   const ignoreEmergency = (emergencyId) => {
@@ -28,6 +36,7 @@ export const EmergencyProvider = ({ children }) => {
         respondedEmergencies,
         ignoredEmergencies,
         respondToEmergency,
+        cancelEmergencyResponse,
         ignoreEmergency,
         isResponded,
         isIgnored

@@ -1110,7 +1110,7 @@ export default function HomeScreen({ navigation }) {
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.localFilterItem}
-                    onPress={() => setShowEmergencyModal(true)}
+                    onPress={() => navigation.navigate('Emergency')}
                   >
                     <View style={[styles.localFilterIcon, { backgroundColor: '#fee2e2' }]}>
                       <Ionicons name="alert-circle" size={22} color="#ef4444" />

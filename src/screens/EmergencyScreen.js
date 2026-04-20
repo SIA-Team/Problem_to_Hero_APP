@@ -10,8 +10,19 @@ import { modalTokens } from '../components/modalTokens';
 import { showAppAlert } from '../utils/appAlert';
 import { getRegionData } from '../data/regionData';
 import emergencyApi from '../services/api/emergencyApi';
+import uploadApi from '../services/api/uploadApi';
+import { buildEmergencyAddressText, resolveChinaRegionFromAddress } from '../utils/chinaRegionMatcher';
 
 import { scaleFont } from '../utils/responsive';
+
+const DEFAULT_EMERGENCY_SETTINGS = {
+  dailyFreeTotal: 0,
+  freeHelperSlots: 5,
+  extraHelperPriceCents: 200,
+  extraPublishPriceCents: 500,
+  nearbyNotifyRadiusKm: 5,
+};
+
 export default function EmergencyScreen({ navigation }) {
   const t = (key) => {
     if (!i18n || typeof i18n.t !== 'function') {
@@ -27,6 +38,7 @@ export default function EmergencyScreen({ navigation }) {
     description: '', 
     location: '', 
     contact: '', 
+    specificLocation: '',
     rescuerCount: 1 
   });
   const [emergencyImages, setEmergencyImages] = useState([]); // 紧急求助图片片?
@@ -36,43 +48,192 @@ export default function EmergencyScreen({ navigation }) {
   const [showRegionModal, setShowRegionModal] = useState(false);
   const [regionStep, setRegionStep] = useState(0);
   const [selectedRegion, setSelectedRegion] = useState({ country: '', city: '', state: '', district: '' });
+  const [selectedCoordinates, setSelectedCoordinates] = useState(null);
+  const [locationAddress, setLocationAddress] = useState(null);
+  const [resolvedChinaRegion, setResolvedChinaRegion] = useState(null);
+  const [emergencySettings, setEmergencySettings] = useState(DEFAULT_EMERGENCY_SETTINGS);
+  const [emergencyFeeEstimate, setEmergencyFeeEstimate] = useState(null);
 
-  const loadEmergencyQuota = React.useCallback(async () => {
+  const toSafeNumber = (value, fallback = 0) => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : fallback;
+  };
+
+  const formatAmount = (value) => {
+    const num = toSafeNumber(value, 0);
+    if (Number.isInteger(num)) {
+      return String(num);
+    }
+    return num.toFixed(2).replace(/\.?0+$/, '');
+  };
+
+  const normalizeEmergencySettings = React.useCallback((rawSettings = {}) => {
+    const normalized = {
+      dailyFreeTotal: Math.max(0, Math.round(toSafeNumber(rawSettings?.dailyFreeTotal, DEFAULT_EMERGENCY_SETTINGS.dailyFreeTotal))),
+      freeHelperSlots: Math.max(0, Math.round(toSafeNumber(rawSettings?.freeHelperSlots, DEFAULT_EMERGENCY_SETTINGS.freeHelperSlots))),
+      extraHelperPriceCents: Math.max(0, Math.round(toSafeNumber(rawSettings?.extraHelperPriceCents, DEFAULT_EMERGENCY_SETTINGS.extraHelperPriceCents))),
+      extraPublishPriceCents: Math.max(0, Math.round(toSafeNumber(rawSettings?.extraPublishPriceCents, DEFAULT_EMERGENCY_SETTINGS.extraPublishPriceCents))),
+      nearbyNotifyRadiusKm: Math.max(0, toSafeNumber(rawSettings?.nearbyNotifyRadiusKm, DEFAULT_EMERGENCY_SETTINGS.nearbyNotifyRadiusKm)),
+    };
+
+    setEmergencySettings(normalized);
+    return normalized;
+  }, []);
+
+  const loadEmergencySettings = React.useCallback(async () => {
     try {
-      // 模拟网络延迟
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // 使用假数据
+      const response = await emergencyApi.getPublicSettings();
+      return normalizeEmergencySettings(response?.data || {});
+    } catch (error) {
+      console.error('Failed to load emergency public settings:', error);
+      return DEFAULT_EMERGENCY_SETTINGS;
+    }
+  }, [normalizeEmergencySettings]);
+
+  const loadEmergencyQuota = React.useCallback(async (fallbackTotal = 0) => {
+    try {
+      const response = await emergencyApi.getQuota();
+      if (response?.code !== 200) {
+        throw new Error(response?.msg || 'Failed to load emergency quota');
+      }
+
+      const quotaData = response?.data || {};
+      const total = Number(quotaData.total);
+      const remaining = Number(quotaData.remaining);
+
       setEmergencyQuota({
-        total: 3,
-        remaining: 2,
+        total: Number.isFinite(total) && total >= 0 ? total : Math.max(0, Number(fallbackTotal) || 0),
+        remaining: Number.isFinite(remaining) && remaining >= 0 ? remaining : 0,
       });
     } catch (error) {
       console.error('Failed to load emergency quota:', error);
+      setEmergencyQuota((prev) => prev || {
+        total: Math.max(0, Number(fallbackTotal) || 0),
+        remaining: 0,
+      });
     }
   }, []);
 
+  const buildLocalFeeEstimate = React.useCallback((neededHelperCount) => {
+    const requestedHelperCount = Math.max(1, Math.round(toSafeNumber(neededHelperCount, 1)));
+    const quotaTotal = Number(emergencyQuota?.total);
+    const quotaRemaining = Number(emergencyQuota?.remaining);
+    const dailyFreeTotal = Number.isFinite(quotaTotal) && quotaTotal >= 0
+      ? quotaTotal
+      : Math.max(0, Math.round(toSafeNumber(emergencySettings?.dailyFreeTotal, DEFAULT_EMERGENCY_SETTINGS.dailyFreeTotal)));
+    const remainingFree = Number.isFinite(quotaRemaining) && quotaRemaining >= 0
+      ? quotaRemaining
+      : Math.max(0, dailyFreeTotal);
+    const usedToday = Math.max(0, dailyFreeTotal - remainingFree);
+    const freeHelperSlots = Math.max(0, Math.round(toSafeNumber(emergencySettings?.freeHelperSlots, DEFAULT_EMERGENCY_SETTINGS.freeHelperSlots)));
+    const extraHelperPriceCents = Math.max(0, Math.round(toSafeNumber(emergencySettings?.extraHelperPriceCents, DEFAULT_EMERGENCY_SETTINGS.extraHelperPriceCents)));
+    const extraPublishPriceCents = Math.max(0, Math.round(toSafeNumber(emergencySettings?.extraPublishPriceCents, DEFAULT_EMERGENCY_SETTINGS.extraPublishPriceCents)));
+    const helperOverageCount = Math.max(0, requestedHelperCount - freeHelperSlots);
+    const helperOverageFeeCents = helperOverageCount * extraHelperPriceCents;
+    const publishOverageFeeCents = remainingFree <= 0 ? extraPublishPriceCents : 0;
+
+    return {
+      dailyFreeTotal,
+      usedToday,
+      remainingFree,
+      freeHelperSlots,
+      extraHelperPriceCents,
+      extraPublishPriceCents,
+      helperOverageCount,
+      helperOverageFeeCents,
+      publishOverageFeeCents,
+      totalFeeCents: helperOverageFeeCents + publishOverageFeeCents,
+    };
+  }, [emergencyQuota, emergencySettings]);
+
+  const normalizeEmergencyFeeEstimate = React.useCallback((rawData = {}, neededHelperCount) => {
+    const fallback = buildLocalFeeEstimate(neededHelperCount);
+    const dailyFreeTotal = Math.max(0, Math.round(toSafeNumber(rawData?.dailyFreeTotal, fallback.dailyFreeTotal)));
+    const remainingFree = Math.max(0, Math.round(toSafeNumber(rawData?.remainingFree, fallback.remainingFree)));
+    const freeHelperSlots = Math.max(0, Math.round(toSafeNumber(rawData?.freeHelperSlots, fallback.freeHelperSlots)));
+    const extraHelperPriceCents = Math.max(0, Math.round(toSafeNumber(rawData?.extraHelperPriceCents, fallback.extraHelperPriceCents)));
+    const extraPublishPriceCents = Math.max(0, Math.round(toSafeNumber(rawData?.extraPublishPriceCents, fallback.extraPublishPriceCents)));
+    const helperOverageCount = Math.max(0, Math.round(toSafeNumber(rawData?.helperOverageCount, Math.max(0, Math.round(toSafeNumber(neededHelperCount, 1)) - freeHelperSlots))));
+    const helperOverageFeeCents = Math.max(0, Math.round(toSafeNumber(rawData?.helperOverageFeeCents, helperOverageCount * extraHelperPriceCents)));
+    const publishOverageFeeCents = Math.max(0, Math.round(toSafeNumber(rawData?.publishOverageFeeCents, remainingFree <= 0 ? extraPublishPriceCents : 0)));
+    const totalFeeCents = Math.max(0, Math.round(toSafeNumber(rawData?.totalFeeCents, helperOverageFeeCents + publishOverageFeeCents)));
+    const usedToday = Math.max(0, Math.round(toSafeNumber(rawData?.usedToday, Math.max(0, dailyFreeTotal - remainingFree))));
+
+    return {
+      dailyFreeTotal,
+      usedToday,
+      remainingFree,
+      freeHelperSlots,
+      extraHelperPriceCents,
+      extraPublishPriceCents,
+      helperOverageCount,
+      helperOverageFeeCents,
+      publishOverageFeeCents,
+      totalFeeCents,
+    };
+  }, [buildLocalFeeEstimate]);
+
+  const loadEmergencyFeeEstimate = React.useCallback(async (neededHelperCount) => {
+    const requestedHelperCount = Math.max(1, Math.round(toSafeNumber(neededHelperCount, 1)));
+    try {
+      const response = await emergencyApi.getFeeEstimate({ neededHelperCount: requestedHelperCount });
+      if (response?.code !== 200) {
+        throw new Error(response?.msg || 'Failed to load emergency fee estimate');
+      }
+
+      const estimateData = normalizeEmergencyFeeEstimate(response?.data || {}, requestedHelperCount);
+      setEmergencyFeeEstimate(estimateData);
+      return estimateData;
+    } catch (error) {
+      console.error('Failed to load emergency fee estimate:', error);
+      const fallbackData = buildLocalFeeEstimate(requestedHelperCount);
+      setEmergencyFeeEstimate(fallbackData);
+      return fallbackData;
+    }
+  }, [buildLocalFeeEstimate, normalizeEmergencyFeeEstimate]);
+
   useFocusEffect(
     React.useCallback(() => {
-      loadEmergencyQuota();
-    }, [loadEmergencyQuota])
+      const syncEmergencyData = async () => {
+        const settings = await loadEmergencySettings();
+        await loadEmergencyQuota(settings?.dailyFreeTotal ?? 0);
+        await loadEmergencyFeeEstimate(1);
+      };
+
+      syncEmergencyData();
+    }, [loadEmergencyFeeEstimate, loadEmergencyQuota, loadEmergencySettings])
   );
 
-  const quotaLoaded = emergencyQuota !== null;
-  const freeCountValue = Number(emergencyQuota?.total);
-  const remainingFreeValue = Number(emergencyQuota?.remaining);
-  const freeCount = Number.isFinite(freeCountValue) && freeCountValue >= 0 ? freeCountValue : 0;
-  const remainingFree = Number.isFinite(remainingFreeValue) && remainingFreeValue >= 0 ? remainingFreeValue : 0;
+  React.useEffect(() => {
+    const helperCount = Math.max(1, Number(emergencyForm.rescuerCount) || 1);
+    const timer = setTimeout(() => {
+      loadEmergencyFeeEstimate(helperCount);
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [emergencyForm.rescuerCount, loadEmergencyFeeEstimate]);
+
+  const fallbackEstimate = buildLocalFeeEstimate(emergencyForm.rescuerCount || 1);
+  const activeFeeEstimate = emergencyFeeEstimate || fallbackEstimate;
+  const quotaLoaded = emergencyQuota !== null || emergencyFeeEstimate !== null;
+  const freeCount = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.dailyFreeTotal, 0)));
+  const remainingFree = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.remainingFree, 0)));
   const freeCountDisplay = quotaLoaded ? `${remainingFree}/${freeCount}` : '--/--';
   const hasRemainingFree = !quotaLoaded || remainingFree > 0;
-  
-  const freeRescuerLimit = 5;
-  const extraRescuerFee = 2;
-  
-  const calculateRescuerFee = (count) => {
-    if (count <= freeRescuerLimit) return 0;
-    return (count - freeRescuerLimit) * extraRescuerFee;
-  };
+
+  const freeRescuerLimit = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.freeHelperSlots, DEFAULT_EMERGENCY_SETTINGS.freeHelperSlots)));
+  const extraRescuerFeeCents = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.extraHelperPriceCents, DEFAULT_EMERGENCY_SETTINGS.extraHelperPriceCents)));
+  const extraPublishFeeCents = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.extraPublishPriceCents, DEFAULT_EMERGENCY_SETTINGS.extraPublishPriceCents)));
+  const helperOverageCount = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.helperOverageCount, Math.max(0, (Number(emergencyForm.rescuerCount) || 1) - freeRescuerLimit))));
+  const helperOverageFeeCents = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.helperOverageFeeCents, helperOverageCount * extraRescuerFeeCents)));
+  const publishOverageFeeCents = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.publishOverageFeeCents, hasRemainingFree ? 0 : extraPublishFeeCents)));
+  const totalEstimatedFeeCents = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.totalFeeCents, helperOverageFeeCents + publishOverageFeeCents)));
+
+  const extraRescuerFee = extraRescuerFeeCents / 100;
+  const helperOverageFee = helperOverageFeeCents / 100;
+  const publishOverageFee = publishOverageFeeCents / 100;
+  const totalEstimatedFee = totalEstimatedFeeCents / 100;
+  const nearbyNotifyRadiusKm = Math.max(0, toSafeNumber(emergencySettings?.nearbyNotifyRadiusKm, DEFAULT_EMERGENCY_SETTINGS.nearbyNotifyRadiusKm));
 
   const getRegionOptions = () => {
     if (regionStep === 0) return regionData.countries;
@@ -107,6 +268,9 @@ export default function EmergencyScreen({ navigation }) {
     const parts = [selectedRegion.country, selectedRegion.city, selectedRegion.state, selectedRegion.district].filter(Boolean);
     const locationText = parts.join(' ');
     setEmergencyForm((prev) => ({ ...prev, location: locationText }));
+    setSelectedCoordinates(null);
+    setLocationAddress(null);
+    setResolvedChinaRegion(null);
     setShowRegionModal(false);
     setRegionStep(0);
   };
@@ -115,8 +279,6 @@ export default function EmergencyScreen({ navigation }) {
     setShowRegionModal(true);
     setRegionStep(0);
   };
-
-  const rescuerFee = calculateRescuerFee(emergencyForm.rescuerCount || 1);
 
   // Use useMemo to prevent calling t() during initial render
   const quickTitles = React.useMemo(() => [
@@ -281,8 +443,15 @@ export default function EmergencyScreen({ navigation }) {
       ].filter(Boolean);
 
       const locationText = locationParts.join(' ');
+      const matchedRegion = resolveChinaRegionFromAddress(address);
 
       setEmergencyForm((prev) => ({ ...prev, location: locationText }));
+      setSelectedCoordinates({
+        latitude: toSafeNumber(currentPosition?.coords?.latitude, 0),
+        longitude: toSafeNumber(currentPosition?.coords?.longitude, 0),
+      });
+      setLocationAddress(address);
+      setResolvedChinaRegion(matchedRegion);
       showAppAlert('成功', '已获取当前位置');
     } catch (error) {
       console.error('Failed to locate emergency address:', error);
@@ -295,17 +464,58 @@ export default function EmergencyScreen({ navigation }) {
     }
   };
 
+  const uploadEmergencyImages = async () => {
+    if (!Array.isArray(emergencyImages) || emergencyImages.length === 0) {
+      return [];
+    }
+
+    const imageUrls = [];
+    for (let index = 0; index < emergencyImages.length; index += 1) {
+      const image = emergencyImages[index];
+      const uploadResult = await uploadApi.uploadImage({
+        uri: image.uri,
+        name: `emergency_${Date.now()}_${index}.jpg`,
+        type: 'image/jpeg',
+      });
+
+      if (uploadResult?.code !== 200 || !uploadResult?.data) {
+        throw new Error(uploadResult?.msg || '图片上传失败');
+      }
+
+      imageUrls.push(uploadResult.data);
+    }
+
+    return imageUrls;
+  };
+
+  const extractRequestErrorMessage = (error, fallback = '发布失败，请稍后重试') => {
+    const candidates = [
+      error?.message,
+      error?.msg,
+      error?.data?.msg,
+      error?.data?.message,
+      error?.response?.data?.msg,
+      error?.response?.data?.message,
+    ];
+
+    return candidates.find((item) => typeof item === 'string' && item.trim()) || fallback;
+  };
+
   const resetEmergencyForm = () => {
     setEmergencyForm({
       title: '',
       description: '',
       location: '',
       contact: '',
+      specificLocation: '',
       rescuerCount: 1,
     });
     setEmergencyImages([]);
     setSelectedRegion({ country: '', city: '', state: '', district: '' });
     setRegionStep(0);
+    setSelectedCoordinates(null);
+    setLocationAddress(null);
+    setResolvedChinaRegion(null);
   };
 
   const handleSubmit = async () => {
@@ -337,20 +547,60 @@ export default function EmergencyScreen({ navigation }) {
     setShowProgressModal(true);
 
     try {
-      // 模拟网络延迟
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const requestedHelperCount = Math.max(1, Number(emergencyForm.rescuerCount) || 1);
+      const latestFeeEstimate = await loadEmergencyFeeEstimate(requestedHelperCount);
+      const latestTotalFeeCents = Math.max(0, Math.round(toSafeNumber(latestFeeEstimate?.totalFeeCents, totalEstimatedFeeCents)));
 
-      // 使用假数据，模拟发布成功
-      await loadEmergencyQuota();
+      const imageUrls = await uploadEmergencyImages();
+      const locationDisplay = emergencyForm.location.trim();
+      const specificLocation = (emergencyForm.specificLocation || '').trim();
+
+      const addressText =
+        buildEmergencyAddressText({
+          provinceName: resolvedChinaRegion?.provinceName || '',
+          cityName: resolvedChinaRegion?.cityName || '',
+          districtName: resolvedChinaRegion?.districtName || '',
+          street: locationAddress?.street || specificLocation,
+          streetNumber: locationAddress?.streetNumber || '',
+          name: locationAddress?.name || '',
+        }) || [locationDisplay, specificLocation].filter(Boolean).join(' ');
+
+      const publishPayload = {
+        title: emergencyForm.title.trim(),
+        description: emergencyForm.description.trim(),
+        urgencyLevel: 0,
+        category: 0,
+        neededHelperCount: requestedHelperCount,
+        contactType: 0,
+        contactValue: normalizePhoneNumber(emergencyForm.contact),
+        provinceId: Number(resolvedChinaRegion?.provinceId || 0),
+        cityId: Number(resolvedChinaRegion?.cityId || 0),
+        districtId: Number(resolvedChinaRegion?.districtId || 0),
+        addressText: addressText || locationDisplay,
+        regionDisplay: locationDisplay,
+        latitude: toSafeNumber(selectedCoordinates?.latitude, 0),
+        longitude: toSafeNumber(selectedCoordinates?.longitude, 0),
+        imageUrls,
+        acknowledgeFees: latestTotalFeeCents > 0,
+      };
+
+      const response = await emergencyApi.publish(publishPayload);
+      if (response?.code !== 200) {
+        throw new Error(response?.msg || '发布失败，请稍后重试');
+      }
+
+      await loadEmergencyQuota(emergencySettings?.dailyFreeTotal ?? 0);
+      await loadEmergencyFeeEstimate(1);
       resetEmergencyForm();
       
       showAppAlert(
         t('emergency.published'),
-        '紧急求助已成功发布！\n\n附近用户将收到通知。',
+        `紧急求助已成功发布！\n\n附近 ${formatAmount(nearbyNotifyRadiusKm)}km 用户将收到通知。`,
         [{ text: t('emergency.confirm'), onPress: () => navigation.goBack() }]
       );
     } catch (error) {
-      showAppAlert('提示', '发布失败，请稍后重试');
+      console.error('Emergency publish failed:', error);
+      showAppAlert('提示', extractRequestErrorMessage(error));
     } finally {
       setShowProgressModal(false);
     }
@@ -393,12 +643,12 @@ export default function EmergencyScreen({ navigation }) {
             {freeCountDisplay}
           </Text>
         </View>
-        {quotaLoaded && remainingFree <= 0 && (
+        {quotaLoaded && publishOverageFeeCents > 0 && (
           <TouchableOpacity 
             style={styles.monthlyPayButton}
-            onPress={() => showAppAlert(t('emergency.monthlyUnlock'))}
+            onPress={() => showAppAlert('提示', `超出免费次数后，本次发布额外费用为 $${formatAmount(publishOverageFee)}`)}
           >
-            <Text style={styles.monthlyPayButtonText}>{t('emergency.payAmount')}</Text>
+            <Text style={styles.monthlyPayButtonText}>{`${t('emergency.pay')} $${formatAmount(publishOverageFee)}`}</Text>
             <Ionicons name="arrow-forward" size={14} color="#fff" />
           </TouchableOpacity>
         )}
@@ -580,7 +830,7 @@ export default function EmergencyScreen({ navigation }) {
           </View>
 
           <View style={styles.rescuerFeeInfo}>
-            {rescuerFee === 0 ? (
+            {totalEstimatedFeeCents === 0 ? (
               <View style={styles.rescuerFeeRow}>
                 <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
                 <Text style={styles.rescuerFeeTextFree}>{t('emergency.rescuerFeeTextFree')}</Text>
@@ -589,26 +839,31 @@ export default function EmergencyScreen({ navigation }) {
               <View style={styles.rescuerFeeCard}>
                 <View style={styles.rescuerFeeRow}>
                   <View style={styles.rescuerFeeLeft}>
-                    <Text style={styles.rescuerFeeLabel}>{t('emergency.rescuerFeeLabel')}</Text>
-                    <Text style={styles.rescuerFeeExtra}>
-                      {emergencyForm.rescuerCount - freeRescuerLimit}{t('emergency.rescuerUnit')} × ${extraRescuerFee}
-                    </Text>
+                    <Text style={styles.rescuerFeeLabel}>费用预估</Text>
+                    {helperOverageFeeCents > 0 && (
+                      <Text style={styles.rescuerFeeExtra}>
+                        救援人数超额费：{helperOverageCount}{t('emergency.rescuerUnit')} × ${formatAmount(extraRescuerFee)} = ${formatAmount(helperOverageFee)}
+                      </Text>
+                    )}
+                    {publishOverageFeeCents > 0 && (
+                      <Text style={styles.rescuerFeeExtra}>超额发布费：${formatAmount(publishOverageFee)}</Text>
+                    )}
                   </View>
                   <View style={styles.rescuerFeeRight}>
                     <Text style={styles.rescuerFeeTotalLabel}>{t('emergency.needPay')}</Text>
-                    <Text style={styles.rescuerFeeTotal}>${rescuerFee}</Text>
+                    <Text style={styles.rescuerFeeTotal}>${formatAmount(totalEstimatedFee)}</Text>
                   </View>
                 </View>
                 <Text style={styles.rescuerFeeNote}>{t('emergency.rescuerFeeNote')}</Text>
                 <TouchableOpacity 
                   style={styles.payButton}
                   onPress={() => showAppAlert(
-                    t('emergency.pay') + ' ' + rescuerFee,
+                    `${t('emergency.pay')} $${formatAmount(totalEstimatedFee)}`,
                     t('emergency.paymentMethods')
                   )}
                 >
                   <Ionicons name="card" size={18} color="#fff" />
-                  <Text style={styles.payButtonText}>{t('emergency.payNow')} ${rescuerFee}</Text>
+                  <Text style={styles.payButtonText}>{t('emergency.payNow')} ${formatAmount(totalEstimatedFee)}</Text>
                   <Ionicons name="arrow-forward" size={16} color="#fff" />
                 </TouchableOpacity>
               </View>
@@ -622,6 +877,7 @@ export default function EmergencyScreen({ navigation }) {
           <Text style={styles.tipsText}>{t('emergency.tip1')}</Text>
           <Text style={styles.tipsText}>{t('emergency.tip2')}</Text>
           <Text style={styles.tipsText}>{t('emergency.tip3')}</Text>
+          <Text style={styles.tipsText}>{`• 当前通知半径：${formatAmount(nearbyNotifyRadiusKm)}km`}</Text>
         </View>
 
         <View style={{ height: 40 }} />

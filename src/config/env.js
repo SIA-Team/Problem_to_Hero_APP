@@ -140,6 +140,10 @@ const API_SERVER_CONFIG = {
   [buildServicePath(SERVICES.USER, '/app/group-message/list')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/group-message/create')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/content/emergency-help/quota')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/content/emergency-help/settings/public')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/content/emergency-help/list')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/content/emergency-help/*')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/content/emergency-help/fee-estimate')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/content/emergency-help/publish')]: getCurrentServerSync,
   
   // 分类相关接口
