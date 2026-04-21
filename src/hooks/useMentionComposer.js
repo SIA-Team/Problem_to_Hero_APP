@@ -76,11 +76,7 @@ export default function useMentionComposer({
       })
       .slice(0, searchLimit);
   }, [activeMention?.keyword, currentUserId, mentionUsers, recommendedUsers, searchLimit]);
-  const shouldShowMentionPanel = Boolean(
-    visible &&
-      activeMention &&
-      (mentionLoading || candidateUsers.length > 0 || String(activeMention?.keyword ?? '').length > 0)
-  );
+  const shouldShowMentionPanel = Boolean(visible && activeMention);
   const hasActiveKeyword = Boolean(String(activeMention?.keyword ?? '').trim());
   const visibleViewportHeight = Math.max(windowHeight - keyboardHeight, 0);
   const panelHeightLimit = isKeyboardVisible
@@ -139,11 +135,29 @@ export default function useMentionComposer({
     setSelection(nextSelection);
   };
 
-  const handleMentionPress = () => {
+  const handleMentionPress = (options = {}) => {
+    const { focusInput: shouldFocusInput = true } = options || {};
     const selectionStart = Number(selection?.start);
     const selectionEnd = Number(selection?.end);
     const start = Number.isFinite(selectionStart) ? selectionStart : String(text ?? '').length;
     const end = Number.isFinite(selectionEnd) ? selectionEnd : start;
+
+    if (
+      activeMention &&
+      start >= activeMention.start &&
+      end <= activeMention.end
+    ) {
+      setSelection({
+        start,
+        end,
+      });
+
+      if (shouldFocusInput) {
+        focusInput();
+      }
+      return;
+    }
+
     const previousChar = start > 0 ? text[start - 1] : '';
     const prefix = previousChar && !/\s/.test(previousChar) ? ' @' : '@';
     const nextText = `${text.slice(0, start)}${prefix}${text.slice(end)}`;
@@ -154,7 +168,9 @@ export default function useMentionComposer({
       start: nextCursor,
       end: nextCursor,
     });
-    focusInput();
+    if (shouldFocusInput) {
+      focusInput();
+    }
   };
 
   const handleMentionSelect = user => {

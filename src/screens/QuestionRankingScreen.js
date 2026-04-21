@@ -1,12 +1,20 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { formatNumber } from '../utils/numberFormatter';
-
+import questionApi from '../services/api/questionApi';
 import { scaleFont } from '../utils/responsive';
-// 排行榜分类
+
 const rankingTabs = [
   { key: 'answers', labelKey: 'screens.questionRanking.tabs.mostAnswers', icon: 'chatbubbles' },
   { key: 'comments', labelKey: 'screens.questionRanking.tabs.mostComments', icon: 'chatbox-ellipses' },
@@ -15,75 +23,265 @@ const rankingTabs = [
   { key: 'likes', labelKey: 'screens.questionRanking.tabs.mostLikes', icon: 'thumbs-up' },
 ];
 
-// 模拟数据
-const mockData = {
-  answers: [
-    { id: 'q1', rank: 1, title: '如何在三个月内从零基础学会Python编程？', answersCount: 2345, viewsCount: 156000, reward: 50, type: 'reward' },
-    { id: 'q2', rank: 2, title: '35岁程序员如何规划职业发展？', answersCount: 1892, viewsCount: 123000, reward: 100, type: 'reward' },
-    { id: 'q3', rank: 3, title: '第一次养猫需要准备什么？', answersCount: 1567, viewsCount: 98000, type: 'free' },
-    { id: 'q4', rank: 4, title: '长期失眠应该怎么调理？', answersCount: 1234, viewsCount: 87000, type: 'free' },
-    { id: 'q5', rank: 5, title: '如何写一份优秀的简历？', answersCount: 987, viewsCount: 76000, reward: 30, type: 'reward' },
-  ],
-  comments: [
-    { id: 'q6', rank: 1, title: 'AI大模型会取代程序员吗？', commentsCount: 3456, viewsCount: 234000, type: 'free' },
-    { id: 'q7', rank: 2, title: '2026年最值得学习的编程语言是什么？', commentsCount: 2987, viewsCount: 198000, reward: 80, type: 'reward' },
-    { id: 'q8', rank: 3, title: '如何判断一个人是否真心喜欢你？', commentsCount: 2345, viewsCount: 167000, type: 'free' },
-    { id: 'q9', rank: 4, title: '30岁转行还来得及吗？', commentsCount: 1987, viewsCount: 145000, reward: 50, type: 'reward' },
-    { id: 'q10', rank: 5, title: '如何克服社交恐惧症？', commentsCount: 1654, viewsCount: 123000, type: 'free' },
-  ],
-  favorites: [
-    { id: 'q11', rank: 1, title: 'Python爬虫入门教程推荐', favoritesCount: 4567, viewsCount: 289000, reward: 100, type: 'reward' },
-    { id: 'q12', rank: 2, title: '如何高效学习一门新技能？', favoritesCount: 3987, viewsCount: 256000, type: 'free' },
-    { id: 'q13', rank: 3, title: '基金定投真的能赚钱吗？', favoritesCount: 3456, viewsCount: 234000, reward: 60, type: 'reward' },
-    { id: 'q14', rank: 4, title: '每天喝多少水才健康？', favoritesCount: 2987, viewsCount: 198000, type: 'free' },
-    { id: 'q15', rank: 5, title: '如何科学减肥不反弹？', favoritesCount: 2654, viewsCount: 176000, type: 'free' },
-  ],
-  views: [
-    { id: 'q16', rank: 1, title: 'ChatGPT对互联网行业的影响有多大？', viewsCount: 567000, answersCount: 2345, reward: 200, type: 'reward' },
-    { id: 'q17', rank: 2, title: '华为Mate 60系列为何能突破封锁？', viewsCount: 489000, answersCount: 1987, type: 'free' },
-    { id: 'q18', rank: 3, title: '2026年是买房好时机吗？', viewsCount: 423000, answersCount: 1654, reward: 150, type: 'reward' },
-    { id: 'q19', rank: 4, title: 'iPhone 15 Pro值得购买吗？', viewsCount: 398000, answersCount: 1432, type: 'free' },
-    { id: 'q20', rank: 5, title: '如何处理婆媳关系？', viewsCount: 367000, answersCount: 1234, type: 'free' },
-  ],
-  likes: [
-    { id: 'q21', rank: 1, title: '有什么简单又好吃的家常菜推荐？', likesCount: 5678, viewsCount: 345000, type: 'free' },
-    { id: 'q22', rank: 2, title: '2026年国内旅游最值得去的地方', likesCount: 4987, viewsCount: 312000, reward: 80, type: 'reward' },
-    { id: 'q23', rank: 3, title: '如何写一份优秀的简历？', likesCount: 4321, viewsCount: 289000, type: 'free' },
-    { id: 'q24', rank: 4, title: '面试时如何谈薪资？', likesCount: 3987, viewsCount: 267000, reward: 50, type: 'reward' },
-    { id: 'q25', rank: 5, title: '年轻人如何开始理财？', likesCount: 3654, viewsCount: 245000, type: 'free' },
-  ],
+const DEFAULT_RANKING_DATA = {
+  answers: [],
+  comments: [],
+  favorites: [],
+  views: [],
+  likes: [],
 };
 
-export default function QuestionRankingScreen({ navigation }) {
+const pickFirstDefinedValue = (...values) => {
+  for (const value of values) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    if (typeof value === 'string' && value.trim() === '') {
+      continue;
+    }
+
+    return value;
+  }
+
+  return undefined;
+};
+
+const toSafeNumber = (value, fallback = 0) => {
+  const parsedValue = Number(value);
+  return Number.isFinite(parsedValue) ? parsedValue : fallback;
+};
+
+const normalizeRankToken = value => String(value || '').trim().toLowerCase();
+
+const resolveTabKeyFromBucket = (mapKey, rankType, items = []) => {
+  const tokens = [normalizeRankToken(mapKey), normalizeRankToken(rankType)];
+
+  if (tokens.some(token => token.includes('answer'))) {
+    return 'answers';
+  }
+
+  if (tokens.some(token => token.includes('comment'))) {
+    return 'comments';
+  }
+
+  if (
+    tokens.some(
+      token =>
+        token.includes('favorite') ||
+        token.includes('favourite') ||
+        token.includes('collect') ||
+        token.includes('bookmark')
+    )
+  ) {
+    return 'favorites';
+  }
+
+  if (tokens.some(token => token.includes('view') || token.includes('browse') || token.includes('read'))) {
+    return 'views';
+  }
+
+  if (tokens.some(token => token.includes('like') || token.includes('thumb'))) {
+    return 'likes';
+  }
+
+  const sampleItem = Array.isArray(items) ? items[0] : null;
+  if (!sampleItem || typeof sampleItem !== 'object') {
+    return null;
+  }
+
+  if (pickFirstDefinedValue(sampleItem.answerCount, sampleItem.answersCount, sampleItem.answerNum) !== undefined) {
+    return 'answers';
+  }
+
+  if (pickFirstDefinedValue(sampleItem.commentCount, sampleItem.commentsCount, sampleItem.commentNum) !== undefined) {
+    return 'comments';
+  }
+
+  if (pickFirstDefinedValue(sampleItem.favoriteCount, sampleItem.favoritesCount, sampleItem.collectCount, sampleItem.collectNum) !== undefined) {
+    return 'favorites';
+  }
+
+  if (pickFirstDefinedValue(sampleItem.viewCount, sampleItem.viewsCount, sampleItem.browseCount, sampleItem.browseNum) !== undefined) {
+    return 'views';
+  }
+
+  if (pickFirstDefinedValue(sampleItem.likeCount, sampleItem.likesCount, sampleItem.likeNum, sampleItem.thumbsUpCount) !== undefined) {
+    return 'likes';
+  }
+
+  return null;
+};
+
+const normalizeRankingItem = (item, index) => {
+  const reward = toSafeNumber(
+    pickFirstDefinedValue(
+      item?.reward,
+      item?.rewardAmount,
+      item?.price,
+      item?.amount,
+      item?.bountyAmount
+    )
+  );
+
+  return {
+    ...item,
+    id: String(
+      pickFirstDefinedValue(item?.questionId, item?.id, item?.contentId, item?.subjectId, `rank-item-${index}`)
+    ),
+    rank: toSafeNumber(
+      pickFirstDefinedValue(item?.rank, item?.rankNo, item?.sort, item?.sortNo, item?.orderNo, item?.order),
+      index + 1
+    ),
+    title: String(
+      pickFirstDefinedValue(item?.title, item?.questionTitle, item?.contentTitle, item?.subject, '')
+    ),
+    reward,
+    type: reward > 0 ? 'reward' : 'free',
+    answersCount: toSafeNumber(
+      pickFirstDefinedValue(item?.answersCount, item?.answerCount, item?.answerNum, item?.replyCount)
+    ),
+    commentsCount: toSafeNumber(
+      pickFirstDefinedValue(item?.commentsCount, item?.commentCount, item?.commentNum)
+    ),
+    favoritesCount: toSafeNumber(
+      pickFirstDefinedValue(item?.favoritesCount, item?.favoriteCount, item?.collectCount, item?.collectNum)
+    ),
+    viewsCount: toSafeNumber(
+      pickFirstDefinedValue(item?.viewsCount, item?.viewCount, item?.browseCount, item?.browseNum, item?.readCount)
+    ),
+    likesCount: toSafeNumber(
+      pickFirstDefinedValue(item?.likesCount, item?.likeCount, item?.likeNum, item?.thumbsUpCount)
+    ),
+  };
+};
+
+const normalizeQuestionRankingData = data => {
+  const normalizedData = { ...DEFAULT_RANKING_DATA };
+  const unresolvedBuckets = [];
+  const usedTabs = new Set();
+  const entries = Object.entries(data || {});
+
+  entries.forEach(([mapKey, bucket]) => {
+    const items = Array.isArray(bucket?.items)
+      ? bucket.items
+      : Array.isArray(bucket)
+        ? bucket
+        : [];
+    const tabKey = resolveTabKeyFromBucket(mapKey, bucket?.rankType, items);
+    const normalizedItems = items.map(normalizeRankingItem);
+
+    if (tabKey && !usedTabs.has(tabKey)) {
+      normalizedData[tabKey] = normalizedItems;
+      usedTabs.add(tabKey);
+      return;
+    }
+
+    unresolvedBuckets.push(normalizedItems);
+  });
+
+  const remainingTabs = ['answers', 'comments', 'favorites', 'views', 'likes'].filter(
+    tabKey => !usedTabs.has(tabKey)
+  );
+
+  unresolvedBuckets.forEach((items, index) => {
+    const tabKey = remainingTabs[index];
+    if (tabKey) {
+      normalizedData[tabKey] = items;
+    }
+  });
+
+  return normalizedData;
+};
+
+const resolveRegionId = routeParams => {
+  const directRegionId = toSafeNumber(routeParams?.regionId, NaN);
+  if (Number.isFinite(directRegionId)) {
+    return directRegionId;
+  }
+
+  const selectedRegion = routeParams?.selectedRegion || {};
+  const regionId = pickFirstDefinedValue(
+    selectedRegion.districtId,
+    selectedRegion.stateId,
+    selectedRegion.cityId,
+    selectedRegion.countryId
+  );
+
+  return toSafeNumber(regionId, 0);
+};
+
+export default function QuestionRankingScreen({ navigation, route }) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('answers');
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [rankingData, setRankingData] = useState(mockData);
+  const [rankingData, setRankingData] = useState(DEFAULT_RANKING_DATA);
 
+  const regionId = useMemo(() => resolveRegionId(route?.params), [route?.params]);
   const currentData = rankingData[activeTab] || [];
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    // 模拟API请求
-    setTimeout(() => {
-      // 这里可以重新加载数据
-      setRankingData(mockData);
-      setRefreshing(false);
-    }, 1000);
-  };
+  const translateOrFallback = useCallback(
+    (key, fallback) => {
+      const translatedText = t(key);
+      return translatedText === key ? fallback : translatedText;
+    },
+    [t]
+  );
 
-  const handleQuestionPress = (item) => {
+  const loadRankingData = useCallback(
+    async (isRefresh = false) => {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      try {
+        const response = await questionApi.getQuestionRankingAll(
+          { regionId },
+          { forceRefresh: isRefresh }
+        );
+        if (response?.code === 200) {
+          setRankingData(normalizeQuestionRankingData(response.data));
+        } else {
+          setRankingData(DEFAULT_RANKING_DATA);
+        }
+      } catch (error) {
+        console.error('Failed to load question ranking data:', error);
+        setRankingData(DEFAULT_RANKING_DATA);
+      } finally {
+        setRefreshing(false);
+        setLoading(false);
+      }
+    },
+    [regionId]
+  );
+
+  useEffect(() => {
+    loadRankingData();
+  }, [loadRankingData]);
+
+  const handleRefresh = useCallback(() => {
+    loadRankingData(true);
+  }, [loadRankingData]);
+
+  const handleQuestionPress = item => {
+    if (!item?.id) {
+      return;
+    }
+
     navigation.navigate('QuestionDetail', { id: item.id });
   };
 
-  const getRankBadgeColor = (rank) => {
+  const getRankBadgeColor = rank => {
     if (rank === 1) return '#ef4444';
     if (rank === 2) return '#f97316';
     if (rank === 3) return '#f59e0b';
     return '#9ca3af';
   };
 
-  const getStatInfo = (item) => {
+  const getStatInfo = item => {
     switch (activeTab) {
       case 'answers':
         return { icon: 'chatbubbles-outline', value: item.answersCount, label: t('screens.questionRanking.stats.answers') };
@@ -100,29 +298,55 @@ export default function QuestionRankingScreen({ navigation }) {
     }
   };
 
+  const getEmptyStateText = () => {
+    if (activeTab === 'likes') {
+      return {
+        title: translateOrFallback(
+          'screens.questionRanking.empty.likesTitle',
+          `${t('screens.questionRanking.tabs.mostLikes')} · ${t('common.noData')}`
+        ),
+        description: translateOrFallback(
+          'screens.questionRanking.empty.likesDescription',
+          t('common.noData')
+        ),
+      };
+    }
+
+    return {
+      title: translateOrFallback(
+        'screens.questionRanking.empty.defaultTitle',
+        t('common.noData')
+      ),
+      description: translateOrFallback(
+        'screens.questionRanking.empty.defaultDescription',
+        t('common.refresh')
+      ),
+    };
+  };
+
+  const emptyStateText = getEmptyStateText();
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* 头部 */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          onPress={() => navigation.goBack()} 
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
           style={styles.backBtn}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Ionicons name="arrow-back" size={24} color="#374151" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('screens.questionRanking.title')}</Text>
-        <View style={{ width: 40 }} />
+        <View style={styles.headerRightPlaceholder} />
       </View>
 
-      {/* 分类标签 */}
       <View style={styles.tabsContainer}>
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.tabsContent}
         >
-          {rankingTabs.map((tab) => (
+          {rankingTabs.map(tab => (
             <TouchableOpacity
               key={tab.key}
               style={styles.tab}
@@ -137,69 +361,83 @@ export default function QuestionRankingScreen({ navigation }) {
         </ScrollView>
       </View>
 
-      {/* 问题列表 */}
-      <ScrollView
-        style={styles.list}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={['#ef4444']}
-            tintColor="#ef4444"
-          />
-        }
-      >
-        {currentData.map((item) => {
-          const statInfo = getStatInfo(item);
-          return (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.questionItem}
-              onPress={() => handleQuestionPress(item)}
-              activeOpacity={0.7}
-            >
-              {/* 排名徽章 */}
-              <View style={[styles.rankBadge, { backgroundColor: getRankBadgeColor(item.rank) }]}>
-                <Text style={styles.rankText}>{item.rank}</Text>
-              </View>
-
-              {/* 问题内容 */}
-              <View style={styles.questionContent}>
-                <Text style={styles.questionTitle} numberOfLines={2}>
-                  {item.type === 'reward' && item.reward && (
-                    <Text style={styles.rewardTagInline}>${item.reward} </Text>
-                  )}
-                  {item.title}
-                </Text>
-
-                <View style={styles.statsRow}>
-                  {/* 主要统计 */}
-                  <View style={styles.mainStat}>
-                    <Ionicons name={statInfo.icon} size={16} color="#10b981" />
-                    <Text style={styles.mainStatValue}>{formatNumber(statInfo.value)}</Text>
-                    <Text style={styles.mainStatLabel}>{statInfo.label}</Text>
+      {loading && !refreshing ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color="#ef4444" />
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={['#ef4444']}
+              tintColor="#ef4444"
+            />
+          }
+        >
+          {currentData.length > 0 ? (
+            currentData.map(item => {
+              const statInfo = getStatInfo(item);
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.questionItem}
+                  onPress={() => handleQuestionPress(item)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.rankBadge, { backgroundColor: getRankBadgeColor(item.rank) }]}>
+                    <Text style={styles.rankText}>{item.rank}</Text>
                   </View>
 
-                  {/* 浏览数 - 只在非浏览量tab中显示 */}
-                  {activeTab !== 'views' && (
-                    <View style={styles.secondaryStat}>
-                      <Ionicons name="eye-outline" size={14} color="#9ca3af" />
-                      <Text style={styles.secondaryStatText}>{formatNumber(item.viewsCount)}</Text>
+                  <View style={styles.questionContent}>
+                    <Text style={styles.questionTitle} numberOfLines={2}>
+                      {item.type === 'reward' && item.reward > 0 ? (
+                        <Text style={styles.rewardTagInline}>${item.reward} </Text>
+                      ) : null}
+                      {item.title}
+                    </Text>
+
+                    <View style={styles.statsRow}>
+                      <View style={styles.mainStat}>
+                        <Ionicons name={statInfo.icon} size={16} color="#10b981" />
+                        <Text style={styles.mainStatValue}>{formatNumber(statInfo.value)}</Text>
+                        <Text style={styles.mainStatLabel}>{statInfo.label}</Text>
+                      </View>
+
+                      {activeTab !== 'views' ? (
+                        <View style={styles.secondaryStat}>
+                          <Ionicons name="eye-outline" size={14} color="#9ca3af" />
+                          <Text style={styles.secondaryStatText}>{formatNumber(item.viewsCount)}</Text>
+                        </View>
+                      ) : null}
                     </View>
-                  )}
-                </View>
+                  </View>
+
+                  <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
+                </TouchableOpacity>
+              );
+            })
+          ) : (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconWrap}>
+                <Ionicons
+                  name={activeTab === 'likes' ? 'time-outline' : 'document-text-outline'}
+                  size={28}
+                  color="#9ca3af"
+                />
               </View>
+              <Text style={styles.emptyTitle}>{emptyStateText.title}</Text>
+              <Text style={styles.emptyDescription}>{emptyStateText.description}</Text>
+            </View>
+          )}
 
-              {/* 箭头 */}
-              <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
-            </TouchableOpacity>
-          );
-        })}
-
-        <View style={styles.listFooter}>
-          <Text style={styles.footerText}>{t('screens.questionRanking.allContentShown')}</Text>
-        </View>
-      </ScrollView>
+          <View style={styles.listFooter}>
+            <Text style={styles.footerText}>{t('screens.questionRanking.allContentShown')}</Text>
+          </View>
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -225,6 +463,9 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(18),
     fontWeight: '600',
     color: '#1f2937',
+  },
+  headerRightPlaceholder: {
+    width: 40,
   },
   tabsContainer: {
     borderBottomWidth: 1,
@@ -260,6 +501,37 @@ const styles = StyleSheet.create({
   },
   list: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 56,
+    gap: 10,
+  },
+  emptyIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: {
+    fontSize: scaleFont(16),
+    fontWeight: '600',
+    color: '#374151',
+  },
+  emptyDescription: {
+    fontSize: scaleFont(13),
+    lineHeight: scaleFont(20),
+    color: '#9ca3af',
+    textAlign: 'center',
   },
   questionItem: {
     flexDirection: 'row',

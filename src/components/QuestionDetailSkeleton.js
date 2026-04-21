@@ -1,97 +1,51 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Easing } from 'react-native';
+import React from 'react';
+import { View, StyleSheet } from 'react-native';
+import SkeletonBlock from './SkeletonBlock';
 
 const QuestionDetailSkeleton = () => {
-  const shimmerAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const shimmer = Animated.loop(
-      Animated.sequence([
-        Animated.timing(shimmerAnim, {
-          toValue: 1,
-          duration: 1500,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        }),
-        Animated.timing(shimmerAnim, {
-          toValue: 0,
-          duration: 1500,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    shimmer.start();
-    return () => shimmer.stop();
-  }, []);
-
-  const shimmerTranslate = shimmerAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-300, 300],
-  });
-
-  const SkeletonBox = ({ width, height, style }) => (
-    <View style={[styles.skeletonBox, { width, height }, style]}>
-      <Animated.View
-        style={[
-          styles.shimmer,
-          {
-            transform: [{ translateX: shimmerTranslate }],
-          },
-        ]}
-      />
-    </View>
-  );
-
   return (
     <View style={styles.container}>
-      {/* 标题骨架 */}
       <View style={styles.titleSection}>
-        <SkeletonBox width="80%" height={24} style={{ marginBottom: 8 }} />
-        <SkeletonBox width="60%" height={20} />
+        <SkeletonBlock width="80%" height={24} style={{ marginBottom: 8 }} />
+        <SkeletonBlock width="60%" height={20} />
       </View>
 
-      {/* 作者信息骨架 */}
       <View style={styles.authorSection}>
-        <SkeletonBox width={32} height={32} style={{ borderRadius: 16 }} />
+        <SkeletonBlock width={32} height={32} style={{ borderRadius: 16 }} />
         <View style={styles.authorInfo}>
-          <SkeletonBox width={100} height={16} style={{ marginBottom: 4 }} />
-          <SkeletonBox width={150} height={14} />
+          <SkeletonBlock width={100} height={16} style={{ marginBottom: 4 }} />
+          <SkeletonBlock width={150} height={14} />
         </View>
       </View>
 
-      {/* 内容骨架 */}
       <View style={styles.contentSection}>
-        <SkeletonBox width="100%" height={16} style={{ marginBottom: 8 }} />
-        <SkeletonBox width="100%" height={16} style={{ marginBottom: 8 }} />
-        <SkeletonBox width="90%" height={16} style={{ marginBottom: 8 }} />
-        <SkeletonBox width="95%" height={16} />
+        <SkeletonBlock width="100%" height={16} style={{ marginBottom: 8 }} />
+        <SkeletonBlock width="100%" height={16} style={{ marginBottom: 8 }} />
+        <SkeletonBlock width="90%" height={16} style={{ marginBottom: 8 }} />
+        <SkeletonBlock width="95%" height={16} />
       </View>
 
-      {/* 悬赏信息骨架 */}
       <View style={styles.rewardSection}>
-        <SkeletonBox width={80} height={32} style={{ marginRight: 12 }} />
-        <SkeletonBox width={100} height={32} />
+        <SkeletonBlock width={80} height={32} style={{ marginRight: 12 }} />
+        <SkeletonBlock width={100} height={32} />
       </View>
 
-      {/* 标签页骨架 */}
       <View style={styles.tabsSection}>
-        <SkeletonBox width={80} height={40} style={{ marginRight: 16 }} />
-        <SkeletonBox width={80} height={40} style={{ marginRight: 16 }} />
-        <SkeletonBox width={80} height={40} style={{ marginRight: 16 }} />
-        <SkeletonBox width={60} height={40} />
+        <SkeletonBlock width={80} height={40} style={{ marginRight: 16 }} />
+        <SkeletonBlock width={80} height={40} style={{ marginRight: 16 }} />
+        <SkeletonBlock width={80} height={40} style={{ marginRight: 16 }} />
+        <SkeletonBlock width={60} height={40} />
       </View>
 
-      {/* 列表项骨架 */}
-      {[1, 2, 3].map((item) => (
+      {[1, 2, 3].map(item => (
         <View key={item} style={styles.listItemSection}>
           <View style={styles.listItemHeader}>
-            <SkeletonBox width={24} height={24} style={{ borderRadius: 12, marginRight: 8 }} />
-            <SkeletonBox width={100} height={16} />
+            <SkeletonBlock width={24} height={24} style={{ borderRadius: 12, marginRight: 8 }} />
+            <SkeletonBlock width={100} height={16} />
           </View>
-          <SkeletonBox width="100%" height={16} style={{ marginTop: 12, marginBottom: 8 }} />
-          <SkeletonBox width="100%" height={16} style={{ marginBottom: 8 }} />
-          <SkeletonBox width="80%" height={16} />
+          <SkeletonBlock width="100%" height={16} style={{ marginTop: 12, marginBottom: 8 }} />
+          <SkeletonBlock width="100%" height={16} style={{ marginBottom: 8 }} />
+          <SkeletonBlock width="80%" height={16} />
         </View>
       ))}
     </View>
@@ -103,16 +57,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
     padding: 16,
-  },
-  skeletonBox: {
-    backgroundColor: '#f3f4f6',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  shimmer: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
   },
   titleSection: {
     marginBottom: 16,

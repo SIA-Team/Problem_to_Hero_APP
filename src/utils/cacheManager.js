@@ -139,18 +139,15 @@ export const getCache = async (prefix, params = {}) => {
   // 1. 先查内存缓存
   const memoryData = getFromMemory(key);
   if (memoryData) {
-    console.log(`✅ 命中内存缓存: ${key}`);
     return memoryData;
   }
   
   // 2. 再查 AsyncStorage
   const storageData = await getFromStorage(key);
   if (storageData) {
-    console.log(`✅ 命中本地缓存: ${key}`);
     return storageData;
   }
   
-  console.log(`❌ 缓存未命中: ${key}`);
   return null;
 };
 
@@ -168,7 +165,6 @@ export const setCache = async (prefix, params = {}, data) => {
   saveToMemory(key, data);
   await saveToStorage(key, data);
   
-  console.log(`💾 已缓存: ${key}`);
 };
 
 /**
@@ -186,7 +182,6 @@ export const clearCache = async (prefix, params = {}) => {
   // 清除 AsyncStorage
   try {
     await AsyncStorage.removeItem(key);
-    console.log(`🗑️ 已清除缓存: ${key}`);
   } catch (error) {
     console.error('清除缓存失败:', error);
   }
@@ -204,7 +199,6 @@ export const clearAllCache = async () => {
     const keys = await AsyncStorage.getAllKeys();
     const cacheKeys = keys.filter(key => key.startsWith('cache_'));
     await AsyncStorage.multiRemove(cacheKeys);
-    console.log(`🗑️ 已清除所有缓存 (${cacheKeys.length} 条)`);
   } catch (error) {
     console.error('清除所有缓存失败:', error);
   }

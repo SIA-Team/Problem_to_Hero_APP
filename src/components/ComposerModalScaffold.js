@@ -8,11 +8,20 @@ import {
   StyleSheet,
   Keyboard,
   Dimensions,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import {
+  initialWindowMetrics,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import KeyboardDismissView from './KeyboardDismissView';
-import ModalSafeAreaView from './ModalSafeAreaView';
 import { modalTokens } from './modalTokens';
+import {
+  resolveComposerFooterPadding,
+  resolveComposerKeyboardMetrics,
+  resolveComposerTopInset,
+} from '../utils/composerLayout';
 import { scaleFont } from '../utils/responsive';
 
 export default function ComposerModalScaffold({
@@ -30,11 +39,21 @@ export default function ComposerModalScaffold({
   footerRight = null,
   footerPaddingBottom = 0,
   footerBottomInset = 0,
+  footerHidden = false,
   containerStyle = null,
+  overlayContent = null,
   floatingOverlay = null,
 }) {
+  const insets = useSafeAreaInsets();
   const [keyboardOffset, setKeyboardOffset] = React.useState(0);
   const [floatingOverlayOffset, setFloatingOverlayOffset] = React.useState(0);
+  const initialTopInset = initialWindowMetrics?.insets?.top ?? 0;
+  const topSafeInset = resolveComposerTopInset({
+    platform: Platform.OS,
+    topInset: insets.top,
+    initialTopInset,
+    statusBarHeight: StatusBar.currentHeight || 0,
+  });
 
   React.useEffect(() => {
     if (!visible) {
@@ -43,51 +62,49 @@ export default function ComposerModalScaffold({
       return undefined;
     }
 
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const frameChangeEvent = Platform.OS === 'ios' ? 'keyboardWillChangeFrame' : null;
-    const resolveKeyboardOverlap = event => {
-      const windowHeight = Dimensions.get('window').height;
-      const keyboardHeight = event?.endCoordinates?.height || 0;
-      const keyboardScreenY = event?.endCoordinates?.screenY ?? windowHeight;
-      const overlapFromScreenY = Math.max(windowHeight - keyboardScreenY, 0);
-      const effectiveKeyboardHeight = Math.max(keyboardHeight, overlapFromScreenY);
-      const androidKeyboardClearance = Math.max(footerBottomInset, 12);
-
-      return Platform.OS === 'ios'
-        ? Math.max(effectiveKeyboardHeight - footerBottomInset, 0)
-        : Math.max(effectiveKeyboardHeight + androidKeyboardClearance, 0);
-    };
-    const resolveFloatingOverlayOffset = event => {
-      const windowHeight = Dimensions.get('window').height;
-      const keyboardHeight = event?.endCoordinates?.height || 0;
-      const keyboardScreenY = event?.endCoordinates?.screenY ?? windowHeight;
-      const overlapFromScreenY = Math.max(windowHeight - keyboardScreenY, 0);
-      const effectiveKeyboardHeight = Math.max(keyboardHeight, overlapFromScreenY);
-
-      return Platform.OS === 'ios'
-        ? Math.max(effectiveKeyboardHeight - footerBottomInset, 0)
-        : Math.max(effectiveKeyboardHeight, 0);
-    };
     const syncKeyboardOffset = event => {
-      setKeyboardOffset(resolveKeyboardOverlap(event));
-      setFloatingOverlayOffset(resolveFloatingOverlayOffset(event));
+      const windowHeight = Dimensions.get('window').height;
+      const keyboardHeight = event?.endCoordinates?.height || 0;
+      const keyboardScreenY = event?.endCoordinates?.screenY ?? windowHeight;
+      const keyboardMetrics = resolveComposerKeyboardMetrics({
+        platform: Platform.OS,
+        windowHeight,
+        keyboardHeight,
+        keyboardScreenY,
+        footerBottomInset,
+        androidFooterClearance: Math.max(footerBottomInset, 12),
+      });
+
+      setKeyboardOffset(keyboardMetrics.footerOffset);
+      setFloatingOverlayOffset(keyboardMetrics.overlayOffset);
     };
     const resetKeyboardOffset = () => {
       setKeyboardOffset(0);
       setFloatingOverlayOffset(0);
     };
 
-    const showSubscription = Keyboard.addListener(showEvent, syncKeyboardOffset);
-    const hideSubscription = Keyboard.addListener(hideEvent, resetKeyboardOffset);
-    const frameChangeSubscription = frameChangeEvent
-      ? Keyboard.addListener(frameChangeEvent, syncKeyboardOffset)
-      : null;
+    const subscriptions = [];
+    const showEvents =
+      Platform.OS === 'ios'
+        ? [
+            'keyboardWillShow',
+            'keyboardDidShow',
+            'keyboardWillChangeFrame',
+            'keyboardDidChangeFrame',
+          ]
+        : ['keyboardDidShow'];
+    const hideEvents =
+      Platform.OS === 'ios' ? ['keyboardWillHide', 'keyboardDidHide'] : ['keyboardDidHide'];
+
+    showEvents.forEach(eventName => {
+      subscriptions.push(Keyboard.addListener(eventName, syncKeyboardOffset));
+    });
+    hideEvents.forEach(eventName => {
+      subscriptions.push(Keyboard.addListener(eventName, resetKeyboardOffset));
+    });
 
     return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
-      frameChangeSubscription?.remove();
+      subscriptions.forEach(subscription => subscription.remove());
     };
   }, [footerBottomInset, visible]);
 
@@ -144,22 +161,31 @@ export default function ComposerModalScaffold({
     submitPlacement === 'footer' ? renderSubmitButton(styles.footerSubmitButton) : footerRight;
   const shouldRenderFooter =
     submitPlacement === 'footer' || Boolean(footerLeft) || Boolean(resolvedFooterRight);
-  const restingFooterPaddingBottom = footerPaddingBottom;
-  const raisedFooterPaddingBottom = Math.max(footerPaddingBottom - footerBottomInset, 0);
-  const effectiveFooterPaddingBottom =
-    keyboardOffset > 0 ? raisedFooterPaddingBottom : restingFooterPaddingBottom;
+  const effectiveFooterPaddingBottom = resolveComposerFooterPadding({
+    footerPaddingBottom,
+    footerBottomInset,
+    keyboardOffset,
+  });
 
   return (
     <Modal
       visible={visible}
       animationType="slide"
       onRequestClose={onClose}
+      presentationStyle="fullScreen"
       statusBarTranslucent
       navigationBarTranslucent
     >
-      <ModalSafeAreaView style={[styles.container, containerStyle]} edges={['top']}>
+      <View style={[styles.container, containerStyle]}>
         <KeyboardDismissView>
-          <View style={styles.header}>
+          <View
+            style={[
+              styles.header,
+              {
+                paddingTop: topSafeInset + 8,
+              },
+            ]}
+          >
             {renderHeaderLeft()}
             <View style={styles.headerCenter}>
               <Text style={styles.title} numberOfLines={1}>
@@ -171,25 +197,35 @@ export default function ComposerModalScaffold({
 
           {headerNotice}
 
-          <View style={styles.content}>{children}</View>
+          <View style={styles.body}>
+            <View style={styles.content}>{children}</View>
 
-          {shouldRenderFooter ? (
-            <View
-              style={[
-                styles.footer,
-                {
-                  paddingBottom: effectiveFooterPaddingBottom,
-                  marginBottom: keyboardOffset,
-                },
-              ]}
-            >
-              <View style={styles.footerLeft}>{footerLeft}</View>
-              {resolvedFooterRight ? (
-                <View style={styles.footerRight}>{resolvedFooterRight}</View>
-              ) : null}
-            </View>
-          ) : null}
+            {shouldRenderFooter ? (
+              <View
+                pointerEvents={footerHidden ? 'none' : 'auto'}
+                style={[
+                  styles.footer,
+                  footerHidden && styles.footerHidden,
+                  {
+                    paddingBottom: effectiveFooterPaddingBottom,
+                    transform: [{ translateY: -keyboardOffset }],
+                  },
+                ]}
+              >
+                <View style={styles.footerLeft}>{footerLeft}</View>
+                {resolvedFooterRight ? (
+                  <View style={styles.footerRight}>{resolvedFooterRight}</View>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
         </KeyboardDismissView>
+
+        {overlayContent ? (
+          <View pointerEvents="box-none" style={styles.overlayContentHost}>
+            {overlayContent}
+          </View>
+        ) : null}
 
         {floatingOverlay ? (
           <View
@@ -204,7 +240,7 @@ export default function ComposerModalScaffold({
             {floatingOverlay}
           </View>
         ) : null}
-      </ModalSafeAreaView>
+      </View>
     </Modal>
   );
 }
@@ -219,10 +255,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: modalTokens.border,
     backgroundColor: modalTokens.surface,
+  },
+  body: {
+    flex: 1,
   },
   headerCenter: {
     flex: 1,
@@ -283,6 +322,9 @@ const styles = StyleSheet.create({
     borderTopColor: modalTokens.border,
     backgroundColor: modalTokens.surface,
   },
+  footerHidden: {
+    opacity: 0,
+  },
   footerLeft: {
     flex: 1,
     flexDirection: 'row',
@@ -299,5 +341,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 40,
+  },
+  overlayContentHost: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 60,
   },
 });

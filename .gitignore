@@ -138,6 +138,7 @@ ADOPT_*.md
 
 # Expo 导出检查文件
 .expo-export-check/
+.expo-export-check-white-screen/
 .expo-web-check/
 .expo-home/
 

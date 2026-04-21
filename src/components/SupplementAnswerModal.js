@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   TextInput,
   StyleSheet,
-  Image,
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,24 +13,28 @@ import Avatar from './Avatar';
 import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
 import ComposerModalScaffold from './ComposerModalScaffold';
+import ComposerImageGrid from './ComposerImageGrid';
 import MentionSuggestionsPanel from './MentionSuggestionsPanel';
 import { modalTokens } from './modalTokens';
 import { toast } from '../utils/toast';
 import { showPublishFailureAlert } from '../utils/appAlert';
 import answerApi from '../services/api/answerApi';
 import uploadApi from '../services/api/uploadApi';
-import userApi from '../services/api/userApi';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
+import useKeyboardVisibility from '../hooks/useKeyboardVisibility';
 import useMentionComposer from '../hooks/useMentionComposer';
+import useRecommendedMentionUsers from '../hooks/useRecommendedMentionUsers';
 import {
-  mergeLocalInviteUsers,
-  normalizeFollowingInviteUsers,
-  normalizePublicUserSearchResponse,
-} from '../utils/localInviteUsers';
+  appendComposerImage,
+  getComposerImageUri,
+  isComposerImageLimitReached,
+  removeComposerImageAt,
+} from '../utils/composerImages';
 import {
   DEFAULT_MENTION_PANEL_BASE_OFFSET,
-  DEFAULT_MENTION_SEARCH_LIMIT,
 } from '../utils/mentionComposer';
+import { resolveComposerScrollPadding } from '../utils/composerLayout';
+import useComposerScrollManager from '../hooks/useComposerScrollManager';
 import { scaleFont } from '../utils/responsive';
 
 export default function SupplementAnswerModal({
@@ -56,6 +59,7 @@ export default function SupplementAnswerModal({
   allowImages = true,
 }) {
   const bottomSafeInset = useBottomSafeInset(12, { maxAndroidInset: 24 });
+  const keyboardVisible = useKeyboardVisibility(visible);
   const { height: answerWindowHeight } = useWindowDimensions();
   const [internalText, setInternalText] = useState('');
   const [internalIdentity, setInternalIdentity] = useState('personal');
@@ -64,8 +68,12 @@ export default function SupplementAnswerModal({
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
-  const [recommendedMentionUsers, setRecommendedMentionUsers] = useState([]);
+  const [inputTop, setInputTop] = useState(0);
   const answerInputRef = React.useRef(null);
+  const { recommendedMentionUsers } = useRecommendedMentionUsers({
+    visible,
+    scene: 'supplement answer',
+  });
 
   const isControlled = typeof onSubmit === 'function';
   const currentText = text ?? internalText;
@@ -75,6 +83,7 @@ export default function SupplementAnswerModal({
     () => (Array.isArray(images) ? images : internalImages),
     [images, internalImages]
   );
+  const imageLimitReached = isComposerImageLimitReached(currentImages);
   const hasPendingUploads = currentImages.some(image => image?.uploading);
   const submitLoading = isControlled ? submitting : isSubmitting;
   const canSubmit = !!currentText.trim() && !submitLoading && !hasPendingUploads;
@@ -116,65 +125,36 @@ export default function SupplementAnswerModal({
     onInvalidMention: () => toast.warning('该用户缺少可用名称'),
   });
 
-  useEffect(() => {
-    if (!visible) {
-      setRecommendedMentionUsers([]);
-      return undefined;
+  const runToolbarAction = React.useCallback((action) => {
+    if (action === 'image') {
+      setShowImagePicker(true);
+      return;
     }
 
-    let isActive = true;
-    const fallbackSearchKeywords = ['a', 'e', 'm', '1', '8'];
+    if (action === 'mention') {
+      handleMentionPress({ focusInput: false });
+    }
+  }, [handleMentionPress]);
+  const {
+    pendingToolbarAction,
+    scrollViewRef,
+    inputFocusedRef,
+    scrollToInput,
+    handleInputFocus,
+    handleInputBlur,
+    triggerToolbarAction,
+  } = useComposerScrollManager({
+    visible,
+    keyboardVisible,
+    inputTop,
+    runToolbarAction,
+  });
 
-    const loadRecommendedUsers = async () => {
-      try {
-        let mergedUsers = [];
-
-        try {
-          const response = await userApi.getFollowing({
-            pageNum: 1,
-            page: 1,
-            pageSize: 20,
-            size: 20,
-            limit: 20,
-          });
-          mergedUsers = mergeLocalInviteUsers(normalizeFollowingInviteUsers(response));
-        } catch (followError) {
-          console.warn('Failed to load supplement answer mention following users:', followError);
-        }
-
-        if (mergedUsers.length < 6) {
-          const fallbackResults = await Promise.allSettled(
-            fallbackSearchKeywords.map(keyword => userApi.searchPublicProfiles(keyword, 10))
-          );
-
-          fallbackResults.forEach(result => {
-            if (result.status !== 'fulfilled') {
-              return;
-            }
-
-            mergedUsers = mergeLocalInviteUsers([
-              ...mergedUsers,
-              ...normalizePublicUserSearchResponse(result.value),
-            ]);
-          });
-        }
-
-        if (isActive) {
-          setRecommendedMentionUsers(mergedUsers.slice(0, DEFAULT_MENTION_SEARCH_LIMIT));
-        }
-      } catch (error) {
-        if (isActive) {
-          console.warn('Failed to load supplement answer mention recommended users:', error);
-          setRecommendedMentionUsers([]);
-        }
-      }
-    };
-
-    loadRecommendedUsers();
-
-    return () => {
-      isActive = false;
-    };
+  useEffect(() => {
+    if (!visible) {
+      setShowImagePicker(false);
+      inputFocusedRef.current = false;
+    }
   }, [visible]);
 
   const updateIdentity = value => {
@@ -224,6 +204,7 @@ export default function SupplementAnswerModal({
       resetInternalState();
     }
     setShowImagePicker(false);
+    inputFocusedRef.current = false;
     onClose?.();
   };
 
@@ -233,13 +214,13 @@ export default function SupplementAnswerModal({
       return;
     }
 
-    if (currentImages.length >= 9) {
+    if (imageLimitReached) {
       toast.error('最多只能上传 9 张图片');
       return;
     }
 
     if (isControlled) {
-      updateImages([...currentImages, imageUri]);
+      updateImages(appendComposerImage(currentImages, imageUri));
       setShowImagePicker(false);
       return;
     }
@@ -251,7 +232,8 @@ export default function SupplementAnswerModal({
         uri: imageUri,
         uploading: true,
       };
-      updateImages([...currentImages, localImage]);
+      const nextImages = appendComposerImage(currentImages, localImage);
+      updateImages(nextImages);
 
       const fileName = imageUri.split('/').pop() || `supplement_${Date.now()}.jpg`;
       const fileType = fileName.split('.').pop() || 'jpeg';
@@ -263,8 +245,7 @@ export default function SupplementAnswerModal({
 
       if (response?.data?.code === 200 && response?.data?.data) {
         updateImages(
-          currentImages
-            .concat(localImage)
+          nextImages
             .map(image =>
               image.uri === imageUri
                 ? {
@@ -290,7 +271,23 @@ export default function SupplementAnswerModal({
   };
 
   const handleRemoveImage = index => {
-    updateImages(currentImages.filter((_, imageIndex) => imageIndex !== index));
+    updateImages(removeComposerImageAt(currentImages, index));
+  };
+
+  const handleOpenImagePicker = () => {
+    triggerToolbarAction('image');
+  };
+
+  const handleToolbarMentionPress = () => {
+    triggerToolbarAction('mention');
+  };
+
+  const handleChangeSupplementAnswerText = value => {
+    updateText(value);
+
+    if (inputFocusedRef.current) {
+      scrollToInput(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -367,19 +364,29 @@ export default function SupplementAnswerModal({
         submitDisabled={!canSubmit}
         footerPaddingBottom={bottomSafeInset + 8}
         footerBottomInset={bottomSafeInset}
+        footerHidden={Boolean(pendingToolbarAction)}
+        overlayContent={showImagePicker && allowImages ? (
+          <ImagePickerSheet
+            visible={showImagePicker}
+            onClose={() => setShowImagePicker(false)}
+            onImageSelected={handleImageSelected}
+            title="选择图片"
+            renderInPlace
+          />
+        ) : null}
         footerLeft={
           <View style={styles.toolsLeft}>
             {allowImages ? (
               <TouchableOpacity
                 style={styles.toolItem}
-                onPress={() => setShowImagePicker(true)}
-                disabled={submitLoading || uploadingImages || currentImages.length >= 9}
+                onPress={handleOpenImagePicker}
+                disabled={submitLoading || uploadingImages || imageLimitReached}
               >
                 <Ionicons
                   name="image-outline"
                   size={24}
                   color={
-                    submitLoading || uploadingImages || currentImages.length >= 9
+                    submitLoading || uploadingImages || imageLimitReached
                       ? '#ccc'
                       : '#666'
                   }
@@ -391,7 +398,7 @@ export default function SupplementAnswerModal({
                 ) : null}
               </TouchableOpacity>
             ) : null}
-            <TouchableOpacity style={styles.toolItem} onPress={handleMentionPress}>
+            <TouchableOpacity style={styles.toolItem} onPress={handleToolbarMentionPress}>
               <Ionicons name="at-outline" size={24} color="#666" />
             </TouchableOpacity>
           </View>
@@ -433,28 +440,67 @@ export default function SupplementAnswerModal({
         </View>
 
         <ScrollView
+          ref={scrollViewRef}
           style={styles.contentArea}
+          contentContainerStyle={[
+            styles.contentContainer,
+            {
+              paddingBottom: resolveComposerScrollPadding({
+                basePaddingBottom: 24,
+                keyboardVisible: keyboardVisible || shouldShowMentionPanel,
+              }),
+            },
+          ]}
+          automaticallyAdjustKeyboardInsets
+          contentInsetAdjustmentBehavior="automatic"
+          showsVerticalScrollIndicator={false}
           scrollEnabled={!shouldShowMentionPanel}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={shouldShowMentionPanel ? 'none' : 'interactive'}
         >
-          <TextInput
-            ref={answerInputRef}
-            style={styles.textInput}
-            placeholder={placeholder}
-            placeholderTextColor="#bbb"
-            value={currentText}
-            onChangeText={updateText}
-            onSelectionChange={handleSelectionChange}
-            selection={selection}
-            multiline
-            autoFocus
-            maxLength={2000}
-            selectionColor={modalTokens.danger}
-            textAlignVertical="top"
+          <View
+            onLayout={(event) => {
+              setInputTop(event.nativeEvent.layout.y);
+            }}
+          >
+            <TextInput
+              ref={answerInputRef}
+              style={styles.textInput}
+              placeholder={placeholder}
+              placeholderTextColor="#bbb"
+              value={currentText}
+              onChangeText={handleChangeSupplementAnswerText}
+              onFocus={handleInputFocus}
+              onBlur={handleInputBlur}
+              onSelectionChange={handleSelectionChange}
+              selection={selection}
+              multiline
+              autoFocus
+              maxLength={2000}
+              selectionColor={modalTokens.danger}
+              textAlignVertical="top"
+            />
+          </View>
+
+          <ComposerImageGrid
+            images={currentImages}
+            onRemove={handleRemoveImage}
+            getImageUri={getComposerImageUri}
+            renderItemOverlay={(image) => (
+              image?.uploading ? (
+                <View style={styles.uploadingOverlay}>
+                  <Text style={styles.uploadingText}>涓婁紶涓?..</Text>
+                </View>
+              ) : null
+            )}
+            containerStyle={styles.imagesContainer}
+            itemStyle={styles.imageWrapper}
+            imageStyle={styles.imagePreview}
+            removeButtonStyle={styles.removeImageBtn}
+            removeIconSize={24}
           />
 
-          {currentImages.length > 0 ? (
+          {false && currentImages.length > 0 ? (
             <View style={styles.imagesContainer}>
               {currentImages.map((image, index) => {
                 const imageUri = typeof image === 'string' ? image : image?.uri;
@@ -491,14 +537,6 @@ export default function SupplementAnswerModal({
         </ScrollView>
       </ComposerModalScaffold>
 
-      {allowImages ? (
-        <ImagePickerSheet
-          visible={showImagePicker}
-          onClose={() => setShowImagePicker(false)}
-          onImageSelected={handleImageSelected}
-          title="选择图片"
-        />
-      ) : null}
     </>
   );
 }
@@ -540,6 +578,9 @@ const styles = StyleSheet.create({
   contentArea: {
     flex: 1,
     backgroundColor: modalTokens.surface,
+  },
+  contentContainer: {
+    paddingBottom: 24,
   },
   textInput: {
     padding: 16,

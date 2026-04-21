@@ -3,10 +3,10 @@ import {
   View,
   Text,
   TouchableOpacity,
+  Pressable,
   TextInput,
   StyleSheet,
   ScrollView,
-  Image,
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,21 +14,24 @@ import Avatar from './Avatar';
 import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
 import ComposerModalScaffold from './ComposerModalScaffold';
+import ComposerImageGrid from './ComposerImageGrid';
 import MentionSuggestionsPanel from './MentionSuggestionsPanel';
-import userApi from '../services/api/userApi';
 import { showToast } from '../utils/toast';
-import {
-  mergeLocalInviteUsers,
-  normalizeFollowingInviteUsers,
-  normalizePublicUserSearchResponse,
-} from '../utils/localInviteUsers';
 import { modalTokens } from './modalTokens';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
+import useKeyboardVisibility from '../hooks/useKeyboardVisibility';
 import useMentionComposer from '../hooks/useMentionComposer';
+import useRecommendedMentionUsers from '../hooks/useRecommendedMentionUsers';
+import {
+  appendComposerImage,
+  isComposerImageLimitReached,
+  removeComposerImageAt,
+} from '../utils/composerImages';
 import {
   DEFAULT_MENTION_PANEL_BASE_OFFSET,
-  DEFAULT_MENTION_SEARCH_LIMIT,
 } from '../utils/mentionComposer';
+import { resolveComposerScrollPadding } from '../utils/composerLayout';
+import useComposerScrollManager from '../hooks/useComposerScrollManager';
 import { scaleFont } from '../utils/responsive';
 
 const WriteCommentModal = ({
@@ -42,13 +45,22 @@ const WriteCommentModal = ({
   title = '\u5199\u8bc4\u8bba',
 }) => {
   const bottomSafeInset = useBottomSafeInset(12, { maxAndroidInset: 24 });
+  const keyboardVisible = useKeyboardVisibility(visible);
   const { height: commentWindowHeight } = useWindowDimensions();
   const [text, setText] = useState('');
   const [selectedIdentity, setSelectedIdentity] = useState('personal');
   const [selectedImages, setSelectedImages] = useState([]);
   const [showImagePicker, setShowImagePicker] = useState(false);
-  const [recommendedMentionUsers, setRecommendedMentionUsers] = useState([]);
+  const [composerAlert, setComposerAlert] = useState(null);
+  const [inputTop, setInputTop] = useState(0);
   const commentInputRef = React.useRef(null);
+  const {
+    recommendedMentionUsers,
+    resetRecommendedMentionUsers,
+  } = useRecommendedMentionUsers({
+    visible,
+    scene: 'comment',
+  });
 
   const canPublish = Boolean(text.trim() || selectedImages.length > 0);
   const {
@@ -79,90 +91,99 @@ const WriteCommentModal = ({
     onInvalidMention: () => showToast('\u8be5\u7528\u6237\u7f3a\u5c11\u53ef\u7528\u540d\u79f0', 'warning'),
   });
 
-  useEffect(() => {
-    if (!visible) {
-      setRecommendedMentionUsers([]);
-      return undefined;
+  const runToolbarAction = React.useCallback((action) => {
+    if (action === 'image') {
+      setShowImagePicker(true);
+      return;
     }
 
-    let isActive = true;
-    const fallbackSearchKeywords = ['a', 'e', 'm', '1', '8'];
+    if (action === 'mention') {
+      handleMentionPress({ focusInput: false });
+    }
+  }, [handleMentionPress]);
+  const {
+    pendingToolbarAction,
+    scrollViewRef,
+    inputFocusedRef,
+    scrollToInput,
+    handleInputFocus,
+    handleInputBlur,
+    triggerToolbarAction,
+  } = useComposerScrollManager({
+    visible,
+    keyboardVisible,
+    inputTop,
+    runToolbarAction,
+  });
 
-    const loadRecommendedUsers = async () => {
-      try {
-        let mergedUsers = [];
-
-        try {
-          const response = await userApi.getFollowing({
-            pageNum: 1,
-            page: 1,
-            pageSize: 20,
-            size: 20,
-            limit: 20,
-          });
-          mergedUsers = mergeLocalInviteUsers(normalizeFollowingInviteUsers(response));
-        } catch (followError) {
-          console.warn('Failed to load comment mention following users:', followError);
-        }
-
-        if (mergedUsers.length < 6) {
-          const fallbackResults = await Promise.allSettled(
-            fallbackSearchKeywords.map(keyword => userApi.searchPublicProfiles(keyword, 10))
-          );
-
-          fallbackResults.forEach(result => {
-            if (result.status !== 'fulfilled') {
-              return;
-            }
-
-            mergedUsers = mergeLocalInviteUsers([
-              ...mergedUsers,
-              ...normalizePublicUserSearchResponse(result.value),
-            ]);
-          });
-        }
-
-        if (isActive) {
-          setRecommendedMentionUsers(mergedUsers.slice(0, DEFAULT_MENTION_SEARCH_LIMIT));
-        }
-      } catch (error) {
-        if (isActive) {
-          console.warn('Failed to load comment mention recommended users:', error);
-          setRecommendedMentionUsers([]);
-        }
-      }
-    };
-
-    loadRecommendedUsers();
-
-    return () => {
-      isActive = false;
-    };
+  useEffect(() => {
+    if (!visible) {
+      setShowImagePicker(false);
+      setComposerAlert(null);
+      inputFocusedRef.current = false;
+    }
   }, [visible]);
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
     if (!canPublish) {
       return;
     }
 
-    onPublish(text.trim(), selectedIdentity === 'team', selectedImages);
+    setComposerAlert(null);
+
+    const publishResult = await Promise.resolve(
+      onPublish(text.trim(), selectedIdentity === 'team', selectedImages)
+    );
+
+    if (publishResult && typeof publishResult === 'object' && publishResult.ok === false) {
+      setComposerAlert({
+        title: publishResult.title || '提示',
+        message: publishResult.message || '',
+      });
+      return;
+    }
+
+    if (publishResult === false) {
+      return;
+    }
+
     setText('');
     setSelectedIdentity('personal');
     setSelectedImages([]);
-    setRecommendedMentionUsers([]);
+    resetRecommendedMentionUsers();
   };
 
   const handleImageSelected = imageUri => {
-    if (selectedImages.length < 9) {
-      setSelectedImages(prev => [...prev, imageUri]);
-    } else {
+    if (isComposerImageLimitReached(selectedImages)) {
       showToast('\u6700\u591a\u53ea\u80fd\u6dfb\u52a09\u5f20\u56fe\u7247', 'warning');
+    } else {
+      setSelectedImages(prev => appendComposerImage(prev, imageUri));
     }
     setShowImagePicker(false);
   };
 
   const removeImage = index => {
-    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setSelectedImages(prev => removeComposerImageAt(prev, index));
+  };
+
+  const handleChangeText = value => {
+    setText(value);
+
+    if (inputFocusedRef.current) {
+      scrollToInput(false);
+    }
+  };
+
+  const handleOpenImagePicker = () => {
+    triggerToolbarAction('image');
+  };
+
+  const handleToolbarMentionPress = () => {
+    triggerToolbarAction('mention');
+  };
+
+  const closeComposerAlert = () => {
+    setComposerAlert(null);
   };
 
   return (
@@ -177,16 +198,50 @@ const WriteCommentModal = ({
         closePlacement={closeOnRight ? 'right' : 'left'}
         footerPaddingBottom={bottomSafeInset + 8}
         footerBottomInset={bottomSafeInset}
+        footerHidden={Boolean(pendingToolbarAction)}
+        overlayContent={
+          showImagePicker || composerAlert ? (
+            <>
+              {showImagePicker ? (
+                <ImagePickerSheet
+                  visible={showImagePicker}
+                  onClose={() => setShowImagePicker(false)}
+                  onImageSelected={handleImageSelected}
+                  title="添加图片"
+                  renderInPlace
+                />
+              ) : null}
+              {composerAlert ? (
+                <View style={styles.composerAlertOverlay}>
+                  <Pressable
+                    style={StyleSheet.absoluteFill}
+                    onPress={closeComposerAlert}
+                  />
+                  <View style={styles.composerAlertCard}>
+                    <Text style={styles.composerAlertTitle}>{composerAlert.title}</Text>
+                    {composerAlert.message ? (
+                      <Text style={styles.composerAlertMessage}>{composerAlert.message}</Text>
+                    ) : null}
+                    <TouchableOpacity
+                      style={styles.composerAlertButton}
+                      onPress={closeComposerAlert}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.composerAlertButtonText}>我知道了</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : null}
+            </>
+          ) : null
+        }
         footerLeft={
           <View style={styles.toolbarLeft}>
-            <TouchableOpacity style={styles.toolbarBtn} onPress={() => setShowImagePicker(true)}>
+            <TouchableOpacity style={styles.toolbarBtn} onPress={handleOpenImagePicker}>
               <Ionicons name="image-outline" size={24} color="#6b7280" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.toolbarBtn} onPress={handleMentionPress}>
+            <TouchableOpacity style={styles.toolbarBtn} onPress={handleToolbarMentionPress}>
               <Ionicons name="at-outline" size={24} color="#6b7280" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.toolbarBtn}>
-              <Ionicons name="happy-outline" size={24} color="#6b7280" />
             </TouchableOpacity>
           </View>
         }
@@ -209,8 +264,19 @@ const WriteCommentModal = ({
         }
       >
         <ScrollView
+          ref={scrollViewRef}
           style={styles.content}
-          contentContainerStyle={styles.contentContainer}
+          contentContainerStyle={[
+            styles.contentContainer,
+            {
+              paddingBottom: resolveComposerScrollPadding({
+                basePaddingBottom: 24,
+                keyboardVisible: keyboardVisible || shouldShowMentionPanel,
+              }),
+            },
+          ]}
+          automaticallyAdjustKeyboardInsets
+          contentInsetAdjustmentBehavior="automatic"
           showsVerticalScrollIndicator={false}
           scrollEnabled={!shouldShowMentionPanel}
           keyboardShouldPersistTaps="handled"
@@ -243,34 +309,38 @@ const WriteCommentModal = ({
             </View>
           ) : null}
 
-          <TextInput
-            ref={commentInputRef}
-            style={styles.textInput}
-            placeholder={placeholder}
-            placeholderTextColor="#9ca3af"
-            value={text}
-            onChangeText={setText}
-            onSelectionChange={handleSelectionChange}
-            selection={selection}
-            multiline
-            autoFocus
-            maxLength={500}
-            selectionColor={modalTokens.danger}
-            textAlignVertical="top"
-          />
+          <View
+            onLayout={(event) => {
+              setInputTop(event.nativeEvent.layout.y);
+            }}
+          >
+            <TextInput
+              ref={commentInputRef}
+              style={styles.textInput}
+              placeholder={placeholder}
+              placeholderTextColor="#9ca3af"
+              value={text}
+              onChangeText={handleChangeText}
+              onFocus={handleInputFocus}
+              onBlur={handleInputBlur}
+              onSelectionChange={handleSelectionChange}
+              selection={selection}
+              multiline
+              autoFocus
+              maxLength={500}
+              selectionColor={modalTokens.danger}
+              textAlignVertical="top"
+            />
+          </View>
 
-          {selectedImages.length > 0 ? (
-            <View style={styles.imageGrid}>
-              {selectedImages.map((imageUri, index) => (
-                <View key={`${imageUri}-${index}`} style={styles.imageItem}>
-                  <Image source={{ uri: imageUri }} style={styles.uploadedImage} />
-                  <TouchableOpacity style={styles.removeImage} onPress={() => removeImage(index)}>
-                    <Ionicons name="close-circle" size={20} color="#ef4444" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          ) : null}
+          <ComposerImageGrid
+            images={selectedImages}
+            onRemove={removeImage}
+            containerStyle={styles.imageGrid}
+            itemStyle={styles.imageItem}
+            imageStyle={styles.uploadedImage}
+            removeButtonStyle={styles.removeImage}
+          />
 
           <View style={styles.identitySection}>
             <IdentitySelector
@@ -280,13 +350,6 @@ const WriteCommentModal = ({
           </View>
         </ScrollView>
       </ComposerModalScaffold>
-
-      <ImagePickerSheet
-        visible={showImagePicker}
-        onClose={() => setShowImagePicker(false)}
-        onImageSelected={handleImageSelected}
-        title="\u6dfb\u52a0\u56fe\u7247"
-      />
     </>
   );
 };
@@ -297,7 +360,6 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 16,
-    paddingBottom: 24,
   },
   originalCommentCard: {
     padding: 14,
@@ -378,6 +440,58 @@ const styles = StyleSheet.create({
     zIndex: 10,
     backgroundColor: '#ffffff',
     borderRadius: 10,
+  },
+  composerAlertOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 80,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.32)',
+  },
+  composerAlertCard: {
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  composerAlertTitle: {
+    fontSize: scaleFont(18),
+    lineHeight: scaleFont(24),
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  composerAlertMessage: {
+    fontSize: scaleFont(15),
+    lineHeight: scaleFont(22),
+    color: '#4b5563',
+    marginBottom: 16,
+  },
+  composerAlertButton: {
+    alignSelf: 'flex-end',
+    minWidth: 88,
+    height: 40,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ef4444',
+  },
+  composerAlertButtonText: {
+    fontSize: scaleFont(14),
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });
 

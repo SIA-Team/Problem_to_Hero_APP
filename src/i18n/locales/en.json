@@ -1381,6 +1381,12 @@
         "views": "views",
         "likes": "likes"
       },
+      "empty": {
+        "defaultTitle": "No ranked content yet",
+        "defaultDescription": "There is no data to show for this ranking right now. Pull down to refresh and check again later.",
+        "likesTitle": "Likes ranking is on the way",
+        "likesDescription": "This sub-ranking is still being prepared by the backend. You can check the other rankings first."
+      },
       "allContentShown": "All content shown"
     },
     "report": {

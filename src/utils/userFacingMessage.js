@@ -66,6 +66,10 @@ const looksLikeTechnicalMessage = (text) => {
   return (
     /api调用失败|接口调用失败/i.test(text) ||
     /\[object Object\]/i.test(text) ||
+    /cannot invoke/i.test(text) ||
+    /because the return value of/i.test(text) ||
+    /java\.lang\./i.test(text) ||
+    /nullpointerexception/i.test(text) ||
     /request failed with status code/i.test(text) ||
     /network error/i.test(text) ||
     /网络连接失败|网络请求失败|请求失败，请检查网络/i.test(text) ||

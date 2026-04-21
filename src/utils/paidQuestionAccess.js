@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const PAID_QUESTION_ACCESS_KEY = '@paid_question_access';
+let paidQuestionAccessMapCache = null;
 
 const normalizeQuestionId = questionId => {
   if (questionId === undefined || questionId === null || questionId === '') {
@@ -32,14 +33,20 @@ const normalizeAccessMap = rawValue => {
 };
 
 export const getPaidQuestionAccessMap = async () => {
+  if (paidQuestionAccessMapCache) {
+    return paidQuestionAccessMapCache;
+  }
+
   try {
     const rawValue = await AsyncStorage.getItem(PAID_QUESTION_ACCESS_KEY);
 
     if (!rawValue) {
+      paidQuestionAccessMapCache = {};
       return {};
     }
 
-    return normalizeAccessMap(JSON.parse(rawValue));
+    paidQuestionAccessMapCache = normalizeAccessMap(JSON.parse(rawValue));
+    return paidQuestionAccessMapCache;
   } catch (error) {
     console.error('Failed to load paid question access state:', error);
     return {};
@@ -75,6 +82,7 @@ export const markQuestionAsPaid = async ({ questionId, paidAmount = 0 } = {}) =>
   };
 
   await AsyncStorage.setItem(PAID_QUESTION_ACCESS_KEY, JSON.stringify(nextMap));
+  paidQuestionAccessMapCache = nextMap;
 
   return nextRecord;
 };
@@ -82,6 +90,20 @@ export const markQuestionAsPaid = async ({ questionId, paidAmount = 0 } = {}) =>
 export const applyPaidQuestionAccessState = async questions => {
   if (!Array.isArray(questions) || questions.length === 0) {
     return Array.isArray(questions) ? questions : [];
+  }
+
+  const hasPaidQuestions = questions.some(question => {
+    if (!question || typeof question !== 'object') {
+      return false;
+    }
+
+    const payViewAmount = Number(question.payViewAmount) || 0;
+    const paidAmount = Number(question.paidAmount) || 0;
+    return question.type === 'paid' || payViewAmount > 0 || paidAmount > 0;
+  });
+
+  if (!hasPaidQuestions) {
+    return questions;
   }
 
   const accessMap = await getPaidQuestionAccessMap();

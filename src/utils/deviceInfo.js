@@ -300,6 +300,86 @@ class DeviceInfo {
     
     return fingerprint;
   }
+
+  /**
+   * 获取设备的唯一标识符（推荐用于用户识别）
+   * 结合多个标识符，提供更稳定的设备识别
+   * @returns {Promise<Object>} 包含多个标识符的对象
+   */
+  static async getDeviceIdentifiers() {
+    try {
+      const identifiers = {
+        // 1. Installation ID - 每次安装唯一
+        installationId: Constants.installationId,
+        
+        // 2. Session ID - 每次启动唯一（不推荐用于持久化识别）
+        sessionId: Constants.sessionId,
+        
+        // 3. 设备指纹 - 基于硬件特征生成
+        fingerprint: await this.generateFingerprintString(),
+        
+        // 4. 平台特定的标识符
+        platformSpecific: null,
+      };
+
+      // iOS: 获取 IDFV (Identifier for Vendor)
+      if (Platform.OS === 'ios') {
+        try {
+          const Application = require('expo-application');
+          identifiers.platformSpecific = await Application.getIosIdForVendorAsync();
+          console.log('📱 iOS IDFV:', identifiers.platformSpecific);
+        } catch (error) {
+          console.warn('无法获取 iOS IDFV:', error);
+        }
+      }
+      
+      // Android: 获取 Android ID
+      if (Platform.OS === 'android') {
+        try {
+          const Application = require('expo-application');
+          identifiers.platformSpecific = Application.androidId;
+          console.log('🤖 Android ID:', identifiers.platformSpecific);
+        } catch (error) {
+          console.warn('无法获取 Android ID:', error);
+        }
+      }
+
+      console.log('🔑 设备标识符汇总:', {
+        installationId: identifiers.installationId,
+        fingerprint: identifiers.fingerprint,
+        platformSpecific: identifiers.platformSpecific,
+      });
+
+      return identifiers;
+    } catch (error) {
+      console.error('获取设备标识符失败:', error);
+      
+      // 返回降级方案
+      return {
+        installationId: Constants.installationId,
+        sessionId: Constants.sessionId,
+        fingerprint: await this.generateFingerprintString(),
+        platformSpecific: null,
+      };
+    }
+  }
+
+  /**
+   * 生成用于后端的设备唯一标识（推荐）
+   * 优先使用平台特定ID，降级到指纹
+   * @returns {Promise<string>}
+   */
+  static async getStableDeviceId() {
+    const identifiers = await this.getDeviceIdentifiers();
+    
+    // 优先级：平台特定ID > 设备指纹 > Installation ID
+    const stableId = identifiers.platformSpecific || 
+                     identifiers.fingerprint || 
+                     identifiers.installationId;
+    
+    console.log('✅ 最终使用的设备ID:', stableId);
+    return stableId;
+  }
 }
 
 export default DeviceInfo;

@@ -1,5 +1,6 @@
 import apiClient from './apiClient';
 import { API_ENDPOINTS, replaceUrlParams } from '../../config/api';
+import { mergeLocalInviteUsers, normalizeFollowingInviteUsers } from '../../utils/localInviteUsers';
 import { normalizeEntityId, serializeJsonPreservingLongIdNumbers } from '../../utils/jsonLongId';
 
 const serializeFollowPayload = userId =>
@@ -24,6 +25,138 @@ const buildPaginationParams = ({ pageNum, pageSize } = {}) => {
   return params;
 };
 
+const hasUserIdParam = params =>
+  params?.userId !== undefined && params?.userId !== null && params?.userId !== '';
+
+const PUBLIC_PROFILE_SEARCH_FALLBACK_PAGE_SIZE = 100;
+const PUBLIC_PROFILE_SEARCH_FALLBACK_MAX_PAGES = 5;
+
+const isSuccessfulBusinessResponse = response => {
+  const code = Number(response?.code ?? response?.data?.code);
+  return code === 0 || code === 200;
+};
+
+const getBusinessMessage = response => {
+  const message =
+    response?.msg ??
+    response?.message ??
+    response?.data?.msg ??
+    response?.data?.message ??
+    '';
+
+  return typeof message === 'string' ? message.trim() : '';
+};
+
+const isPublicProfileSearchRouteMismatch = response => {
+  const normalizedMessage = getBusinessMessage(response).toLowerCase();
+
+  return normalizedMessage.includes('userid') && normalizedMessage.includes('search');
+};
+
+const normalizeSearchKeyword = value => String(value ?? '').trim().toLowerCase();
+
+const scorePublicProfileSearchCandidate = (user, keyword) => {
+  if (!keyword) {
+    return 1;
+  }
+
+  const username = normalizeSearchKeyword(user?.username);
+  const nickName = normalizeSearchKeyword(user?.nickName ?? user?.nickname);
+  const userId = normalizeSearchKeyword(user?.userId ?? user?.id);
+  let score = 0;
+
+  if (nickName.startsWith(keyword)) {
+    score += 120;
+  } else if (nickName.includes(keyword)) {
+    score += 70;
+  }
+
+  if (username.startsWith(keyword)) {
+    score += 100;
+  } else if (username.includes(keyword)) {
+    score += 60;
+  }
+
+  if (userId === keyword) {
+    score += 80;
+  } else if (userId.includes(keyword)) {
+    score += 30;
+  }
+
+  return score;
+};
+
+const filterPublicProfileSearchCandidates = (users, keyword, limit) => {
+  const normalizedKeyword = normalizeSearchKeyword(keyword);
+  const normalizedUsers = mergeLocalInviteUsers(users);
+
+  if (!normalizedKeyword) {
+    return normalizedUsers.slice(0, limit);
+  }
+
+  return normalizedUsers
+    .map(user => ({
+      user,
+      score: scorePublicProfileSearchCandidate(user, normalizedKeyword),
+    }))
+    .filter(item => item.score > 0)
+    .sort((left, right) => {
+      if (right.score !== left.score) {
+        return right.score - left.score;
+      }
+
+      return String(left.user?.nickName ?? left.user?.username ?? '').localeCompare(
+        String(right.user?.nickName ?? right.user?.username ?? '')
+      );
+    })
+    .slice(0, limit)
+    .map(item => item.user);
+};
+
+const buildFallbackPublicProfileSearchResponse = users => ({
+  code: 200,
+  msg: 'ok',
+  data: users,
+});
+
+const fallbackSearchPublicProfiles = async (keyword, limit) => {
+  let mergedUsers = [];
+  let pageNum = 1;
+
+  while (pageNum <= PUBLIC_PROFILE_SEARCH_FALLBACK_MAX_PAGES) {
+    const response = await apiClient.get(API_ENDPOINTS.USER.MY_FOLLOWING, {
+      params: {
+        pageNum,
+        pageSize: PUBLIC_PROFILE_SEARCH_FALLBACK_PAGE_SIZE,
+        size: PUBLIC_PROFILE_SEARCH_FALLBACK_PAGE_SIZE,
+        limit: PUBLIC_PROFILE_SEARCH_FALLBACK_PAGE_SIZE,
+      },
+    });
+
+    if (!isSuccessfulBusinessResponse(response)) {
+      throw new Error(getBusinessMessage(response) || 'Failed to load following users');
+    }
+
+    const pageUsers = mergeLocalInviteUsers(normalizeFollowingInviteUsers(response));
+
+    if (pageUsers.length === 0) {
+      break;
+    }
+
+    mergedUsers = mergeLocalInviteUsers([...mergedUsers, ...pageUsers]);
+
+    if (pageUsers.length < PUBLIC_PROFILE_SEARCH_FALLBACK_PAGE_SIZE) {
+      break;
+    }
+
+    pageNum += 1;
+  }
+
+  return buildFallbackPublicProfileSearchResponse(
+    filterPublicProfileSearchCandidates(mergedUsers, keyword, limit)
+  );
+};
+
 /**
  * 用户相关 API
  */
@@ -34,41 +167,10 @@ const userApi = {
    * @returns {Promise<Object>}
    */
   getProfile: async (userId) => {
-    console.log('\n📡 调用 getProfile API...');
-    console.log('   userId:', userId || '当前用户');
-    
-    let response;
-    if (userId) {
-      // 获取其他用户的资料
-      console.log('   请求 URL:', `${API_ENDPOINTS.USER.PROFILE}/${userId}`);
-      response = await apiClient.get(`${API_ENDPOINTS.USER.PROFILE}/${userId}`);
-    } else {
-      // 获取当前用户的详细信息
-      console.log('   请求 URL:', API_ENDPOINTS.USER.PROFILE_ME);
-      response = await apiClient.get(API_ENDPOINTS.USER.PROFILE_ME);
-    }
-    
-    console.log('\n📥 /app/user/profile/me 接口返回数据:');
-    console.log('─────────────────────────────────────────────────────────────────');
-    console.log(JSON.stringify(response, null, 2));
-    console.log('─────────────────────────────────────────────────────────────────');
-    
-    if (response && response.data) {
-      console.log('\n📊 用户数据字段详情:');
-      console.log('   userId:', response.data.userId);
-      console.log('   username:', response.data.username, '(用户名)');
-      console.log('   usernameLastModified:', response.data.usernameLastModified, '(用户名上次修改时间)');
-      console.log('   nickName:', response.data.nickName);
-      console.log('   email:', response.data.email);
-      console.log('   phonenumber:', response.data.phonenumber);
-      console.log('   avatar:', response.data.avatar);
-      console.log('   signature:', response.data.signature);
-      console.log('   profession:', response.data.profession);
-      console.log('   location:', response.data.location);
-      console.log('   sex:', response.data.sex);
-      console.log('   passwordChanged:', response.data.passwordChanged, '(是否修改过密码)');
-    }
-    
+    const response = userId
+      ? await apiClient.get(`${API_ENDPOINTS.USER.PROFILE}/${userId}`)
+      : await apiClient.get(API_ENDPOINTS.USER.PROFILE_ME);
+
     return response;
   },
 
@@ -82,7 +184,7 @@ const userApi = {
     return apiClient.get(url);
   },
 
-  searchPublicProfiles: (keyword, limit = 20) => {
+  searchPublicProfiles: async (keyword, limit = 20) => {
     const normalizedKeyword = String(keyword ?? '').trim();
     const normalizedLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
 
@@ -90,12 +192,36 @@ const userApi = {
       return Promise.reject(new Error('keyword is required'));
     }
 
-    return apiClient.get(API_ENDPOINTS.USER.PUBLIC_SEARCH, {
-      params: {
-        keyword: normalizedKeyword,
-        limit: normalizedLimit,
-      },
-    });
+    try {
+      const response = await apiClient.get(API_ENDPOINTS.USER.PUBLIC_SEARCH, {
+        params: {
+          keyword: normalizedKeyword,
+          limit: normalizedLimit,
+        },
+      });
+
+      if (isSuccessfulBusinessResponse(response)) {
+        return response;
+      }
+
+      if (isPublicProfileSearchRouteMismatch(response)) {
+        console.warn(
+          'Public profile search endpoint was routed to the public profile detail handler. Falling back to following list search.'
+        );
+        return fallbackSearchPublicProfiles(normalizedKeyword, normalizedLimit);
+      }
+
+      throw new Error(getBusinessMessage(response) || 'Failed to search public profiles');
+    } catch (error) {
+      if (isPublicProfileSearchRouteMismatch(error)) {
+        console.warn(
+          'Public profile search request failed because the backend treated "search" as a userId. Falling back to following list search.'
+        );
+        return fallbackSearchPublicProfiles(normalizedKeyword, normalizedLimit);
+      }
+
+      throw error;
+    }
   },
 
   updateProfile: (data) => {
@@ -304,7 +430,7 @@ const userApi = {
    * @returns {Promise<Object>}
    */
   getFollowers: (params) => {
-    if (params?.userId !== undefined && params?.userId !== null && params?.userId !== '') {
+    if (hasUserIdParam(params)) {
       return userApi.getUserFollowers(params);
     }
 
@@ -323,11 +449,12 @@ const userApi = {
       ...params,
     };
 
-    if (normalizedParams.userId !== undefined && normalizedParams.userId !== null && normalizedParams.userId !== '') {
+    if (hasUserIdParam(normalizedParams)) {
       normalizedParams.userId = normalizeEntityId(normalizedParams.userId);
+      return apiClient.get(API_ENDPOINTS.USER.USER_FOLLOWING, { params: normalizedParams });
     }
 
-    return apiClient.get(API_ENDPOINTS.USER.FOLLOWING, { params: normalizedParams });
+    return apiClient.get(API_ENDPOINTS.USER.MY_FOLLOWING, { params: normalizedParams });
   },
 
   getWalletBalance: async () => {

@@ -27,14 +27,12 @@ const processTitle = (title) => {
   
   // 如果标题过长（超过50个字符），可能包含了描述内容
   if (title.length > 50) {
-    console.log(`⚠️ 标题过长: "${title}" (${title.length}字符)`);
     
     // 尝试提取问题的核心部分
     // 1. 如果包含问号，截取到第一个问号
     const questionMarkIndex = title.indexOf('？') !== -1 ? title.indexOf('？') : title.indexOf('?');
     if (questionMarkIndex !== -1 && questionMarkIndex < 50) {
       const extractedTitle = title.substring(0, questionMarkIndex + 1);
-      console.log(`📝 提取问题标题: "${extractedTitle}"`);
       return extractedTitle;
     }
     
@@ -42,13 +40,11 @@ const processTitle = (title) => {
     const periodIndex = title.indexOf('。') !== -1 ? title.indexOf('。') : title.indexOf('.');
     if (periodIndex !== -1 && periodIndex < 50) {
       const extractedTitle = title.substring(0, periodIndex + 1);
-      console.log(`📝 提取问题标题: "${extractedTitle}"`);
       return extractedTitle;
     }
     
     // 3. 如果都没有，截取前40个字符并加省略号
     const truncatedTitle = title.substring(0, 40) + '...';
-    console.log(`📝 截断标题: "${truncatedTitle}"`);
     return truncatedTitle;
   }
   
@@ -178,10 +174,16 @@ const transformApiDataToHomeFormat = (apiData) => {
   const filteredData = apiData.filter(item => item.status !== 0);
   
   if (filteredData.length !== apiData.length) {
-    console.log(`🔍 过滤问题数据: 原始${apiData.length}条，过滤后${filteredData.length}条（移除了${apiData.length - filteredData.length}条 status=0 的数据）`);
   }
   
   return filteredData.map((item, index) => {
+    const normalizedQuestionId =
+      item.id ??
+      item.questionId ??
+      item.question_id ??
+      item.contentId ??
+      item.subjectId ??
+      `question-${index}`;
     const normalizedPublicUserId =
       item.publicUserId ??
       item.authorUserId ??
@@ -208,14 +210,17 @@ const transformApiDataToHomeFormat = (apiData) => {
     
     // 基础数据转换
     const transformedItem = {
-      id: item.id,
+      id: normalizedQuestionId,
       publicUserId: normalizedPublicUserId,
       authorId: item.authorId ?? item.author_id ?? normalizedPublicUserId,
       userId: item.userId ?? item.user_id ?? normalizedPublicUserId,
       title: processTitle(item.title) || '无标题',
       author: item.authorNickName || item.userName || item.userNickname || '匿名用户',
       authorNickName: item.authorNickName || item.userName || item.userNickname || null,
-      avatar: item.authorAvatar || item.userAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${item.id}`,
+      avatar:
+        item.authorAvatar ||
+        item.userAvatar ||
+        `https://api.dicebear.com/7.x/avataaars/svg?seed=user${normalizedQuestionId}`,
       authorAvatar: item.authorAvatar || item.userAvatar || null,
       time: timeDisplay,
       likeCount: item.likeCount || 0,
@@ -335,6 +340,7 @@ const formatApiTime = (timeStr) => {
 
 // 正在进行的请求（用于去重）
 const pendingRequests = new Map();
+const backgroundRefreshTimers = new Map();
 
 // 预加载队列
 const prefetchQueue = [];
@@ -404,12 +410,10 @@ export const loadQuestionSupplements = async (questionId, sortBy = 'featured', p
  */
 const backgroundUpdateSupplements = async (questionId, sortBy, page) => {
   try {
-    console.log(`🔄 后台更新补充: questionId=${questionId}, sortBy=${sortBy}, page=${page}`);
     const response = await fetchSupplementsByQuestion(questionId, sortBy, page);
     
     if (response && response.length > 0) {
       await setCache('supplements', { questionId, sortBy, page }, response);
-      console.log(`✅ 后台更新补充完成: questionId=${questionId}, sortBy=${sortBy}, page=${page}`);
     }
   } catch (error) {
     console.warn(`补充列表后台更新失败: questionId=${questionId}, sortBy=${sortBy}, page=${page}`, error);
@@ -421,11 +425,6 @@ const backgroundUpdateSupplements = async (questionId, sortBy, page) => {
  */
 const fetchSupplementsByQuestion = async (questionId, sortBy, page) => {
   try {
-    console.log('\n🔍 ==================== 补充列表API调用 ====================');
-    console.log('📊 调用参数:');
-    console.log('  questionId:', questionId);
-    console.log('  sortBy:', sortBy);
-    console.log('  page:', page);
     
     const response = await questionApi.getQuestionSupplements(questionId, {
       sortBy,
@@ -433,43 +432,27 @@ const fetchSupplementsByQuestion = async (questionId, sortBy, page) => {
       pageSize: 10,
     });
     
-    console.log('📥 API原始响应:');
-    console.log(JSON.stringify(response, null, 2));
     
     // 处理响应数据
     if (response && response.code === 200) {
       const rawData = response.data?.rows || response.data?.list || response.data || [];
       
-      console.log('📋 提取的数据:');
-      console.log('  数据路径: response.data?.rows || response.data?.list || response.data');
-      console.log('  提取结果:', JSON.stringify(rawData, null, 2));
-      console.log('  数据条数:', Array.isArray(rawData) ? rawData.length : 0);
       
       if (Array.isArray(rawData) && rawData.length > 0) {
-        console.log('\n📄 第一条数据详细分析:');
         const firstItem = rawData[0];
-        console.log('  完整数据:', JSON.stringify(firstItem, null, 2));
-        console.log('\n  字段检查:');
         Object.keys(firstItem).forEach(key => {
-          console.log(`    ${key}: ${firstItem[key]} (${typeof firstItem[key]})`);
         });
       }
       
       const transformedData = transformSupplementDataToFormat(rawData);
       
-      console.log('\n📊 转换后数据:');
-      console.log(JSON.stringify(transformedData, null, 2));
-      console.log('🔍 ==================== API调用结束 ====================\n');
       
       return transformedData;
     } else {
-      console.log('⚠️  API响应异常:', response);
-      console.log('🔍 ==================== API调用结束 ====================\n');
       return [];
     }
   } catch (error) {
     console.warn('补充列表接口调用失败:', error);
-    console.log('🔍 ==================== API调用结束 ====================\n');
     throw error;
   }
 };
@@ -496,7 +479,6 @@ export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onD
     try {
       // 优化：如果是强制刷新，直接从网络加载，不检查缓存
       if (forceRefresh) {
-        console.log(`⚡ 强制刷新: ${tabType} - 第${page}页 (跳过缓存检查)`);
         const response = await fetchQuestionsByTab(tabType, page, onDebugUpdate);
         const decoratedResponse = await applyPaidQuestionAccessState(response);
         
@@ -512,7 +494,7 @@ export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onD
       const cached = await getCache('questions', { tabType, page });
       if (cached) {
         // 返回缓存数据，同时在后台更新
-        backgroundUpdate(tabType, page, onDebugUpdate);
+        scheduleBackgroundUpdate(tabType, page, onDebugUpdate);
         return { data: await applyPaidQuestionAccessState(cached), fromCache: true };
       }
       
@@ -530,7 +512,6 @@ export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onD
       // 如果网络请求失败，尝试返回缓存数据
       const cached = await getCache('questions', { tabType, page });
       if (cached) {
-        console.log(`⚠️ 网络请求失败，使用缓存数据: ${tabType} - 第${page}页`);
         return { data: await applyPaidQuestionAccessState(cached), fromCache: true };
       }
       
@@ -552,12 +533,10 @@ export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onD
  */
 const backgroundUpdate = async (tabType, page) => {
   try {
-    console.log(`🔄 后台更新: ${tabType} - 第${page}页`);
     const response = await fetchQuestionsByTab(tabType, page);
     
     if (response && response.length > 0) {
       await setCache('questions', { tabType, page }, response);
-      console.log(`✅ 后台更新完成: ${tabType} - 第${page}页`);
     }
   } catch (error) {
     console.warn(`问题列表后台更新失败: ${tabType} - 第${page}页`, error);
@@ -567,6 +546,21 @@ const backgroundUpdate = async (tabType, page) => {
 /**
  * 根据 Tab 类型获取数据
  */
+const scheduleBackgroundUpdate = (tabType, page, onDebugUpdate = null) => {
+  const cacheKey = `questions_${tabType}_${page}`;
+
+  if (backgroundRefreshTimers.has(cacheKey)) {
+    return;
+  }
+
+  const timer = setTimeout(() => {
+    backgroundRefreshTimers.delete(cacheKey);
+    loadQuestions(tabType, page, true, onDebugUpdate).catch(() => {});
+  }, 1200);
+
+  backgroundRefreshTimers.set(cacheKey, timer);
+};
+
 const fetchQuestionsByTab = async (tabType, page, onDebugUpdate) => {
   const pageSize = 20;
   
@@ -681,7 +675,6 @@ const processPrefetchQueue = async () => {
     const tabType = prefetchQueue.shift();
     
     try {
-      console.log(`🔮 预加载 Tab: ${tabType}`);
       await loadQuestions(tabType, 1, false);
     } catch (error) {
       console.warn(`问题列表预加载失败: ${tabType}`, error);
@@ -704,7 +697,6 @@ export const prefetchNextPage = async (tabType, currentPage) => {
   const nextPage = currentPage + 1;
   
   try {
-    console.log(`🔮 预加载下一页: ${tabType} - 第${nextPage}页`);
     await loadQuestions(tabType, nextPage, false);
   } catch (error) {
     console.warn(`问题列表预加载下一页失败: ${tabType} - 第${nextPage}页`, error);
@@ -718,7 +710,6 @@ export const prefetchNextPage = async (tabType, currentPage) => {
  * @returns {Promise<Object>} 各 Tab 的数据
  */
 export const batchLoadTabs = async (tabs) => {
-  console.log(`📦 批量加载 ${tabs.length} 个 Tab`);
   
   const results = {};
   
@@ -773,5 +764,4 @@ export const clearTabCache = async (tabType) => {
     await clearCache('questions', { tabType, page });
   }
   
-  console.log(`🗑️ 已清除 ${tabType} 的所有缓存`);
 };

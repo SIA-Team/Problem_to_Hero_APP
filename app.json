@@ -27,7 +27,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.problemvshero.app",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "infoPlist": {
         "UIViewControllerBasedStatusBarAppearance": false,
         "NSPhotoLibraryUsageDescription": "允许访问您的相册以上传图片和更换头像",

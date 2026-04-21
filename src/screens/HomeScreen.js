@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { AppState, View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, Dimensions, TextInput, FlatList, Platform, ActivityIndicator, RefreshControl, KeyboardAvoidingView } from 'react-native';
+import { AppState, InteractionManager, View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, Dimensions, TextInput, FlatList, Platform, ActivityIndicator, RefreshControl, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import InitialCredentialsModal from '../components/InitialCredentialsModal';
 import WriteCommentModal from '../components/WriteCommentModal';
 import KeyboardDismissView from '../components/KeyboardDismissView';
 import RegionSelector from '../components/RegionSelector';
+import SkeletonBlock from '../components/SkeletonBlock';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/useTranslation';
 import { getRegionData } from '../data/regionData';
@@ -33,6 +34,7 @@ import { scaleFont } from '../utils/responsive';
 const { width: screenWidth } = Dimensions.get('window');
 const INITIAL_CREDENTIALS_NOTICE_STORAGE_KEY = '@initial_credentials_notice';
 const MOCK_RECHARGE_RETURN_AMOUNT = 100;
+const HOME_WALLET_REFRESH_DEBOUNCE_MS = 15000;
 
 // tabs array will be moved inside component to use translation
 
@@ -59,14 +61,6 @@ export default function HomeScreen({ navigation }) {
   const regionData = useMemo(() => getRegionData(), []);
   
   // 添加调试信息 - 显示检测到的语言
-  React.useEffect(() => {
-    console.log('='.repeat(50));
-    console.log('🔍 HomeScreen mounted - Language Detection Debug');
-    console.log('='.repeat(50));
-    console.log('📱 regionData.countries:', regionData.countries?.slice(0, 3));
-    console.log('🌐 First country:', regionData.countries?.[0]);
-    console.log('='.repeat(50));
-  }, []);
   
   const [comboTabs, setComboTabs] = useState([]);
 
@@ -92,6 +86,19 @@ export default function HomeScreen({ navigation }) {
     ...baseTabs,
     ...comboTabs.filter(tab => !baseTabs.includes(tab))
   ], [baseTabs, comboTabs]);
+
+  const questionFeedTabs = useMemo(() => {
+    const excludedTabs = new Set([
+      t('home.follow'),
+      t('home.topics'),
+      t('home.hotList'),
+      t('home.rewardRanking'),
+      t('home.questionRanking'),
+      t('home.heroRanking'),
+    ]);
+
+    return tabs.filter(tab => !excludedTabs.has(tab));
+  }, [tabs, t]);
   
   const [activeTab, setActiveTab] = useState('');
 
@@ -195,9 +202,12 @@ export default function HomeScreen({ navigation }) {
   const pendingRechargeSimulationRef = useRef(false);
   const appStateRef = useRef(AppState.currentState);
   const handleRechargeReturnRef = useRef(async () => {});
+  const lastWalletRefreshAtRef = useRef(0);
+  const walletRefreshTaskRef = useRef(null);
   const [showInitialCredentialsModal, setShowInitialCredentialsModal] = useState(false);
   const [initialCredentials, setInitialCredentials] = useState({ username: '', password: '' });
   const [selectedRegion, setSelectedRegion] = useState({ country: '', city: '', state: '', district: '' });
+  const hasFocusedHomeOnceRef = useRef(false);
   
   // 话题关注状态
   const [topicFollowState, setTopicFollowState] = useState({});
@@ -217,7 +227,7 @@ export default function HomeScreen({ navigation }) {
     onRefresh,
     onLoadMore,
     setQuestionList,
-  } = useOptimizedQuestions(activeTab, tabs);
+  } = useOptimizedQuestions(activeTab, questionFeedTabs);
 
   
   // 问题标题展开/折叠状态
@@ -318,6 +328,23 @@ export default function HomeScreen({ navigation }) {
     setQuestionList((prevList) => filterBlockedQuestions(prevList, blockedIds));
   }, [questionList, filterBlockedQuestions, setQuestionList]);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      if (
+        hasFocusedHomeOnceRef.current &&
+        activeTab &&
+        activeTab !== t('home.topics') &&
+        !optimizedLoading &&
+        !refreshing &&
+        questionList.length === 0
+      ) {
+        onRefresh();
+      }
+
+      hasFocusedHomeOnceRef.current = true;
+    }, [activeTab, optimizedLoading, onRefresh, questionList.length, refreshing, t])
+  );
+
 
 
   // 同城功能
@@ -385,6 +412,43 @@ export default function HomeScreen({ navigation }) {
     
     return null;
   };
+
+  const renderEmptyList = React.useCallback(() => {
+    if (optimizedLoading) {
+      return (
+        <View style={styles.skeletonContainer}>
+          {[0, 1, 2, 3].map((item) => (
+            <View key={`skeleton-${item}`} style={styles.skeletonCard}>
+              <SkeletonBlock width="42%" height={18} style={styles.skeletonTitleShort} />
+              <SkeletonBlock width="100%" height={72} style={styles.skeletonBanner} />
+              <View style={styles.skeletonMetaRow}>
+                <SkeletonBlock width={32} height={32} style={styles.skeletonAvatar} />
+                <View style={styles.skeletonMetaTextGroup}>
+                  <SkeletonBlock width="46%" height={12} style={styles.skeletonMetaPrimary} />
+                  <SkeletonBlock width="28%" height={10} style={styles.skeletonMetaSecondary} />
+                </View>
+                <View style={styles.skeletonStatGroup}>
+                  <SkeletonBlock width={20} height={12} style={styles.skeletonStatItem} />
+                  <SkeletonBlock width={20} height={12} style={styles.skeletonStatItem} />
+                  <SkeletonBlock width={16} height={12} style={styles.skeletonMenuDot} />
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.listStateContainer}>
+        <Ionicons name="document-text-outline" size={30} color="#9ca3af" />
+        <Text style={styles.listStateTitle}>{t('common.noData')}</Text>
+        <TouchableOpacity style={styles.listRetryBtn} onPress={onRefresh} activeOpacity={0.8}>
+          <Text style={styles.listRetryBtnText}>{t('common.refresh')}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }, [onRefresh, optimizedLoading, t]);
 
   // 问题类型和类别数据
   const questionTypes = ['国家问题', '行业问题', '个人问题'];
@@ -687,7 +751,18 @@ export default function HomeScreen({ navigation }) {
     return Number.isInteger(numericAmount) ? `${numericAmount}` : numericAmount.toFixed(2);
   }, []);
 
-  const loadWalletBalance = useCallback(async () => {
+  const loadWalletBalance = useCallback(async (options = {}) => {
+    const forceRefresh = options.forceRefresh === true;
+    const now = Date.now();
+
+    if (
+      !forceRefresh &&
+      lastWalletRefreshAtRef.current > 0 &&
+      now - lastWalletRefreshAtRef.current < HOME_WALLET_REFRESH_DEBOUNCE_MS
+    ) {
+      return;
+    }
+
     const fallbackWalletBalance = await getWalletBalanceWithMock(0);
 
     setWalletData(prev => ({
@@ -708,7 +783,11 @@ export default function HomeScreen({ navigation }) {
         });
       }
     } catch (error) {
-      console.error('Failed to load wallet balance in HomeScreen:', error);
+      if (__DEV__) {
+        console.log('HomeScreen wallet balance fallback applied:', error?.message || error);
+      }
+    } finally {
+      lastWalletRefreshAtRef.current = Date.now();
     }
   }, []);
 
@@ -722,7 +801,9 @@ export default function HomeScreen({ navigation }) {
         username: profileData.username || '',
       });
     } catch (error) {
-      console.error('Failed to load current user profile in HomeScreen:', error);
+      if (__DEV__) {
+        console.log('HomeScreen user profile load skipped:', error?.message || error);
+      }
     }
   }, []);
 
@@ -739,7 +820,7 @@ export default function HomeScreen({ navigation }) {
       balance: (Number(prev.balance) || 0) + (Number.isFinite(numericAmount) ? numericAmount : 0),
     }));
 
-    await loadWalletBalance();
+    await loadWalletBalance({ forceRefresh: true });
     showAppAlert(
       t('profile.rechargeSuccess'),
       `${t('profile.rechargeSuccess')} $${numericAmount.toFixed(2)} (${t('profile.mockRechargeTag')})`
@@ -783,12 +864,25 @@ export default function HomeScreen({ navigation }) {
   }, [handleMockRecharge]);
 
   useEffect(() => {
-    loadWalletBalance();
-    loadCurrentUserProfile();
-  }, [loadCurrentUserProfile, loadWalletBalance]);
+    const task = InteractionManager.runAfterInteractions(() => {
+      loadCurrentUserProfile();
+    });
+
+    return () => {
+      task.cancel();
+    };
+  }, [loadCurrentUserProfile]);
 
   useFocusEffect(useCallback(() => {
-    loadWalletBalance();
+    walletRefreshTaskRef.current?.cancel?.();
+    walletRefreshTaskRef.current = InteractionManager.runAfterInteractions(() => {
+      loadWalletBalance();
+    });
+
+    return () => {
+      walletRefreshTaskRef.current?.cancel?.();
+      walletRefreshTaskRef.current = null;
+    };
   }, [loadWalletBalance]));
 
   useEffect(() => {
@@ -953,6 +1047,25 @@ export default function HomeScreen({ navigation }) {
     return parts[parts.length - 1];
   };
 
+  const getSelectedRegionId = () => {
+    const regionIds = [
+      selectedRegion.districtId,
+      selectedRegion.stateId,
+      selectedRegion.cityId,
+      selectedRegion.countryId,
+    ];
+    const matchedRegionId = regionIds.find(regionId => {
+      if (regionId === undefined || regionId === null) {
+        return false;
+      }
+
+      return String(regionId).trim() !== '';
+    });
+
+    const parsedRegionId = Number(matchedRegionId);
+    return Number.isFinite(parsedRegionId) ? parsedRegionId : 0;
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* 顶部搜索栏 */}
@@ -995,7 +1108,18 @@ export default function HomeScreen({ navigation }) {
 
       {/* 标签栏 */}
       <View style={styles.tabBarContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabBar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabBar}
+          contentContainerStyle={styles.tabBarContent}
+          directionalLockEnabled
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+          overScrollMode="never"
+          scrollEventThrottle={16}
+          decelerationRate="fast"
+        >
           {tabs.map(tab => (
             <TouchableOpacity
               key={tab}
@@ -1010,7 +1134,10 @@ export default function HomeScreen({ navigation }) {
                 } else if (tab === t('home.rewardRanking')) {
                   navigation.navigate('RewardRanking');
                 } else if (tab === t('home.questionRanking')) {
-                  navigation.navigate('QuestionRanking');
+                  navigation.navigate('QuestionRanking', {
+                    regionId: getSelectedRegionId(),
+                    selectedRegion,
+                  });
                 } else if (tab === t('home.heroRanking')) {
                   navigation.navigate('HeroRanking');
                 } else {
@@ -1046,16 +1173,17 @@ export default function HomeScreen({ navigation }) {
           <FlashList
             data={questionList}
             estimatedItemSize={300}
-            keyExtractor={(item) => item.id.toString()}
+            keyExtractor={(item, index) => String(item?.id ?? item?.questionId ?? `question-${index}`)}
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl
-                refreshing={refreshing}
+                refreshing={refreshing && questionList.length === 0}
                 onRefresh={onRefresh}
                 colors={['#ef4444']}
                 tintColor="#ef4444"
               />
             }
+            ListEmptyComponent={renderEmptyList}
             onEndReached={onLoadMore}
             onEndReachedThreshold={0.3}
             ListHeaderComponent={() => (
@@ -1663,6 +1791,7 @@ const styles = StyleSheet.create({
   badge: { position: 'absolute', top: 6, right: 6, width: 8, height: 8, backgroundColor: '#ef4444', borderRadius: 4 },
   tabBarContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', height: 44, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#ebebeb' },
   tabBar: { flex: 1 },
+  tabBarContent: { paddingRight: 8 },
   tabItem: { paddingHorizontal: 12, height: '100%', justifyContent: 'center', alignItems: 'center', position: 'relative' },
   tabText: { fontSize: scaleFont(16), color: '#505050', fontWeight: '400', paddingBottom: 4 },
   tabTextActive: { color: '#ef4444', fontWeight: '600' },
@@ -1673,6 +1802,23 @@ const styles = StyleSheet.create({
   socialButtonText: { fontSize: scaleFont(13), color: '#4b5563', fontWeight: '500' },
   listContainer: { flex: 1, backgroundColor: '#ffffff' },
   list: { flex: 1, paddingTop: 0, paddingHorizontal: 0 },
+  skeletonContainer: { paddingTop: 8, paddingBottom: 20 },
+  skeletonCard: { backgroundColor: '#ffffff', paddingHorizontal: 16, paddingTop: 18, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  skeletonTitleShort: { borderRadius: 6, marginBottom: 16 },
+  skeletonBanner: { borderRadius: 14, backgroundColor: '#faf5e8', borderWidth: 1, borderColor: '#f8e7b4', marginBottom: 16 },
+  skeletonMetaRow: { flexDirection: 'row', alignItems: 'center' },
+  skeletonAvatar: { borderRadius: 16, marginRight: 10 },
+  skeletonMetaTextGroup: { flex: 1, gap: 6 },
+  skeletonMetaPrimary: { borderRadius: 6 },
+  skeletonMetaSecondary: { borderRadius: 5 },
+  skeletonStatGroup: { flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 12 },
+  skeletonStatItem: { borderRadius: 6 },
+  skeletonMenuDot: { borderRadius: 6 },
+  listStateContainer: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 72, gap: 12 },
+  listStateText: { fontSize: scaleFont(14), color: '#9ca3af' },
+  listStateTitle: { fontSize: scaleFont(15), color: '#6b7280', fontWeight: '500' },
+  listRetryBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 18, backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca' },
+  listRetryBtnText: { fontSize: scaleFont(13), color: '#ef4444', fontWeight: '600' },
   footerLoading: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 20 },
   footerText: { marginLeft: 8, fontSize: scaleFont(14), color: '#9ca3af' },
   footerEnd: { paddingVertical: 20, alignItems: 'center' },

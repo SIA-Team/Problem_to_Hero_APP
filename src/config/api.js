@@ -114,6 +114,7 @@ export const API_ENDPOINTS = {
     BROWSE_MY: buildApiPath(SERVICES.CONTENT, '/app/content/browse/my'),  // 获取我的浏览历史
     HOT: '/questions/hot',
     RANKING: '/questions/ranking',
+    RANKING_ALL: buildApiPath(SERVICES.CONTENT, '/app/content/rank/question/all'),
     SEARCH: '/questions/search',
     COMMUNITY_SOLVE_VOTE_SUMMARY: buildApiPath(SERVICES.CONTENT, '/app/content/question/:id/communitySolveVote/summary'),
     COMMUNITY_SOLVE_VOTE: buildApiPath(SERVICES.CONTENT, '/app/content/question/:id/communitySolveVote'),

@@ -5,27 +5,16 @@ describe('nativeSplashGate', () => {
     expect(
       canHideNativeSplashScreen({
         fontsLoaded: false,
-        isInitializing: false,
+        rootLayoutReady: true,
       })
     ).toBe(false);
   });
 
-  it('keeps the native splash visible while app initialization is still running', () => {
+  it('keeps the native splash visible until the root layout is mounted', () => {
     expect(
       canHideNativeSplashScreen({
         fontsLoaded: true,
-        isInitializing: true,
-      })
-    ).toBe(false);
-  });
-
-  it('keeps the native splash visible while the logged-in onboarding gate is still checking', () => {
-    expect(
-      canHideNativeSplashScreen({
-        fontsLoaded: true,
-        isInitializing: false,
-        isLoggedIn: true,
-        isCheckingInterestOnboarding: true,
+        rootLayoutReady: false,
       })
     ).toBe(false);
   });
@@ -34,9 +23,7 @@ describe('nativeSplashGate', () => {
     expect(
       canHideNativeSplashScreen({
         fontsLoaded: true,
-        isInitializing: false,
-        isLoggedIn: true,
-        isCheckingInterestOnboarding: false,
+        rootLayoutReady: true,
       })
     ).toBe(true);
   });

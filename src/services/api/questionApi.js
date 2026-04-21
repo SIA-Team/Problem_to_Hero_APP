@@ -3,6 +3,9 @@ import contentApiClient from './contentApiClient';
 import { API_ENDPOINTS, replaceUrlParams } from '../../config/api';
 
 const LEGACY_QUESTION_DETAIL_ENDPOINT = '/qa-hero-content/app/content/question/detail';
+const QUESTION_RANKING_ALL_CACHE_TTL = 2 * 60 * 1000;
+const questionRankingAllCache = new Map();
+const questionRankingAllPendingRequests = new Map();
 
 const extractRequestErrorMessage = error => {
   if (!error) {
@@ -31,6 +34,12 @@ const isStaticResourceNotFoundError = error => {
 };
 
 const isQuestionApiSuccessResponse = response => !!response && response.code === 200;
+
+const buildQuestionRankingAllCacheKey = params => {
+  const parsedRegionId = Number(params?.regionId);
+  const regionId = Number.isFinite(parsedRegionId) ? parsedRegionId : 0;
+  return `question-ranking-all:${regionId}`;
+};
 
 const shouldFallbackQuestionRequest = result => {
   if (isQuestionApiSuccessResponse(result)) {
@@ -466,6 +475,49 @@ const questionApi = {
    */
   getQuestionRanking: (params) => {
     return apiClient.get(API_ENDPOINTS.QUESTION.RANKING, { params });
+  },
+
+  getQuestionRankingAll: (params = {}, options = {}) => {
+    const parsedRegionId = Number(params.regionId);
+    const regionId = Number.isFinite(parsedRegionId) ? parsedRegionId : 0;
+    const cacheKey = buildQuestionRankingAllCacheKey({ regionId });
+    const forceRefresh = options.forceRefresh === true;
+
+    if (!forceRefresh) {
+      const cachedEntry = questionRankingAllCache.get(cacheKey);
+      const isCacheValid =
+        cachedEntry &&
+        Date.now() - cachedEntry.timestamp < QUESTION_RANKING_ALL_CACHE_TTL &&
+        isQuestionApiSuccessResponse(cachedEntry.response);
+
+      if (isCacheValid) {
+        return Promise.resolve(cachedEntry.response);
+      }
+
+      if (questionRankingAllPendingRequests.has(cacheKey)) {
+        return questionRankingAllPendingRequests.get(cacheKey);
+      }
+    }
+
+    const request = contentApiClient.get(API_ENDPOINTS.QUESTION.RANKING_ALL, {
+      params: { regionId },
+    })
+      .then(response => {
+        if (isQuestionApiSuccessResponse(response)) {
+          questionRankingAllCache.set(cacheKey, {
+            response,
+            timestamp: Date.now(),
+          });
+        }
+
+        return response;
+      })
+      .finally(() => {
+        questionRankingAllPendingRequests.delete(cacheKey);
+      });
+
+    questionRankingAllPendingRequests.set(cacheKey, request);
+    return request;
   },
 
   /**

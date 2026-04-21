@@ -15,20 +15,17 @@ import * as ImagePicker from 'expo-image-picker';
 import { showToast } from '../utils/toast';
 import { modalTokens } from './modalTokens';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
-
 import { scaleFont } from '../utils/responsive';
+
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-/**
- * 通用图片选择器底部弹出框
- * 支持拍照和从相册选择
- * 
- * @param {boolean} visible - 是否显示
- * @param {function} onClose - 关闭回调
- * @param {function} onImageSelected - 图片选择成功回调，参数为图片URI
- * @param {string} title - 弹窗标题，默认为"选择图片"
- */
-export default function ImagePickerSheet({ visible, onClose, onImageSelected, title = '选择图片' }) {
+export default function ImagePickerSheet({
+  visible,
+  onClose,
+  onImageSelected,
+  title = '选择图片',
+  renderInPlace = false,
+}) {
   const bottomSafeInset = useBottomSafeInset(20);
   const [slideAnim] = React.useState(new Animated.Value(SCREEN_HEIGHT));
 
@@ -47,21 +44,18 @@ export default function ImagePickerSheet({ visible, onClose, onImageSelected, ti
         useNativeDriver: true,
       }).start();
     }
-  }, [visible]);
+  }, [slideAnim, visible]);
 
-  const handleClose = () => {
+  const handleClose = React.useCallback(() => {
     Animated.timing(slideAnim, {
       toValue: SCREEN_HEIGHT,
       duration: 250,
       useNativeDriver: true,
     }).start(() => {
-      onClose();
+      onClose?.();
     });
-  };
+  }, [onClose, slideAnim]);
 
-  /**
-   * 请求相机权限
-   */
   const requestCameraPermission = async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -77,9 +71,6 @@ export default function ImagePickerSheet({ visible, onClose, onImageSelected, ti
     }
   };
 
-  /**
-   * 请求相册权限
-   */
   const requestMediaLibraryPermission = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -95,26 +86,24 @@ export default function ImagePickerSheet({ visible, onClose, onImageSelected, ti
     }
   };
 
-  /**
-   * 拍照
-   */
   const handleTakePhoto = async () => {
     handleClose();
-    
+
     setTimeout(async () => {
       try {
         const hasPermission = await requestCameraPermission();
-        if (!hasPermission) return;
-        
+        if (!hasPermission) {
+          return;
+        }
+
         const result = await ImagePicker.launchCameraAsync({
           mediaTypes: ['images'],
           allowsEditing: false,
           quality: 0.8,
         });
-        
+
         if (!result.canceled && result.assets && result.assets.length > 0) {
-          const imageUri = result.assets[0].uri;
-          onImageSelected(imageUri);
+          onImageSelected?.(result.assets[0].uri);
         }
       } catch (error) {
         console.error('拍照失败:', error);
@@ -123,26 +112,24 @@ export default function ImagePickerSheet({ visible, onClose, onImageSelected, ti
     }, 300);
   };
 
-  /**
-   * 从相册选择
-   */
   const handleChooseFromAlbum = async () => {
     handleClose();
-    
+
     setTimeout(async () => {
       try {
         const hasPermission = await requestMediaLibraryPermission();
-        if (!hasPermission) return;
-        
+        if (!hasPermission) {
+          return;
+        }
+
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
           allowsEditing: false,
           quality: 0.8,
         });
-        
+
         if (!result.canceled && result.assets && result.assets.length > 0) {
-          const imageUri = result.assets[0].uri;
-          onImageSelected(imageUri);
+          onImageSelected?.(result.assets[0].uri);
         }
       } catch (error) {
         console.error('选择图片失败:', error);
@@ -151,7 +138,75 @@ export default function ImagePickerSheet({ visible, onClose, onImageSelected, ti
     }, 300);
   };
 
-  if (!visible) return null;
+  if (!visible) {
+    return null;
+  }
+
+  const sheetContent = (
+    <View
+      style={[
+        styles.overlay,
+        renderInPlace && styles.inlineOverlay,
+      ]}
+    >
+      <TouchableWithoutFeedback onPress={handleClose}>
+        <View style={StyleSheet.absoluteFill} />
+      </TouchableWithoutFeedback>
+
+      <Animated.View
+        style={[
+          styles.container,
+          {
+            transform: [{ translateY: slideAnim }],
+            paddingBottom: bottomSafeInset,
+          },
+        ]}
+        pointerEvents="box-none"
+      >
+        <View style={styles.header} pointerEvents="auto">
+          <View style={styles.dragIndicator} />
+          <Text style={styles.title}>{title}</Text>
+        </View>
+
+        <View style={styles.optionsContainer} pointerEvents="auto">
+          <TouchableOpacity
+            style={styles.option}
+            onPress={handleTakePhoto}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.iconContainer, styles.cameraIconContainer]}>
+              <Ionicons name="camera" size={24} color="#fff" />
+            </View>
+            <Text style={styles.optionText}>拍照</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.option}
+            onPress={handleChooseFromAlbum}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.iconContainer, styles.albumIconContainer]}>
+              <Ionicons name="images" size={24} color="#fff" />
+            </View>
+            <Text style={styles.optionText}>从相册选择</Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          style={styles.cancelButton}
+          onPress={handleClose}
+          activeOpacity={0.7}
+          pointerEvents="auto"
+        >
+          <Text style={styles.cancelButtonText}>取消</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  );
+
+  if (renderInPlace) {
+    return sheetContent;
+  }
 
   return (
     <Modal
@@ -162,60 +217,7 @@ export default function ImagePickerSheet({ visible, onClose, onImageSelected, ti
       statusBarTranslucent
       navigationBarTranslucent
     >
-      <View style={styles.overlay}>
-        <TouchableWithoutFeedback onPress={handleClose}>
-          <View style={StyleSheet.absoluteFill} />
-        </TouchableWithoutFeedback>
-        
-        <Animated.View
-          style={[
-            styles.container,
-            {
-              transform: [{ translateY: slideAnim }],
-              paddingBottom: bottomSafeInset,
-            },
-          ]}
-          pointerEvents="box-none"
-        >
-          <View style={styles.header} pointerEvents="auto">
-            <View style={styles.dragIndicator} />
-            <Text style={styles.title}>{title}</Text>
-          </View>
-
-          <View style={styles.optionsContainer} pointerEvents="auto">
-            <TouchableOpacity
-              style={styles.option}
-              onPress={handleTakePhoto}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.iconContainer, { backgroundColor: '#4CAF50' }]}>
-                <Ionicons name="camera" size={24} color="#fff" />
-              </View>
-              <Text style={styles.optionText}>拍照</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.option}
-              onPress={handleChooseFromAlbum}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.iconContainer, { backgroundColor: '#2196F3' }]}>
-                <Ionicons name="images" size={24} color="#fff" />
-              </View>
-              <Text style={styles.optionText}>从相册选择</Text>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={handleClose}
-            activeOpacity={0.7}
-            pointerEvents="auto"
-          >
-            <Text style={styles.cancelButtonText}>取消</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      </View>
+      {sheetContent}
     </Modal>
   );
 }
@@ -225,6 +227,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: modalTokens.overlay,
     justifyContent: 'flex-end',
+  },
+  inlineOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
   },
   container: {
     backgroundColor: modalTokens.surfaceSoft,
@@ -290,6 +296,12 @@ const styles = StyleSheet.create({
         elevation: 4,
       },
     }),
+  },
+  cameraIconContainer: {
+    backgroundColor: '#4CAF50',
+  },
+  albumIconContainer: {
+    backgroundColor: '#2196F3',
   },
   optionText: {
     fontSize: scaleFont(14),

@@ -114,7 +114,13 @@ export default function IdentitySelector({
             </Text>
           </View>
           
-          <ScrollView style={styles.teamsList} showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>
+          <ScrollView
+            style={styles.teamsList}
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled={true}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="none"
+          >
             {userTeams.map(team => <TouchableOpacity key={team.id} style={[styles.teamItem, localSelectedTeams.includes(team.id) && styles.teamItemSelected]} onPress={() => toggleTeam(team.id)} activeOpacity={0.7}>
                 <Image source={{
             uri: team.avatar
