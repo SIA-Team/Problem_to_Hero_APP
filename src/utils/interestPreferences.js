@@ -101,5 +101,9 @@ export const shouldShowInterestOnboarding = async (userId) => {
   if (completed) return false;
 
   const pendingUserId = await getInterestOnboardingPendingUser();
-  return pendingUserId === normalizedUserId;
+  if (pendingUserId !== normalizedUserId) {
+    await setInterestOnboardingPending(normalizedUserId);
+  }
+
+  return true;
 };

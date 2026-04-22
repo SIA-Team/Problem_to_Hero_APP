@@ -931,9 +931,19 @@ function AppContent() {
       setIsCheckingInterestOnboarding(true);
 
       try {
-        const currentUser = await authApi.getCurrentUser();
+        const currentUser = await withTimeout(
+          () => authApi.getCurrentUser(),
+          STARTUP_STEP_TIMEOUT_MS,
+          'interest onboarding current user'
+        );
         const currentUserId = currentUser?.userId ? String(currentUser.userId) : null;
-        const shouldShow = await shouldShowInterestOnboarding(currentUserId);
+        const shouldShow = currentUserId
+          ? await withTimeout(
+              () => shouldShowInterestOnboarding(currentUserId),
+              STARTUP_STEP_TIMEOUT_MS,
+              'interest onboarding status'
+            )
+          : false;
 
         if (!mounted) return;
 
@@ -957,6 +967,21 @@ function AppContent() {
       mounted = false;
     };
   }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !isCheckingInterestOnboarding) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      console.error('Interest onboarding check timed out, fallback to main flow');
+      setShouldShowInterestOnboardingScreen(false);
+      setIsCheckingInterestOnboarding(false);
+      setInterestOnboardingUserId(null);
+    }, STARTUP_STEP_TIMEOUT_MS);
+
+    return () => clearTimeout(timer);
+  }, [isLoggedIn, isCheckingInterestOnboarding]);
 
   // 显示加载界面直到字体和初始化完成
   if (!fontsLoaded || isInitializing) {
@@ -1028,17 +1053,6 @@ function AppContent() {
     setShouldShowInterestOnboardingScreen(false);
   };
 
-  if (isLoggedIn && isCheckingInterestOnboarding) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
-        <ActivityIndicator size="large" color="#ef4444" />
-        <Text style={{ marginTop: 16, fontSize: 14, color: '#6b7280' }}>
-          Preparing personalized setup...
-        </Text>
-      </View>
-    );
-  }
-
   if (isLoggedIn && shouldShowInterestOnboardingScreen) {
     return (
       <EmergencyProvider>
@@ -1085,11 +1099,13 @@ function AppContent() {
     );
   }
 
+  const navigationLinking = __DEV__ ? undefined : APP_LINKING;
+
   return (
     <EmergencyProvider>
       <SafeAreaProvider>
         {updateChecker}
-        <NavigationContainer linking={APP_LINKING}>
+        <NavigationContainer linking={navigationLinking}>
         <StatusBar style="dark" />
         <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="Main">
