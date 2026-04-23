@@ -410,6 +410,7 @@ export function CommentBottomSheetReplyCard({
 export function CommentBottomSheetListBody({
   styles,
   loading,
+  loaded = true,
   items = [],
   renderItem,
   loadingText = 'Loading...',
@@ -423,14 +424,17 @@ export function CommentBottomSheetListBody({
   loadMoreText = 'Load more',
   noMoreText = 'No more content',
 }) {
+  const shouldShowLoadingState = (loading || !loaded) && items.length === 0;
+  const shouldShowEmptyState = loaded && !loading && items.length === 0;
+
   return (
     <ScrollView style={styles.commentListScroll} showsVerticalScrollIndicator={false}>
-      {loading && items.length === 0 ? (
+      {shouldShowLoadingState ? (
         <View style={styles.supplementsLoadingContainer}>
           <ActivityIndicator size="large" color="#ef4444" />
           <Text style={styles.supplementsLoadingText}>{loadingText}</Text>
         </View>
-      ) : items.length === 0 ? (
+      ) : shouldShowEmptyState ? (
         <View style={styles.supplementsEmptyContainer}>
           <Ionicons name={emptyIcon} size={48} color="#d1d5db" />
           <Text style={styles.supplementsEmptyText}>{emptyTitle}</Text>
@@ -472,6 +476,8 @@ export function CommentBottomSheetReplyPanel({
   originalComment,
   onPressAuthor,
   sectionTitle = 'Replies',
+  loading = false,
+  loadingText = 'Loading...',
   children,
   emptyState,
 }) {
@@ -492,8 +498,17 @@ export function CommentBottomSheetReplyPanel({
       />
       <CommentBottomSheetSectionHeader title={sectionTitle} styles={styles} />
       <ScrollView style={styles.commentListScroll} showsVerticalScrollIndicator={false}>
-        {children}
-        {emptyState}
+        {loading ? (
+          <View style={styles.loadingIndicator}>
+            <ActivityIndicator size="small" color="#ef4444" />
+            <Text style={styles.loadingText}>{loadingText}</Text>
+          </View>
+        ) : (
+          <>
+            {children}
+            {emptyState}
+          </>
+        )}
       </ScrollView>
     </CommentBottomSheet>
   );

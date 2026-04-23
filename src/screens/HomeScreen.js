@@ -11,6 +11,7 @@ import EditTextModal from '../components/EditTextModal';
 import InitialCredentialsModal from '../components/InitialCredentialsModal';
 import WriteCommentModal from '../components/WriteCommentModal';
 import KeyboardDismissView from '../components/KeyboardDismissView';
+import RootErrorBoundary from '../components/RootErrorBoundary';
 import RegionSelector from '../components/RegionSelector';
 import SkeletonBlock from '../components/SkeletonBlock';
 import { modalTokens } from '../components/modalTokens';
@@ -21,6 +22,8 @@ import { showToast } from '../utils/toast';
 import { showAppAlert } from '../utils/appAlert';
 import { buildTwitterShareText, openTwitterShare } from '../utils/shareService';
 import { formatTime } from '../utils/timeFormatter';
+import { getLastLocationLevel } from '../utils/locationFormatter';
+import { shouldRequirePaidQuestionAccess } from '../utils/questionAccessRules';
 import { openOfficialRechargePage } from '../utils/externalLinks';
 import { applyMockRecharge, applyMockWalletExpense, getWalletBalanceWithMock } from '../utils/walletMock';
 import { markQuestionAsPaid } from '../utils/paidQuestionAccess';
@@ -98,7 +101,7 @@ export default function HomeScreen({ navigation }) {
     ]);
 
     return tabs.filter(tab => !excludedTabs.has(tab));
-  }, [tabs, t]);
+  }, [tabs, locale]);
   
   const [activeTab, setActiveTab] = useState('');
 
@@ -228,6 +231,10 @@ export default function HomeScreen({ navigation }) {
     onLoadMore,
     setQuestionList,
   } = useOptimizedQuestions(activeTab, questionFeedTabs);
+  const safeQuestionList = useMemo(
+    () => (Array.isArray(questionList) ? questionList.filter(item => item && typeof item === 'object' && !Array.isArray(item)) : []),
+    [questionList]
+  );
 
   
   // 问题标题展开/折叠状态
@@ -238,40 +245,42 @@ export default function HomeScreen({ navigation }) {
   
   // 记录标题的完整行数
   const [titleLineCount, setTitleLineCount] = useState({});
+  const measuredTitleIdsRef = useRef(new Set());
   
   // 时间格式化函数 - 使用工具函数
   // 已从 ../utils/timeFormatter 导入
   
   // 根据选择的区域层级显示地区信息
   const getLocationDisplay = (item) => {
+    const normalizedFullLocation = (item?.location || '').toString().replace(/\s+/g, ' ').trim();
     // 始终根据问题本身的地区数据来显示
     // 如果没有选择任何区域，只显示国家
     if (!selectedRegion.country) {
-      return item.country;
+      return getLastLocationLevel(normalizedFullLocation || item.country || item.city || '未知');
     }
     
     // 如果只选择了国家，显示城市（省份/州）
     if (selectedRegion.country && !selectedRegion.city) {
-      return item.city || item.country;
+      return getLastLocationLevel(item.city || normalizedFullLocation || item.country || '未知');
     }
     
     // 如果选择了城市（省份/州），显示州/区（如果有的话）
     if (selectedRegion.city && !selectedRegion.state) {
-      return item.state || item.city || item.country;
+      return getLastLocationLevel(item.state || item.city || normalizedFullLocation || item.country || '未知');
     }
     
     // 如果选择了州/区，显示最后一层（区）
     if (selectedRegion.state && !selectedRegion.district) {
-      return item.district || item.state || item.city;
+      return getLastLocationLevel(item.district || item.state || item.city || normalizedFullLocation || '未知');
     }
     
     // 如果选择了最后一层，显示最后一层的名字
     if (selectedRegion.district) {
-      return item.district || item.state || item.city;
+      return getLastLocationLevel(item.district || item.state || item.city || normalizedFullLocation || '未知');
     }
     
     // 默认显示国家
-    return item.country;
+    return getLastLocationLevel(normalizedFullLocation || item.country || item.city || '未知');
   };
 
 
@@ -336,13 +345,13 @@ export default function HomeScreen({ navigation }) {
         activeTab !== t('home.topics') &&
         !optimizedLoading &&
         !refreshing &&
-        questionList.length === 0
+        safeQuestionList.length === 0
       ) {
         onRefresh();
       }
 
       hasFocusedHomeOnceRef.current = true;
-    }, [activeTab, optimizedLoading, onRefresh, questionList.length, refreshing, t])
+    }, [activeTab, optimizedLoading, onRefresh, safeQuestionList.length, refreshing, locale])
   );
 
 
@@ -931,7 +940,7 @@ export default function HomeScreen({ navigation }) {
       return;
     }
 
-    if (question.type === 'paid' && !question.isPaid) {
+    if (shouldRequirePaidQuestionAccess(question) && !question.isPaid) {
       openPaidAlertModal(question, extraParams);
       return;
     }
@@ -1067,6 +1076,7 @@ export default function HomeScreen({ navigation }) {
   };
 
   return (
+    <RootErrorBoundary>
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* 顶部搜索栏 */}
       <View style={styles.header}>
@@ -1171,13 +1181,13 @@ export default function HomeScreen({ navigation }) {
       {activeTab !== t('home.topics') ? (
         <View style={styles.listContainer}>
           <FlashList
-            data={questionList}
+            data={safeQuestionList}
             estimatedItemSize={300}
             keyExtractor={(item, index) => String(item?.id ?? item?.questionId ?? `question-${index}`)}
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl
-                refreshing={refreshing && questionList.length === 0}
+                refreshing={refreshing && safeQuestionList.length === 0}
                 onRefresh={onRefresh}
                 colors={['#ef4444']}
                 tintColor="#ef4444"
@@ -1251,11 +1261,15 @@ export default function HomeScreen({ navigation }) {
             )}
           ListFooterComponent={renderFooter}
           renderItem={({ item, index }) => {
+            if (!item || typeof item !== 'object') {
+              return null;
+            }
             const isLiked = getQuestionLikeState(item.id);
             const isDisliked = getQuestionDislikeState(item.id);
             const isLikeDisabled = !isLiked && isDisliked;
+            const requiresPaidView = item.requiresPaidView ?? shouldRequirePaidQuestionAccess(item);
             const isFirstItem = index === 0;
-            const isLastItem = index === questionList.length - 1;
+            const isLastItem = index === safeQuestionList.length - 1;
             return (
               <TouchableOpacity 
                 style={[styles.questionCard, isFirstItem && styles.firstQuestionCard]} 
@@ -1267,47 +1281,26 @@ export default function HomeScreen({ navigation }) {
                 <View style={[styles.questionCardInner, isLastItem && styles.lastQuestionCardInner]}>
                   {/* 问题标题和标签 */}
                   <View style={styles.questionTitleWrapper}>
-                    {/* 隐藏的完整文本用于检测行数 */}
-                    <Text 
-                      style={[styles.questionTitle, { position: 'absolute', opacity: 0, zIndex: -1 }]}
-                      onTextLayout={(e) => {
-                        const lineCount = e.nativeEvent.lines.length;
-                        if (lineCount > 3 && !titleLineCount[item.id]) {
-                          setTitleLineCount(prev => ({ ...prev, [item.id]: lineCount }));
-                          setNeedsExpand(prev => ({ ...prev, [item.id]: true }));
-                        }
-                      }}
-                    >
-                      {(item.type === 'reward' && item.reward) || (item.type === 'targeted' && item.reward) || item.type === 'paid' ? (
-                        <>
-                          {item.type === 'reward' && item.reward && (
-                            <Text style={styles.rewardTagInline}> ${item.reward} </Text>
-                          )}
-                          {item.type === 'targeted' && (
-                            <>
-                              {item.reward && item.reward > 0 ? (
-                                <Text style={styles.targetedTagInline}> ${item.reward} </Text>
-                              ) : (
-                                <Text style={styles.targetedTagInline}> {t('home.targeted')} </Text>
-                              )}
-                            </>
-                          )}
-                          {item.type === 'paid' && (
-                            <Text style={styles.paidTagInline}> </Text>
-                          )}
-                          {'  '}
-                        </>
-                      ) : null}
-                      {item.title}
-                      {item.status === 2 && (
-                        <Text style={styles.solvedTagInline}> {t('home.solved')}</Text>
-                      )}
-                    </Text>
-                    
                     {/* 实际显示的文本 */}
                     <View style={styles.titleContainer}>
-                      <Text style={styles.questionTitle} numberOfLines={3}>
-                        {(item.type === 'reward' && item.reward) || (item.type === 'targeted' && item.reward) || item.type === 'paid' ? (
+                      <Text
+                        style={styles.questionTitle}
+                        numberOfLines={3}
+                        onTextLayout={(e) => {
+                          if (measuredTitleIdsRef.current.has(item.id)) {
+                            return;
+                          }
+
+                          measuredTitleIdsRef.current.add(item.id);
+                          const lineCount = e.nativeEvent.lines.length;
+
+                          if (lineCount > 3) {
+                            setTitleLineCount(prev => prev[item.id] === lineCount ? prev : ({ ...prev, [item.id]: lineCount }));
+                            setNeedsExpand(prev => prev[item.id] ? prev : ({ ...prev, [item.id]: true }));
+                          }
+                        }}
+                      >
+                        {(item.type === 'reward' && item.reward) || (item.type === 'targeted' && item.reward) || requiresPaidView ? (
                           <>
                             {item.type === 'reward' && item.reward && (
                               <Text style={styles.rewardTagInline}> ${item.reward} </Text>
@@ -1317,11 +1310,11 @@ export default function HomeScreen({ navigation }) {
                                 {item.reward && item.reward > 0 ? (
                                   <Text style={styles.targetedTagInline}> ${item.reward} </Text>
                                 ) : (
-                                  <Text style={styles.targetedTagInline}> {t('home.targeted')} </Text>
-                                )}
-                              </>
-                            )}
-                            {item.type === 'paid' && (
+                                <Text style={styles.targetedTagInline}> {t('home.targeted')} </Text>
+                              )}
+                            </>
+                          )}
+                            {requiresPaidView && (
                               <Text style={styles.paidTagInline}> </Text>
                             )}
                             {'  '}
@@ -1350,7 +1343,7 @@ export default function HomeScreen({ navigation }) {
                   </View>
 
                   {/* 付费查看按钮 */}
-                  {item.type === 'paid' && !item.isPaid && (
+                  {requiresPaidView && !item.isPaid && (
                     <TouchableOpacity 
                       style={styles.paidViewButton}
                       onPress={(e) => {
@@ -1439,53 +1432,62 @@ export default function HomeScreen({ navigation }) {
                     </View>
                   )}
 
-                  {/* 头像、姓名、时间、地区 - 全部放在一行,右侧放点赞和评论 */}
+                  {/* 用户信息区域 - 分为两行显示 */}
                   <View style={styles.cardHeader}>
-                    <TouchableOpacity
-                      style={styles.cardHeaderLeft}
-                      activeOpacity={0.7}
-                      onPress={e => {
-                        e.stopPropagation();
-                        navigateToPublicProfile(navigation, item, { allowAnonymous: false });
-                      }}
-                    >
-                      <Avatar 
-                        uri={item.authorAvatar} 
-                        name={item.authorNickName || t('home.anonymous')} 
-                        size={17} 
-                      />
-                      <Text style={styles.authorName}>
-                        {item.authorNickName || t('home.anonymous')}
-                      </Text>
-                      {item.verified && <Ionicons name="checkmark-circle" size={10} color="#3b82f6" style={{ marginLeft: 2 }} />}
-                      <Text style={styles.metaSeparator}>·</Text>
-                      <Text style={styles.postTime}>{formatTime(item.time)}</Text>
-                      <Text style={styles.metaSeparator}>·</Text>
-                      <Ionicons name="location-outline" size={9} color="#9ca3af" />
-                      <Text style={styles.locationText}>{getLocationDisplay(item)}</Text>
-                    </TouchableOpacity>
-                    <View style={styles.cardHeaderRight}>
+                    {/* 第一行：头像、用户名、认证标识 + 右侧操作按钮 */}
+                    <View style={styles.cardHeaderRow}>
                       <TouchableOpacity
-                        style={[styles.headerActionBtn, isLikeDisabled && styles.headerActionBtnDisabled]}
-                        onPress={() => toggleLike(item.id)}
-                        disabled={isLikeDisabled}
-                      >
-                        <Ionicons name={isLiked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={isLiked ? "#ef4444" : isLikeDisabled ? "#d1d5db" : "#9ca3af"} />
-                        <Text style={[styles.headerActionText, isLiked && { color: '#ef4444' }, isLikeDisabled && styles.headerActionTextDisabled]}>{formatNumber(item.likeCount || 0)}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.headerActionBtn} 
-                        onPress={() => {
-                          setCurrentQuestionForComment(item);
-                          setShowCommentModal(true);
+                        style={styles.cardHeaderLeft}
+                        activeOpacity={0.7}
+                        onPress={e => {
+                          e.stopPropagation();
+                          navigateToPublicProfile(navigation, item, { allowAnonymous: false });
                         }}
                       >
-                        <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
-                        <Text style={styles.headerActionText}>{item.answerCount || 0}</Text>
+                        <Avatar 
+                          uri={item.authorAvatar} 
+                          name={item.authorNickName || t('home.anonymous')} 
+                          size={17} 
+                        />
+                        <Text style={styles.authorName} numberOfLines={1}>
+                          {item.authorNickName || t('home.anonymous')}
+                        </Text>
+                        {item.verified && <Ionicons name="checkmark-circle" size={10} color="#3b82f6" style={{ marginLeft: 2 }} />}
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.headerMoreBtn} onPress={() => openActionModal(item)}>
-                        <Ionicons name="ellipsis-horizontal" size={16} color="#9ca3af" />
-                      </TouchableOpacity>
+                      <View style={styles.cardHeaderRight}>
+                        <TouchableOpacity
+                          style={[styles.headerActionBtn, isLikeDisabled && styles.headerActionBtnDisabled]}
+                          onPress={() => toggleLike(item.id)}
+                          disabled={isLikeDisabled}
+                        >
+                          <Ionicons name={isLiked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={isLiked ? "#ef4444" : isLikeDisabled ? "#d1d5db" : "#9ca3af"} />
+                          <Text style={[styles.headerActionText, isLiked && { color: '#ef4444' }, isLikeDisabled && styles.headerActionTextDisabled]}>{formatNumber(item.likeCount || 0)}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.headerActionBtn} 
+                          onPress={() => {
+                            setCurrentQuestionForComment(item);
+                            setShowCommentModal(true);
+                          }}
+                        >
+                          <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
+                          <Text style={styles.headerActionText}>{item.answerCount || 0}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.headerMoreBtn} onPress={() => openActionModal(item)}>
+                          <Ionicons name="ellipsis-horizontal" size={16} color="#9ca3af" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    {/* 第二行：时间和地区信息 */}
+                    <View style={styles.cardMetaRow}>
+                      <Text style={styles.postTime}>{formatTime(item.time)}</Text>
+                      <Text style={styles.metaSeparator}>·</Text>
+                      <View style={styles.locationMeta}>
+                        <Ionicons name="location-outline" size={9} color="#9ca3af" />
+                        <Text style={styles.locationText} numberOfLines={1}>
+                          {getLocationDisplay(item)}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                 </View>
@@ -1775,6 +1777,7 @@ export default function HomeScreen({ navigation }) {
         title={t('home.commentTitle')}
       />
     </SafeAreaView>
+    </RootErrorBoundary>
   );
 }
 
@@ -1847,18 +1850,68 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   cardHeader: {
+    marginTop: 0
+  },
+  cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 0
+    width: '100%'
   },
-  cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  cardHeaderRight: { flexDirection: 'row', alignItems: 'center' },
+  cardHeaderLeft: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    flex: 1, 
+    minWidth: 0,
+    marginRight: 8
+  },
+  cardHeaderRight: { 
+    flexDirection: 'row', 
+    alignItems: 'center',
+    flexShrink: 0
+  },
+  cardMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    marginLeft: 21
+  },
   avatar: { width: 16, height: 16, borderRadius: 8 },
-  authorName: { fontSize: scaleFont(14), fontWeight: '400', color: '#999999', marginLeft: 4, fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
-  metaSeparator: { fontSize: scaleFont(14), color: '#999999', marginHorizontal: 3, fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
-  postTime: { fontSize: scaleFont(14), fontWeight: '400', color: '#999999', fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
-  locationText: { fontSize: scaleFont(14), fontWeight: '400', color: '#999999', marginLeft: 1, fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' },
+  authorName: { 
+    fontSize: scaleFont(14), 
+    fontWeight: '400', 
+    color: '#999999', 
+    marginLeft: 4, 
+    fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif', 
+    flexShrink: 1,
+    maxWidth: '70%'
+  },
+  metaSeparator: { 
+    fontSize: scaleFont(14), 
+    color: '#999999', 
+    marginHorizontal: 3, 
+    fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' 
+  },
+  postTime: { 
+    fontSize: scaleFont(12), 
+    fontWeight: '400', 
+    color: '#999999', 
+    fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif' 
+  },
+  locationMeta: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    flex: 1,
+    minWidth: 0
+  },
+  locationText: { 
+    fontSize: scaleFont(12), 
+    fontWeight: '400', 
+    color: '#999999', 
+    marginLeft: 3, 
+    fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif', 
+    flex: 1
+  },
   headerActionBtn: { flexDirection: 'row', alignItems: 'center', marginLeft: 16 },
   headerActionBtnDisabled: { opacity: 0.45 },
   headerActionText: { fontSize: scaleFont(12), color: '#666666', marginLeft: 4 },

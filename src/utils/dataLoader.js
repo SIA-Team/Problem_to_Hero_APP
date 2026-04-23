@@ -11,6 +11,7 @@
 import { getCache, setCache } from './cacheManager';
 import { formatTime as formatDisplayTime } from './timeFormatter';
 import { applyPaidQuestionAccessState } from './paidQuestionAccess';
+import { getQuestionAdoptRate, getQuestionPayViewAmount, shouldRequirePaidQuestionAccess } from './questionAccessRules';
 import questionApi from '../services/api/questionApi';
 
 /**
@@ -49,6 +50,39 @@ const processTitle = (title) => {
   }
   
   return title;
+};
+
+const normalizeLocationText = (value) => {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  return String(value).replace(/\s+/g, ' ').trim();
+};
+
+const resolveLocationParts = (item = {}) => {
+  const normalizedLocation = normalizeLocationText(
+    item.location ||
+    item.ipLocation ||
+    item.ip_location ||
+    item.city ||
+    item.region ||
+    item.address
+  );
+
+  const parts = normalizedLocation ? normalizedLocation.split(/\s+/).filter(Boolean) : [];
+  const fallbackCountry = normalizeLocationText(item.country);
+  const fallbackCity = normalizeLocationText(item.city);
+  const fallbackState = normalizeLocationText(item.state);
+  const fallbackDistrict = normalizeLocationText(item.district);
+
+  return {
+    location: normalizedLocation,
+    country: fallbackCountry || parts[0] || '',
+    city: fallbackCity || parts[1] || '',
+    state: fallbackState || parts[2] || '',
+    district: fallbackDistrict || parts[3] || ''
+  };
 };
 
 /**
@@ -170,8 +204,8 @@ const transformApiDataToHomeFormat = (apiData) => {
     return [];
   }
   
-  // 过滤掉 status 为 0 的数据
-  const filteredData = apiData.filter(item => item.status !== 0);
+  // 过滤掉空值、非对象和 status 为 0 的数据
+  const filteredData = apiData.filter(item => item && typeof item === 'object' && !Array.isArray(item) && item.status !== 0);
   
   if (filteredData.length !== apiData.length) {
   }
@@ -207,7 +241,17 @@ const transformApiDataToHomeFormat = (apiData) => {
       const hoursAgo = Math.floor(Math.random() * 24) + 1; // 1-24小时前
       timeDisplay = `${hoursAgo}小时前`;
     }
+
+    const locationParts = resolveLocationParts(item);
     
+    const normalizedPayViewAmount = getQuestionPayViewAmount(item);
+    const normalizedBountyAmount = Number(item.bountyAmount ?? 0) || 0;
+    const normalizedAdoptRate = getQuestionAdoptRate(item);
+    const requiresPaidView = shouldRequirePaidQuestionAccess({
+      adoptRate: normalizedAdoptRate,
+      payViewAmount: normalizedPayViewAmount,
+    });
+
     // 基础数据转换
     const transformedItem = {
       id: normalizedQuestionId,
@@ -228,33 +272,41 @@ const transformApiDataToHomeFormat = (apiData) => {
       answerCount: item.answerCount || 0,
       shareCount: item.shareCount || 0,
       collectCount: item.collectCount || 0,
-      country: '中国',
-      city: item.location || '北京',
-      solvedPercent: item.solvedPercent || Math.floor(Math.random() * 100),
+      location: locationParts.location || '未知',
+      country: locationParts.country || locationParts.location || '未知',
+      city: locationParts.city || locationParts.location || locationParts.country || '未知',
+      state: locationParts.state || '',
+      district: locationParts.district || '',
+      adoptRate: normalizedAdoptRate,
+      solvedPercent: normalizedAdoptRate,
+      payViewAmount: normalizedPayViewAmount,
+      bountyAmount: normalizedBountyAmount,
+      rawType: item.type ?? null,
+      requiresPaidView,
     };
     
     // 问题类型转换
-    // 注意：付费查看的优先级最高，如果 payViewAmount > 0，优先显示付费样式
-    if (item.payViewAmount > 0) {
+    // 注意：仅当问题已解决且配置了付费查看时，首页才显示付费样式
+    if (requiresPaidView) {
       // 付费查看（优先级最高）
       transformedItem.type = 'paid';
-      transformedItem.paidAmount = Math.floor(item.payViewAmount / 100);
+      transformedItem.paidAmount = normalizedPayViewAmount / 100;
       // 付费功能暂未完成，统一设置为未付费
       transformedItem.isPaid = Boolean(item.isPaid ?? item.hasPaid ?? item.isUnlocked ?? false);
       // 保存原始问题类型，用户付费后可以看到
       transformedItem.originalType = item.type;
-      if (item.bountyAmount > 0) {
-        transformedItem.originalReward = Math.floor(item.bountyAmount / 100);
+      if (normalizedBountyAmount > 0) {
+        transformedItem.originalReward = Math.floor(normalizedBountyAmount / 100);
       }
-    } else if (item.type === 1 && item.bountyAmount > 0) {
+    } else if (item.type === 1 && normalizedBountyAmount > 0) {
       // 悬赏问题
       transformedItem.type = 'reward';
-      transformedItem.reward = Math.floor(item.bountyAmount / 100); // 转换为元
+      transformedItem.reward = Math.floor(normalizedBountyAmount / 100); // 转换为元
     } else if (item.type === 2) {
       // 定向问题
       transformedItem.type = 'targeted';
-      if (item.bountyAmount > 0) {
-        transformedItem.reward = Math.floor(item.bountyAmount / 100);
+      if (normalizedBountyAmount > 0) {
+        transformedItem.reward = Math.floor(normalizedBountyAmount / 100);
       }
     } else {
       // 免费问题

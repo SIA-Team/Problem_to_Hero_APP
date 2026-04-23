@@ -11,6 +11,15 @@
         "simulator": false
       }
     },
+    "development-adhoc": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development",
+      "ios": {
+        "simulator": false,
+        "enterpriseProvisioning": "adhoc"
+      }
+    },
     "preview": {
       "distribution": "internal",
       "channel": "preview",

@@ -616,6 +616,7 @@ export default function AnswerDetailScreen({
     };
   };
   const normalizeComments = (rows = [], defaults = {}) => rows.map(row => normalizeCommentItem(row, defaults));
+  const getAnswerDirectCommentCount = answerItem => normalizeCount(answerItem?.commentCount, answerItem?.comment_count, answerItem?.comments);
   const syncAnswerCommentInteractionStates = (commentsToSync = []) => {
     if (!commentsToSync.length) {
       return;
@@ -1053,15 +1054,17 @@ export default function AnswerDetailScreen({
           ...INITIAL_COMMENT_COMPOSER_TARGET,
           targetId
         });
-        setAnswerData(prevAnswerData => {
-          const baseAnswer = prevAnswerData || answer;
-          const nextCommentCount = normalizeCount(baseAnswer?.commentCount, baseAnswer?.comments) + 1;
-          return normalizeAnswerDetail({
-            ...baseAnswer,
-            commentCount: nextCommentCount,
-            comments: nextCommentCount
+        if (parentId === 0) {
+          setAnswerData(prevAnswerData => {
+            const baseAnswer = prevAnswerData || answer;
+            const nextCommentCount = getAnswerDirectCommentCount(baseAnswer) + 1;
+            return normalizeAnswerDetail({
+              ...baseAnswer,
+              commentCount: nextCommentCount,
+              comments: nextCommentCount
+            });
           });
-        });
+        }
         await loadAnswerComments({
           isRefresh: true
         });
@@ -1732,14 +1735,15 @@ export default function AnswerDetailScreen({
           parentId: 0
         });
         const total = extractCommentTotal(response, newComments.length);
+        const normalizedTotal = normalizeCount(total, newComments.length);
         syncAnswerCommentInteractionStates(newComments);
         setAnswerCommentListState(prevState => {
           const nextList = isLoadMore ? [...prevState.list, ...newComments] : newComments;
-          const hasMore = total > 0 ? nextList.length < total : newComments.length >= prevState.pageSize;
+          const hasMore = normalizedTotal > 0 ? nextList.length < normalizedTotal : newComments.length >= prevState.pageSize;
           return {
             ...prevState,
             list: nextList,
-            total,
+            total: normalizedTotal,
             pageNum: newComments.length < prevState.pageSize ? pageNum : pageNum + 1,
             hasMore,
             loaded: true,
@@ -1749,6 +1753,20 @@ export default function AnswerDetailScreen({
             targetId: Number(answer.id),
             error: null
           };
+        });
+        setAnswerData(prevAnswerData => {
+          if (!prevAnswerData) {
+            return prevAnswerData;
+          }
+          const currentCommentCount = getAnswerDirectCommentCount(prevAnswerData);
+          if (currentCommentCount === normalizedTotal) {
+            return prevAnswerData;
+          }
+          return normalizeAnswerDetail({
+            ...prevAnswerData,
+            commentCount: normalizedTotal,
+            comments: normalizedTotal
+          });
         });
       } else {
         setAnswerCommentListState(prevState => ({

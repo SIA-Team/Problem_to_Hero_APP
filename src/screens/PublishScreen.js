@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Switch, Alert, Modal, Platform, ActivityIndicator, Image, FlatList, KeyboardAvoidingView } from 'react-native';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Switch, Alert, Modal, Platform, ActivityIndicator, Image, FlatList, KeyboardAvoidingView, InteractionManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import CategoryIcon from '../components/CategoryIcon';
 import IdentitySelector from '../components/IdentitySelector';
 import ImagePickerSheet from '../components/ImagePickerSheet';
-import KeyboardDismissView from '../components/KeyboardDismissView';
 import categoryApi from '../services/api/categoryApi';
 import questionCategoryService from '../services/questionCategoryService';
 import questionApi from '../services/api/questionApi';
@@ -88,6 +87,79 @@ const buildCustomCategoryPayload = (level1, level2) => {
   };
 };
 
+const MIN_PAY_VIEW_AMOUNT_CENTS = 1;
+const EMPTY_REGION_SELECTION = {
+  country: '',
+  city: '',
+  state: '',
+  district: '',
+};
+
+const buildRegionDisplayText = (selectedRegion = EMPTY_REGION_SELECTION) => {
+  return [
+    selectedRegion.country,
+    selectedRegion.city,
+    selectedRegion.state,
+    selectedRegion.district,
+  ].filter(Boolean).join(' ');
+};
+
+const sanitizePayViewPriceInput = (value) => {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  const rawValue = String(value).replace(/[^\d.]/g, '');
+  if (!rawValue) {
+    return '';
+  }
+
+  let normalizedValue = '';
+  let hasDecimalPoint = false;
+
+  for (const char of rawValue) {
+    if (char === '.') {
+      if (hasDecimalPoint) {
+        continue;
+      }
+      hasDecimalPoint = true;
+    }
+    normalizedValue += char;
+  }
+
+  if (normalizedValue.startsWith('.')) {
+    normalizedValue = `0${normalizedValue}`;
+  }
+
+  const decimalIndex = normalizedValue.indexOf('.');
+  if (decimalIndex === -1) {
+    return normalizedValue;
+  }
+
+  const integerPart = normalizedValue.slice(0, decimalIndex);
+  const decimalPart = normalizedValue.slice(decimalIndex + 1).replace(/\./g, '').slice(0, 2);
+
+  if (normalizedValue.endsWith('.') && decimalPart.length === 0) {
+    return `${integerPart}.`;
+  }
+
+  return `${integerPart}.${decimalPart}`;
+};
+
+const parsePayViewAmountInCents = (value) => {
+  const normalizedValue = typeof value === 'string' ? value.trim() : String(value ?? '').trim();
+  if (!normalizedValue) {
+    return 0;
+  }
+
+  const amount = Number.parseFloat(normalizedValue);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return 0;
+  }
+
+  return Math.round(amount * 100);
+};
+
 export default function PublishScreen({
   navigation,
   route
@@ -108,7 +180,8 @@ export default function PublishScreen({
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [images, setImages] = useState([]);
   const [customTopic, setCustomTopic] = useState('');
-  const [location, setLocation] = useState('北京');
+  const [region, setRegion] = useState('');
+  const [location, setLocation] = useState('');
   const [visibility, setVisibility] = useState(0); // 直接使用数字：0=所有人，1=仅关注我的人，2=仅自己
 
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -165,9 +238,13 @@ export default function PublishScreen({
   const [level2SearchQuery, setLevel2SearchQuery] = useState('');
   const [customLevel2Name, setCustomLevel2Name] = useState('');
 
+  const [showRegionModal, setShowRegionModal] = useState(false);
+  const [publishRegionStep, setPublishRegionStep] = useState(0);
+  const [selectedPublishRegion, setSelectedPublishRegion] = useState(EMPTY_REGION_SELECTION);
   const [showLocationModal, setShowLocationModal] = useState(false);
-  const [regionStep, setRegionStep] = useState(0);
-  const [selectedLocationRegion, setSelectedLocationRegion] = useState({ country: '', city: '', state: '', district: '' });
+  const [locationStep, setLocationStep] = useState(0);
+  const [selectedLocationRegion, setSelectedLocationRegion] = useState(EMPTY_REGION_SELECTION);
+  const draftCategoryRestoreKeyRef = useRef(null);
 
   // 加载分类数据
   useEffect(() => {
@@ -199,6 +276,9 @@ export default function PublishScreen({
         console.log('  设置位置:', draftData.location);
         setLocation(draftData.location);
       }
+      if (draftData.region) {
+        setRegion(draftData.region);
+      }
       if (typeof draftData.visibilityScope === 'number') {
         console.log('  设置可见范围:', draftData.visibilityScope);
         setVisibility(draftData.visibilityScope);
@@ -229,7 +309,7 @@ export default function PublishScreen({
         const amount = (draftData.payViewAmount / 100).toString();
         console.log('  设置付费查看金额:', amount, '元');
         setAnswerPaid(true);
-        setAnswerPrice(amount);
+        setAnswerPrice(sanitizePayViewPriceInput(amount));
       }
 
       // 图片
@@ -293,6 +373,11 @@ export default function PublishScreen({
     const categoryName = normalizeCustomCategoryName(
       draftData.customCategoryName || draftData.categoryName
     );
+    const draftLookupKey = `${categoryId || 0}:${categoryName}`;
+
+    if (draftCategoryRestoreKeyRef.current !== draftLookupKey) {
+      draftCategoryRestoreKeyRef.current = null;
+    }
 
     if (!categoryId && !categoryName) {
       return;
@@ -346,11 +431,40 @@ export default function PublishScreen({
       return;
     }
 
-    level1Categories.forEach((level1) => {
-      if (!level2CategoriesMap[level1.id]) {
-        fetchLevel2Categories(level1.id);
+    if (!categoryId || draftCategoryRestoreKeyRef.current === draftLookupKey) {
+      return;
+    }
+
+    draftCategoryRestoreKeyRef.current = draftLookupKey;
+    let cancelled = false;
+    const interactionTask = InteractionManager.runAfterInteractions(async () => {
+      for (const level1 of level1Categories) {
+        if (cancelled) {
+          return;
+        }
+
+        const cachedLevel2List = level2CategoriesMap[level1.id];
+        const level2List = Array.isArray(cachedLevel2List)
+          ? cachedLevel2List
+          : await fetchLevel2Categories(level1.id);
+
+        if (!Array.isArray(level2List) || cancelled) {
+          continue;
+        }
+
+        const matchedLevel2 = level2List.find((cat) => Number(cat.id) === categoryId);
+        if (matchedLevel2) {
+          setSelectedLevel1(level1);
+          setSelectedLevel2(matchedLevel2);
+          return;
+        }
       }
     });
+
+    return () => {
+      cancelled = true;
+      interactionTask?.cancel?.();
+    };
   }, [draftData, level1Categories, level2CategoriesMap]);
 
   // 加载一级分类
@@ -676,8 +790,8 @@ export default function PublishScreen({
         subQuestions: '',
         bountyAmount: 5000,
         // 默认悬赏金额
-        payViewAmount: answerPaid ? Math.round(parseFloat(answerPrice || 0) * 100) : 0,
-        location: location && location !== '不显示' ? location : '北京市朝阳区',
+        payViewAmount: answerPaid ? parsePayViewAmountInCents(answerPrice) : 0,
+        location: location && location !== '不显示' ? location : '',
         visibilityScope: visibility,
         // 直接使用数字，不需要映射
         isAnonymous: isAnonymous ? 1 : 0,
@@ -790,7 +904,7 @@ export default function PublishScreen({
     }
 
     // 4. 验证付费查看答案
-    if (answerPaid && (!answerPrice || parseFloat(answerPrice) < 1)) {
+    if (answerPaid && parsePayViewAmountInCents(answerPrice) < MIN_PAY_VIEW_AMOUNT_CENTS) {
       showToast(t('publish.toasts.setPaidPrice'), 'warning');
       return;
     }
@@ -891,9 +1005,9 @@ export default function PublishScreen({
           // 悬赏金额（单位：分，需要转换）
           bountyAmount: 0,
           // 付费查看金额（单位：分）
-          payViewAmount: answerPaid ? Math.round(parseFloat(answerPrice || 0) * 100) : 0,
+          payViewAmount: answerPaid ? parsePayViewAmountInCents(answerPrice) : 0,
           // 位置信息
-          location: location && location !== '不显示' ? location : '北京市朝阳区',
+          location: location && location !== '不显示' ? location : '',
           // 可见范围：0=所有人，1=仅关注我的人，2=仅自己
           visibilityScope: visibility,
           // 直接使用数字，不需要映射
@@ -985,6 +1099,10 @@ export default function PublishScreen({
         setAnswerPublic(true);
         setAnswerPaid(false);
         setAnswerPrice('');
+        setRegion('');
+        setLocation('');
+        setSelectedPublishRegion(EMPTY_REGION_SELECTION);
+        setSelectedLocationRegion(EMPTY_REGION_SELECTION);
 
         // 延迟返回上一页，让用户看到成功提示
         setTimeout(() => {
@@ -1031,34 +1149,74 @@ export default function PublishScreen({
       setIsUploadingImages(false);
     }
   };
+  const handleRegionPress = () => {
+    setShowRegionModal(true);
+    setPublishRegionStep(0);
+  };
+  
+  const getPublishRegionOptions = () => {
+    if (publishRegionStep === 0) return regionData.countries;
+    if (publishRegionStep === 1) return regionData.cities[selectedPublishRegion.country] || [];
+    if (publishRegionStep === 2) return regionData.states[selectedPublishRegion.city] || [];
+    if (publishRegionStep === 3) return regionData.districts[selectedPublishRegion.state] || [];
+    return [];
+  };
+
+  const selectPublishRegion = (value) => {
+    if (publishRegionStep === 0) {
+      setSelectedPublishRegion({ ...selectedPublishRegion, country: value, city: '', state: '', district: '' });
+      if (regionData.cities[value] && regionData.cities[value].length > 0) {
+        setPublishRegionStep(1);
+      }
+    } else if (publishRegionStep === 1) {
+      setSelectedPublishRegion({ ...selectedPublishRegion, city: value, state: '', district: '' });
+      if (regionData.states[value] && regionData.states[value].length > 0) {
+        setPublishRegionStep(2);
+      }
+    } else if (publishRegionStep === 2) {
+      setSelectedPublishRegion({ ...selectedPublishRegion, state: value, district: '' });
+      if (regionData.districts[value] && regionData.districts[value].length > 0) {
+        setPublishRegionStep(3);
+      }
+    } else {
+      setSelectedPublishRegion({ ...selectedPublishRegion, district: value });
+    }
+  };
+
+  const confirmRegionSelection = () => {
+    setRegion(buildRegionDisplayText(selectedPublishRegion));
+    setShowRegionModal(false);
+    setPublishRegionStep(0);
+  };
+
   const handleLocationPress = () => {
     setShowLocationModal(true);
-    setRegionStep(0);
+    setLocationStep(0);
   };
   
   const getLocationRegionOptions = () => {
-    if (regionStep === 0) return regionData.countries;
-    if (regionStep === 1) return regionData.cities[selectedLocationRegion.country] || [];
-    if (regionStep === 2) return regionData.states[selectedLocationRegion.city] || [];
-    if (regionStep === 3) return regionData.districts[selectedLocationRegion.state] || [];
+    if (locationStep === 0) return regionData.countries;
+    if (locationStep === 1) return regionData.cities[selectedLocationRegion.country] || [];
+    if (locationStep === 2) return regionData.states[selectedLocationRegion.city] || [];
+    if (locationStep === 3) return regionData.districts[selectedLocationRegion.state] || [];
     return [];
   };
   
   const selectLocationRegion = (value) => {
-    if (regionStep === 0) {
+    if (locationStep === 0) {
       setSelectedLocationRegion({ ...selectedLocationRegion, country: value, city: '', state: '', district: '' });
       if (regionData.cities[value] && regionData.cities[value].length > 0) {
-        setRegionStep(1);
+        setLocationStep(1);
       }
-    } else if (regionStep === 1) {
+    } else if (locationStep === 1) {
       setSelectedLocationRegion({ ...selectedLocationRegion, city: value, state: '', district: '' });
       if (regionData.states[value] && regionData.states[value].length > 0) {
-        setRegionStep(2);
+        setLocationStep(2);
       }
-    } else if (regionStep === 2) {
+    } else if (locationStep === 2) {
       setSelectedLocationRegion({ ...selectedLocationRegion, state: value, district: '' });
       if (regionData.districts[value] && regionData.districts[value].length > 0) {
-        setRegionStep(3);
+        setLocationStep(3);
       }
     } else {
       setSelectedLocationRegion({ ...selectedLocationRegion, district: value });
@@ -1066,11 +1224,9 @@ export default function PublishScreen({
   };
   
   const confirmLocationSelection = () => {
-    const parts = [selectedLocationRegion.country, selectedLocationRegion.city, selectedLocationRegion.state, selectedLocationRegion.district].filter(Boolean);
-    const locationText = parts.join(' ');
-    setLocation(locationText);
+    setLocation(buildRegionDisplayText(selectedLocationRegion));
     setShowLocationModal(false);
-    setRegionStep(0);
+    setLocationStep(0);
   };
   
   const handleLocationSelect = city => {
@@ -1078,6 +1234,7 @@ export default function PublishScreen({
   };
   const handleLocationClose = () => {
     setShowLocationModal(false);
+    setLocationStep(0);
   };
   const handleVisibilityPress = () => {
     setShowVisibilityModal(true);
@@ -1193,7 +1350,10 @@ export default function PublishScreen({
   }, [selectedType, selectedLevel1, selectedLevel2]);
 
   // 过滤专家列表（本地搜索）
-  const filteredExperts = expertList.filter(user => user.nickname.toLowerCase().includes(expertSearchQuery.toLowerCase()) || user.categories && user.categories.some(cat => cat.name.toLowerCase().includes(expertSearchQuery.toLowerCase())));
+  const filteredExperts = useMemo(() => {
+    const normalizedQuery = expertSearchQuery.toLowerCase();
+    return expertList.filter(user => user.nickname.toLowerCase().includes(normalizedQuery) || user.categories && user.categories.some(cat => cat.name.toLowerCase().includes(normalizedQuery)));
+  }, [expertList, expertSearchQuery]);
   const selectLevel1 = async cat => {
     setTempSelectedLevel1(cat);
     setCategoryModalView('level2'); // ??????????????
@@ -1233,8 +1393,9 @@ export default function PublishScreen({
     }
     return t('publish.selectCategory');
   };
+  const publishRegionOptions = showRegionModal ? getPublishRegionOptions() : [];
+  const locationRegionOptions = showLocationModal ? getLocationRegionOptions() : [];
   return <SafeAreaView style={styles.container} edges={['top']}>
-      <KeyboardDismissView>
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -1265,7 +1426,7 @@ export default function PublishScreen({
         paddingBottom: bottomSafeInset + 16
       }]}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="always"
         keyboardDismissMode="interactive"
       >
         {/* 问题类型选择 */}
@@ -1286,13 +1447,13 @@ export default function PublishScreen({
 
         {/* 地区选择 */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('publish.addLocation')}</Text>
-          <TouchableOpacity style={styles.categorySelector} onPress={handleLocationPress}>
+          <Text style={styles.sectionTitle}>{t('publish.addRegion')}</Text>
+          <TouchableOpacity style={styles.categorySelector} onPress={handleRegionPress}>
             <View style={styles.categorySelectorLeft}>
-              <Text style={[styles.categorySelectorText, !location && {
+              <Text style={[styles.categorySelectorText, !region && {
               color: '#9ca3af'
             }]}>
-                {location || t('home.selectRegion')}
+                {region || t('home.selectRegion')}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
@@ -1591,7 +1752,15 @@ export default function PublishScreen({
               <Text style={styles.answerPriceLabel}>{t('publish.viewPrice')}</Text>
               <View style={styles.answerPriceInput}>
                 <Text style={styles.currencySymbol}>$</Text>
-                <TextInput style={styles.priceInput} placeholder={t('publish.setPriceDesc')} keyboardType="numeric" value={answerPrice} onChangeText={setAnswerPrice} placeholderTextColor="#9ca3af" />
+                <TextInput
+                  style={styles.priceInput}
+                  placeholder={t('publish.setPriceDesc')}
+                  keyboardType="decimal-pad"
+                  inputMode="decimal"
+                  value={answerPrice}
+                  onChangeText={value => setAnswerPrice(sanitizePayViewPriceInput(value))}
+                  placeholderTextColor="#9ca3af"
+                />
               </View>
               <Text style={styles.answerPriceHint}>{t('publish.priceSuggestion')}</Text>
             </View>}
@@ -1659,7 +1828,7 @@ export default function PublishScreen({
       </ScrollView>
 
       {/* 问题类别选择弹窗 */}
-      <Modal visible={showCategoryModal} animationType="slide" transparent>
+      {showCategoryModal && <Modal visible animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.categoryModal}>
             <View style={styles.modalHeader}>
@@ -1781,10 +1950,10 @@ export default function PublishScreen({
               </ScrollView>}
           </View>
         </View>
-      </Modal>
+      </Modal>}
 
       {/* 谁可以看弹窗 */}
-      <Modal visible={showVisibilityModal} animationType="fade" transparent>
+      {showVisibilityModal && <Modal visible animationType="fade" transparent>
         <View style={[styles.modalOverlay, {
         justifyContent: 'center'
       }]}>
@@ -1841,17 +2010,104 @@ export default function PublishScreen({
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      </Modal>}
 
       {/* 区域选择弹窗 */}
-      <Modal visible={showLocationModal} transparent animationType="slide">
+      {showRegionModal && <Modal visible transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => {
+              setShowRegionModal(false);
+              setPublishRegionStep(0);
+            }}
+          />
+          <View style={[styles.regionModal, { paddingBottom: 30 }]}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowRegionModal(false);
+                  setPublishRegionStep(0);
+                }}
+              >
+                <Ionicons name="close" size={24} color="#1f2937" />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>{t('home.selectRegion')}</Text>
+              <TouchableOpacity onPress={confirmRegionSelection}>
+                <Text style={styles.confirmText}>{t('home.confirm')}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.breadcrumbContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.breadcrumbScrollContent}>
+                <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setPublishRegionStep(0)}>
+                  <Text style={[styles.breadcrumbText, publishRegionStep === 0 && styles.breadcrumbTextActive]}>
+                    {selectedPublishRegion.country || '鍥藉'}
+                  </Text>
+                </TouchableOpacity>
+
+                {selectedPublishRegion.country && (
+                  <>
+                    <View style={styles.breadcrumbSeparatorWrapper}>
+                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
+                    </View>
+                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setPublishRegionStep(1)}>
+                      <Text style={[styles.breadcrumbText, publishRegionStep === 1 && styles.breadcrumbTextActive]}>
+                        {selectedPublishRegion.city || '鐪佷唤'}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                {selectedPublishRegion.city && (
+                  <>
+                    <View style={styles.breadcrumbSeparatorWrapper}>
+                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
+                    </View>
+                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setPublishRegionStep(2)}>
+                      <Text style={[styles.breadcrumbText, publishRegionStep === 2 && styles.breadcrumbTextActive]}>
+                        {selectedPublishRegion.state || '鍩庡競'}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                {selectedPublishRegion.state && (
+                  <>
+                    <View style={styles.breadcrumbSeparatorWrapper}>
+                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
+                    </View>
+                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setPublishRegionStep(3)}>
+                      <Text style={[styles.breadcrumbText, publishRegionStep === 3 && styles.breadcrumbTextActive]}>
+                        {selectedPublishRegion.district || '鍖哄幙'}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </ScrollView>
+            </View>
+
+            <ScrollView style={styles.regionList} keyboardShouldPersistTaps="always" keyboardDismissMode="interactive">
+              {publishRegionOptions.map((option, idx) => (
+                <TouchableOpacity key={idx} style={styles.regionOption} onPress={() => selectPublishRegion(option)}>
+                  <Text style={styles.regionOptionText}>{option}</Text>
+                  <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>}
+
+      {showLocationModal && <Modal visible transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <TouchableOpacity
             style={styles.modalBackdrop}
             activeOpacity={1}
             onPress={() => {
               setShowLocationModal(false);
-              setRegionStep(0);
+              setLocationStep(0);
             }}
           />
           <View style={[styles.regionModal, { paddingBottom: 30 }]}>
@@ -1859,7 +2115,7 @@ export default function PublishScreen({
               <TouchableOpacity
                 onPress={() => {
                   setShowLocationModal(false);
-                  setRegionStep(0);
+                  setLocationStep(0);
                 }}
               >
                 <Ionicons name="close" size={24} color="#1f2937" />
@@ -1872,8 +2128,8 @@ export default function PublishScreen({
 
             <View style={styles.breadcrumbContainer}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.breadcrumbScrollContent}>
-                <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setRegionStep(0)}>
-                  <Text style={[styles.breadcrumbText, regionStep === 0 && styles.breadcrumbTextActive]}>
+                <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setLocationStep(0)}>
+                  <Text style={[styles.breadcrumbText, locationStep === 0 && styles.breadcrumbTextActive]}>
                     {selectedLocationRegion.country || '国家'}
                   </Text>
                 </TouchableOpacity>
@@ -1883,8 +2139,8 @@ export default function PublishScreen({
                     <View style={styles.breadcrumbSeparatorWrapper}>
                       <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
                     </View>
-                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setRegionStep(1)}>
-                      <Text style={[styles.breadcrumbText, regionStep === 1 && styles.breadcrumbTextActive]}>
+                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setLocationStep(1)}>
+                      <Text style={[styles.breadcrumbText, locationStep === 1 && styles.breadcrumbTextActive]}>
                         {selectedLocationRegion.city || '省份'}
                       </Text>
                     </TouchableOpacity>
@@ -1896,8 +2152,8 @@ export default function PublishScreen({
                     <View style={styles.breadcrumbSeparatorWrapper}>
                       <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
                     </View>
-                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setRegionStep(2)}>
-                      <Text style={[styles.breadcrumbText, regionStep === 2 && styles.breadcrumbTextActive]}>
+                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setLocationStep(2)}>
+                      <Text style={[styles.breadcrumbText, locationStep === 2 && styles.breadcrumbTextActive]}>
                         {selectedLocationRegion.state || '城市'}
                       </Text>
                     </TouchableOpacity>
@@ -1909,8 +2165,8 @@ export default function PublishScreen({
                     <View style={styles.breadcrumbSeparatorWrapper}>
                       <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
                     </View>
-                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setRegionStep(3)}>
-                      <Text style={[styles.breadcrumbText, regionStep === 3 && styles.breadcrumbTextActive]}>
+                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setLocationStep(3)}>
+                      <Text style={[styles.breadcrumbText, locationStep === 3 && styles.breadcrumbTextActive]}>
                         {selectedLocationRegion.district || '区县'}
                       </Text>
                     </TouchableOpacity>
@@ -1919,8 +2175,8 @@ export default function PublishScreen({
               </ScrollView>
             </View>
 
-            <ScrollView style={styles.regionList} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
-              {getLocationRegionOptions().map((option, idx) => (
+            <ScrollView style={styles.regionList} keyboardShouldPersistTaps="always" keyboardDismissMode="interactive">
+              {locationRegionOptions.map((option, idx) => (
                 <TouchableOpacity key={idx} style={styles.regionOption} onPress={() => selectLocationRegion(option)}>
                   <Text style={styles.regionOptionText}>{option}</Text>
                   <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
@@ -1929,12 +2185,11 @@ export default function PublishScreen({
             </ScrollView>
           </View>
         </View>
-      </Modal>
+      </Modal>}
 
       {/* 图片选择器 */}
         <ImagePickerSheet visible={showImagePicker} onClose={() => setShowImagePicker(false)} onImageSelected={handleImageSelected} title={t('publish.addImage')} />
       </KeyboardAvoidingView>
-      </KeyboardDismissView>
     </SafeAreaView>;
   }
 const styles = StyleSheet.create({

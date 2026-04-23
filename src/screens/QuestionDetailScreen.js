@@ -48,6 +48,7 @@ import {
 import { sanitizeUserFacingMessage } from '../utils/userFacingMessage';
 import { formatNumber } from '../utils/numberFormatter';
 import { formatTime } from '../utils/timeFormatter';
+import { getQuestionAdoptRate, getQuestionPayViewAmount, isQuestionSolvedByAdoptRate } from '../utils/questionAccessRules';
 import { normalizeEntityId } from '../utils/jsonLongId';
 import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
@@ -1594,8 +1595,25 @@ export default function QuestionDetailScreen({
     return Number(answersCache.featured.total || answersCache.newest.total || questionData?.answerCount || questionData?.answers || answersTotal || 0) || 0;
   }, [answersCache.featured.total, answersCache.newest.total, questionData?.answerCount, questionData?.answers, answersTotal]);
   const commentsTabTotal = React.useMemo(() => {
-    return Number(commentsCache.likes.total || commentsCache.newest.total || questionData?.commentCount || questionData?.comments || commentsTotal || 0) || 0;
-  }, [commentsCache.likes.total, commentsCache.newest.total, questionData?.commentCount, questionData?.comments, commentsTotal]);
+    const cachedCommentsTotal = Number(
+      commentsCache[commentsSortBy]?.total ??
+      commentsCache.likes.total ??
+      commentsCache.newest.total ??
+      0
+    ) || 0;
+
+    if (cachedCommentsTotal > 0 || commentsCache[commentsSortBy]?.loaded || commentsCache.likes.loaded || commentsCache.newest.loaded) {
+      return cachedCommentsTotal;
+    }
+
+    return Number(questionData?.commentCount || questionData?.comments || commentsTotal || 0) || 0;
+  }, [
+    commentsCache,
+    commentsSortBy,
+    questionData?.commentCount,
+    questionData?.comments,
+    commentsTotal
+  ]);
 
   // 使用 useMemo 创建 answerTabs，优先显示详情接口中的数量，再回退到列表缓存数量
   const answerTabs = React.useMemo(() => {
@@ -1698,6 +1716,31 @@ export default function QuestionDetailScreen({
       loadCommentsList(questionId, true, commentsSortBy);
     }
   }, [activeTabType, commentsSortBy, commentsCache, route?.params?.id]);
+  useEffect(() => {
+    if (!currentQuestionId || !questionData || activeTabType === 'comments' || loadingComments || commentsRefreshing || commentsLoadingMore) {
+      return;
+    }
+
+    const likesCache = commentsCache.likes;
+    const newestCache = commentsCache.newest;
+    const hasUsableCommentsCache =
+      (likesCache.loaded && !isCacheExpired(likesCache)) ||
+      (newestCache.loaded && !isCacheExpired(newestCache));
+
+    if (!hasUsableCommentsCache) {
+      loadCommentsList(currentQuestionId, true, commentsSortBy);
+    }
+  }, [
+    currentQuestionId,
+    questionData,
+    activeTabType,
+    commentsCache.likes,
+    commentsCache.newest,
+    commentsSortBy,
+    loadingComments,
+    commentsRefreshing,
+    commentsLoadingMore
+  ]);
   useEffect(() => {
     if (!showAnswerCommentListModal || !currentAnswerId) {
       return;
@@ -1810,6 +1853,8 @@ export default function QuestionDetailScreen({
     displayType: 'free',
     reward: 0
   };
+  const questionAdoptRate = getQuestionAdoptRate(questionData);
+  const isQuestionSolvedFromAdoptRate = isQuestionSolvedByAdoptRate(questionData);
   const currentReplyComment = commentsList.find(comment => String(comment.id) === String(currentCommentId)) || Object.values(questionCommentRepliesMap).flatMap(entry => entry?.list || []).find(comment => String(comment.id) === String(currentCommentId)) || suppCommentsList.find(comment => String(comment.id) === String(currentCommentId)) || commentsData.find(comment => String(comment.id) === String(currentCommentId)) || null;
   const currentAnswerReplyComment = answerCommentsList.find(comment => String(comment.id) === String(currentAnswerCommentId)) || Object.values(answerCommentRepliesMap).flatMap(entry => entry?.list || []).find(comment => String(comment.id) === String(currentAnswerCommentId)) || null;
   const currentSuppReplyComment = suppCommentsList.find(comment => String(comment.id) === String(currentSuppCommentId)) || null;
@@ -1911,14 +1956,14 @@ export default function QuestionDetailScreen({
     const normalizedRawType = question.type ?? question.questionType ?? question.originalType ?? null;
     const normalizedIsAnonymous = Number(question.isAnonymous ?? 0);
     const normalizedBountyAmount = Number(question.bountyAmount ?? question.rewardAmount ?? 0) || 0;
-    const normalizedPayViewAmount = Number(question.payViewAmount ?? question.price ?? 0) || 0;
+    const normalizedPayViewAmount = getQuestionPayViewAmount(question);
     const normalizedViewCount = Number(question.viewCount ?? question.views ?? 0) || 0;
     const normalizedLikeCount = Number(question.likeCount ?? question.likes ?? 0) || 0;
     const normalizedCollectCount = Number(question.collectCount ?? question.bookmarkCount ?? question.bookmarks ?? 0) || 0;
     const normalizedCommentCount = Number(question.commentCount ?? question.comments ?? 0) || 0;
     const normalizedAnswerCount = Number(question.answerCount ?? question.answers ?? 0) || 0;
     const normalizedSupplementCount = Number(question.supplementCount ?? question.supplements ?? question.supplementQuestionCount ?? question.supplement_question_count ?? 0) || 0;
-    const normalizedAdoptRate = Number(question.adoptRate ?? question.solvedPercent ?? 0) || 0;
+    const normalizedAdoptRate = getQuestionAdoptRate(question);
     const normalizedCreateTime = question.createTime ?? question.createdAt ?? null;
     const normalizedLiked = !!(question.liked ?? question.isLiked);
     const normalizedCollected = !!(question.collected ?? question.isCollected ?? question.bookmarked ?? question.isBookmarked);
@@ -3428,6 +3473,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       comments: normalizedCommentCount
     });
   };
+  const getAnswerDirectCommentCount = answer => Math.max(Number(answer?.commentCount ?? answer?.comment_count ?? answer?.comments ?? 0) || 0, 0);
   const buildCommentReplyTarget = (comment, fallbackTarget = {}) => {
     if (!comment || typeof comment !== 'object') {
       return {
@@ -3644,6 +3690,77 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     }
     return Math.max(totalTopLevelComments, fetchedTopLevelComments);
   };
+  const fetchAnswerInteractionCount = async answerId => {
+    if (!answerId) {
+      return 0;
+    }
+    const pageSize = 100;
+    let pageNum = 1;
+    let totalTopLevelComments = 0;
+    let fetchedTopLevelComments = 0;
+
+    while (true) {
+      const response = await commentApi.getComments({
+        targetType: 2,
+        targetId: Number(answerId),
+        parentId: 0,
+        pageNum,
+        pageSize
+      });
+      if (!(response && response.code === 200)) {
+        break;
+      }
+      const comments = normalizeComments(extractCommentRows(response), {
+        targetType: 2,
+        targetId: Number(answerId),
+        parentId: 0
+      });
+      const pageTopLevelTotal = extractCommentTotal(response, comments.length);
+      totalTopLevelComments = Math.max(Number(pageTopLevelTotal) || 0, totalTopLevelComments, comments.length);
+      fetchedTopLevelComments += comments.length;
+      if (comments.length === 0 || comments.length < pageSize || fetchedTopLevelComments >= totalTopLevelComments) {
+        break;
+      }
+      pageNum += 1;
+    }
+
+    return Math.max(totalTopLevelComments, fetchedTopLevelComments);
+  };
+  const hydrateAnswerCommentCounts = async (answers = []) => {
+    const answersToSync = answers.filter(item => item?.id);
+    if (!answersToSync.length) {
+      return answers;
+    }
+    const commentCountResults = await Promise.allSettled(answersToSync.map(async item => ({
+      id: item.id,
+      commentCount: await fetchAnswerInteractionCount(item.id)
+    })));
+    const nextCommentCountMap = commentCountResults.reduce((accumulator, result) => {
+      if (result.status !== 'fulfilled' || !result.value?.id) {
+        return accumulator;
+      }
+      accumulator[String(result.value.id)] = result.value.commentCount;
+      return accumulator;
+    }, {});
+    if (!Object.keys(nextCommentCountMap).length) {
+      return answers;
+    }
+    return answers.map(item => {
+      const nextCommentCount = nextCommentCountMap[String(item?.id)];
+      if (nextCommentCount === undefined) {
+        return item;
+      }
+      const currentCommentCount = getAnswerDirectCommentCount(item);
+      if (currentCommentCount === nextCommentCount) {
+        return item;
+      }
+      return normalizeAnswerItem({
+        ...item,
+        commentCount: nextCommentCount,
+        comments: nextCommentCount
+      });
+    });
+  };
   const hydrateSupplementCommentCounts = async (supplements = []) => {
     const supplementsToSync = supplements.filter(item => {
       if (!item?.id) {
@@ -3800,7 +3917,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         pageSize: 10
       });
       if (response && response.code === 200 && response.data) {
-        const newAnswers = normalizeAnswers(extractAnswerRows(response));
+        const normalizedAnswers = normalizeAnswers(extractAnswerRows(response));
+        const newAnswers = await hydrateAnswerCommentCounts(normalizedAnswers);
         const total = extractAnswerTotal(response, newAnswers.length);
         syncAnswerInteractionStates(newAnswers);
 
@@ -3908,7 +4026,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       });
       console.log('📥 回答列表响应:', response);
       if (response && response.code === 200 && response.data) {
-        const newAnswers = normalizeAnswers(extractAnswerRows(response));
+        const normalizedAnswers = normalizeAnswers(extractAnswerRows(response));
+        const newAnswers = await hydrateAnswerCommentCounts(normalizedAnswers);
         const total = extractAnswerTotal(response, newAnswers.length);
         const otherSortBy = sortBy === 'featured' ? 'newest' : 'featured';
         logSortPreview({
@@ -3961,7 +4080,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             pageSize: 10
           });
           if (newestResponse && newestResponse.code === 200 && newestResponse.data) {
-            const newestAnswers = normalizeAnswers(extractAnswerRows(newestResponse));
+            const normalizedNewestAnswers = normalizeAnswers(extractAnswerRows(newestResponse));
+            const newestAnswers = await hydrateAnswerCommentCounts(normalizedNewestAnswers);
             const newestTotal = extractAnswerTotal(newestResponse, newestAnswers.length);
             if (newestAnswers.length > 0) {
               syncAnswerInteractionStates(newestAnswers);
@@ -4024,6 +4144,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           parentId: 0
         }), cacheData.list);
         const total = extractCommentTotal(response, newComments.length);
+        const normalizedTotal = Math.max(Number(total) || 0, 0);
         syncCommentInteractionStates(newComments);
         setCommentsCache(prevCache => {
           const updatedCache = {
@@ -4033,26 +4154,42 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           if (isRefresh) {
             updatedCache[sortBy] = {
               list: newComments,
-              total,
+              total: normalizedTotal,
               pageNum: newComments.length < 10 ? 1 : 2,
-              hasMore: newComments.length >= 10 && newComments.length < total,
+              hasMore: newComments.length >= 10 && newComments.length < normalizedTotal,
               loaded: true,
               lastUpdated: Date.now()
             };
           } else {
             updatedCache[sortBy] = {
               list: [...currentData.list, ...newComments],
-              total,
+              total: normalizedTotal,
               pageNum: newComments.length < 10 ? pageNum : pageNum + 1,
-              hasMore: newComments.length >= 10 && currentData.list.length + newComments.length < total,
+              hasMore: newComments.length >= 10 && currentData.list.length + newComments.length < normalizedTotal,
               loaded: true,
               lastUpdated: Date.now()
             };
           }
           return updatedCache;
         });
+        setQuestionData(prevQuestion => {
+          if (!prevQuestion || typeof prevQuestion !== 'object') {
+            return prevQuestion;
+          }
 
-        if (shouldFallbackToNewestComments(sortBy, newComments, total)) {
+          const currentCommentCount = Number(prevQuestion.commentCount ?? prevQuestion.comments ?? 0) || 0;
+          if (currentCommentCount === normalizedTotal) {
+            return prevQuestion;
+          }
+
+          return {
+            ...prevQuestion,
+            commentCount: normalizedTotal,
+            comments: normalizedTotal
+          };
+        });
+
+        if (shouldFallbackToNewestComments(sortBy, newComments, normalizedTotal)) {
           console.log('ℹ️ 当前精选评论为空但总数大于 0，自动切换到最新评论');
           const newestResponse = await commentApi.getComments({
             targetType: 1,
@@ -4069,7 +4206,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               targetId: Number(questionId),
               parentId: 0
             });
-            const newestTotal = extractCommentTotal(newestResponse, newestComments.length);
+            const newestTotal = Math.max(Number(extractCommentTotal(newestResponse, newestComments.length)) || 0, 0);
             if (newestComments.length > 0) {
               syncCommentInteractionStates(newestComments);
               setCommentsCache(prevCache => ({
@@ -4273,15 +4410,16 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           parentId: 0
         }), answerCommentListState.list);
         const total = extractCommentTotal(response, newComments.length);
+        const normalizedTotal = Math.max(Number(total) || 0, 0);
         syncCommentInteractionStates(newComments);
         setAnswerCommentListState(prevState => {
           const nextList = isLoadMore ? [...prevState.list, ...newComments] : newComments;
           return {
             ...prevState,
             list: nextList,
-            total,
+            total: normalizedTotal,
             pageNum: newComments.length < 10 ? pageNum : pageNum + 1,
-            hasMore: newComments.length >= 10 && nextList.length < total,
+            hasMore: newComments.length >= 10 && nextList.length < normalizedTotal,
             loaded: true,
             loading: false,
             refreshing: false,
@@ -4289,6 +4427,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             targetId: Number(answerId)
           };
         });
+        syncAnswerCommentCount(answerId, normalizedTotal);
       } else {
         setAnswerCommentListState(prevState => ({
           ...prevState,
@@ -4801,14 +4940,18 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     }, delay);
   }, []);
 
-  const openAnswerCommentReplySheet = React.useCallback((commentId) => {
+  const openAnswerCommentReplySheet = React.useCallback(async (commentId) => {
+    const currentReplyEntry = answerCommentRepliesMap[commentId];
     setCurrentAnswerCommentId(commentId);
+    if (!currentReplyEntry?.loaded && !currentReplyEntry?.loading) {
+      await loadAnswerCommentReplies(commentId);
+    }
     setShowAnswerCommentListModal(false);
     setShowAnswerCommentReplyModal(false);
     scheduleCommentSheetTransition(() => {
       setShowAnswerCommentReplyModal(true);
     });
-  }, [scheduleCommentSheetTransition]);
+  }, [answerCommentRepliesMap, loadAnswerCommentReplies, scheduleCommentSheetTransition]);
 
   const returnToAnswerCommentList = React.useCallback(() => {
     setShowAnswerCommentReplyModal(false);
@@ -4818,14 +4961,18 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     });
   }, [scheduleCommentSheetTransition]);
 
-  const openSupplementCommentReplySheet = React.useCallback((commentId) => {
+  const openSupplementCommentReplySheet = React.useCallback(async (commentId) => {
+    const currentReplyEntry = suppCommentRepliesMap[commentId];
     setCurrentSuppCommentId(commentId);
+    if (!currentReplyEntry?.loaded && !currentReplyEntry?.loading) {
+      await loadSupplementCommentReplies(commentId);
+    }
     setShowSuppCommentListModal(false);
     setShowSuppCommentReplyModal(false);
     scheduleCommentSheetTransition(() => {
       setShowSuppCommentReplyModal(true);
     });
-  }, [scheduleCommentSheetTransition]);
+  }, [loadSupplementCommentReplies, scheduleCommentSheetTransition, suppCommentRepliesMap]);
 
   const returnToSupplementCommentList = React.useCallback(() => {
     setShowSuppCommentReplyModal(false);
@@ -4965,8 +5112,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           }
         } else if (targetType === 2) {
           const currentAnswer = answersList.find(item => String(getAnswerPrimaryId(item) ?? item.id) === String(targetId)) || Object.values(answersCache).flatMap(entry => entry?.list || []).find(item => String(getAnswerPrimaryId(item) ?? item.id) === String(targetId)) || null;
-          const currentAnswerCommentCount = Number(currentAnswer?.commentCount ?? currentAnswer?.comments ?? 0) || 0;
-          syncAnswerCommentCount(targetId, currentAnswerCommentCount + 1);
+          const currentAnswerCommentCount = getAnswerDirectCommentCount(currentAnswer);
+          if (parentId === 0) {
+            syncAnswerCommentCount(targetId, currentAnswerCommentCount + 1);
+          }
 
           if (String(currentAnswerId) === String(targetId)) {
             await loadAnswerComments(targetId, {
@@ -7206,7 +7355,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               {/* 采纳进度 */}
               <View style={styles.adoptionProgressContainer}>
                 <Text style={styles.adoptionProgressText}>
-                  已采纳 {questionData.adoptRate !== undefined && questionData.adoptRate !== null ? `${questionData.adoptRate}%` : '0%'}
+                  {isQuestionSolvedFromAdoptRate ? '已解决' : `已采纳 ${questionAdoptRate}%`}
                 </Text>
               </View>
             </View>
@@ -7358,7 +7507,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           )}
             </View>
             <Text style={styles.sortFilterCount}>
-              {activeTabType === 'supplements' ? `共 ${supplementsList.length} 条补充` : activeTabType === 'answers' ? `共 ${answersTotal} 条回答` : `共 ${commentsTotal || questionData?.commentCount || 0} 条评论`}
+              {activeTabType === 'supplements' ? `共 ${supplementsList.length} 条补充` : activeTabType === 'answers' ? `共 ${answersTotal} 条回答` : `共 ${commentsTabTotal} 条评论`}
             </Text>
           </View>
 
@@ -8117,7 +8266,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       setShowAnswerCommentListModal(true);
                     }}>
                     <Ionicons name="chatbubble-outline" size={16} color="#6b7280" />
-                    <Text style={styles.answerActionText}>{formatNumber(answer.commentCount || answer.comment_count || answer.comments || 0)}</Text>
+                    <Text style={styles.answerActionText}>{formatNumber(getAnswerDirectCommentCount(answer))}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.answerActionBtn} onPress={e => {
                       e.stopPropagation();
@@ -8462,6 +8611,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         <CommentBottomSheetListBody
           styles={styles}
           loading={suppCommentListState.loading || suppCommentListState.refreshing}
+          loaded={suppCommentListState.loaded}
           items={suppCommentsList}
           loadingText="加载评论中..."
           emptyTitle="暂无评论"
@@ -8617,6 +8767,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }
         originalComment={currentReplyComment}
         onPressAuthor={openPublicProfile}
+        loading={!!(currentCommentId && questionCommentRepliesMap[currentCommentId]?.loading && !questionCommentRepliesMap[currentCommentId]?.loaded)}
+        loadingText="加载回复中..."
         emptyState={currentCommentId && questionCommentRepliesMap[currentCommentId]?.loaded && (!questionCommentRepliesMap[currentCommentId]?.list || questionCommentRepliesMap[currentCommentId].list.length === 0) ? <View style={styles.loadingIndicator}>
               <Text style={styles.loadingText}>暂无回复</Text>
             </View> : null}
@@ -8660,6 +8812,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }
         originalComment={currentAnswerReplyComment}
         onPressAuthor={openPublicProfile}
+        loading={!!(currentAnswerCommentId && answerCommentRepliesMap[currentAnswerCommentId]?.loading && !answerCommentRepliesMap[currentAnswerCommentId]?.loaded)}
+        loadingText="加载回复中..."
         emptyState={currentAnswerCommentId && answerCommentRepliesMap[currentAnswerCommentId]?.loaded && (!answerCommentRepliesMap[currentAnswerCommentId]?.list || answerCommentRepliesMap[currentAnswerCommentId].list.length === 0) ? <View style={styles.loadingIndicator}>
               <Text style={styles.loadingText}>暂无回复</Text>
             </View> : null}
@@ -8703,6 +8857,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }
         originalComment={currentSuppReplyComment}
         onPressAuthor={openPublicProfile}
+        loading={!!(currentSuppCommentId && suppCommentRepliesMap[currentSuppCommentId]?.loading && !suppCommentRepliesMap[currentSuppCommentId]?.loaded)}
+        loadingText="加载回复中..."
         emptyState={currentSuppCommentId && suppCommentRepliesMap[currentSuppCommentId]?.loaded && (!suppCommentRepliesMap[currentSuppCommentId]?.list || suppCommentRepliesMap[currentSuppCommentId].list.length === 0) ? <View style={styles.loadingIndicator}>
               <Text style={styles.loadingText}>暂无回复</Text>
             </View> : null}
@@ -8953,7 +9109,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       >
         <CommentBottomSheetListBody
           styles={styles}
-          loading={answerCommentListState.loading}
+          loading={answerCommentListState.loading || answerCommentListState.refreshing}
+          loaded={answerCommentListState.loaded}
           items={answerCommentsList}
           loadingText="加载评论中..."
           emptyTitle="暂无评论"

@@ -38,6 +38,8 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
   const appState = useRef(AppState.currentState);
   const checkInterval = useRef(null);
   const isInitialLoad = useRef(true);
+  const hasStartedInitialLoad = useRef(false);
+  const previousActiveTabRef = useRef(null);
 
   const getTabType = useCallback(
     tab => {
@@ -267,11 +269,28 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
   }, [checkNew]);
 
   useEffect(() => {
-    if (isInitialLoad.current) {
-      initialLoad();
-    } else {
-      onTabChange(activeTab);
+    if (!activeTab) {
+      previousActiveTabRef.current = activeTab;
+      return;
     }
+
+    if (isInitialLoad.current) {
+      if (hasStartedInitialLoad.current) {
+        return;
+      }
+
+      hasStartedInitialLoad.current = true;
+      previousActiveTabRef.current = activeTab;
+      initialLoad();
+      return;
+    }
+
+    if (previousActiveTabRef.current === activeTab) {
+      return;
+    }
+
+    previousActiveTabRef.current = activeTab;
+    onTabChange(activeTab);
   }, [activeTab, initialLoad, onTabChange]);
 
   return {

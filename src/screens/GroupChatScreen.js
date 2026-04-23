@@ -42,6 +42,13 @@ import {
   DEFAULT_MENTION_PANEL_BASE_OFFSET,
   DEFAULT_MENTION_SEARCH_LIMIT,
 } from '../utils/mentionComposer';
+import {
+  extractGroupIdsFromGroups,
+  getGroupIdValue,
+  hasGroupIdValue,
+  normalizeGroupId,
+  normalizeQuestionGroupIdsResponse,
+} from '../utils/groupChatGroupId';
 
 import { scaleFont } from '../utils/responsive';
 const DEFAULT_QUESTION = {
@@ -52,24 +59,13 @@ const DEFAULT_QUESTION = {
 };
 
 const isSuccessResponse = response => response && (response.code === 200 || response.code === 0);
-const hasGroupIdValue = value => value !== null && value !== undefined && value !== '';
 const GROUP_CHAT_INTERNAL_ERROR_PATTERN = /No static resource|NOT_FOUND|SQLSyntaxErrorException|app_group/i;
 const GROUP_ALREADY_JOINED_PATTERN = /已加入该群组|已经加入该群组|already joined/i;
-
-const getGroupIdValue = group =>
-  group?.resolvedGroupId ??
-  group?.groupId ??
-  group?.id ??
-  group?.publicGroupId ??
-  group?.questionGroupId ??
-  group?.groupID ??
-  group?.groupNo ??
-  null;
 
 const pickPreferredGroup = groups =>
   groups.find(group => Boolean(group?.isJoined)) ||
   groups.find(group => Number(group?.status) === 1) ||
-  groups.find(group => Boolean(getGroupIdValue(group))) ||
+  groups.find(group => hasGroupIdValue(getGroupIdValue(group))) ||
   groups[0] ||
   null;
 
@@ -113,55 +109,20 @@ const normalizeQuestionGroupsResponse = response => {
       [];
 
   if (Array.isArray(candidateList)) {
-    return candidateList.map(normalizeGroupItem).filter(group => Boolean(getGroupIdValue(group)));
+    return candidateList.map(normalizeGroupItem).filter(group => hasGroupIdValue(getGroupIdValue(group)));
   }
 
   if (candidateList && typeof candidateList === 'object') {
     const normalizedGroup = normalizeGroupItem(candidateList, 0);
-    return getGroupIdValue(normalizedGroup) ? [normalizedGroup] : [];
+    return hasGroupIdValue(getGroupIdValue(normalizedGroup)) ? [normalizedGroup] : [];
   }
 
-  if (payload && typeof payload === 'object' && getGroupIdValue(payload)) {
+  if (payload && typeof payload === 'object' && hasGroupIdValue(getGroupIdValue(payload))) {
     return [normalizeGroupItem(payload, 0)];
   }
 
   return [];
 };
-
-const normalizeQuestionGroupIdsResponse = response => {
-  const payload = response?.data;
-  const candidateList = Array.isArray(payload)
-    ? payload
-    : Array.isArray(payload?.data)
-      ? payload.data
-      : Array.isArray(payload?.list)
-        ? payload.list
-        : [];
-
-  return candidateList
-    .map(item => {
-      if (item && typeof item === 'object') {
-        return Number(
-          item?.groupId ??
-            item?.id ??
-            item?.publicGroupId ??
-            item?.questionGroupId ??
-            item?.groupID ??
-            item?.groupNo
-        );
-      }
-
-      return Number(item);
-    })
-    .filter(item => Number.isInteger(item) && item >= 0);
-};
-
-const extractGroupIdsFromGroups = groups =>
-  groups
-    .map(group => getGroupIdValue(group))
-    .filter(hasGroupIdValue)
-    .map(groupId => String(groupId).trim())
-    .filter(Boolean);
 
 const arePrimitiveArraysEqual = (prev = [], next = []) =>
   prev.length === next.length && prev.every((item, index) => item === next[index]);
@@ -775,16 +736,16 @@ export default function GroupChatScreen({ navigation, route }) {
 
   const question = route?.params?.question || DEFAULT_QUESTION;
   const questionId = route?.params?.questionId || question?.id;
-  const routeGroupId =
+  const routeGroupId = normalizeGroupId(
     route?.params?.groupId ??
-    route?.params?.group?.id ??
-    route?.params?.group?.groupId ??
-    question?.groupId ??
-    question?.publicGroupId ??
-    question?.questionGroupId ??
-    null;
+      route?.params?.group?.id ??
+      route?.params?.group?.groupId ??
+      question?.groupId ??
+      question?.publicGroupId ??
+      question?.questionGroupId
+  );
   const currentGroup = useMemo(() => pickPreferredGroup(questionGroups), [questionGroups]);
-  const currentGroupId = getGroupIdValue(currentGroup) ?? routeGroupId ?? questionGroupIds[0] ?? null;
+  const currentGroupId = getGroupIdValue(currentGroup) ?? routeGroupId ?? normalizeGroupId(questionGroupIds[0]);
   const displayMemberCount = currentGroup?.memberCount ?? question.memberCount ?? 0;
   const displayMaxMembers = currentGroup?.maxMembers ?? 0;
   const displayAvatar =
@@ -961,9 +922,9 @@ export default function GroupChatScreen({ navigation, route }) {
   };
 
   const ensureJoinedGroup = async (targetGroupId, { refreshOnSuccess = true } = {}) => {
-    const normalizedGroupId = Number(targetGroupId);
+    const normalizedGroupId = normalizeGroupId(targetGroupId);
 
-    if (!Number.isInteger(normalizedGroupId) || normalizedGroupId <= 0) {
+    if (normalizedGroupId === null) {
       throw new Error(t('screens.groupChat.groupInfoUnavailable'));
     }
 

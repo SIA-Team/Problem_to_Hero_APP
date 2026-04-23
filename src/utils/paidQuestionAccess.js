@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { shouldRequirePaidQuestionAccess } from './questionAccessRules';
 
 const PAID_QUESTION_ACCESS_KEY = '@paid_question_access';
 let paidQuestionAccessMapCache = null;
@@ -97,9 +98,7 @@ export const applyPaidQuestionAccessState = async questions => {
       return false;
     }
 
-    const payViewAmount = Number(question.payViewAmount) || 0;
-    const paidAmount = Number(question.paidAmount) || 0;
-    return question.type === 'paid' || payViewAmount > 0 || paidAmount > 0;
+    return shouldRequirePaidQuestionAccess(question) || (question.type === 'paid' && Boolean(question.isPaid));
   });
 
   if (!hasPaidQuestions) {
@@ -114,9 +113,7 @@ export const applyPaidQuestionAccessState = async questions => {
     }
 
     const normalizedId = normalizeQuestionId(question.id ?? question.questionId);
-    const payViewAmount = Number(question.payViewAmount) || 0;
-    const paidAmount = Number(question.paidAmount) || 0;
-    const isPaidQuestion = question.type === 'paid' || payViewAmount > 0 || paidAmount > 0;
+    const isPaidQuestion = shouldRequirePaidQuestionAccess(question) || question.type === 'paid';
 
     if (!isPaidQuestion || !normalizedId) {
       return question;
