@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -73,6 +73,8 @@ export default function ExpertisePickerModal({
 
   const [level1Search, setLevel1Search] = useState('');
   const [level2Search, setLevel2Search] = useState('');
+  const initializedSnapshotRef = useRef('');
+  const loadedLevel2ParentIdsRef = useRef(new Set());
 
   const selectedLevel2List = useMemo(
     () => Object.values(selectedLevel2Map),
@@ -127,7 +129,7 @@ export default function ExpertisePickerModal({
 
   const loadLevel2 = useCallback(
     async (parentId) => {
-      if (!parentId || level2ByParent[parentId]) {
+      if (!parentId || loadedLevel2ParentIdsRef.current.has(parentId)) {
         return;
       }
 
@@ -152,6 +154,7 @@ export default function ExpertisePickerModal({
           ...prev,
           [parentId]: normalized,
         }));
+        loadedLevel2ParentIdsRef.current.add(parentId);
       } catch (loadError) {
         setLevel2ByParent((prev) => ({
           ...prev,
@@ -166,26 +169,38 @@ export default function ExpertisePickerModal({
         }));
       }
     },
-    [level1NameMap, level2ByParent]
+    [level1NameMap]
   );
 
-  const initializeWithCurrentValue = useCallback(() => {
+  const currentValueSnapshot = useMemo(() => {
     const normalized = normalizeCurrentValue(currentValue);
+    return JSON.stringify(normalized);
+  }, [currentValue]);
 
+  useEffect(() => {
+    if (!visible) {
+      initializedSnapshotRef.current = '';
+      return;
+    }
+
+    if (initializedSnapshotRef.current === currentValueSnapshot) {
+      return;
+    }
+
+    const normalized = JSON.parse(currentValueSnapshot);
     setSelectedLevel1Ids(normalized.selectedLevel1Ids);
     setSelectedLevel2Map(normalized.selectedLevel2Map);
     setActiveLevel1Id(normalized.selectedLevel1Ids[0] || null);
     setLevel1Search('');
     setLevel2Search('');
     setError('');
-  }, [currentValue]);
+    initializedSnapshotRef.current = currentValueSnapshot;
+  }, [currentValueSnapshot, visible]);
 
   useEffect(() => {
     if (!visible) {
       return;
     }
-
-    initializeWithCurrentValue();
 
     let active = true;
 
@@ -233,7 +248,7 @@ export default function ExpertisePickerModal({
     return () => {
       active = false;
     };
-  }, [initializeWithCurrentValue, visible]);
+  }, [visible, activeLevel1Id, level1Categories.length]);
 
   useEffect(() => {
     if (!visible) {
@@ -751,4 +766,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
 
