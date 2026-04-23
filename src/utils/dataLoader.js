@@ -12,6 +12,7 @@ import { getCache, setCache } from './cacheManager';
 import { formatTime as formatDisplayTime } from './timeFormatter';
 import { applyPaidQuestionAccessState } from './paidQuestionAccess';
 import { getQuestionAdoptRate, getQuestionPayViewAmount, shouldRequirePaidQuestionAccess } from './questionAccessRules';
+import { centsToAmount } from './rewardAmount';
 import questionApi from '../services/api/questionApi';
 
 /**
@@ -296,17 +297,17 @@ const transformApiDataToHomeFormat = (apiData) => {
       // 保存原始问题类型，用户付费后可以看到
       transformedItem.originalType = item.type;
       if (normalizedBountyAmount > 0) {
-        transformedItem.originalReward = Math.floor(normalizedBountyAmount / 100);
+        transformedItem.originalReward = centsToAmount(normalizedBountyAmount);
       }
-    } else if (item.type === 1 && normalizedBountyAmount > 0) {
+    } else if (item.type !== 2 && normalizedBountyAmount > 0) {
       // 悬赏问题
       transformedItem.type = 'reward';
-      transformedItem.reward = Math.floor(normalizedBountyAmount / 100); // 转换为元
+      transformedItem.reward = centsToAmount(normalizedBountyAmount); // 转换为元
     } else if (item.type === 2) {
       // 定向问题
       transformedItem.type = 'targeted';
       if (normalizedBountyAmount > 0) {
-        transformedItem.reward = Math.floor(normalizedBountyAmount / 100);
+        transformedItem.reward = centsToAmount(normalizedBountyAmount);
       }
     } else {
       // 免费问题

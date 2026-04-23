@@ -95,6 +95,7 @@ import SuperLikePurchaseScreen from './src/screens/SuperLikePurchaseScreen';
 import SuperLikeHistoryScreen from './src/screens/SuperLikeHistoryScreen';
 import ContributorsScreen from './src/screens/ContributorsScreen';
 import PublicProfileScreen from './src/screens/PublicProfileScreen';
+import TopicDetailScreen from './src/screens/TopicDetailScreen';
 import NetworkTestScreen from './src/screens/NetworkTestScreen';
 import DeviceInfoScreen from './src/screens/DeviceInfoScreen';
 import ChangePasswordScreen from './src/screens/ChangePasswordScreen';
@@ -1540,9 +1541,9 @@ function AppContent() {
         <Stack.Screen name="MyActivities" component={MyActivitiesScreen} />
         <Stack.Screen name="MyTeams" component={MyTeamsScreen} />
         <Stack.Screen name="MyGroups" component={MyGroupsScreen} />
-        <Stack.Screen name="TeamAnnouncementDetail" component={TeamAnnouncementDetailScreen} />
         <Stack.Screen name="QuestionTeams" component={QuestionTeamsScreen} />
         <Stack.Screen name="TeamDetail" component={TeamDetailScreen} />
+        <Stack.Screen name="TeamAnnouncementDetail" component={TeamAnnouncementDetailScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="ChannelManage" component={ChannelManageScreen} />
         <Stack.Screen name="WisdomIndex" component={WisdomIndexScreen} />
@@ -1560,6 +1561,7 @@ function AppContent() {
         <Stack.Screen name="SuperLikeHistory" component={SuperLikeHistoryScreen} />
         <Stack.Screen name="Contributors" component={ContributorsScreen} />
         <Stack.Screen name="PublicProfile" component={PublicProfileScreen} />
+        <Stack.Screen name="TopicDetail" component={TopicDetailScreen} />
         <Stack.Screen name="DeviceInfo" component={DeviceInfoScreen} />
         <Stack.Screen name="NetworkTest" component={NetworkTestScreen} />
         <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />

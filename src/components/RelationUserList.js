@@ -9,10 +9,12 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from './Avatar';
 import { useTranslation } from '../i18n/withTranslation';
 import userApi from '../services/api/userApi';
+import { subscribeMyFollowingCount } from '../services/myFollowingCountState';
 import { showToast } from '../utils/toast';
 import { scaleFont } from '../utils/responsive';
 import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
@@ -298,6 +300,7 @@ export default function RelationUserList({
   isOwnList = false,
   targetUserId = '',
   profileName = '',
+  injectedUsers = [],
   showSearch = false,
   showStatsBar = true,
   ListHeaderExtra = null,
@@ -323,6 +326,8 @@ export default function RelationUserList({
 
   const usersRef = useRef([]);
   const requestIdRef = useRef(0);
+  const loadUsersRef = useRef(null);
+  const loadedRef = useRef(false);
   const listIdentity = useMemo(
     () => `${relationType}:${isOwnList ? 'mine' : targetUserId || 'unknown'}`,
     [isOwnList, relationType, targetUserId]
@@ -331,6 +336,10 @@ export default function RelationUserList({
   useEffect(() => {
     usersRef.current = users;
   }, [users]);
+
+  useEffect(() => {
+    loadedRef.current = loaded;
+  }, [loaded]);
 
   const resetState = useCallback(() => {
     usersRef.current = [];
@@ -444,6 +453,10 @@ export default function RelationUserList({
   );
 
   useEffect(() => {
+    loadUsersRef.current = loadUsers;
+  }, [loadUsers]);
+
+  useEffect(() => {
     requestIdRef.current += 1;
     resetState();
     loadUsers({ pageNum: 1 });
@@ -453,18 +466,59 @@ export default function RelationUserList({
     };
   }, [listIdentity]);
 
+  const normalizedInjectedUsers = useMemo(
+    () =>
+      (Array.isArray(injectedUsers) ? injectedUsers : [])
+        .map((user, index) => normalizeRelationUser(user, index + 100000, relationType))
+        .filter(Boolean),
+    [injectedUsers, relationType]
+  );
+
+  const mergedDisplayUsers = useMemo(
+    () => mergeUsers(normalizedInjectedUsers, users),
+    [normalizedInjectedUsers, users]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!loadedRef.current || !loadUsersRef.current) {
+        return undefined;
+      }
+
+      loadUsersRef.current({
+        pageNum: 1,
+        refresh: true,
+      });
+
+      return undefined;
+    }, [listIdentity])
+  );
+
+  useEffect(() => {
+    if (relationType !== 'following' || !isOwnList) {
+      return undefined;
+    }
+
+    return subscribeMyFollowingCount(() => {
+      loadUsersRef.current?.({
+        pageNum: 1,
+        refresh: true,
+      });
+    });
+  }, [isOwnList, listIdentity, relationType]);
+
   const filteredUsers = useMemo(() => {
     const keyword = searchText.trim().toLowerCase();
 
     if (!keyword) {
-      return users;
+      return mergedDisplayUsers;
     }
 
-    return users.filter(user => {
+    return mergedDisplayUsers.filter(user => {
       const fields = [user.username, user.bio, user.userId].filter(Boolean);
       return fields.some(field => String(field).toLowerCase().includes(keyword));
     });
-  }, [searchText, users]);
+  }, [mergedDisplayUsers, searchText]);
 
   const handleRefresh = useCallback(() => {
     loadUsers({
@@ -625,7 +679,11 @@ export default function RelationUserList({
         {showStatsBar && filteredUsers.length > 0 ? (
           <View style={styles.statsBar}>
             <Text style={styles.statsText}>
-              {copy.totalLabel(searchText.trim() ? filteredUsers.length : total || filteredUsers.length)}
+              {copy.totalLabel(
+                searchText.trim()
+                  ? filteredUsers.length
+                  : Math.max(total || 0, filteredUsers.length)
+              )}
             </Text>
           </View>
         ) : null}

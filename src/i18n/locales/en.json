@@ -56,8 +56,8 @@
     "selectDistrict": "Select District",
     "followers": "followers",
     "questions": "questions",
-    "followTopic": "Follow",
-    "unfollowTopic": "Unfollow",
+    "followTopic": "+follow",
+    "unfollowTopic": "following",
     "paidViewContent": "Pay to View Full Content",
     "payToView": "Pay ${amount} to view full content",
     "payToViewExtraLine1": "Viewing this content requires a payment.",
@@ -164,10 +164,10 @@
     "selectCategory": "Please select a category",
     "setRewardAmount": "Set Reward Amount",
     "rewardDesc": "Can be set to $0 (no reward) or any amount",
-    "rewardDescRequired": "Reward amount cannot be less than $1",
+    "rewardDescRequired": "Reward amount cannot be less than {amount}",
     "customAmount": "Custom amount:",
     "enterAmount": "Enter amount (can be $0)",
-    "enterAmountMin": "Enter amount (minimum $1)",
+    "enterAmountMin": "Enter amount (minimum {amount})",
     "inviteExperts": "Invite Experts",
     "inviteExpertsDesc": "Invite up to 5 experts to answer",
     "searchExperts": "Search expert name, field or title...",
@@ -240,7 +240,7 @@
       "titleTooLong": "Title cannot exceed 50 characters",
       "enterDescription": "Please enter question description",
       "selectCategory": "Please select a category",
-      "rewardTooLow": "Reward amount cannot be less than $1",
+      "rewardTooLow": "Reward amount cannot be less than {amount}",
       "inviteAtLeastOne": "Please invite at least one expert",
       "setPaidPrice": "Please set the price to view answer (minimum $0.01)",
       "selectTeam": "Please select a team to represent",
@@ -767,6 +767,9 @@
       },
       "transfer": {
         "title": "Select New Leader",
+        "selectMember": "Please select a member as the new leader"
+      }
+    },
     "teamAnnouncementDetail": {
       "title": "Announcement Details",
       "pinned": "Pinned",
@@ -778,9 +781,6 @@
       "unknownAuthor": "Team Admin",
       "emptyTitle": "Announcement Not Found",
       "emptyContent": "No announcement content yet."
-    },
-        "selectMember": "Please select a member as the new leader"
-      }
     },
     "supplementDetail": {
       "title": "Supplement Detail",
@@ -2101,14 +2101,24 @@
     "public": "Public",
     "targeted": "Targeted",
     "searchUsers": "Search users...",
-    "followed": "Following",
+    "followed": "following",
     "recommendFollow": "Recommended",
     "followedTopics": "Following Topics",
     "followers": "followers",
-    "follow": "+ Follow",
-    "following": "Following",
+    "follow": "+follow",
+    "following": "following",
+    "topicsEmptyTitle": "No followed topics yet",
+    "topicsEmptyHint": "Topics you follow will appear here",
     "minutesAgo": "minutes ago",
     "hoursAgo": "hours ago"
+  },
+  "topicDetail": {
+    "title": "Topic Detail",
+    "relatedQuestions": "Related Questions",
+    "emptyTitle": "No questions for this topic yet",
+    "emptyHint": "Questions under this topic will appear here later",
+    "loadFailed": "Failed to load topic questions",
+    "retry": "Retry"
   },
   "fans": {
     "title": "Fans",

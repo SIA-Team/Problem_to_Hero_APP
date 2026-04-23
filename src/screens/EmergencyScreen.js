@@ -1,5 +1,5 @@
 ﻿import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, Platform, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, Platform, Modal, ActivityIndicator, InteractionManager } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,8 +7,8 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import i18n from '../i18n';
 import { modalTokens } from '../components/modalTokens';
+import RegionSelector from '../components/RegionSelector';
 import { showAppAlert } from '../utils/appAlert';
-import { getRegionData } from '../data/regionData';
 import emergencyApi from '../services/api/emergencyApi';
 import uploadApi from '../services/api/uploadApi';
 import { buildEmergencyAddressText, resolveChinaRegionFromAddress } from '../utils/chinaRegionMatcher';
@@ -23,6 +23,63 @@ const DEFAULT_EMERGENCY_SETTINGS = {
   nearbyNotifyRadiusKm: 5,
 };
 
+const DEFAULT_SELECTED_REGION = {
+  country: '',
+  countryId: '',
+  city: '',
+  cityId: '',
+  state: '',
+  stateId: '',
+  district: '',
+  districtId: '',
+};
+
+const REQUEST_TIMEOUT_MS = 15000;
+const UPLOAD_TIMEOUT_MS = 30000;
+
+const isSuccessResponse = (response) => {
+  const code = Number(response?.code ?? response?.data?.code);
+  return code === 200 || code === 0;
+};
+
+const extractResponsePayload = (response) => {
+  const data = response?.data;
+
+  if (data && typeof data === 'object' && !Array.isArray(data) && data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+    return data.data;
+  }
+
+  return data;
+};
+
+const withAsyncTimeout = (promiseFactory, timeoutMs, timeoutMessage) =>
+  new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+
+    Promise.resolve()
+      .then(() => promiseFactory())
+      .then((result) => {
+        clearTimeout(timer);
+        resolve(result);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+
+const toPositiveIntOrUndefined = (value) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return undefined;
+  }
+
+  const normalized = Math.trunc(num);
+  return normalized > 0 ? normalized : undefined;
+};
+
 export default function EmergencyScreen({ navigation }) {
   const t = (key) => {
     if (!i18n || typeof i18n.t !== 'function') {
@@ -31,8 +88,6 @@ export default function EmergencyScreen({ navigation }) {
     return i18n.t(key);
   };
 
-  const regionData = React.useMemo(() => getRegionData(), []);
-  
   const [emergencyForm, setEmergencyForm] = useState({ 
     title: '', 
     description: '', 
@@ -46,13 +101,13 @@ export default function EmergencyScreen({ navigation }) {
   const [emergencyQuota, setEmergencyQuota] = useState(null);
   const [isLocating, setIsLocating] = useState(false);
   const [showRegionModal, setShowRegionModal] = useState(false);
-  const [regionStep, setRegionStep] = useState(0);
-  const [selectedRegion, setSelectedRegion] = useState({ country: '', city: '', state: '', district: '' });
+  const [selectedRegion, setSelectedRegion] = useState(DEFAULT_SELECTED_REGION);
   const [selectedCoordinates, setSelectedCoordinates] = useState(null);
   const [locationAddress, setLocationAddress] = useState(null);
   const [resolvedChinaRegion, setResolvedChinaRegion] = useState(null);
   const [emergencySettings, setEmergencySettings] = useState(DEFAULT_EMERGENCY_SETTINGS);
   const [emergencyFeeEstimate, setEmergencyFeeEstimate] = useState(null);
+  const [progressMessage, setProgressMessage] = useState('请稍候，正在提交真实数据...');
 
   const toSafeNumber = (value, fallback = 0) => {
     const num = Number(value);
@@ -83,7 +138,7 @@ export default function EmergencyScreen({ navigation }) {
   const loadEmergencySettings = React.useCallback(async () => {
     try {
       const response = await emergencyApi.getPublicSettings();
-      return normalizeEmergencySettings(response?.data || {});
+      return normalizeEmergencySettings(extractResponsePayload(response) || {});
     } catch (error) {
       console.error('Failed to load emergency public settings:', error);
       return DEFAULT_EMERGENCY_SETTINGS;
@@ -93,11 +148,11 @@ export default function EmergencyScreen({ navigation }) {
   const loadEmergencyQuota = React.useCallback(async (fallbackTotal = 0) => {
     try {
       const response = await emergencyApi.getQuota();
-      if (response?.code !== 200) {
+      if (!isSuccessResponse(response)) {
         throw new Error(response?.msg || 'Failed to load emergency quota');
       }
 
-      const quotaData = response?.data || {};
+      const quotaData = extractResponsePayload(response) || {};
       const total = Number(quotaData.total);
       const remaining = Number(quotaData.remaining);
 
@@ -177,11 +232,11 @@ export default function EmergencyScreen({ navigation }) {
     const requestedHelperCount = Math.max(1, Math.round(toSafeNumber(neededHelperCount, 1)));
     try {
       const response = await emergencyApi.getFeeEstimate({ neededHelperCount: requestedHelperCount });
-      if (response?.code !== 200) {
+      if (!isSuccessResponse(response)) {
         throw new Error(response?.msg || 'Failed to load emergency fee estimate');
       }
 
-      const estimateData = normalizeEmergencyFeeEstimate(response?.data || {}, requestedHelperCount);
+      const estimateData = normalizeEmergencyFeeEstimate(extractResponsePayload(response) || {}, requestedHelperCount);
       setEmergencyFeeEstimate(estimateData);
       return estimateData;
     } catch (error) {
@@ -235,50 +290,37 @@ export default function EmergencyScreen({ navigation }) {
   const totalEstimatedFee = totalEstimatedFeeCents / 100;
   const nearbyNotifyRadiusKm = Math.max(0, toSafeNumber(emergencySettings?.nearbyNotifyRadiusKm, DEFAULT_EMERGENCY_SETTINGS.nearbyNotifyRadiusKm));
 
-  const getRegionOptions = () => {
-    if (regionStep === 0) return regionData.countries;
-    if (regionStep === 1) return regionData.cities[selectedRegion.country] || [];
-    if (regionStep === 2) return regionData.states[selectedRegion.city] || [];
-    if (regionStep === 3) return regionData.districts[selectedRegion.state] || [];
-    return [];
+  const openRegionSelector = () => {
+    setShowRegionModal(true);
   };
 
-  const selectRegion = (value) => {
-    if (regionStep === 0) {
-      setSelectedRegion({ ...selectedRegion, country: value, city: '', state: '', district: '' });
-      if (regionData.cities[value] && regionData.cities[value].length > 0) {
-        setRegionStep(1);
-      }
-    } else if (regionStep === 1) {
-      setSelectedRegion({ ...selectedRegion, country: selectedRegion.country, city: value, state: '', district: '' });
-      if (regionData.states[value] && regionData.states[value].length > 0) {
-        setRegionStep(2);
-      }
-    } else if (regionStep === 2) {
-      setSelectedRegion({ ...selectedRegion, country: selectedRegion.country, city: selectedRegion.city, state: value, district: '' });
-      if (regionData.districts[value] && regionData.districts[value].length > 0) {
-        setRegionStep(3);
-      }
-    } else {
-      setSelectedRegion({ ...selectedRegion, country: selectedRegion.country, city: selectedRegion.city, state: selectedRegion.state, district: value });
-    }
-  };
+  const handleRegionChange = React.useCallback((nextRegion) => {
+    const normalizedRegion = {
+      ...DEFAULT_SELECTED_REGION,
+      ...nextRegion,
+    };
+    const locationText = [
+      normalizedRegion.country,
+      normalizedRegion.city,
+      normalizedRegion.state,
+      normalizedRegion.district,
+    ]
+      .filter(Boolean)
+      .join(' ');
 
-  const confirmRegionSelection = () => {
-    const parts = [selectedRegion.country, selectedRegion.city, selectedRegion.state, selectedRegion.district].filter(Boolean);
-    const locationText = parts.join(' ');
+    setSelectedRegion(normalizedRegion);
     setEmergencyForm((prev) => ({ ...prev, location: locationText }));
     setSelectedCoordinates(null);
     setLocationAddress(null);
-    setResolvedChinaRegion(null);
-    setShowRegionModal(false);
-    setRegionStep(0);
-  };
-
-  const openRegionSelector = () => {
-    setShowRegionModal(true);
-    setRegionStep(0);
-  };
+    setResolvedChinaRegion({
+      provinceId: toPositiveIntOrUndefined(normalizedRegion.cityId),
+      cityId: toPositiveIntOrUndefined(normalizedRegion.stateId),
+      districtId: toPositiveIntOrUndefined(normalizedRegion.districtId),
+      provinceName: normalizedRegion.city || '',
+      cityName: normalizedRegion.state || '',
+      districtName: normalizedRegion.district || '',
+    });
+  }, []);
 
   // Use useMemo to prevent calling t() during initial render
   const quickTitles = React.useMemo(() => [
@@ -452,6 +494,20 @@ export default function EmergencyScreen({ navigation }) {
       });
       setLocationAddress(address);
       setResolvedChinaRegion(matchedRegion);
+      setSelectedRegion(
+        matchedRegion
+          ? {
+              ...DEFAULT_SELECTED_REGION,
+              country: address.country || '中国',
+              city: matchedRegion.provinceName,
+              cityId: String(matchedRegion.provinceId),
+              state: matchedRegion.cityName,
+              stateId: String(matchedRegion.cityId),
+              district: matchedRegion.districtName,
+              districtId: String(matchedRegion.districtId),
+            }
+          : DEFAULT_SELECTED_REGION
+      );
       showAppAlert('成功', '已获取当前位置');
     } catch (error) {
       console.error('Failed to locate emergency address:', error);
@@ -472,17 +528,23 @@ export default function EmergencyScreen({ navigation }) {
     const imageUrls = [];
     for (let index = 0; index < emergencyImages.length; index += 1) {
       const image = emergencyImages[index];
-      const uploadResult = await uploadApi.uploadImage({
-        uri: image.uri,
-        name: `emergency_${Date.now()}_${index}.jpg`,
-        type: 'image/jpeg',
-      });
+      setProgressMessage(`正在上传图片 ${index + 1}/${emergencyImages.length}...`);
+      const uploadResult = await withAsyncTimeout(
+        () => uploadApi.uploadImage({
+          uri: image.uri,
+          name: `emergency_${Date.now()}_${index}.jpg`,
+          type: 'image/jpeg',
+        }),
+        UPLOAD_TIMEOUT_MS,
+        `第 ${index + 1} 张图片上传超时，请稍后重试`
+      );
 
-      if (uploadResult?.code !== 200 || !uploadResult?.data) {
+      const uploadPayload = extractResponsePayload(uploadResult);
+      if (!isSuccessResponse(uploadResult) || !uploadPayload) {
         throw new Error(uploadResult?.msg || '图片上传失败');
       }
 
-      imageUrls.push(uploadResult.data);
+      imageUrls.push(uploadPayload);
     }
 
     return imageUrls;
@@ -511,14 +573,32 @@ export default function EmergencyScreen({ navigation }) {
       rescuerCount: 1,
     });
     setEmergencyImages([]);
-    setSelectedRegion({ country: '', city: '', state: '', district: '' });
-    setRegionStep(0);
+    setSelectedRegion(DEFAULT_SELECTED_REGION);
     setSelectedCoordinates(null);
     setLocationAddress(null);
     setResolvedChinaRegion(null);
   };
 
+  const closeProgressModal = React.useCallback(() => {
+    setShowProgressModal(false);
+    setProgressMessage('请稍候，正在提交真实数据...');
+  }, []);
+
+  const showAlertAfterProgressClosed = React.useCallback((title, message, buttons = []) => {
+    closeProgressModal();
+
+    requestAnimationFrame(() => {
+      InteractionManager.runAfterInteractions(() => {
+        showAppAlert(title, message, buttons);
+      });
+    });
+  }, [closeProgressModal]);
+
   const handleSubmit = async () => {
+    if (showProgressModal) {
+      return;
+    }
+
     if (!emergencyForm.title.trim()) {
       showAppAlert(t('emergency.enterTitle'));
       return;
@@ -544,11 +624,16 @@ export default function EmergencyScreen({ navigation }) {
       return;
     }
 
+    setProgressMessage('正在校验费用...');
     setShowProgressModal(true);
 
     try {
       const requestedHelperCount = Math.max(1, Number(emergencyForm.rescuerCount) || 1);
-      const latestFeeEstimate = await loadEmergencyFeeEstimate(requestedHelperCount);
+      const latestFeeEstimate = await withAsyncTimeout(
+        () => loadEmergencyFeeEstimate(requestedHelperCount),
+        REQUEST_TIMEOUT_MS,
+        '费用计算超时，请稍后重试'
+      );
       const latestTotalFeeCents = Math.max(0, Math.round(toSafeNumber(latestFeeEstimate?.totalFeeCents, totalEstimatedFeeCents)));
 
       const imageUrls = await uploadEmergencyImages();
@@ -557,25 +642,35 @@ export default function EmergencyScreen({ navigation }) {
 
       const addressText =
         buildEmergencyAddressText({
-          provinceName: resolvedChinaRegion?.provinceName || '',
-          cityName: resolvedChinaRegion?.cityName || '',
-          districtName: resolvedChinaRegion?.districtName || '',
+          provinceName: resolvedChinaRegion?.provinceName || selectedRegion.city || '',
+          cityName: resolvedChinaRegion?.cityName || selectedRegion.state || '',
+          districtName: resolvedChinaRegion?.districtName || selectedRegion.district || '',
           street: locationAddress?.street || specificLocation,
           streetNumber: locationAddress?.streetNumber || '',
           name: locationAddress?.name || '',
         }) || [locationDisplay, specificLocation].filter(Boolean).join(' ');
 
+      const provinceId =
+        toPositiveIntOrUndefined(resolvedChinaRegion?.provinceId) ||
+        toPositiveIntOrUndefined(selectedRegion.cityId);
+      const cityId =
+        toPositiveIntOrUndefined(resolvedChinaRegion?.cityId) ||
+        toPositiveIntOrUndefined(selectedRegion.stateId);
+      const districtId =
+        toPositiveIntOrUndefined(resolvedChinaRegion?.districtId) ||
+        toPositiveIntOrUndefined(selectedRegion.districtId);
+
       const publishPayload = {
         title: emergencyForm.title.trim(),
         description: emergencyForm.description.trim(),
-        urgencyLevel: 0,
-        category: 0,
+        urgencyLevel: 1,
+        category: 1,
         neededHelperCount: requestedHelperCount,
-        contactType: 0,
+        contactType: 1,
         contactValue: normalizePhoneNumber(emergencyForm.contact),
-        provinceId: Number(resolvedChinaRegion?.provinceId || 0),
-        cityId: Number(resolvedChinaRegion?.cityId || 0),
-        districtId: Number(resolvedChinaRegion?.districtId || 0),
+        ...(provinceId ? { provinceId } : {}),
+        ...(cityId ? { cityId } : {}),
+        ...(districtId ? { districtId } : {}),
         addressText: addressText || locationDisplay,
         regionDisplay: locationDisplay,
         latitude: toSafeNumber(selectedCoordinates?.latitude, 0),
@@ -584,25 +679,33 @@ export default function EmergencyScreen({ navigation }) {
         acknowledgeFees: latestTotalFeeCents > 0,
       };
 
-      const response = await emergencyApi.publish(publishPayload);
-      if (response?.code !== 200) {
+      setProgressMessage('正在提交紧急求助...');
+      const response = await withAsyncTimeout(
+        () => emergencyApi.publish(publishPayload),
+        REQUEST_TIMEOUT_MS,
+        '发布请求超时，请稍后重试'
+      );
+      if (!isSuccessResponse(response)) {
         throw new Error(response?.msg || '发布失败，请稍后重试');
       }
 
-      await loadEmergencyQuota(emergencySettings?.dailyFreeTotal ?? 0);
-      await loadEmergencyFeeEstimate(1);
       resetEmergencyForm();
-      
-      showAppAlert(
+
+      Promise.allSettled([
+        loadEmergencyQuota(emergencySettings?.dailyFreeTotal ?? 0),
+        loadEmergencyFeeEstimate(1),
+      ]).catch((refreshError) => {
+        console.error('Emergency post-publish refresh failed:', refreshError);
+      });
+
+      showAlertAfterProgressClosed(
         t('emergency.published'),
         `紧急求助已成功发布！\n\n附近 ${formatAmount(nearbyNotifyRadiusKm)}km 用户将收到通知。`,
         [{ text: t('emergency.confirm'), onPress: () => navigation.goBack() }]
       );
     } catch (error) {
       console.error('Emergency publish failed:', error);
-      showAppAlert('提示', extractRequestErrorMessage(error));
-    } finally {
-      setShowProgressModal(false);
+      showAlertAfterProgressClosed('提示', extractRequestErrorMessage(error));
     }
   };
 
@@ -883,93 +986,13 @@ export default function EmergencyScreen({ navigation }) {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* 区域选择弹窗 */}
-      <Modal visible={showRegionModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity
-            style={styles.modalBackdrop}
-            activeOpacity={1}
-            onPress={() => {
-              setShowRegionModal(false);
-              setRegionStep(0);
-            }}
-          />
-          <View style={[styles.regionModal, { paddingBottom: 30 }]}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowRegionModal(false);
-                  setRegionStep(0);
-                }}
-              >
-                <Ionicons name="close" size={24} color="#1f2937" />
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>选择区域</Text>
-              <TouchableOpacity onPress={confirmRegionSelection}>
-                <Text style={styles.confirmText}>确认</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.breadcrumbContainer}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.breadcrumbScrollContent}>
-                <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setRegionStep(0)}>
-                  <Text style={[styles.breadcrumbText, regionStep === 0 && styles.breadcrumbTextActive]}>
-                    {selectedRegion.country || '国家'}
-                  </Text>
-                </TouchableOpacity>
-
-                {selectedRegion.country && (
-                  <>
-                    <View style={styles.breadcrumbSeparatorWrapper}>
-                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
-                    </View>
-                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setRegionStep(1)}>
-                      <Text style={[styles.breadcrumbText, regionStep === 1 && styles.breadcrumbTextActive]}>
-                        {selectedRegion.city || '省份'}
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-
-                {selectedRegion.city && (
-                  <>
-                    <View style={styles.breadcrumbSeparatorWrapper}>
-                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
-                    </View>
-                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setRegionStep(2)}>
-                      <Text style={[styles.breadcrumbText, regionStep === 2 && styles.breadcrumbTextActive]}>
-                        {selectedRegion.state || '城市'}
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-
-                {selectedRegion.state && (
-                  <>
-                    <View style={styles.breadcrumbSeparatorWrapper}>
-                      <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
-                    </View>
-                    <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setRegionStep(3)}>
-                      <Text style={[styles.breadcrumbText, regionStep === 3 && styles.breadcrumbTextActive]}>
-                        {selectedRegion.district || '区县'}
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </ScrollView>
-            </View>
-
-            <ScrollView style={styles.regionList}>
-              {getRegionOptions().map((option, idx) => (
-                <TouchableOpacity key={idx} style={styles.regionOption} onPress={() => selectRegion(option)}>
-                  <Text style={styles.regionOptionText}>{option}</Text>
-                  <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      <RegionSelector
+        visible={showRegionModal}
+        onClose={() => setShowRegionModal(false)}
+        selectedRegion={selectedRegion}
+        onRegionChange={handleRegionChange}
+        t={t}
+      />
 
       {/* 通知发送进度模态框 */}
       <Modal
@@ -987,7 +1010,7 @@ export default function EmergencyScreen({ navigation }) {
             
             <View style={styles.progressBody}>
               <ActivityIndicator size="large" color="#ef4444" />
-              <Text style={styles.loadingHint}>请稍候，正在提交真实数据...</Text>
+              <Text style={styles.loadingHint}>{progressMessage}</Text>
             </View>
           </View>
         </View>

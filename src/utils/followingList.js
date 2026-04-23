@@ -79,7 +79,7 @@ export const fetchMyFollowingTotalCount = async () => {
       pageSize: FOLLOWING_COUNT_PAGE_SIZE,
     });
 
-    if (!response || response.code !== 200) {
+    if (!response || (response.code !== 200 && response.code !== 0)) {
       throw new Error(response?.msg || '获取关注数量失败');
     }
 

@@ -23,6 +23,7 @@ import { openOfficialRechargePage } from '../utils/externalLinks';
 import { applyMockRecharge, getWalletBalanceWithMock } from '../utils/walletMock';
 import { formatTime } from '../utils/timeFormatter';
 import { formatNumber } from '../utils/numberFormatter';
+import { formatAmount } from '../utils/rewardAmount';
 import { isVisibleMyTeam, normalizeMyTeam } from '../utils/teamTransforms';
 import ServerSwitcher from '../components/ServerSwitcher';
 
@@ -1533,7 +1534,7 @@ export default function ProfileScreen({
                 </View>
                 <Text style={styles.questionTitle}>
                   {q.type === 'reward' && <Text style={styles.rewardTagInline}>
-                      <Text style={styles.rewardTagInlineText}>${q.reward}</Text>
+                      <Text style={styles.rewardTagInlineText}>{formatAmount(q.reward)}</Text>
                     </Text>}
                   {q.solved && <Text style={styles.solvedTagInline}>
                       <Text style={styles.solvedTagInlineText}>{t('profile.solved')}</Text>

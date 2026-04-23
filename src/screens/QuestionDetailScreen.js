@@ -32,6 +32,7 @@ import commentApi from '../services/api/commentApi';
 import uploadApi from '../services/api/uploadApi';
 import userApi from '../services/api/userApi';
 import { getFollowState, setFollowState } from '../services/followState';
+import { refreshMyFollowingCount } from '../services/myFollowingCountState';
 import {
   getQuestionDetailCache,
   getQuestionDetailListCaches,
@@ -47,6 +48,7 @@ import {
 } from '../utils/appAlert';
 import { sanitizeUserFacingMessage } from '../utils/userFacingMessage';
 import { formatNumber } from '../utils/numberFormatter';
+import { centsToAmount, formatAmount } from '../utils/rewardAmount';
 import { formatTime } from '../utils/timeFormatter';
 import { getQuestionAdoptRate, getQuestionPayViewAmount, isQuestionSolvedByAdoptRate } from '../utils/questionAccessRules';
 import { normalizeEntityId } from '../utils/jsonLongId';
@@ -1202,29 +1204,8 @@ export default function QuestionDetailScreen({
   const [showRewardContributorsModal, setShowRewardContributorsModal] = useState(false); // 显示追加悬赏人员名单
 
   // 当前悬赏金额 - 从问题数据中获取
-  const currentReward = questionData ? (Number(questionData.bountyAmount || 0) / 100) : 0;
-  const formatCompactRewardAmount = React.useCallback(amount => {
-    const numericAmount = Number(amount);
-
-    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      return '$0';
-    }
-
-    if (numericAmount < 1000) {
-      return `$${numericAmount.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')}`;
-    }
-
-    if (numericAmount >= 1000000000) {
-      return `$${(numericAmount / 1000000000).toFixed(1).replace(/\.0$/, '')}B`;
-    }
-
-    if (numericAmount >= 1000000) {
-      return `$${(numericAmount / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
-    }
-
-    return `$${(numericAmount / 1000).toFixed(1).replace(/\.0$/, '')}K`;
-  }, []);
-  const rewardAmountDisplayText = formatCompactRewardAmount(currentReward);
+  const currentReward = questionData ? centsToAmount(questionData.bountyAmount || 0) : 0;
+  const rewardAmountDisplayText = formatAmount(currentReward);
   const syncCommunitySolveVoteSummary = React.useCallback(summaryResponse => {
     const normalizedSummary = summaryResponse?.code === 200 ? normalizeCommunitySolveVoteSummary(summaryResponse.data) : normalizeCommunitySolveVoteSummary(null);
     setCommunitySolveVoteSummary(normalizedSummary);
@@ -1844,7 +1825,9 @@ export default function QuestionDetailScreen({
     author: questionData.author || '匿名用户',
     avatar: questionData.userAvatar || questionData.authorAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${questionData.userId}`,
     displayType: questionData.displayType || 'free',
-    reward: questionData.reward || 0
+    reward: Number.isFinite(Number(questionData.reward))
+      ? Number(questionData.reward)
+      : centsToAmount(questionData.bountyAmount || 0)
   } : {
     id: route?.params?.id || 1,
     title: '加载中...',
@@ -1987,7 +1970,7 @@ export default function QuestionDetailScreen({
       question.bountyUsers
     );
     const normalizedDisplayType = normalizedPayViewAmount > 0 ? 'paid' : normalizedRawType === 1 || normalizedRawType === '1' || normalizedRawType === 'reward' ? normalizedBountyAmount > 0 ? 'reward' : 'free' : normalizedRawType === 2 || normalizedRawType === '2' || normalizedRawType === 'targeted' ? 'targeted' : 'free';
-    const normalizedReward = normalizedBountyAmount > 0 ? Math.floor(normalizedBountyAmount / 100) : 0;
+    const normalizedReward = normalizedBountyAmount > 0 ? centsToAmount(normalizedBountyAmount) : 0;
     return {
       ...question,
       questionId: question.questionId ?? question.id ?? null,
@@ -6504,6 +6487,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
 
         setQuestionAuthorIsFollowing(resolvedFollowState);
         setFollowState(targetUserId, resolvedFollowState);
+        refreshMyFollowingCount().catch(countError => {
+          console.error('Refresh following count after question author follow action failed:', countError);
+        });
         setQuestionAuthorFollowerCount(previousCount => {
           if (Number.isFinite(nextFollowerCountFromResponse)) {
             return nextFollowerCountFromResponse;
@@ -7231,7 +7217,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         <View style={styles.questionSection}>
           {/* 问题标题 - 使用真实数据 */}
           <Text style={styles.questionTitle}>
-            {(currentQuestion.displayType === 'reward' || currentQuestion.displayType === 'targeted') && currentQuestion.reward > 0 && <Text style={styles.rewardTagInline}>${currentQuestion.reward} </Text>}
+            {(currentQuestion.displayType === 'reward' || currentQuestion.displayType === 'targeted') && currentQuestion.reward > 0 && <Text style={styles.rewardTagInline}>{formatAmount(currentQuestion.reward)} </Text>}
             {currentQuestion.title}
             {currentQuestion.status === 2 && (
               <Text style={styles.solvedTagInline}> {t('questionDetail.solved')}</Text>
@@ -9386,7 +9372,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <View style={styles.currentRewardInfo}>
                 <View style={styles.currentRewardRow}>
                   <Text style={styles.currentRewardLabel}>当前悬赏</Text>
-                  <Text style={styles.currentRewardAmount}>${currentReward}</Text>
+                  <Text style={styles.currentRewardAmount}>{formatAmount(currentReward)}</Text>
                 </View>
                 <View style={styles.currentRewardRow}>
                   <Text style={styles.currentRewardDesc}>已有 {rewardContributors} 人追加悬赏</Text>
@@ -9400,7 +9386,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 setSelectedAddRewardAmount(amount);
                 setAddRewardAmount('');
               }}>
-                    <Text style={[styles.quickAmountText, selectedAddRewardAmount === amount && styles.quickAmountTextActive]}>${amount}</Text>
+                    <Text style={[styles.quickAmountText, selectedAddRewardAmount === amount && styles.quickAmountTextActive]}>{formatAmount(amount)}</Text>
                   </TouchableOpacity>)}
               </View>
 
@@ -9425,7 +9411,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               {/* 确认按钮 */}
               <TouchableOpacity style={[styles.confirmAddRewardBtn, !selectedAddRewardAmount && !addRewardAmount && styles.confirmAddRewardBtnDisabled]} onPress={handleAddReward} disabled={!selectedAddRewardAmount && !addRewardAmount}>
                 <Text style={styles.confirmAddRewardBtnText}>
-                  确认追加 ${selectedAddRewardAmount || addRewardAmount || 0}
+                  确认追加 {formatAmount(selectedAddRewardAmount ?? addRewardAmount ?? 0)}
                 </Text>
               </TouchableOpacity>
 
@@ -9569,7 +9555,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             <View style={styles.contributorsTotalInfo}>
               <View style={styles.contributorsTotalRow}>
                 <Text style={styles.contributorsTotalLabel}>当前总悬赏</Text>
-                <Text style={styles.contributorsTotalAmount}>${currentReward}</Text>
+                <Text style={styles.contributorsTotalAmount}>{formatAmount(currentReward)}</Text>
               </View>
               <Text style={styles.contributorsTotalDesc}>共 {rewardContributors} 人追加悬赏</Text>
             </View>
@@ -9586,7 +9572,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   </View>
                   <View style={styles.contributorAmountBadge}>
                     <Ionicons name="add" size={12} color="#ef4444" />
-                    <Text style={styles.contributorAmountText}>${contributor.amount}</Text>
+                    <Text style={styles.contributorAmountText}>{formatAmount(contributor.amount)}</Text>
                   </View>
                 </View>)}
             </ScrollView>

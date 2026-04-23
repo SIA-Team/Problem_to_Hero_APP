@@ -15,6 +15,14 @@ import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/useTranslation';
 import { getRegionData } from '../data/regionData';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
+import { REWARD_MIN_AMOUNT } from '../constants/reward';
+import {
+  centsToAmount,
+  formatAmount,
+  formatAmountValue,
+  parseRewardAmountToCents,
+  sanitizeAmountInput,
+} from '../utils/rewardAmount';
 import { scaleFont, scaleWidth } from '../utils/responsive';
 const questionTypes = [{
   id: 0,
@@ -166,6 +174,7 @@ export default function PublishScreen({
 }) {
   const { t } = useTranslation();
   const bottomSafeInset = useBottomSafeInset(20);
+  const rewardMinAmountText = formatAmount(REWARD_MIN_AMOUNT);
   
   // 获取多语言区域数据
   const regionData = React.useMemo(() => getRegionData(), []);
@@ -294,7 +303,7 @@ export default function PublishScreen({
 
       // 悬赏金额（分转元）
       if (draftData.bountyAmount && draftData.bountyAmount > 0) {
-        const amount = (draftData.bountyAmount / 100).toString();
+        const amount = formatAmountValue(centsToAmount(draftData.bountyAmount));
         console.log('  设置悬赏金额:', amount, '元');
         if (draftData.type === 2) {
           // 定向问题
@@ -788,7 +797,7 @@ export default function PublishScreen({
         title: title.trim() || '',
         description: content.trim() || '',
         subQuestions: '',
-        bountyAmount: 5000,
+        bountyAmount: 0,
         // 默认悬赏金额
         payViewAmount: answerPaid ? parsePayViewAmountInCents(answerPrice) : 0,
         location: location && location !== '不显示' ? location : '',
@@ -805,15 +814,17 @@ export default function PublishScreen({
       };
 
       // 设置悬赏金额（根据问题类型）
+      const rewardAmountInCents = parseRewardAmountToCents(reward, { required: false, allowZero: true });
+      const targetedRewardAmountInCents = parseRewardAmountToCents(targetedReward, { required: false, allowZero: true });
       if (selectedType === 1 && reward) {
         // 1 = 悬赏问题
-        draftData.bountyAmount = Math.round(parseFloat(reward) * 100);
+        draftData.bountyAmount = rewardAmountInCents || 0;
       } else if (selectedType === 2 && targetedReward) {
         // 2 = 定向问题
-        draftData.bountyAmount = Math.round(parseFloat(targetedReward) * 100);
+        draftData.bountyAmount = targetedRewardAmountInCents || 0;
       } else if (selectedType === 0 && reward) {
         // 0 = 公开问题
-        draftData.bountyAmount = Math.round(parseFloat(reward) * 100);
+        draftData.bountyAmount = rewardAmountInCents || 0;
       }
       console.log('保存草稿数据:', JSON.stringify(draftData, null, 2));
       const response = await questionApi.saveDraft(draftData);
@@ -886,9 +897,9 @@ export default function PublishScreen({
     // 2. 验证悬赏问题金额
     if (selectedType === 1) {
       // 1 = 悬赏问题
-      const amount = parseFloat(reward);
-      if (isNaN(amount) || amount < 1) {
-        showToast(t('publish.toasts.rewardTooLow'), 'warning');
+      const rewardAmountInCents = parseRewardAmountToCents(reward);
+      if (rewardAmountInCents === null) {
+        showToast(t('publish.toasts.rewardTooLow').replace('{amount}', rewardMinAmountText), 'warning');
         return;
       }
     }
@@ -926,6 +937,8 @@ export default function PublishScreen({
 
     try {
       setIsPublishing(true);
+      const rewardAmountInCents = parseRewardAmountToCents(reward, { required: false, allowZero: true });
+      const targetedRewardAmountInCents = parseRewardAmountToCents(targetedReward, { required: false, allowZero: true });
 
       // 6. 上传图片（如果有）
       let imageUrls = [];
@@ -969,7 +982,9 @@ export default function PublishScreen({
           description: content.trim() || '',
           subQuestions: '[]',
           // JSON 字符串格式的空数组
-          bountyAmount: selectedType === 1 && reward ? Math.round(parseFloat(reward) * 100) : 0,
+          bountyAmount: selectedType === 1 && reward
+            ? parseRewardAmountToCents(reward, { required: false, allowZero: true }) || 0
+            : 0,
           // 1 = 悬赏问题
           payViewAmount: 0,
           location: location || '',
@@ -1037,18 +1052,18 @@ export default function PublishScreen({
       if (selectedType === 1 && reward) {
         // 1 = 悬赏问题
         // 悬赏问题：使用 reward 字段的金额，转换为分
-        requestData.bountyAmount = Math.round(parseFloat(reward) * 100);
+        requestData.bountyAmount = rewardAmountInCents || 0;
       } else if (selectedType === 2 && targetedReward) {
         // 2 = 定向问题
         // 定向问题：使用 targetedReward 字段的金额，转换为分
-        requestData.bountyAmount = Math.round(parseFloat(targetedReward) * 100);
+        requestData.bountyAmount = targetedRewardAmountInCents || 0;
       } else if (selectedType === 0 && reward) {
         // 0 = 公开问题
         // 公开问题：如果设置了悬赏金额，也转换为分
-        requestData.bountyAmount = Math.round(parseFloat(reward) * 100);
+        requestData.bountyAmount = rewardAmountInCents || 0;
       } else {
         // 默认悬赏金额
-        requestData.bountyAmount = 5000;
+        requestData.bountyAmount = 0;
       }
 
       // 9. 调用发布接口
@@ -1497,10 +1512,9 @@ export default function PublishScreen({
             </View>
             <View style={styles.customAmount}>
               <Text style={styles.customLabel}>{t('publish.customAmount')}</Text>
-              <TextInput style={styles.customInput} placeholder={t('publish.enterAmount')} keyboardType="numeric" value={reward} onChangeText={text => {
+              <TextInput style={styles.customInput} placeholder={t('publish.enterAmount')} keyboardType="decimal-pad" value={reward} onChangeText={text => {
             // 只允许输入数字和小数点
-            const filtered = text.replace(/[^0-9.]/g, '');
-            setReward(filtered);
+            setReward(sanitizeAmountInput(text));
           }} />
               <Text style={styles.currencySymbol}>$</Text>
             </View>
@@ -1511,7 +1525,7 @@ export default function PublishScreen({
       // 1 = 悬赏问题
       <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('publish.setRewardAmount')} <Text style={styles.required}>*</Text></Text>
-            <Text style={styles.sectionDesc}>{t('publish.rewardDescRequired')}</Text>
+            <Text style={styles.sectionDesc}>{t('publish.rewardDescRequired').replace('{amount}', rewardMinAmountText)}</Text>
             <View style={styles.quickAmounts}>
               {rewardAmounts.map(amount => <TouchableOpacity key={amount} style={[styles.amountBtn, reward === String(amount) && styles.amountBtnActive]} onPress={() => setReward(String(amount))}>
                   <Text style={[styles.amountText, reward === String(amount) && styles.amountTextActive]}>${amount}</Text>
@@ -1519,10 +1533,9 @@ export default function PublishScreen({
             </View>
             <View style={styles.customAmount}>
               <Text style={styles.customLabel}>{t('publish.customAmount')}</Text>
-              <TextInput style={styles.customInput} placeholder={t('publish.enterAmountMin')} keyboardType="numeric" value={reward} onChangeText={text => {
+              <TextInput style={styles.customInput} placeholder={t('publish.enterAmountMin').replace('{amount}', rewardMinAmountText)} keyboardType="decimal-pad" value={reward} onChangeText={text => {
             // 只允许输入数字和小数点
-            const filtered = text.replace(/[^0-9.]/g, '');
-            setReward(filtered);
+            setReward(sanitizeAmountInput(text));
           }} />
               <Text style={styles.currencySymbol}>$</Text>
             </View>
@@ -1636,10 +1649,9 @@ export default function PublishScreen({
               </View>
               <View style={styles.customAmount}>
                 <Text style={styles.customLabel}>{t('publish.customAmount')}</Text>
-                <TextInput style={styles.customInput} placeholder={t('publish.enterAmount')} keyboardType="numeric" value={targetedReward} onChangeText={text => {
+                <TextInput style={styles.customInput} placeholder={t('publish.enterAmount')} keyboardType="decimal-pad" value={targetedReward} onChangeText={text => {
               // 只允许输入数字和小数点
-              const filtered = text.replace(/[^0-9.]/g, '');
-              setTargetedReward(filtered);
+              setTargetedReward(sanitizeAmountInput(text));
             }} />
                 <Text style={styles.currencySymbol}>$</Text>
               </View>
@@ -2043,7 +2055,7 @@ export default function PublishScreen({
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.breadcrumbScrollContent}>
                 <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setPublishRegionStep(0)}>
                   <Text style={[styles.breadcrumbText, publishRegionStep === 0 && styles.breadcrumbTextActive]}>
-                    {selectedPublishRegion.country || '鍥藉'}
+                    {selectedPublishRegion.country || '国家'}
                   </Text>
                 </TouchableOpacity>
 
@@ -2054,7 +2066,7 @@ export default function PublishScreen({
                     </View>
                     <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setPublishRegionStep(1)}>
                       <Text style={[styles.breadcrumbText, publishRegionStep === 1 && styles.breadcrumbTextActive]}>
-                        {selectedPublishRegion.city || '鐪佷唤'}
+                        {selectedPublishRegion.city || '省份'}
                       </Text>
                     </TouchableOpacity>
                   </>
@@ -2067,7 +2079,7 @@ export default function PublishScreen({
                     </View>
                     <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setPublishRegionStep(2)}>
                       <Text style={[styles.breadcrumbText, publishRegionStep === 2 && styles.breadcrumbTextActive]}>
-                        {selectedPublishRegion.state || '鍩庡競'}
+                        {selectedPublishRegion.state || '城市'}
                       </Text>
                     </TouchableOpacity>
                   </>
@@ -2080,7 +2092,7 @@ export default function PublishScreen({
                     </View>
                     <TouchableOpacity style={styles.breadcrumbItem} onPress={() => setPublishRegionStep(3)}>
                       <Text style={[styles.breadcrumbText, publishRegionStep === 3 && styles.breadcrumbTextActive]}>
-                        {selectedPublishRegion.district || '鍖哄幙'}
+                        {selectedPublishRegion.district || '区县'}
                       </Text>
                     </TouchableOpacity>
                   </>
