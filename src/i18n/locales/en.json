@@ -737,7 +737,8 @@
       },
       "members": {
         "title": "All Members",
-        "count": "({count})"
+        "count": "({count})",
+        "profileUnavailable": "This member cannot be opened yet because the profile id is missing."
       },
       "report": {
         "title": "Report",
@@ -766,6 +767,18 @@
       },
       "transfer": {
         "title": "Select New Leader",
+    "teamAnnouncementDetail": {
+      "title": "Announcement Details",
+      "pinned": "Pinned",
+      "authorLabel": "Author",
+      "publishTimeLabel": "Published",
+      "teamLabel": "Team",
+      "updatedAtLabel": "Updated",
+      "viewsLabel": "Views",
+      "unknownAuthor": "Team Admin",
+      "emptyTitle": "Announcement Not Found",
+      "emptyContent": "No announcement content yet."
+    },
         "selectMember": "Please select a member as the new leader"
       }
     },

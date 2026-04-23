@@ -13,7 +13,18 @@ import { showAppAlert } from '../utils/appAlert';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import { scaleFont } from '../utils/responsive';
 import teamApi from '../services/api/teamApi';
+import {
+  createLocalTeamAnnouncement,
+  getTeamAnnouncements,
+  getTeamMembers,
+} from '../services/teamDetailService';
 import { buildTeamDetailRouteState } from '../utils/teamTransforms';
+import {
+  buildTeamAnnouncementDetailRouteParams,
+  buildTeamMemberProfileRouteParams,
+  resolveTeamDetailTabKey,
+  TEAM_DETAIL_TAB_KEYS,
+} from '../utils/teamDetailNavigation';
 import { executeTeamExitFlow, FALLBACK_TEAM_MEMBERS, getTransferLeaderCandidates } from '../utils/teamExit';
 import { executeTeamJoinApply, isTeamJoinPendingError } from '../utils/teamJoin';
 const initialMessages = [{
@@ -289,10 +300,20 @@ const teamMembers = [{
 
 // 根据是否是队长显示不同的tabs
 const getTabsForRole = (isLeader, t) => {
+  const tabs = [{
+    key: TEAM_DETAIL_TAB_KEYS.DISCUSSION,
+    label: t('screens.teamDetail.tabs.discussion')
+  }, {
+    key: TEAM_DETAIL_TAB_KEYS.ANNOUNCEMENT,
+    label: t('screens.teamDetail.tabs.announcement')
+  }];
   if (isLeader) {
-    return [t('screens.teamDetail.tabs.discussion'), t('screens.teamDetail.tabs.announcement'), t('screens.teamDetail.tabs.approval')];
+    tabs.push({
+      key: TEAM_DETAIL_TAB_KEYS.APPROVAL,
+      label: t('screens.teamDetail.tabs.approval')
+    });
   }
-  return [t('screens.teamDetail.tabs.discussion'), t('screens.teamDetail.tabs.announcement')];
+  return tabs;
 };
 
 const mapTeamApplication = application => ({
@@ -429,20 +450,26 @@ export default function TeamDetailScreen({
   const team = detailRouteState?.team || fallbackTeam;
   const isLeader = Boolean(team?.isLeader) || Number(team?.userRole) === 3;
   const isAdmin = Boolean(team?.isAdmin) || isLeader || Number(team?.userRole) === 2;
+  const routeRequestedTab = route?.params?.initialTab ?? route?.params?.tab ?? route?.params?.returnToTab;
+  const initialRouteLeaderState = Boolean(route?.params?.team?.isLeader) || Number(route?.params?.team?.userRole) === 3;
+  const teamMembers = React.useMemo(() => getTeamMembers({
+    teamId: routeTeamId,
+    routeMembers: route?.params?.teamMembers,
+    detailMembers: Array.isArray(teamDetailData?.memberList) ? teamDetailData.memberList : teamDetailData?.members,
+    members: route?.params?.members
+  }), [route?.params?.members, route?.params?.teamMembers, routeTeamId, teamDetailData?.memberList, teamDetailData?.members]);
+  const baseAnnouncements = React.useMemo(() => getTeamAnnouncements({
+    teamId: routeTeamId,
+    teamName: team?.name,
+    announcements: route?.params?.announcements
+  }), [route?.params?.announcements, routeTeamId, team?.name]);
   const defaultIsJoined = detailRouteState?.isJoined !== undefined ? Boolean(detailRouteState.isJoined) : Boolean(team?.userRole) || isAdmin;
   const isJoined = joinStateOverride?.isJoined !== undefined ? Boolean(joinStateOverride.isJoined) : defaultIsJoined;
   const isPending = joinStateOverride?.isPending !== undefined ? Boolean(joinStateOverride.isPending) : Boolean(detailRouteState?.isPending);
   const restrictedView = Boolean(detailRouteState?.restrictedView || !isJoined);
   const displayedMemberCount = Number(team?.memberCount ?? team?.members) || teamMembers.length;
   const transferLeaderCandidates = React.useMemo(() => getTransferLeaderCandidates([route?.params?.teamMembers, route?.params?.members, teamDetailData?.memberList, teamDetailData?.members, detailRouteState?.team?.memberList, detailRouteState?.team?.members]), [detailRouteState?.team?.memberList, detailRouteState?.team?.members, route?.params?.members, route?.params?.teamMembers, teamDetailData?.memberList, teamDetailData?.members]);
-  const [activeTab, setActiveTab] = useState('');
-
-  // Initialize activeTab with translated value
-  React.useEffect(() => {
-    if (!activeTab) {
-      setActiveTab(t('screens.teamDetail.tabs.discussion'));
-    }
-  }, [t, activeTab]);
+  const [activeTab, setActiveTab] = useState(() => resolveTeamDetailTabKey(routeRequestedTab, initialRouteLeaderState));
   const bottomSafeInset = useBottomSafeInset(20);
   const commentSheetBottomSpacing = bottomSafeInset + 12;
   const replyModalBottomSpacing = bottomSafeInset + 16;
@@ -476,6 +503,7 @@ export default function TeamDetailScreen({
   const [showPublishAnnouncementModal, setShowPublishAnnouncementModal] = useState(false);
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementContent, setAnnouncementContent] = useState('');
+  const [announcementItems, setAnnouncementItems] = useState(baseAnnouncements);
   const [isPinned, setIsPinned] = useState(false);
   const [joinSubmitting, setJoinSubmitting] = useState(false);
   const [approvingApplicationId, setApprovingApplicationId] = useState(null);
@@ -502,22 +530,18 @@ export default function TeamDetailScreen({
 
   // 审批消息数据（仅队长可见）
   const [joinRequests, setJoinRequests] = useState([]);
-  const tabs = getTabsForRole(isLeader, t);
-  const activeTabType = React.useMemo(() => {
-    if (!activeTab) {
-      return '';
+  const tabs = React.useMemo(() => getTabsForRole(isLeader, t), [isLeader, t]);
+  const activeTabType = activeTab;
+
+  React.useEffect(() => {
+    if (!tabs.some(tab => tab.key === activeTab)) {
+      setActiveTab(resolveTeamDetailTabKey(routeRequestedTab, isLeader));
     }
-    if (activeTab === t('screens.teamDetail.tabs.discussion')) {
-      return 'discussion';
-    }
-    if (activeTab === t('screens.teamDetail.tabs.announcement')) {
-      return 'announcement';
-    }
-    if (activeTab === t('screens.teamDetail.tabs.approval')) {
-      return 'approval';
-    }
-    return '';
-  }, [activeTab, t]);
+  }, [activeTab, isLeader, routeRequestedTab, tabs]);
+
+  React.useEffect(() => {
+    setAnnouncementItems(baseAnnouncements);
+  }, [baseAnnouncements]);
 
   // 可邀请的用户列表
   const platformUsers = [{
@@ -1229,6 +1253,20 @@ export default function TeamDetailScreen({
       targetId: Number(msg?.id) || 0
     });
   };
+  const handleOpenMemberProfile = (member, from = 'team-detail') => {
+    const profileParams = buildTeamMemberProfileRouteParams(member, from);
+    if (!profileParams.userId) {
+      showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.members.profileUnavailable'));
+      return;
+    }
+    navigation.push('PublicProfile', profileParams);
+  };
+  const handleOpenAnnouncementDetail = announcement => {
+    navigation.push('TeamAnnouncementDetail', buildTeamAnnouncementDetailRouteParams({
+      announcement,
+      team
+    }));
+  };
   const handlePublishAnnouncement = () => {
     if (!announcementTitle.trim()) {
       showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.alerts.enterTitle'));
@@ -1238,6 +1276,16 @@ export default function TeamDetailScreen({
       showAppAlert(t('screens.teamDetail.alerts.hint'), t('screens.teamDetail.alerts.enterContent'));
       return;
     }
+    const nextAnnouncement = createLocalTeamAnnouncement({
+      title: announcementTitle,
+      content: announcementContent,
+      isPinned,
+      teamId: routeTeamId,
+      teamName: team?.name,
+      authorName: '当前用户'
+    });
+    setAnnouncementItems(prevItems => [nextAnnouncement, ...prevItems].sort((left, right) => Number(Boolean(right.isPinned)) - Number(Boolean(left.isPinned))));
+    setActiveTab(TEAM_DETAIL_TAB_KEYS.ANNOUNCEMENT);
     showAppAlert(t('screens.teamDetail.alerts.success'), t('screens.teamDetail.alerts.announcementPublished'));
     setAnnouncementTitle('');
     setAnnouncementContent('');
@@ -1330,7 +1378,7 @@ export default function TeamDetailScreen({
           
           {/* 限制访问模式：网格显示全部成员 */}
           {restrictedView ? <View style={styles.teamMembersGrid}>
-              {teamMembers.map(member => <View key={member.id} style={styles.teamMemberGridItem}>
+              {teamMembers.map(member => <TouchableOpacity key={`${member.id}-${member.userId}`} style={styles.teamMemberGridItem} activeOpacity={0.85} onPress={() => handleOpenMemberProfile(member, 'team-detail')}>
                   <View style={styles.teamMemberAvatarWrapper}>
                     <Avatar uri={member.avatar} name={member.name} size={56} />
                     {member.role === '队长' && <View style={styles.teamLeaderBadge}>
@@ -1339,10 +1387,10 @@ export default function TeamDetailScreen({
                   </View>
                   <Text style={styles.teamMemberName} numberOfLines={1}>{member.name}</Text>
                   {member.role === '队长' && <Text style={styles.teamMemberRole}>队长</Text>}
-                </View>)}
+                </TouchableOpacity>)}
             </View> : (/* 已加入模式：横向滚动显示部分成员 */
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.teamMembersScroll}>
-              {visibleMembers.map(member => <View key={member.id} style={styles.teamMemberItem}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.teamMembersScroll} keyboardShouldPersistTaps="handled">
+              {visibleMembers.map(member => <TouchableOpacity key={`${member.id}-${member.userId}`} style={styles.teamMemberItem} activeOpacity={0.85} onPress={() => handleOpenMemberProfile(member, 'team-detail')}>
                   <View style={styles.teamMemberAvatarWrapper}>
                     <Avatar uri={member.avatar} name={member.name} size={56} />
                     {member.role === '队长' && <View style={styles.teamLeaderBadge}>
@@ -1351,7 +1399,7 @@ export default function TeamDetailScreen({
                   </View>
                   <Text style={styles.teamMemberName} numberOfLines={1}>{member.name}</Text>
                   {member.role === '队长' && <Text style={styles.teamMemberRole}>队长</Text>}
-                </View>)}
+                </TouchableOpacity>)}
             </ScrollView>)}
         </View>
 
@@ -1360,11 +1408,11 @@ export default function TeamDetailScreen({
             {/* Tab标签 */}
             <View style={styles.tabsSection}>
               <View style={styles.tabs}>
-                {tabs.map(tab => <TouchableOpacity key={tab} style={styles.tabItem} onPress={() => setActiveTab(tab)}>
-                    <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
-                    {activeTab === tab && <View style={styles.tabIndicator} />}
+                {tabs.map(tab => <TouchableOpacity key={tab.key} style={styles.tabItem} onPress={() => setActiveTab(tab.key)}>
+                    <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>{tab.label}</Text>
+                    {activeTab === tab.key && <View style={styles.tabIndicator} />}
                     {/* 审批消息显示未读数量 */}
-                    {tab === t('screens.teamDetail.tabs.approval') && joinRequests.length > 0 && <View style={styles.tabBadge}>
+                    {tab.key === TEAM_DETAIL_TAB_KEYS.APPROVAL && joinRequests.length > 0 && <View style={styles.tabBadge}>
                         <Text style={styles.tabBadgeText}>{joinRequests.length}</Text>
                       </View>}
                   </TouchableOpacity>)}
@@ -1459,21 +1507,21 @@ export default function TeamDetailScreen({
               </>
             ) : activeTabType === 'announcement' ? (/* 团队公告列表 */
         <View style={styles.announcementList}>
-                {announcements.map(announcement => <View key={announcement.id} style={styles.announcementItem}>
+                {announcementItems.map(announcement => <TouchableOpacity key={announcement.id} style={styles.announcementItem} activeOpacity={0.9} onPress={() => handleOpenAnnouncementDetail(announcement)}>
                     {Boolean(announcement.isPinned) && <View style={styles.pinnedBadge}>
                         <Ionicons name="pin" size={12} color="#ef4444" />
                         <Text style={styles.pinnedText}>{t('screens.teamDetail.announcement.pinned')}</Text>
                       </View>}
                     <Text style={styles.announcementTitle}>{announcement.title}</Text>
-                    <Text style={styles.announcementContent}>{announcement.content}</Text>
+                    <Text style={styles.announcementContent} numberOfLines={2}>{announcement.summary || announcement.content}</Text>
                     <View style={styles.announcementFooter}>
                       <View style={styles.announcementAuthor}>
                         <Ionicons name="person-circle-outline" size={14} color="#9ca3af" />
-                        <Text style={styles.announcementAuthorText}>{announcement.author}</Text>
+                        <Text style={styles.announcementAuthorText}>{announcement.authorName || announcement.author}</Text>
                       </View>
-                      <Text style={styles.announcementTime}>{announcement.time}</Text>
+                      <Text style={styles.announcementTime}>{announcement.createdAt}</Text>
                     </View>
-                  </View>)}
+                  </TouchableOpacity>)}
               </View>) : (/* 审批消息列表 - 仅队长可见 */
         <ScrollView style={styles.approvalList} showsVerticalScrollIndicator={false}>
                 {/* 加入团队申请 */}
@@ -1791,7 +1839,7 @@ export default function TeamDetailScreen({
               </View>
               <View style={styles.membersModalContent}>
                 <ScrollView style={styles.membersModalList} contentContainerStyle={styles.membersModalListContent} showsVerticalScrollIndicator={false}>
-                {teamMembers.map(member => <View key={member.id} style={styles.memberModalItem}>
+                {teamMembers.map(member => <TouchableOpacity key={`${member.id}-${member.userId}`} style={styles.memberModalItem} activeOpacity={0.85} onPress={() => handleOpenMemberProfile(member, 'team-member-list')}>
                     <Avatar uri={member.avatar} name={member.name} size={48} />
                     <View style={styles.memberModalInfo}>
                       <View style={styles.memberModalNameRow}>
@@ -1803,7 +1851,7 @@ export default function TeamDetailScreen({
                       </View>
                       <Text style={styles.memberModalRole}>{member.role}</Text>
                     </View>
-                  </View>)}
+                  </TouchableOpacity>)}
                 </ScrollView>
               </View>
             </View>

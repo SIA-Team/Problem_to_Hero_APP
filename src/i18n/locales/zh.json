@@ -739,7 +739,8 @@
       },
       "members": {
         "title": "全部成员",
-        "count": "({count})"
+        "count": "({count})",
+        "profileUnavailable": "当前成员缺少主页标识，暂时无法查看"
       },
       "report": {
         "title": "举报",
@@ -770,6 +771,18 @@
         "title": "选择新团长",
         "selectMember": "请选择一位成员作为新团长"
       }
+    },
+    "teamAnnouncementDetail": {
+      "title": "公告详情",
+      "pinned": "置顶",
+      "authorLabel": "发布人",
+      "publishTimeLabel": "发布时间",
+      "teamLabel": "所属团队",
+      "updatedAtLabel": "更新时间",
+      "viewsLabel": "阅读量",
+      "unknownAuthor": "团队管理员",
+      "emptyTitle": "未找到公告",
+      "emptyContent": "暂无公告内容"
     },
     "inviteTeamMember": {
       "title": "邀请团队成员",

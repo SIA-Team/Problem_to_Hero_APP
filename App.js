@@ -74,6 +74,7 @@ import MyActivitiesScreen from './src/screens/MyActivitiesScreen';
 import MyTeamsScreen from './src/screens/MyTeamsScreen';
 import MyGroupsScreen from './src/screens/MyGroupsScreen';
 import TeamDetailScreen from './src/screens/TeamDetailScreen';
+import TeamAnnouncementDetailScreen from './src/screens/TeamAnnouncementDetailScreen';
 import QuestionTeamsScreen from './src/screens/QuestionTeamsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import WisdomIndexScreen from './src/screens/WisdomIndexScreen';
@@ -1539,6 +1540,7 @@ function AppContent() {
         <Stack.Screen name="MyActivities" component={MyActivitiesScreen} />
         <Stack.Screen name="MyTeams" component={MyTeamsScreen} />
         <Stack.Screen name="MyGroups" component={MyGroupsScreen} />
+        <Stack.Screen name="TeamAnnouncementDetail" component={TeamAnnouncementDetailScreen} />
         <Stack.Screen name="QuestionTeams" component={QuestionTeamsScreen} />
         <Stack.Screen name="TeamDetail" component={TeamDetailScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
