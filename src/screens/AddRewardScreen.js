@@ -8,6 +8,12 @@ import { showAppAlert } from '../utils/appAlert';
 import userApi from '../services/api/userApi';
 import { openOfficialRechargePage } from '../utils/externalLinks';
 import { applyMockRecharge, applyMockWalletExpense, getWalletBalanceWithMock } from '../utils/walletMock';
+import { REWARD_MIN_AMOUNT } from '../constants/reward';
+import {
+  formatAmount,
+  parseRewardAmountToCents,
+  sanitizeAmountInput,
+} from '../utils/rewardAmount';
 
 import { scaleFont } from '../utils/responsive';
 
@@ -60,16 +66,6 @@ export default function AddRewardScreen({ navigation, route }) {
 
     return `${getCurrencySymbol(currency)}${safeAmount.toFixed(2)}`;
   }, [getCurrencySymbol, walletData.currency]);
-
-  const formatAmountText = useCallback(amount => {
-    const numericAmount = Number(amount);
-
-    if (!Number.isFinite(numericAmount)) {
-      return '0';
-    }
-
-    return Number.isInteger(numericAmount) ? `${numericAmount}` : numericAmount.toFixed(2);
-  }, []);
 
   const loadWalletBalance = useCallback(async () => {
     const fallbackWalletBalance = await getWalletBalanceWithMock(0);
@@ -190,12 +186,17 @@ export default function AddRewardScreen({ navigation, route }) {
   }, [routeUserId, routeUsername, t, userProfile.userId, userProfile.username]);
 
   const handleAddReward = async () => {
-    const amount = selectedAddRewardAmount || parseFloat(addRewardAmount);
+    const amountInCents =
+      selectedAddRewardAmount !== null
+        ? Math.round(Number(selectedAddRewardAmount) * 100)
+        : parseRewardAmountToCents(addRewardAmount);
+    const amount = amountInCents === null ? null : amountInCents / 100;
+
     if (!amount || amount <= 0) {
       showAppAlert(t('screens.addRewardScreen.validation.hint'), t('screens.addRewardScreen.validation.invalidAmount'));
       return;
     }
-    if (amount < 0.01) {
+    if (amount < REWARD_MIN_AMOUNT) {
       showAppAlert(t('screens.addRewardScreen.validation.hint'), t('screens.addRewardScreen.validation.minAmount'));
       return;
     }
@@ -250,7 +251,7 @@ export default function AddRewardScreen({ navigation, route }) {
 
     showAppAlert(
       t('screens.addRewardScreen.success.title'),
-      t('screens.addRewardScreen.success.message').replace('${amount}', formatAmountText(amount)),
+      t('screens.addRewardScreen.success.message').replace('${amount}', formatAmount(amount)),
       [
         {
           text: t('screens.addRewardScreen.success.confirm'),
@@ -303,7 +304,7 @@ export default function AddRewardScreen({ navigation, route }) {
         <View style={styles.currentRewardInfo}>
           <View style={styles.currentRewardRow}>
             <Text style={styles.currentRewardLabel}>{t('screens.addRewardScreen.currentReward.label')}</Text>
-            <Text style={styles.currentRewardAmount}>${currentReward}</Text>
+            <Text style={styles.currentRewardAmount}>{formatAmount(currentReward)}</Text>
           </View>
           <View style={styles.currentRewardRow}>
             <Text style={styles.currentRewardDesc}>
@@ -330,7 +331,7 @@ export default function AddRewardScreen({ navigation, route }) {
               <Text style={[
                 styles.quickAmountText,
                 selectedAddRewardAmount === amount && styles.quickAmountTextActive
-              ]}>${amount}</Text>
+              ]}>{formatAmount(amount)}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -345,10 +346,10 @@ export default function AddRewardScreen({ navigation, route }) {
             placeholderTextColor="#9ca3af"
             value={addRewardAmount}
             onChangeText={(text) => {
-              setAddRewardAmount(text);
+              setAddRewardAmount(sanitizeAmountInput(text));
               setSelectedAddRewardAmount(null);
             }}
-            keyboardType="numeric"
+            keyboardType="decimal-pad"
           />
         </View>
 
@@ -374,7 +375,7 @@ export default function AddRewardScreen({ navigation, route }) {
           disabled={!selectedAddRewardAmount && !addRewardAmount}
         >
           <Text style={styles.confirmBtnText}>
-            {t('screens.addRewardScreen.confirmButton').replace('${amount}', selectedAddRewardAmount || addRewardAmount || 0)}
+            {t('screens.addRewardScreen.confirmButton').replace('${amount}', formatAmount(selectedAddRewardAmount ?? addRewardAmount ?? 0))}
           </Text>
         </TouchableOpacity>
 

@@ -45,6 +45,8 @@ const EMPTY_HAS_MORE = {
   favorites: false,
 };
 
+const FALLBACK_LOADED_TABS = new Set(['questions', 'answers', 'favorites']);
+
 const resolveProfilePayload = response => {
   if (!response || typeof response !== 'object') {
     return {};
@@ -131,6 +133,48 @@ const buildProfileViewModel = (profile, fallbackUserId) => {
       { key: 'following', label: '关注', value: followCount, pressType: 'following' },
       { key: 'answers', label: '回答', value: answerCount, pressType: 'answers' },
     ],
+  };
+};
+
+const buildRouteFallbackProfile = routeParams => {
+  const fallbackUserId = String(routeParams?.userId ?? routeParams?.id ?? '').trim();
+  const fallbackName = String(routeParams?.name ?? routeParams?.username ?? '').trim();
+  const fallbackAvatar = String(routeParams?.avatar ?? '').trim();
+  const fallbackRole = String(routeParams?.role ?? routeParams?.occupation ?? '').trim();
+  const fallbackBio = String(routeParams?.bio ?? '').trim();
+  const fallbackLocation = String(routeParams?.location ?? '').trim();
+
+  if (!fallbackUserId && !fallbackName && !fallbackAvatar) {
+    return null;
+  }
+
+  const fallbackProfile = buildProfileViewModel(
+    {
+      userId: fallbackUserId,
+      nickName: fallbackName,
+      avatar: fallbackAvatar,
+      profession: fallbackRole,
+      signature: fallbackBio,
+      location: fallbackLocation,
+      likeCount: 0,
+      fanCount: 0,
+      followCount: 0,
+      answerCount: 0,
+    },
+    fallbackUserId || 'mock-user'
+  );
+
+  return {
+    ...fallbackProfile,
+    username: fallbackName || fallbackProfile.username,
+    avatar: fallbackAvatar || fallbackProfile.avatar,
+    occupation: fallbackRole || fallbackProfile.occupation,
+    bio: fallbackBio || fallbackProfile.bio,
+    location: fallbackLocation || fallbackProfile.location,
+    statsItems: fallbackProfile.statsItems.map(item => ({
+      ...item,
+      value: 0,
+    })),
   };
 };
 
@@ -294,7 +338,9 @@ const overrideStatsItemValue = (profile, statKey, nextValue) => {
 
 export default function PublicProfileScreen({ navigation, route }) {
   const { t } = useTranslation();
-  const { userId } = route.params;
+  const routeParams = route?.params || {};
+  const { userId } = routeParams;
+  const routeFallbackProfile = useMemo(() => buildRouteFallbackProfile(routeParams), [routeParams]);
   const [userData, setUserData] = useState(null);
   const [activeTab, setActiveTab] = useState('questions');
   const [questionsData, setQuestionsData] = useState([]);
@@ -312,6 +358,7 @@ export default function PublicProfileScreen({ navigation, route }) {
   const [isBlacklistSubmitting, setIsBlacklistSubmitting] = useState(false);
   const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [isRouteFallbackActive, setIsRouteFallbackActive] = useState(false);
 
   const isOwnProfile = useMemo(
     () => String(currentUserId || '') !== '' && String(currentUserId) === String(userId),
@@ -323,7 +370,7 @@ export default function PublicProfileScreen({ navigation, route }) {
   }, [userId]);
 
   useEffect(() => {
-    if (isBlacklisted) {
+    if (isBlacklisted || isRouteFallbackActive) {
       return;
     }
 
@@ -416,10 +463,26 @@ export default function PublicProfileScreen({ navigation, route }) {
       setAnswersData([]);
       setFavoritesData([]);
       setIsBlacklisted(nextIsBlacklisted);
+      setIsRouteFallbackActive(false);
       setLoadedTabs(new Set());
       setTabPages(EMPTY_TAB_PAGES);
       setTabHasMore(EMPTY_HAS_MORE);
     } catch (err) {
+      if (routeFallbackProfile) {
+        setCurrentUserId(null);
+        setUserData(routeFallbackProfile);
+        setIsFollowing(false);
+        setQuestionsData([]);
+        setAnswersData([]);
+        setFavoritesData([]);
+        setIsBlacklisted(false);
+        setIsRouteFallbackActive(true);
+        setLoadedTabs(new Set(FALLBACK_LOADED_TABS));
+        setTabPages(EMPTY_TAB_PAGES);
+        setTabHasMore(EMPTY_HAS_MORE);
+        setError(null);
+        return;
+      }
       setError(err?.message || '加载失败');
     } finally {
       setIsLoading(false);

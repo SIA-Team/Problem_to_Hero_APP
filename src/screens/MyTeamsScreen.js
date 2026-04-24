@@ -11,6 +11,7 @@ import teamApi from '../services/api/teamApi';
 import { showAppAlert } from '../utils/appAlert';
 import { isVisibleMyTeam, mapTeamToDetailRoute, normalizeMyTeam } from '../utils/teamTransforms';
 import { executeTeamExitFlow, getTransferLeaderCandidates } from '../utils/teamExit';
+import { formatAmount } from '../utils/rewardAmount';
 
 import { scaleFont } from '../utils/responsive';
 /*
@@ -490,7 +491,7 @@ export default function MyTeamsScreen({
               }}>
                   <View style={styles.questionOptionContent}>
                     {q.type === 'reward' && <View style={styles.rewardTagSmall}>
-                        <Text style={styles.rewardTagSmallText}>${q.reward}</Text>
+                        <Text style={styles.rewardTagSmallText}>{formatAmount(q.reward)}</Text>
                       </View>}
                     <Text style={styles.questionOptionTitle} numberOfLines={2}>{q.title}</Text>
                   </View>

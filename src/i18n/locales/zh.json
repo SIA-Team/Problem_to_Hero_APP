@@ -56,7 +56,7 @@
     "selectDistrict": "选择区",
     "followers": "关注者",
     "questions": "问题",
-    "followTopic": "关注",
+    "followTopic": "+关注",
     "unfollowTopic": "已关注",
     "paidViewContent": "付费查看完整内容",
     "payToView": "支付 $${amount} 查看完整内容",
@@ -165,10 +165,10 @@
     "selectCategory": "请选择问题类别",
     "setRewardAmount": "设置悬赏金额",
     "rewardDesc": "可以设置为 $0（不设悬赏）或任意金额",
-    "rewardDescRequired": "悬赏金额不能小于 $1",
+    "rewardDescRequired": "悬赏金额不能小于 {amount}",
     "customAmount": "自定义金额：",
     "enterAmount": "输入金额（可以是$0）",
-    "enterAmountMin": "输入金额（最低$1）",
+    "enterAmountMin": "输入金额（最低{amount}）",
     "inviteExperts": "邀请回答专家",
     "inviteExpertsDesc": "最多邀请5位专家回答",
     "searchExperts": "搜索专家姓名、领域或职称...",
@@ -241,7 +241,7 @@
       "titleTooLong": "标题最多50个字",
       "enterDescription": "请输入问题描述",
       "selectCategory": "请选择问题类别",
-      "rewardTooLow": "悬赏问题金额不能小于$1",
+      "rewardTooLow": "悬赏问题金额不能小于 {amount}",
       "inviteAtLeastOne": "请至少邀请一位专家",
       "setPaidPrice": "请设置查看答案的价格（最低$0.01）",
       "selectTeam": "请选择要代表的团队",
@@ -739,7 +739,8 @@
       },
       "members": {
         "title": "全部成员",
-        "count": "({count})"
+        "count": "({count})",
+        "profileUnavailable": "当前成员缺少主页标识，暂时无法查看"
       },
       "report": {
         "title": "举报",
@@ -770,6 +771,18 @@
         "title": "选择新团长",
         "selectMember": "请选择一位成员作为新团长"
       }
+    },
+    "teamAnnouncementDetail": {
+      "title": "公告详情",
+      "pinned": "置顶",
+      "authorLabel": "发布人",
+      "publishTimeLabel": "发布时间",
+      "teamLabel": "所属团队",
+      "updatedAtLabel": "更新时间",
+      "viewsLabel": "阅读量",
+      "unknownAuthor": "团队管理员",
+      "emptyTitle": "未找到公告",
+      "emptyContent": "暂无公告内容"
     },
     "inviteTeamMember": {
       "title": "邀请团队成员",
@@ -2310,10 +2323,20 @@
     "recommendFollow": "推荐关注",
     "followedTopics": "已关注话题",
     "followers": "粉丝",
-    "follow": "+ 关注",
+    "follow": "+关注",
     "following": "已关注",
+    "topicsEmptyTitle": "还没有关注任何话题",
+    "topicsEmptyHint": "关注感兴趣的话题后，会在这里看到它们",
     "minutesAgo": "分钟前",
     "hoursAgo": "小时前"
+  },
+  "topicDetail": {
+    "title": "话题详情",
+    "relatedQuestions": "相关问题",
+    "emptyTitle": "该话题下还没有问题",
+    "emptyHint": "等有新的提问内容后，会显示在这里",
+    "loadFailed": "加载话题问题失败",
+    "retry": "重试"
   },
   "fans": {
     "title": "粉丝列表",

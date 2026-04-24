@@ -737,7 +737,8 @@
       },
       "members": {
         "title": "All Members",
-        "count": "({count})"
+        "count": "({count})",
+        "profileUnavailable": "This member cannot be opened yet because the profile id is missing."
       },
       "report": {
         "title": "Report",
@@ -768,6 +769,18 @@
         "title": "Select New Leader",
         "selectMember": "Please select a member as the new leader"
       }
+    },
+    "teamAnnouncementDetail": {
+      "title": "Announcement Details",
+      "pinned": "Pinned",
+      "authorLabel": "Author",
+      "publishTimeLabel": "Published",
+      "teamLabel": "Team",
+      "updatedAtLabel": "Updated",
+      "viewsLabel": "Views",
+      "unknownAuthor": "Team Admin",
+      "emptyTitle": "Announcement Not Found",
+      "emptyContent": "No announcement content yet."
     },
     "supplementDetail": {
       "title": "Supplement Detail",
@@ -2167,8 +2180,18 @@
     "followers": "followers",
     "follow": "+ Follow",
     "following": "Following",
+    "topicsEmptyTitle": "No followed topics yet",
+    "topicsEmptyHint": "Follow topics you care about to see related questions here",
     "minutesAgo": "minutes ago",
     "hoursAgo": "hours ago"
+  },
+  "topicDetail": {
+    "title": "Topic Detail",
+    "relatedQuestions": "Related Questions",
+    "emptyTitle": "No questions for this topic yet",
+    "emptyHint": "Questions under this topic will appear here later",
+    "loadFailed": "Failed to load topic questions",
+    "retry": "Retry"
   },
   "fans": {
     "title": "Fans",

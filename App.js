@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -134,8 +134,10 @@ const getGroupChatScreen = () => require('./src/screens/GroupChatScreen').defaul
 const getAnswerDetailScreen = () => require('./src/screens/AnswerDetailScreen').default;
 const getQuestionTeamsScreen = () => require('./src/screens/QuestionTeamsScreen').default;
 const getTeamDetailScreen = () => require('./src/screens/TeamDetailScreen').default;
+const getTeamAnnouncementDetailScreen = () => require('./src/screens/TeamAnnouncementDetailScreen').default;
 const getSettingsScreen = () => require('./src/screens/SettingsScreen').default;
 const getPublicProfileScreen = () => require('./src/screens/PublicProfileScreen').default;
+const getTopicDetailScreen = () => require('./src/screens/TopicDetailScreen').default;
 const getInterestOnboardingScreen = () => require('./src/screens/InterestOnboardingScreen').default;
 const SafePublishScreen = createSafeLazyScreenSafe(getPublishScreen, '发布');
 const SafeProfileScreen = createSafeLazyScreenSafe(getProfileScreen, '个人中心');
@@ -146,8 +148,10 @@ const SafeGroupChatScreen = createSafeLazyScreenSafe(getGroupChatScreen, '问题
 const SafeAnswerDetailScreen = createSafeLazyScreenSafe(getAnswerDetailScreen, '回答详情');
 const SafeQuestionTeamsScreen = createSafeLazyScreenSafe(getQuestionTeamsScreen, '问题组队');
 const SafeTeamDetailScreen = createSafeLazyScreenSafe(getTeamDetailScreen, '团队详情');
+const SafeTeamAnnouncementDetailScreen = createSafeLazyScreenSafe(getTeamAnnouncementDetailScreen, '公告详情');
 const SafeSettingsScreen = createSafeLazyScreenSafe(getSettingsScreen, '设置');
 const SafePublicProfileScreen = createSafeLazyScreenSafe(getPublicProfileScreen, '公开主页');
+const SafeTopicDetailScreen = createSafeLazyScreenSafe(getTopicDetailScreen, '话题详情');
 const SafeInterestOnboardingScreen = createSafeLazyScreenSafe(getInterestOnboardingScreen, '兴趣引导');
 
 const appDebugLog = (...args) => {
@@ -1734,6 +1738,7 @@ function AppContent() {
         <Stack.Screen name="MyGroups" component={MyGroupsScreen} />
         <Stack.Screen name="QuestionTeams" component={SafeQuestionTeamsScreen} />
         <Stack.Screen name="TeamDetail" component={SafeTeamDetailScreen} />
+        <Stack.Screen name="TeamAnnouncementDetail" component={SafeTeamAnnouncementDetailScreen} />
         <Stack.Screen name="Settings" component={SafeSettingsScreen} />
         <Stack.Screen name="ChannelManage" component={ChannelManageScreen} />
         <Stack.Screen name="WisdomIndex" component={WisdomIndexScreen} />
@@ -1751,6 +1756,7 @@ function AppContent() {
         <Stack.Screen name="SuperLikeHistory" component={SuperLikeHistoryScreen} />
         <Stack.Screen name="Contributors" component={ContributorsScreen} />
         <Stack.Screen name="PublicProfile" component={SafePublicProfileScreen} />
+        <Stack.Screen name="TopicDetail" component={SafeTopicDetailScreen} />
         <Stack.Screen name="DeviceInfo" component={DeviceInfoScreen} />
         <Stack.Screen name="NetworkTest" component={NetworkTestScreen} />
         <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />

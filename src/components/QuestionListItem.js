@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { formatTime } from '../utils/timeFormatter';
+import { formatAmount } from '../utils/rewardAmount';
 
 import { scaleFont } from '../utils/responsive';
 /**
@@ -24,7 +25,7 @@ export default function QuestionListItem({ item, onPress }) {
       <Text style={styles.title}>
         {item.questionType === 'reward' && (
           <Text style={styles.rewardTag}>
-            <Text style={styles.rewardTagText}>${item.reward}</Text>
+            <Text style={styles.rewardTagText}>{formatAmount(item.reward)}</Text>
           </Text>
         )}
         {item.solved && (

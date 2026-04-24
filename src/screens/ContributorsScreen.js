@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import { useTranslation } from '../i18n/withTranslation';
+import { formatAmount } from '../utils/rewardAmount';
 
 import { scaleFont } from '../utils/responsive';
 export default function ContributorsScreen({ navigation, route }) {
@@ -35,7 +36,7 @@ export default function ContributorsScreen({ navigation, route }) {
       <View style={styles.totalInfo}>
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>{t('screens.contributorsScreen.totalLabel')}</Text>
-          <Text style={styles.totalAmount}>${currentReward}</Text>
+          <Text style={styles.totalAmount}>{formatAmount(currentReward)}</Text>
         </View>
         <Text style={styles.totalDesc}>{t('screens.contributorsScreen.totalDesc').replace('{count}', rewardContributors)}</Text>
       </View>
@@ -57,7 +58,7 @@ export default function ContributorsScreen({ navigation, route }) {
             </View>
             <View style={styles.amountBadge}>
               <Ionicons name="add" size={12} color="#ef4444" />
-              <Text style={styles.amountText}>${contributor.amount}</Text>
+              <Text style={styles.amountText}>{formatAmount(contributor.amount)}</Text>
             </View>
           </View>
         ))}

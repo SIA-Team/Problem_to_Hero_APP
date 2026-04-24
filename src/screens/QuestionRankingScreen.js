@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { formatNumber } from '../utils/numberFormatter';
+import { centsToAmount, formatAmount } from '../utils/rewardAmount';
 import questionApi from '../services/api/questionApi';
 import { scaleFont } from '../utils/responsive';
 
@@ -114,15 +115,12 @@ const resolveTabKeyFromBucket = (mapKey, rankType, items = []) => {
 };
 
 const normalizeRankingItem = (item, index) => {
-  const reward = toSafeNumber(
-    pickFirstDefinedValue(
-      item?.reward,
-      item?.rewardAmount,
-      item?.price,
-      item?.amount,
-      item?.bountyAmount
-    )
-  );
+  const directRewardAmount = pickFirstDefinedValue(item?.reward, item?.price, item?.amount);
+  const centsRewardAmount = pickFirstDefinedValue(item?.rewardAmount, item?.bountyAmount);
+  const reward =
+    directRewardAmount !== undefined
+      ? toSafeNumber(directRewardAmount)
+      : centsToAmount(centsRewardAmount);
 
   return {
     ...item,
@@ -394,7 +392,7 @@ export default function QuestionRankingScreen({ navigation, route }) {
                   <View style={styles.questionContent}>
                     <Text style={styles.questionTitle} numberOfLines={2}>
                       {item.type === 'reward' && item.reward > 0 ? (
-                        <Text style={styles.rewardTagInline}>${item.reward} </Text>
+                        <Text style={styles.rewardTagInline}>{formatAmount(item.reward)} </Text>
                       ) : null}
                       {item.title}
                     </Text>

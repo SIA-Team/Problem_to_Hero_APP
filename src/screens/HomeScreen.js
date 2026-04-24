@@ -21,6 +21,7 @@ import { useOptimizedQuestions } from '../hooks/useOptimizedQuestions';
 import { showToast } from '../utils/toast';
 import { showAppAlert } from '../utils/appAlert';
 import { buildTwitterShareText, openTwitterShare } from '../utils/shareService';
+import { formatAmount } from '../utils/rewardAmount';
 import { formatTime } from '../utils/timeFormatter';
 import { getLastLocationLevel } from '../utils/locationFormatter';
 import { shouldRequirePaidQuestionAccess } from '../utils/questionAccessRules';
@@ -714,7 +715,23 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const toggleFollowTopic = (topicId) => setTopicFollowState(prev => ({ ...prev, [topicId]: !prev[topicId] }));
+  const toggleFollowTopic = (topicId, currentFollowed = false) =>
+    setTopicFollowState(prev => ({
+      ...prev,
+      [topicId]: !currentFollowed,
+    }));
+
+  const handleTopicPress = useCallback((topic) => {
+    if (!topic) {
+      return;
+    }
+
+    navigation.navigate('TopicDetail', {
+      topicId: topic.id,
+      topic,
+    });
+  }, [navigation]);
+
   const formatNumber = (num) => num >= 1000 ? (num / 1000).toFixed(1) + 'k' : num;
 
   const openActionModal = (item) => { setSelectedQuestion(item); setShowActionModal(true); };
@@ -1303,12 +1320,12 @@ export default function HomeScreen({ navigation }) {
                         {(item.type === 'reward' && item.reward) || (item.type === 'targeted' && item.reward) || requiresPaidView ? (
                           <>
                             {item.type === 'reward' && item.reward && (
-                              <Text style={styles.rewardTagInline}> ${item.reward} </Text>
+                              <Text style={styles.rewardTagInline}> {formatAmount(item.reward)} </Text>
                             )}
                             {item.type === 'targeted' && (
                               <>
                                 {item.reward && item.reward > 0 ? (
-                                  <Text style={styles.targetedTagInline}> ${item.reward} </Text>
+                                  <Text style={styles.targetedTagInline}> {formatAmount(item.reward)} </Text>
                                 ) : (
                                 <Text style={styles.targetedTagInline}> {t('home.targeted')} </Text>
                               )}
@@ -1506,7 +1523,12 @@ export default function HomeScreen({ navigation }) {
               const displayFollowed = currentFollowState !== undefined ? currentFollowState : isFollowed;
               
               return (
-                <TouchableOpacity key={topic.id} style={styles.topicCard}>
+                <View key={topic.id} style={styles.topicCard}>
+                  <TouchableOpacity
+                    style={styles.topicMain}
+                    activeOpacity={0.82}
+                    onPress={() => handleTopicPress(topic)}
+                  >
                   <View style={[styles.topicIcon, { backgroundColor: topic.color + '20' }]}>
                     <Ionicons name={topic.icon} size={24} color={topic.color} />
                   </View>
@@ -1515,15 +1537,16 @@ export default function HomeScreen({ navigation }) {
                     <Text style={styles.topicDesc}>{topic.description}</Text>
                     <Text style={styles.topicStats}>{topic.followers} {t('home.followers')} · {topic.questions} {t('home.questions')}</Text>
                   </View>
+                  </TouchableOpacity>
                   <TouchableOpacity 
                     style={[styles.topicFollowBtn, displayFollowed && styles.topicFollowBtnActive]}
-                    onPress={() => toggleFollowTopic(topic.id)}
+                    onPress={() => toggleFollowTopic(topic.id, displayFollowed)}
                   >
                     <Text style={[styles.topicFollowBtnText, displayFollowed && styles.topicFollowBtnTextActive]}>
-                      {displayFollowed ? t('home.unfollowTopic') : `+ ${t('home.followTopic')}`}
+                      {displayFollowed ? t('home.unfollowTopic') : t('home.followTopic')}
                     </Text>
                   </TouchableOpacity>
-                </TouchableOpacity>
+                </View>
               );
             })}
           </View>
@@ -2235,6 +2258,7 @@ const styles = StyleSheet.create({
   topicsContainer: { flex: 1, backgroundColor: '#f3f4f6' },
   topicsSection: { backgroundColor: '#fff', marginTop: 8, padding: 12 },
   topicCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  topicMain: { flex: 1, flexDirection: 'row', alignItems: 'center', marginRight: 12 },
   topicIcon: { width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   topicInfo: { flex: 1, marginLeft: 12 },
   topicName: { fontSize: scaleFont(15), fontWeight: '500', color: '#1f2937' },

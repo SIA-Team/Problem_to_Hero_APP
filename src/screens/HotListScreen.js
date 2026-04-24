@@ -1162,13 +1162,17 @@ export default function HotListScreen({
         name: item.name,
         flag: item.flag
       });
-      setRegionType('country');
+      setRegionType('city');
+      return;
     } else {
+      const countryId = selectedRegion.type === 'country' ? selectedRegion.id : selectedRegion.countryId;
+      const country = regionData.countries.find(countryItem => countryItem.id === countryId);
       setSelectedRegion({
         type: 'city',
         id: item.id,
         name: item.name,
-        countryId: selectedRegion.id
+        countryId,
+        flag: country?.flag
       });
       setRegionType('city');
     }
@@ -1180,6 +1184,7 @@ export default function HotListScreen({
     }
     return regionData.cities[selectedRegion.countryId] || [];
   };
+  const selectedCountryId = selectedRegion.type === 'city' ? selectedRegion.countryId : selectedRegion.id;
   return <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{
@@ -1245,10 +1250,10 @@ export default function HotListScreen({
 
       {/* 区域选择弹窗 */}
       <Modal visible={showRegionModal} transparent={true} animationType="slide" onRequestClose={() => setShowRegionModal(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowRegionModal(false)}>
-          <TouchableOpacity activeOpacity={1} onPress={e => e.stopPropagation()}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowRegionModal(false)} />
             <View style={[styles.regionModal, {
-            paddingBottom: 30
+            paddingBottom: Math.max(insets.bottom, 8)
           }]}>
               <View style={styles.regionModalHandle} />
               <View style={styles.regionModalHeader}>
@@ -1271,27 +1276,28 @@ export default function HotListScreen({
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.regionList}>
+            <ScrollView style={styles.regionList} contentContainerStyle={styles.regionListContent}>
               {regionType === 'country' ? <View style={styles.regionGrid}>
-                  {regionData.countries.map(country => <TouchableOpacity key={country.id} style={[styles.regionItem, selectedRegion.id === country.id && selectedRegion.type === 'country' && styles.regionItemActive]} onPress={() => handleRegionSelect('country', country)}>
+                  {regionData.countries.map(country => <TouchableOpacity key={country.id} style={[styles.regionItem, selectedCountryId === country.id && styles.regionItemActive]} onPress={() => handleRegionSelect('country', country)}>
                       <Text style={styles.regionFlag}>{country.flag}</Text>
-                      <Text style={[styles.regionName, selectedRegion.id === country.id && selectedRegion.type === 'country' && styles.regionNameActive]}>
+                      <Text style={[styles.regionName, selectedCountryId === country.id && styles.regionNameActive]}>
                         {country.name}
                       </Text>
-                      {selectedRegion.id === country.id && selectedRegion.type === 'country' && <Ionicons name="checkmark-circle" size={16} color="#ef4444" style={styles.regionCheck} />}
+                      {selectedCountryId === country.id && <Ionicons name="checkmark-circle" size={16} color="#ef4444" style={styles.regionCheck} />}
                     </TouchableOpacity>)}
                 </View> : <View style={styles.regionGrid}>
-                  {getCitiesForSelectedCountry().map(city => <TouchableOpacity key={city.id} style={[styles.regionItem, selectedRegion.id === city.id && selectedRegion.type === 'city' && styles.regionItemActive]} onPress={() => handleRegionSelect('city', city)}>
+                  {getCitiesForSelectedCountry().length > 0 ? getCitiesForSelectedCountry().map(city => <TouchableOpacity key={city.id} style={[styles.regionItem, selectedRegion.id === city.id && selectedRegion.type === 'city' && styles.regionItemActive]} onPress={() => handleRegionSelect('city', city)}>
                       <Text style={[styles.regionCityName, selectedRegion.id === city.id && selectedRegion.type === 'city' && styles.regionNameActive]}>
                         {city.name}
                       </Text>
                       {selectedRegion.id === city.id && selectedRegion.type === 'city' && <Ionicons name="checkmark-circle" size={16} color="#ef4444" style={styles.regionCheck} />}
-                    </TouchableOpacity>)}
+                    </TouchableOpacity>) : <View style={styles.regionEmptyState}>
+                      <Text style={styles.regionEmptyText}>暂无可选城市</Text>
+                    </View>}
                 </View>}
             </ScrollView>
             </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
+        </View>
       </Modal>
     </SafeAreaView>;
 }
@@ -1508,13 +1514,22 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     backgroundColor: modalTokens.overlay
   },
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0
+  },
   regionModal: {
+    width: '100%',
     backgroundColor: modalTokens.surface,
     borderTopLeftRadius: modalTokens.sheetRadius,
     borderTopRightRadius: modalTokens.sheetRadius,
     borderTopWidth: 1,
     borderColor: modalTokens.border,
-    maxHeight: '80%'
+    maxHeight: '80%',
+    overflow: 'hidden'
   },
   regionModalHandle: {
     width: 40,
@@ -1571,6 +1586,9 @@ const styles = StyleSheet.create({
   regionList: {
     maxHeight: 400
   },
+  regionListContent: {
+    paddingBottom: 12
+  },
   regionGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1587,6 +1605,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: modalTokens.border,
     position: 'relative'
+  },
+  regionEmptyState: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 36
+  },
+  regionEmptyText: {
+    fontSize: scaleFont(14),
+    color: modalTokens.textMuted
   },
   regionItemActive: {
     backgroundColor: '#fef2f2',

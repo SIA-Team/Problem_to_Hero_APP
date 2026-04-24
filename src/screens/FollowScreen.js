@@ -6,10 +6,15 @@ import Avatar from '../components/Avatar';
 import RelationUserList from '../components/RelationUserList';
 import { useTranslation } from '../i18n/withTranslation';
 import { scaleFont } from '../utils/responsive';
+import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
+import userApi from '../services/api/userApi';
+import { refreshMyFollowingCount } from '../services/myFollowingCountState';
+import { showToast } from '../utils/toast';
 
-const recommendUsers = [
+const RECOMMEND_USERS = [
   {
-    id: 101,
+    id: '101',
+    userId: '101',
     name: '数据分析师小陈',
     avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=rec1',
     title: '数据分析师 · 3年经验',
@@ -18,8 +23,9 @@ const recommendUsers = [
     answers: 156,
   },
   {
-    id: 102,
-    name: '前端大咖',
+    id: '102',
+    userId: '102',
+    name: '前端架构师',
     avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=rec2',
     title: '前端架构师',
     followers: '18万',
@@ -28,8 +34,9 @@ const recommendUsers = [
     verified: true,
   },
   {
-    id: 103,
-    name: '产品经理老张',
+    id: '103',
+    userId: '103',
+    name: '产品经理老周',
     avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=rec3',
     title: '产品总监 · 8年经验',
     followers: '6.8万',
@@ -38,9 +45,9 @@ const recommendUsers = [
   },
 ];
 
-const followedTopics = [
+const INITIAL_FOLLOWED_TOPICS = [
   {
-    id: 1,
+    id: '1',
     name: '#Python学习',
     icon: 'code-slash',
     color: '#3b82f6',
@@ -49,7 +56,7 @@ const followedTopics = [
     description: '分享 Python 学习经验和实战技巧',
   },
   {
-    id: 2,
+    id: '2',
     name: '#家常菜谱',
     icon: 'restaurant',
     color: '#f97316',
@@ -58,7 +65,7 @@ const followedTopics = [
     description: '美味家常菜做法分享',
   },
   {
-    id: 3,
+    id: '3',
     name: '#职业发展',
     icon: 'briefcase',
     color: '#8b5cf6',
@@ -75,7 +82,7 @@ const buildRecommendStats = (user, t) =>
     `${user.answers} ${t('home.answers')}`,
   ]
     .filter(Boolean)
-    .join(' · ');
+    .join(' 路 ');
 
 export default function FollowScreen({ navigation }) {
   const { t } = useTranslation();
@@ -86,11 +93,114 @@ export default function FollowScreen({ navigation }) {
     ],
     [t]
   );
+
   const [activeTab, setActiveTab] = useState('users');
   const [userFollowState, setUserFollowState] = useState({});
-  const [topicFollowState, setTopicFollowState] = useState({});
+  const [followedTopics, setFollowedTopics] = useState(INITIAL_FOLLOWED_TOPICS);
+  const [injectedFollowingUsers, setInjectedFollowingUsers] = useState([]);
+  const [followSubmittingMap, setFollowSubmittingMap] = useState({});
 
   const isUsersTabActive = activeTab === 'users';
+
+  const isSuccessResponse = response => {
+    const code = Number(response?.code ?? response?.data?.code);
+    return code === 200 || code === 0;
+  };
+
+  const buildInjectedFollowUser = user => ({
+    userId: user.userId ?? user.id,
+    id: user.userId ?? user.id,
+    nickName: user.name,
+    avatar: user.avatar,
+    profession: user.title,
+    verified: user.verified ? 1 : 0,
+    followersCount: user.followers,
+    questionCount: user.questions,
+    answerCount: user.answers,
+  });
+
+  const applyRecommendFollowState = (user, nextFollowing) => {
+    const userId = String(user?.userId ?? user?.id ?? '').trim();
+    if (!userId) {
+      return;
+    }
+
+    setUserFollowState(prev => ({
+      ...prev,
+      [userId]: nextFollowing,
+    }));
+
+    setInjectedFollowingUsers(prev => {
+      if (!nextFollowing) {
+        return prev.filter(item => String(item?.userId ?? item?.id) !== userId);
+      }
+
+      const nextUser = buildInjectedFollowUser(user);
+      const exists = prev.some(item => String(item?.userId ?? item?.id) === userId);
+      return exists ? prev : [nextUser, ...prev];
+    });
+  };
+
+  const handleUserCardPress = user => {
+    navigateToPublicProfile(navigation, user);
+  };
+
+  const handleRecommendFollowToggle = async user => {
+    const userId = String(user?.userId ?? user?.id ?? '').trim();
+    if (!userId || followSubmittingMap[userId]) {
+      return;
+    }
+
+    const currentlyFollowing = Boolean(userFollowState[userId]);
+    const nextFollowing = !currentlyFollowing;
+    const fallbackErrorMessage = currentlyFollowing
+      ? '取消关注失败，请稍后重试'
+      : '关注失败，请稍后重试';
+    const fallbackSuccessMessage = currentlyFollowing ? '已取消关注' : '已关注';
+
+    setFollowSubmittingMap(prev => ({
+      ...prev,
+      [userId]: true,
+    }));
+    applyRecommendFollowState(user, nextFollowing);
+
+    try {
+      const response = currentlyFollowing
+        ? await userApi.unfollowUser(userId)
+        : await userApi.followUser(userId);
+
+      if (!isSuccessResponse(response)) {
+        throw new Error(response?.msg || fallbackErrorMessage);
+      }
+
+      refreshMyFollowingCount().catch(error => {
+        console.error('Refresh following count after recommend follow action failed:', error);
+      });
+
+      showToast(response?.msg || fallbackSuccessMessage, 'success');
+      return;
+    } catch (error) {
+      applyRecommendFollowState(user, currentlyFollowing);
+      showToast(error?.message || fallbackErrorMessage, 'error');
+      return;
+    } finally {
+      setFollowSubmittingMap(prev => ({
+        ...prev,
+        [userId]: false,
+      }));
+    }
+  };
+
+  const handleTopicPress = topic => {
+    navigation.navigate('TopicDetail', {
+      topicId: topic.id,
+      topic,
+    });
+  };
+
+  const handleTopicUnfollow = topicId => {
+    setFollowedTopics(prev => prev.filter(topic => String(topic.id) !== String(topicId)));
+  };
 
   const renderRecommendSection = ({ searchText }) => {
     if (searchText.trim()) {
@@ -100,40 +210,102 @@ export default function FollowScreen({ navigation }) {
     return (
       <View style={styles.sectionBlock}>
         <Text style={styles.sectionTitle}>{t('follow.recommendFollow')}</Text>
-        {recommendUsers.map(user => (
-          <TouchableOpacity key={user.id} style={styles.userCard} activeOpacity={0.8}>
-            <Avatar uri={user.avatar} name={user.name} size={48} />
-            <View style={styles.userInfo}>
-              <View style={styles.userNameRow}>
-                <Text style={styles.userName}>{user.name}</Text>
-                {Boolean(user.verified) ? (
-                  <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />
-                ) : null}
-              </View>
-              <Text style={styles.userTitle}>{user.title}</Text>
-              <Text style={styles.userStats}>{buildRecommendStats(user, t)}</Text>
-            </View>
+        {RECOMMEND_USERS.map(user => {
+          const recommendUserId = String(user.userId ?? user.id);
+          const isFollowing = Boolean(userFollowState[recommendUserId]);
+          const isSubmitting = Boolean(followSubmittingMap[recommendUserId]);
+
+          return (
+          <View key={user.id} style={styles.userCard}>
             <TouchableOpacity
-              style={[styles.followBtn, userFollowState[user.id] && styles.followBtnActive]}
-              onPress={() =>
-                setUserFollowState(prev => ({
-                  ...prev,
-                  [user.id]: !prev[user.id],
-                }))
-              }
+              style={styles.userCardMain}
+              activeOpacity={0.8}
+              onPress={() => handleUserCardPress(user)}
+            >
+              <Avatar uri={user.avatar} name={user.name} size={48} />
+              <View style={styles.userInfo}>
+                <View style={styles.userNameRow}>
+                  <Text style={styles.userName}>{user.name}</Text>
+                  {Boolean(user.verified) ? (
+                    <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />
+                  ) : null}
+                </View>
+                <Text style={styles.userTitle}>{user.title}</Text>
+                <Text style={styles.userStats}>{buildRecommendStats(user, t)}</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.followBtn, isFollowing && styles.followBtnActive]}
+              onPress={() => handleRecommendFollowToggle(user)}
+              activeOpacity={0.85}
+              disabled={isSubmitting}
             >
               <Text
                 style={[
                   styles.followBtnText,
-                  userFollowState[user.id] && styles.followBtnTextActive,
+                  isFollowing && styles.followBtnTextActive,
                 ]}
               >
-                {userFollowState[user.id] ? t('follow.following') : t('follow.follow')}
+                {isFollowing ? t('follow.following') : t('follow.follow')}
               </Text>
             </TouchableOpacity>
-          </TouchableOpacity>
-        ))}
+          </View>
+          );
+        })}
       </View>
+    );
+  };
+
+  const renderTopicsTab = () => {
+    if (followedTopics.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="pricetags-outline" size={64} color="#d1d5db" />
+          <Text style={styles.emptyText}>{t('follow.topicsEmptyTitle')}</Text>
+          <Text style={styles.emptyHint}>{t('follow.topicsEmptyHint')}</Text>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.sectionBlock}>
+          <Text style={styles.sectionTitle}>
+            {t('follow.followedTopics')} ({followedTopics.length})
+          </Text>
+          {followedTopics.map(topic => (
+            <View key={topic.id} style={styles.topicCard}>
+              <TouchableOpacity
+                style={styles.topicMain}
+                activeOpacity={0.82}
+                onPress={() => handleTopicPress(topic)}
+              >
+                <View style={[styles.topicIcon, { backgroundColor: `${topic.color}20` }]}>
+                  <Ionicons name={topic.icon} size={24} color={topic.color} />
+                </View>
+                <View style={styles.topicInfo}>
+                  <Text style={styles.topicName}>{topic.name}</Text>
+                  <Text style={styles.topicDesc}>{topic.description}</Text>
+                  <Text style={styles.topicStats}>
+                    {topic.followers} {t('home.followers')} 路 {topic.questions} {t('home.questions')}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.followBtn, styles.followBtnActive]}
+                onPress={() => handleTopicUnfollow(topic.id)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.followBtnText, styles.followBtnTextActive]}>
+                  {t('follow.following')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+        <View style={styles.bottomSpacer} />
+      </ScrollView>
     );
   };
 
@@ -167,57 +339,13 @@ export default function FollowScreen({ navigation }) {
           navigation={navigation}
           relationType="following"
           isOwnList
+          injectedUsers={injectedFollowingUsers}
           showSearch
           listStyle={styles.flexList}
           ListFooterExtra={renderRecommendSection}
         />
       ) : (
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.sectionBlock}>
-            <Text style={styles.sectionTitle}>
-              {t('follow.followedTopics')} ({followedTopics.length})
-            </Text>
-            {followedTopics.map(topic => (
-              <TouchableOpacity key={topic.id} style={styles.topicCard} activeOpacity={0.8}>
-                <View style={[styles.topicIcon, { backgroundColor: `${topic.color}20` }]}>
-                  <Ionicons name={topic.icon} size={24} color={topic.color} />
-                </View>
-                <View style={styles.topicInfo}>
-                  <Text style={styles.topicName}>{topic.name}</Text>
-                  <Text style={styles.topicDesc}>{topic.description}</Text>
-                  <Text style={styles.topicStats}>
-                    {topic.followers} {t('home.followers')} · {topic.questions}{' '}
-                    {t('home.questions')}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={[
-                    styles.followBtn,
-                    topicFollowState[topic.id] === false && styles.followBtnInactive,
-                  ]}
-                  onPress={() =>
-                    setTopicFollowState(prev => ({
-                      ...prev,
-                      [topic.id]: !prev[topic.id],
-                    }))
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.followBtnText,
-                      topicFollowState[topic.id] === false && styles.followBtnTextInactive,
-                    ]}
-                  >
-                    {topicFollowState[topic.id] === false
-                      ? t('follow.follow')
-                      : t('follow.following')}
-                  </Text>
-                </TouchableOpacity>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <View style={styles.bottomSpacer} />
-        </ScrollView>
+        renderTopicsTab()
       )}
     </SafeAreaView>
   );
@@ -300,6 +428,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
+  userCardMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   userInfo: {
     flex: 1,
     marginLeft: 12,
@@ -309,12 +442,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 4,
+    gap: 4,
   },
   userName: {
     fontSize: scaleFont(15),
-    fontWeight: '600',
+    fontWeight: '500',
     color: '#1f2937',
-    marginRight: 4,
   },
   userTitle: {
     fontSize: scaleFont(13),
@@ -325,32 +458,6 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(12),
     color: '#9ca3af',
   },
-  followBtn: {
-    minWidth: 74,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 18,
-    backgroundColor: '#ef4444',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  followBtnActive: {
-    backgroundColor: '#fee2e2',
-  },
-  followBtnInactive: {
-    backgroundColor: '#fee2e2',
-  },
-  followBtnText: {
-    fontSize: scaleFont(13),
-    color: '#fff',
-    fontWeight: '600',
-  },
-  followBtnTextActive: {
-    color: '#ef4444',
-  },
-  followBtnTextInactive: {
-    color: '#ef4444',
-  },
   topicCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -358,32 +465,76 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
+  topicMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 12,
+  },
   topicIcon: {
     width: 48,
     height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
+    borderRadius: 12,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   topicInfo: {
     flex: 1,
     marginLeft: 12,
-    marginRight: 12,
   },
   topicName: {
     fontSize: scaleFont(15),
-    fontWeight: '600',
+    fontWeight: '500',
     color: '#1f2937',
-    marginBottom: 4,
   },
   topicDesc: {
-    fontSize: scaleFont(13),
+    fontSize: scaleFont(12),
     color: '#6b7280',
-    marginBottom: 4,
+    marginTop: 2,
   },
   topicStats: {
-    fontSize: scaleFont(12),
+    fontSize: scaleFont(11),
     color: '#9ca3af',
+    marginTop: 4,
+  },
+  followBtn: {
+    minWidth: 86,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  followBtnActive: {
+    backgroundColor: '#fef2f2',
+  },
+  followBtnText: {
+    fontSize: scaleFont(12),
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  followBtnTextActive: {
+    color: '#ef4444',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  emptyText: {
+    marginTop: 16,
+    fontSize: scaleFont(16),
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  emptyHint: {
+    marginTop: 8,
+    fontSize: scaleFont(13),
+    lineHeight: scaleFont(20),
+    color: '#9ca3af',
+    textAlign: 'center',
   },
   bottomSpacer: {
     height: 20,
