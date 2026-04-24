@@ -49,11 +49,7 @@ import { EmergencyProvider } from './src/contexts/EmergencyContext';
 
 import HomeScreen from './src/screens/HomeScreen';
 import SearchScreen from './src/screens/SearchScreen';
-import PublishScreen from './src/screens/PublishScreen';
-import MessagesScreen from './src/screens/MessagesScreen';
 import PrivateConversationScreen from './src/screens/PrivateConversationScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
-import QuestionDetailScreen from './src/screens/QuestionDetailScreen';
 import PaidUsersListScreen from './src/screens/PaidUsersListScreen';
 import FollowScreen from './src/screens/FollowScreen';
 import FansScreen from './src/screens/FansScreen';
@@ -63,9 +59,6 @@ import IncomeRankingScreen from './src/screens/IncomeRankingScreen';
 import RewardRankingScreen from './src/screens/RewardRankingScreen';
 import QuestionRankingScreen from './src/screens/QuestionRankingScreen';
 import HeroRankingScreen from './src/screens/HeroRankingScreen';
-import GroupChatScreen from './src/screens/GroupChatScreen';
-import AnswerDetailScreen from './src/screens/AnswerDetailScreen';
-import SupplementDetailScreen from './src/screens/SupplementDetailScreen';
 import ActivityScreen from './src/screens/ActivityScreen';
 import ActivityDetailScreen from './src/screens/ActivityDetailScreen';
 import LoginScreen from './src/screens/LoginScreen';
@@ -73,9 +66,6 @@ import QuestionActivityListScreen from './src/screens/QuestionActivityListScreen
 import MyActivitiesScreen from './src/screens/MyActivitiesScreen';
 import MyTeamsScreen from './src/screens/MyTeamsScreen';
 import MyGroupsScreen from './src/screens/MyGroupsScreen';
-import TeamDetailScreen from './src/screens/TeamDetailScreen';
-import QuestionTeamsScreen from './src/screens/QuestionTeamsScreen';
-import SettingsScreen from './src/screens/SettingsScreen';
 import WisdomIndexScreen from './src/screens/WisdomIndexScreen';
 import WisdomExamScreen from './src/screens/WisdomExamScreen';
 import ExamHistoryScreen from './src/screens/ExamHistoryScreen';
@@ -93,7 +83,6 @@ import AddRewardScreen from './src/screens/AddRewardScreen';
 import SuperLikePurchaseScreen from './src/screens/SuperLikePurchaseScreen';
 import SuperLikeHistoryScreen from './src/screens/SuperLikeHistoryScreen';
 import ContributorsScreen from './src/screens/ContributorsScreen';
-import PublicProfileScreen from './src/screens/PublicProfileScreen';
 import NetworkTestScreen from './src/screens/NetworkTestScreen';
 import DeviceInfoScreen from './src/screens/DeviceInfoScreen';
 import ChangePasswordScreen from './src/screens/ChangePasswordScreen';
@@ -103,7 +92,6 @@ import ApiDebugScreen from './src/screens/ApiDebugScreen';
 import FeedbackScreen from './src/screens/FeedbackScreen';
 import BlacklistScreen from './src/screens/BlacklistScreen';
 import WalletDetailScreen from './src/screens/WalletDetailScreen';
-import InterestOnboardingScreen from './src/screens/InterestOnboardingScreen';
 import { modalTokens } from './src/components/modalTokens';
 import {
   markInterestOnboardingCompleted,
@@ -134,6 +122,33 @@ const DEV_CONSOLE_ERROR_SILENCE_PATTERNS = [
 ];
 
 const APP_DEBUG_LOG_ENABLED = false;
+const ROOT_LAYOUT_READY_WATCHDOG_MS = 1200;
+const STARTUP_FONT_LOAD_TIMEOUT_MS = 2500;
+
+const getPublishScreen = () => require('./src/screens/PublishScreen').default;
+const getProfileScreen = () => require('./src/screens/ProfileScreen').default;
+const getMessagesScreen = () => require('./src/screens/MessagesScreen').default;
+const getQuestionDetailScreen = () => require('./src/screens/QuestionDetailScreen').default;
+const getSupplementDetailScreen = () => require('./src/screens/SupplementDetailScreen').default;
+const getGroupChatScreen = () => require('./src/screens/GroupChatScreen').default;
+const getAnswerDetailScreen = () => require('./src/screens/AnswerDetailScreen').default;
+const getQuestionTeamsScreen = () => require('./src/screens/QuestionTeamsScreen').default;
+const getTeamDetailScreen = () => require('./src/screens/TeamDetailScreen').default;
+const getSettingsScreen = () => require('./src/screens/SettingsScreen').default;
+const getPublicProfileScreen = () => require('./src/screens/PublicProfileScreen').default;
+const getInterestOnboardingScreen = () => require('./src/screens/InterestOnboardingScreen').default;
+const SafePublishScreen = createSafeLazyScreenSafe(getPublishScreen, '发布');
+const SafeProfileScreen = createSafeLazyScreenSafe(getProfileScreen, '个人中心');
+const SafeMessagesScreen = createSafeLazyScreenSafe(getMessagesScreen, '消息');
+const SafeQuestionDetailScreen = createSafeLazyScreenSafe(getQuestionDetailScreen, '问题详情');
+const SafeSupplementDetailScreen = createSafeLazyScreenSafe(getSupplementDetailScreen, '补充详情');
+const SafeGroupChatScreen = createSafeLazyScreenSafe(getGroupChatScreen, '问题群组');
+const SafeAnswerDetailScreen = createSafeLazyScreenSafe(getAnswerDetailScreen, '回答详情');
+const SafeQuestionTeamsScreen = createSafeLazyScreenSafe(getQuestionTeamsScreen, '问题组队');
+const SafeTeamDetailScreen = createSafeLazyScreenSafe(getTeamDetailScreen, '团队详情');
+const SafeSettingsScreen = createSafeLazyScreenSafe(getSettingsScreen, '设置');
+const SafePublicProfileScreen = createSafeLazyScreenSafe(getPublicProfileScreen, '公开主页');
+const SafeInterestOnboardingScreen = createSafeLazyScreenSafe(getInterestOnboardingScreen, '兴趣引导');
 
 const appDebugLog = (...args) => {
   if (__DEV__ && APP_DEBUG_LOG_ENABLED) {
@@ -296,6 +311,130 @@ function LaunchLoadingScreen({ title, message, notice = '' }) {
       </View>
     </View>
   );
+}
+
+function ScreenLoadFallback({ title = '页面加载失败', message = '当前页面暂时无法打开，请返回后重试。' }) {
+  return (
+    <View style={startupStyles.screen}>
+      <View style={launchLoadingStyles.card}>
+        <Ionicons name="alert-circle-outline" size={36} color="#ef4444" />
+        <Text style={launchLoadingStyles.title}>{title}</Text>
+        <Text style={launchLoadingStyles.message}>{message}</Text>
+      </View>
+    </View>
+  );
+}
+
+function createSafeLazyScreen(resolveScreen, screenLabel) {
+  const SafeLazyScreen = function SafeLazyScreen(props) {
+    let ScreenComponent = null;
+
+    try {
+      ScreenComponent = resolveScreen();
+    } catch (error) {
+      console.error(`Failed to load ${screenLabel}:`, error);
+    }
+
+    if (!ScreenComponent) {
+      return (
+        <ScreenLoadFallback
+          title={`${screenLabel}加载失败`}
+          message="页面资源恢复异常，请返回上一页后重试。"
+        />
+      );
+    }
+
+    try {
+      return <ScreenComponent {...props} />;
+    } catch (error) {
+      console.error(`Failed to render ${screenLabel}:`, error);
+      return (
+        <ScreenLoadFallback
+          title={`${screenLabel}暂时不可用`}
+          message="页面渲染遇到异常，请稍后再次进入。"
+        />
+      );
+    }
+  };
+
+  SafeLazyScreen.displayName = `SafeLazyScreen(${screenLabel})`;
+  return SafeLazyScreen;
+}
+
+function ScreenLoadFallbackSafe({
+  title = 'Page unavailable',
+  message = 'This screen could not be opened. Please go back and try again.',
+}) {
+  return (
+    <View style={startupStyles.screen}>
+      <View style={launchLoadingStyles.card}>
+        <Ionicons name="alert-circle-outline" size={36} color="#ef4444" />
+        <Text style={launchLoadingStyles.title}>{title}</Text>
+        <Text style={launchLoadingStyles.message}>{message}</Text>
+      </View>
+    </View>
+  );
+}
+
+class ScreenRenderBoundarySafe extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error(`Screen render failed: ${this.props.screenLabel}`, error, errorInfo);
+  }
+
+  render() {
+    const { error } = this.state;
+    const { children, screenLabel } = this.props;
+
+    if (error) {
+      return (
+        <ScreenLoadFallbackSafe
+          title={`${screenLabel} unavailable`}
+          message="A rendering problem occurred on this screen. Please go back and try again."
+        />
+      );
+    }
+
+    return children;
+  }
+}
+
+function createSafeLazyScreenSafe(resolveScreen, screenLabel) {
+  const SafeLazyScreen = function SafeLazyScreen(props) {
+    let ScreenComponent = null;
+
+    try {
+      ScreenComponent = resolveScreen();
+    } catch (error) {
+      console.error(`Failed to load ${screenLabel}:`, error);
+    }
+
+    if (!ScreenComponent) {
+      return (
+        <ScreenLoadFallbackSafe
+          title={`${screenLabel} failed to load`}
+          message="The screen module could not be restored. Please return and try again."
+        />
+      );
+    }
+
+    return (
+      <ScreenRenderBoundarySafe screenLabel={screenLabel}>
+        <ScreenComponent {...props} />
+      </ScreenRenderBoundarySafe>
+    );
+  };
+
+  SafeLazyScreen.displayName = `SafeLazyScreen(${screenLabel})`;
+  return SafeLazyScreen;
 }
 
 // Emergency Help Modal Component
@@ -617,6 +756,10 @@ const modalStyles = StyleSheet.create({
 
 function MainTabs({ onLogout }) {
   const insets = useSafeAreaInsets();
+  const renderProfileTab = React.useCallback(
+    (props) => <SafeProfileScreen {...props} onLogout={onLogout} />,
+    [onLogout]
+  );
   
   // 定义固定的 tab 名称（使用英文 key）
   const TAB_NAMES = {
@@ -674,10 +817,10 @@ function MainTabs({ onLogout }) {
     >
       <Tab.Screen name={TAB_NAMES.HOME} component={HomeScreen} />
       <Tab.Screen name={TAB_NAMES.ACTIVITY} component={ActivityScreen} />
-      <Tab.Screen name={TAB_NAMES.PUBLISH} component={PublishScreen} />
+      <Tab.Screen name={TAB_NAMES.PUBLISH} component={SafePublishScreen} />
       <Tab.Screen name={TAB_NAMES.EMERGENCY} component={EmergencyScreen} />
       <Tab.Screen name={TAB_NAMES.PROFILE}>
-        {(props) => <ProfileScreen {...props} onLogout={onLogout} />}
+        {renderProfileTab}
       </Tab.Screen>
     </Tab.Navigator>
   );
@@ -725,6 +868,14 @@ function AppContent() {
     nativeSplashStateRef.current = 'hiding';
 
     try {
+      await new Promise((resolve) => {
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(() => resolve());
+          return;
+        }
+
+        setTimeout(resolve, 0);
+      });
       await SplashScreen.hideAsync();
       nativeSplashStateRef.current = 'hidden';
     } catch (error) {
@@ -736,6 +887,20 @@ function AppContent() {
   const handleRootLayout = React.useCallback(() => {
     setRootLayoutReady(true);
   }, []);
+
+  useEffect(() => {
+    if (rootLayoutReady) {
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      console.warn(
+        'Root layout readiness watchdog triggered; keeping native splash visible until the first real layout is rendered'
+      );
+    }, ROOT_LAYOUT_READY_WATCHDOG_MS);
+
+    return () => clearTimeout(timer);
+  }, [rootLayoutReady]);
 
   useEffect(() => {
     if (!canHideSplashScreen || nativeSplashStateRef.current === 'hidden') {
@@ -870,9 +1035,21 @@ function AppContent() {
   useEffect(() => {
     appDebugLog('🔤 开始加载字体...');
     updateStartupStatus('正在准备应用', '正在加载界面资源，请稍候...');
+    let isMounted = true;
+    let fontWatchdogTimer = null;
+
     async function loadFonts() {
       try {
         appDebugLog('🔤 正在加载字体...');
+        fontWatchdogTimer = setTimeout(() => {
+          if (!isMounted) {
+            return;
+          }
+
+          console.warn('Font loading watchdog triggered, continuing startup with system fonts');
+          setFontsLoaded(true);
+        }, STARTUP_FONT_LOAD_TIMEOUT_MS);
+
         await Font.loadAsync({
           ...Ionicons.font,
           // 预加载 Font Awesome 5 字体
@@ -881,14 +1058,30 @@ function AppContent() {
           'FontAwesome5_Brands': require('react-native-vector-icons/Fonts/FontAwesome5_Brands.ttf'),
         });
         appDebugLog('✅ 字体加载完成');
-        setFontsLoaded(true);
+        if (isMounted) {
+          setFontsLoaded(true);
+        }
       } catch (error) {
         console.error('❌ 字体加载失败:', error);
         // 即使加载失败也继续，避免卡住
-        setFontsLoaded(true);
+        if (isMounted) {
+          setFontsLoaded(true);
+        }
+      } finally {
+        if (fontWatchdogTimer) {
+          clearTimeout(fontWatchdogTimer);
+          fontWatchdogTimer = null;
+        }
       }
     }
     loadFonts();
+
+    return () => {
+      isMounted = false;
+      if (fontWatchdogTimer) {
+        clearTimeout(fontWatchdogTimer);
+      }
+    };
   }, []);
 
   // 初始化服务和检查登录状态
@@ -1461,7 +1654,7 @@ function AppContent() {
           <SafeAreaProvider>
             <StatusBar style="dark" />
             {updateChecker}
-            <InterestOnboardingScreen
+            <SafeInterestOnboardingScreen
               userId={interestOnboardingUserId}
               onComplete={handleInterestOnboardingComplete}
               onSkip={handleInterestOnboardingSkip}
@@ -1518,9 +1711,9 @@ function AppContent() {
               {() => <MainTabs onLogout={handleLogout} />}
             </Stack.Screen>
           <Stack.Screen name="Search" component={SearchScreen} />
-          <Stack.Screen name="QuestionDetail" component={QuestionDetailScreen} />
+          <Stack.Screen name="QuestionDetail" component={SafeQuestionDetailScreen} />
           <Stack.Screen name="PaidUsersList" component={PaidUsersListScreen} options={{ title: '付费明细' }} />
-          <Stack.Screen name="SupplementDetail" component={SupplementDetailScreen} />
+          <Stack.Screen name="SupplementDetail" component={SafeSupplementDetailScreen} />
           <Stack.Screen name="QuestionActivityList" component={QuestionActivityListScreen} />
           <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
         <Stack.Screen name="Follow" component={FollowScreen} />
@@ -1531,17 +1724,17 @@ function AppContent() {
         <Stack.Screen name="RewardRanking" component={RewardRankingScreen} />
         <Stack.Screen name="QuestionRanking" component={QuestionRankingScreen} />
         <Stack.Screen name="HeroRanking" component={HeroRankingScreen} />
-        <Stack.Screen name="Messages" component={MessagesScreen} />
+        <Stack.Screen name="Messages" component={SafeMessagesScreen} />
         <Stack.Screen name="EmergencyList" component={EmergencyListScreen} />
         <Stack.Screen name="PrivateConversation" component={PrivateConversationScreen} />
-        <Stack.Screen name="GroupChat" component={GroupChatScreen} />
-        <Stack.Screen name="AnswerDetail" component={AnswerDetailScreen} />
+        <Stack.Screen name="GroupChat" component={SafeGroupChatScreen} />
+        <Stack.Screen name="AnswerDetail" component={SafeAnswerDetailScreen} />
         <Stack.Screen name="MyActivities" component={MyActivitiesScreen} />
         <Stack.Screen name="MyTeams" component={MyTeamsScreen} />
         <Stack.Screen name="MyGroups" component={MyGroupsScreen} />
-        <Stack.Screen name="QuestionTeams" component={QuestionTeamsScreen} />
-        <Stack.Screen name="TeamDetail" component={TeamDetailScreen} />
-        <Stack.Screen name="Settings" component={SettingsScreen} />
+        <Stack.Screen name="QuestionTeams" component={SafeQuestionTeamsScreen} />
+        <Stack.Screen name="TeamDetail" component={SafeTeamDetailScreen} />
+        <Stack.Screen name="Settings" component={SafeSettingsScreen} />
         <Stack.Screen name="ChannelManage" component={ChannelManageScreen} />
         <Stack.Screen name="WisdomIndex" component={WisdomIndexScreen} />
         <Stack.Screen name="WisdomExam" component={WisdomExamScreen} />
@@ -1557,7 +1750,7 @@ function AppContent() {
         <Stack.Screen name="SuperLikePurchase" component={SuperLikePurchaseScreen} />
         <Stack.Screen name="SuperLikeHistory" component={SuperLikeHistoryScreen} />
         <Stack.Screen name="Contributors" component={ContributorsScreen} />
-        <Stack.Screen name="PublicProfile" component={PublicProfileScreen} />
+        <Stack.Screen name="PublicProfile" component={SafePublicProfileScreen} />
         <Stack.Screen name="DeviceInfo" component={DeviceInfoScreen} />
         <Stack.Screen name="NetworkTest" component={NetworkTestScreen} />
         <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as Updates from 'expo-updates';
+import { InteractionManager } from 'react-native';
 import { showAppAlert } from '../utils/appAlert';
 
 const UpdateChecker = ({ enabled = true }) => {
@@ -11,12 +12,20 @@ const UpdateChecker = ({ enabled = true }) => {
       return;
     }
 
-    const timer = setTimeout(() => {
-      hasCheckedRef.current = true;
-      checkForUpdates();
-    }, 1500);
+    let timer = null;
+    const interactionTask = InteractionManager.runAfterInteractions(() => {
+      timer = setTimeout(() => {
+        hasCheckedRef.current = true;
+        checkForUpdates();
+      }, 1500);
+    });
 
-    return () => clearTimeout(timer);
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+      interactionTask.cancel();
+    };
   }, [enabled]);
 
   const fetchAndApplyUpdate = async () => {

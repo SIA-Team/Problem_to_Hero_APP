@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Pressable,
   TextInput,
   StyleSheet,
   ScrollView,
@@ -15,6 +14,7 @@ import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
 import ComposerModalScaffold from './ComposerModalScaffold';
 import ComposerImageGrid from './ComposerImageGrid';
+import ComposerAlertOverlay from './ComposerAlertOverlay';
 import MentionSuggestionsPanel from './MentionSuggestionsPanel';
 import { showToast } from '../utils/toast';
 import { modalTokens } from './modalTokens';
@@ -211,7 +211,7 @@ const WriteCommentModal = ({
                   renderInPlace
                 />
               ) : null}
-              {composerAlert ? (
+              {composerAlert ? (false ? (
                 <View style={styles.composerAlertOverlay}>
                   <Pressable
                     style={StyleSheet.absoluteFill}
@@ -231,7 +231,13 @@ const WriteCommentModal = ({
                     </TouchableOpacity>
                   </View>
                 </View>
-              ) : null}
+              ) : (
+                <ComposerAlertOverlay
+                  title={composerAlert.title}
+                  message={composerAlert.message}
+                  onClose={closeComposerAlert}
+                />
+              )) : null}
             </>
           ) : null
         }

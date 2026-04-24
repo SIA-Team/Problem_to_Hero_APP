@@ -4,6 +4,7 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   TextInput,
   StyleSheet,
   useWindowDimensions,
@@ -13,6 +14,7 @@ import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
 import ComposerModalScaffold from './ComposerModalScaffold';
 import ComposerImageGrid from './ComposerImageGrid';
+import ComposerAlertOverlay from './ComposerAlertOverlay';
 import MentionSuggestionsPanel from './MentionSuggestionsPanel';
 import { showToast } from '../utils/toast';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
@@ -30,6 +32,8 @@ import {
 import { resolveComposerScrollPadding } from '../utils/composerLayout';
 import useComposerScrollManager from '../hooks/useComposerScrollManager';
 import { scaleFont } from '../utils/responsive';
+
+const COMPOSER_ALERT_CONFIRM_TEXT = '我知道了';
 
 export default function WriteAnswerModal({
   visible,
@@ -59,6 +63,7 @@ export default function WriteAnswerModal({
   const keyboardVisible = useKeyboardVisibility(visible);
   const { height: answerWindowHeight } = useWindowDimensions();
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const [composerAlert, setComposerAlert] = useState(null);
   const [inputTop, setInputTop] = useState(0);
   const answerInputRef = React.useRef(null);
   const { recommendedMentionUsers } = useRecommendedMentionUsers({
@@ -125,6 +130,7 @@ export default function WriteAnswerModal({
   useEffect(() => {
     if (!visible) {
       setShowImagePicker(false);
+      setComposerAlert(null);
       inputFocusedRef.current = false;
     }
   }, [visible]);
@@ -164,26 +170,78 @@ export default function WriteAnswerModal({
     triggerToolbarAction('mention');
   };
 
+  const closeComposerAlert = () => {
+    setComposerAlert(null);
+  };
+
+  const handleSubmitAnswer = async () => {
+    setComposerAlert(null);
+
+    const submitResult = await Promise.resolve(onSubmit?.());
+
+    if (submitResult && typeof submitResult === 'object' && submitResult.ok === false) {
+      setComposerAlert({
+        title: submitResult.title || '提示',
+        message: submitResult.message || '',
+      });
+    }
+  };
+
   return (
     <>
       <ComposerModalScaffold
         visible={visible}
         onClose={onClose}
         title={title}
-        onSubmit={onSubmit}
+        onSubmit={handleSubmitAnswer}
         submitText={publishText}
         submitDisabled={!canSubmit}
         footerPaddingBottom={bottomSafeInset + 8}
         footerBottomInset={bottomSafeInset}
         footerHidden={Boolean(pendingToolbarAction)}
-        overlayContent={showImagePicker ? (
-          <ImagePickerSheet
-            visible={showImagePicker}
-            onClose={() => setShowImagePicker(false)}
-            onImageSelected={handleAddImage}
-            renderInPlace
-          />
-        ) : null}
+        overlayContent={
+          showImagePicker || composerAlert ? (
+            <>
+              {showImagePicker ? (
+                <ImagePickerSheet
+                  visible={showImagePicker}
+                  onClose={() => setShowImagePicker(false)}
+                  onImageSelected={handleAddImage}
+                  renderInPlace
+                />
+              ) : null}
+              {composerAlert ? (false ? (
+                <View style={styles.composerAlertOverlay}>
+                  <Pressable
+                    style={StyleSheet.absoluteFill}
+                    onPress={closeComposerAlert}
+                  />
+                  <View style={styles.composerAlertCard}>
+                    <Text style={styles.composerAlertTitle}>{composerAlert.title}</Text>
+                    {composerAlert.message ? (
+                      <Text style={styles.composerAlertMessage}>{composerAlert.message}</Text>
+                    ) : null}
+                    <TouchableOpacity
+                      style={styles.composerAlertButton}
+                      onPress={closeComposerAlert}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.composerAlertButtonText}>
+                        {COMPOSER_ALERT_CONFIRM_TEXT}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <ComposerAlertOverlay
+                  title={composerAlert.title}
+                  message={composerAlert.message}
+                  onClose={closeComposerAlert}
+                />
+              )) : null}
+            </>
+          ) : null
+        }
         footerLeft={
           <View style={styles.answerToolsLeft}>
             <TouchableOpacity style={styles.answerToolItem} onPress={handleOpenImagePicker}>
@@ -405,5 +463,57 @@ const styles = StyleSheet.create({
   answerWordCount: {
     fontSize: scaleFont(13),
     color: '#999',
+  },
+  composerAlertOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 80,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.32)',
+  },
+  composerAlertCard: {
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  composerAlertTitle: {
+    fontSize: scaleFont(18),
+    lineHeight: scaleFont(24),
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  composerAlertMessage: {
+    fontSize: scaleFont(15),
+    lineHeight: scaleFont(22),
+    color: '#4b5563',
+    marginBottom: 16,
+  },
+  composerAlertButton: {
+    alignSelf: 'flex-end',
+    minWidth: 88,
+    height: 40,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ef4444',
+  },
+  composerAlertButtonText: {
+    fontSize: scaleFont(14),
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });

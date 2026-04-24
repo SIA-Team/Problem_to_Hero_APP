@@ -13,7 +13,8 @@ import WriteCommentModal from '../components/WriteCommentModal';
 import EmptyState from '../components/EmptyState';
 import { toast } from '../utils/toast';
 import { useTranslation } from '../i18n/withTranslation';
-import { showAppAlert, showPublishFailureAlert } from '../utils/appAlert';
+import { showAppAlert, showPublishBlockedAlert } from '../utils/appAlert';
+import { sanitizeUserFacingMessage } from '../utils/userFacingMessage';
 import { normalizeEntityId } from '../utils/jsonLongId';
 import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
@@ -208,6 +209,7 @@ export default function AnswerDetailScreen({
   const [supplementLoading, setSupplementLoading] = useState(false);
   const [supplementError, setSupplementError] = useState(null);
   const [supplementPagination, setSupplementPagination] = useState(INITIAL_SUPPLEMENT_PAGINATION);
+  const [supplementAnswerPublishBlockedMessage, setSupplementAnswerPublishBlockedMessage] = useState('');
 
   // 鍥炵瓟鏁版嵁鐘舵€?- 鐢ㄤ簬绠＄悊瀹屾暣鐨勫洖绛旀暟鎹?
   const [answerData, setAnswerData] = useState(null);
@@ -395,6 +397,7 @@ export default function AnswerDetailScreen({
     setSupplementAnswers([]);
     setSupplementError(null);
     setSupplementPagination(INITIAL_SUPPLEMENT_PAGINATION);
+    setSupplementAnswerPublishBlockedMessage('');
     setAnswerCommentListState(INITIAL_COMMENT_LIST_STATE);
     setAnswerCommentRepliesMap({});
     setCurrentAnswerCommentId(null);
@@ -508,6 +511,8 @@ export default function AnswerDetailScreen({
     };
   };
   const normalizeSupplementAnswerList = (rows = []) => rows.map(normalizeSupplementAnswerItem);
+  const isSupplementAnswerPublishBlockedMessage = message =>
+    typeof message === 'string' && message.includes('不允许') && message.includes('回答补充');
   const buildSupplementAnswerMutationResult = (currentSupplement = {}, responseData, fallbackValues = {}) => {
     const payload = responseData && typeof responseData === 'object' && !Array.isArray(responseData) ? responseData : {};
     const liked = typeof responseData === 'boolean' && fallbackValues.liked !== undefined ? responseData : payload.liked ?? payload.isLiked ?? fallbackValues.liked ?? currentSupplement.liked ?? false;
@@ -1008,9 +1013,17 @@ export default function AnswerDetailScreen({
     return currentComment?.id ?? commentId;
   };
   const isSupplementTab = activeTab === 0;
+  const supplementAnswerPublishBlockedReason = supplementAnswerPublishBlockedMessage;
   const bottomComposerPlaceholder = isSupplementTab ? t('screens.answerDetail.actions.supplementAnswer') : t('screens.answerDetail.placeholders.writeComment');
   const handleOpenBottomComposer = () => {
     if (isSupplementTab) {
+      if (supplementAnswerPublishBlockedReason) {
+        showPublishBlockedAlert(supplementAnswerPublishBlockedReason, {
+          title: '暂时无法补充回答',
+          fallbackMessage: '当前回答暂不支持继续补充，请稍后再试。',
+        });
+        return;
+      }
       setShowSupplementAnswerModal(true);
       return;
     }
@@ -1028,7 +1041,7 @@ export default function AnswerDetailScreen({
     const parentId = Number(answerCommentTarget?.parentId ?? 0) || 0;
     if (!targetId) {
       toast.error(t('screens.answerDetail.alerts.operationFailed'));
-      return;
+      return false;
     }
     try {
       const payload = {
@@ -1076,18 +1089,29 @@ export default function AnswerDetailScreen({
             setShowAnswerCommentReplyModal(true);
           }
         }
+        return true;
       } else {
-        showPublishFailureAlert(response?.msg, {
+        return {
+          ok: false,
           title: '评论发布失败',
-          fallbackMessage: t('screens.answerDetail.alerts.networkError'),
-        });
+          message: sanitizeUserFacingMessage(
+            response?.msg,
+            t('screens.answerDetail.alerts.networkError'),
+            'error'
+          ),
+        };
       }
     } catch (error) {
       console.error('发布回答评论失败:', error);
-      showPublishFailureAlert(error, {
+      return {
+        ok: false,
         title: '评论发布失败',
-        fallbackMessage: t('screens.answerDetail.alerts.networkError'),
-      });
+        message: sanitizeUserFacingMessage(
+          error,
+          t('screens.answerDetail.alerts.networkError'),
+          'error'
+        ),
+      };
     }
   };
   const handleSubmitArbitration = () => {
@@ -2083,7 +2107,7 @@ export default function AnswerDetailScreen({
     const parentId = Number(supplementCommentTarget?.parentId ?? 0) || 0;
     if (!targetId) {
       toast.error(t('screens.answerDetail.alerts.operationFailed'));
-      return;
+      return false;
     }
     try {
       const payload = {
@@ -2125,18 +2149,29 @@ export default function AnswerDetailScreen({
         } else {
           setShowSupplementCommentListModal(true);
         }
+        return true;
       } else {
-        showPublishFailureAlert(response?.msg, {
+        return {
+          ok: false,
           title: '评论发布失败',
-          fallbackMessage: t('screens.answerDetail.alerts.networkError'),
-        });
+          message: sanitizeUserFacingMessage(
+            response?.msg,
+            t('screens.answerDetail.alerts.networkError'),
+            'error'
+          ),
+        };
       }
     } catch (error) {
       console.error('发布补充回答评论失败:', error);
-      showPublishFailureAlert(error, {
+      return {
+        ok: false,
         title: '评论发布失败',
-        fallbackMessage: t('screens.answerDetail.alerts.networkError'),
-      });
+        message: sanitizeUserFacingMessage(
+          error,
+          t('screens.answerDetail.alerts.networkError'),
+          'error'
+        ),
+      };
     }
   };
   const handleSupplementCommentsLoadMore = () => {
@@ -3154,7 +3189,11 @@ export default function AnswerDetailScreen({
       </Modal>
 
       {/* 琛ュ厖鍥炵瓟寮圭獥 */}
-      <SupplementAnswerModal visible={showSupplementAnswerModal} onClose={() => setShowSupplementAnswerModal(false)} answer={answer} questionId={route?.params?.questionId || answer?.questionId} onSuccess={() => {
+      <SupplementAnswerModal visible={showSupplementAnswerModal} onClose={() => setShowSupplementAnswerModal(false)} answer={answer} questionId={route?.params?.questionId || answer?.questionId} blockedReason={supplementAnswerPublishBlockedReason} onPublishBlocked={message => {
+      if (isSupplementAnswerPublishBlockedMessage(message)) {
+        setSupplementAnswerPublishBlockedMessage(message);
+      }
+    }} onSuccess={() => {
       // 琛ュ厖鍥炵瓟鍙戝竷鎴愬姛鍚庡埛鏂板垪琛?
       fetchSupplementAnswers(true);
     }} />

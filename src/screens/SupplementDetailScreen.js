@@ -11,7 +11,7 @@ import WriteAnswerModal from '../components/WriteAnswerModal';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import { showToast } from '../utils/toast';
-import { showPublishFailureAlert } from '../utils/appAlert';
+import { sanitizeUserFacingMessage } from '../utils/userFacingMessage';
 import { formatNumber } from '../utils/numberFormatter';
 import { formatTime } from '../utils/timeFormatter';
 import { normalizeEntityId } from '../utils/jsonLongId';
@@ -1710,7 +1710,7 @@ export default function SupplementDetailScreen({
 
     if (!targetId) {
       showToast('补充问题ID不存在', 'error');
-      return;
+      return false;
     }
 
     try {
@@ -1781,19 +1781,29 @@ export default function SupplementDetailScreen({
         }
 
         showToast(t('screens.supplementDetail.alerts.commentPublished'), 'success');
-        return;
+        return true;
       }
 
-      showPublishFailureAlert(response?.msg, {
+      return {
+        ok: false,
         title: '评论发布失败',
-        fallbackMessage: '评论发布失败，请稍后重试',
-      });
+        message: sanitizeUserFacingMessage(
+          response?.msg,
+          '评论发布失败，请稍后重试',
+          'error'
+        ),
+      };
     } catch (error) {
       console.error('发布补充问题评论失败:', error);
-      showPublishFailureAlert(error, {
+      return {
+        ok: false,
         title: '评论发布失败',
-        fallbackMessage: '评论发布失败，请稍后重试',
-      });
+        message: sanitizeUserFacingMessage(
+          error,
+          '评论发布失败，请稍后重试',
+          'error'
+        ),
+      };
     }
   };
   const handleCommentLike = async commentId => {
@@ -2218,19 +2228,29 @@ export default function SupplementDetailScreen({
       if (response?.code === 200) {
         showToast('回答发布成功', 'success');
         closeAnswerModal();
-        return;
+        return true;
       }
 
-      showPublishFailureAlert(response?.msg, {
+      return {
+        ok: false,
         title: '回答发布失败',
-        fallbackMessage: '回答发布失败，请稍后重试',
-      });
+        message: sanitizeUserFacingMessage(
+          response?.msg,
+          '回答发布失败，请稍后重试',
+          'error'
+        ),
+      };
     } catch (error) {
       console.error('补充问题详情页发布回答失败:', error);
-      showPublishFailureAlert(error, {
+      return {
+        ok: false,
         title: '回答发布失败',
-        fallbackMessage: '回答发布失败，请稍后重试',
-      });
+        message: sanitizeUserFacingMessage(
+          error,
+          '回答发布失败，请稍后重试',
+          'error'
+        ),
+      };
     } finally {
       setAnswerSubmitting(false);
     }
@@ -2318,19 +2338,29 @@ export default function SupplementDetailScreen({
         });
         setSortFilter(SORT_KEYS.LATEST);
         closeAnswerModal();
-        return;
+        return true;
       }
 
-      showPublishFailureAlert(response?.msg, {
+      return {
+        ok: false,
         title: '回答发布失败',
-        fallbackMessage: '回答发布失败，请稍后重试',
-      });
+        message: sanitizeUserFacingMessage(
+          response?.msg,
+          '回答发布失败，请稍后重试',
+          'error'
+        ),
+      };
     } catch (error) {
       console.error('琛ュ厖闂璇︽儏椤靛彂甯冨洖绛斿け璐?', error);
-      showPublishFailureAlert(error, {
+      return {
+        ok: false,
         title: '回答发布失败',
-        fallbackMessage: '回答发布失败，请稍后重试',
-      });
+        message: sanitizeUserFacingMessage(
+          error,
+          '回答发布失败，请稍后重试',
+          'error'
+        ),
+      };
     } finally {
       setAnswerSubmitting(false);
     }

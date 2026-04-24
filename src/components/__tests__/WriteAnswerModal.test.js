@@ -1,6 +1,6 @@
 import React from 'react';
 import renderer from 'react-test-renderer';
-import { ScrollView } from 'react-native';
+import { ScrollView, TouchableOpacity } from 'react-native';
 import WriteAnswerModal from '../WriteAnswerModal';
 import useKeyboardVisibility from '../../hooks/useKeyboardVisibility';
 import useMentionComposer from '../../hooks/useMentionComposer';
@@ -14,11 +14,14 @@ jest.mock('../ImagePickerSheet', () => 'ImagePickerSheet');
 jest.mock('../MentionSuggestionsPanel', () => 'MentionSuggestionsPanel');
 jest.mock('../ComposerModalScaffold', () => {
   const React = require('react');
-  const { View } = require('react-native');
+  const { View, TouchableOpacity, Text } = require('react-native');
 
-  return function MockComposerModalScaffold({ children, overlayContent }) {
+  return function MockComposerModalScaffold({ children, overlayContent, onSubmit }) {
     return (
       <View>
+        <TouchableOpacity onPress={onSubmit}>
+          <Text>发布</Text>
+        </TouchableOpacity>
         {children}
         {overlayContent}
       </View>
@@ -174,5 +177,37 @@ describe('WriteAnswerModal', () => {
         }),
       }),
     ]);
+  });
+
+  it('renders publish failures inside the answer composer instead of behind the modal', async () => {
+    let tree;
+    let publishButton;
+
+    renderer.act(() => {
+      tree = renderer.create(
+        <WriteAnswerModal
+          visible
+          onClose={jest.fn()}
+          onSubmit={jest.fn(async () => ({
+            ok: false,
+            title: '回答发布失败',
+            message: '回答发布失败，请稍后重试',
+          }))}
+          onChangeText={jest.fn()}
+          text="测试回答"
+        />
+      );
+    });
+
+    publishButton = tree.root.findAllByType(TouchableOpacity)[0];
+
+    await renderer.act(async () => {
+      await publishButton.props.onPress();
+    });
+
+    expect(tree.root.findAllByProps({ children: '回答发布失败' }).length).toBeGreaterThan(0);
+    expect(
+      tree.root.findAllByProps({ children: '回答发布失败，请稍后重试' }).length
+    ).toBeGreaterThan(0);
   });
 });

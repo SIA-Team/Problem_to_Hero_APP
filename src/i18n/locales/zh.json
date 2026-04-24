@@ -779,16 +779,64 @@
         "facebook": "Facebook"
       },
       "search": {
-        "placeholder": "搜索用户..."
+        "placeholder": "搜索用户",
+        "placeholderTwitter": "搜索推特用户"
       },
       "selectedCount": "已选择 {count} 位用户",
       "userMeta": {
         "followers": "关注者",
         "members": "成员"
       },
+      "sections": {
+        "recommended": "推荐邀请",
+        "searchResults": "搜索结果",
+        "invited": "已邀请",
+        "initiated": "已发起邀请"
+      },
+      "empty": {
+        "noSearchResults": "没有找到匹配的用户",
+        "noLocalUsers": "暂无可邀请的本站用户",
+        "noInvited": "私信发送成功后，会显示在这里",
+        "noInvitedSearch": "没有匹配的邀请记录",
+        "noTwitterUsers": "没有匹配的推特用户",
+        "noTwitterInvites": "保存文案并跳转到推特后，会展示在这里",
+        "loading": "加载中..."
+      },
+      "status": {
+        "invited": "已邀请",
+        "retry": "待重试",
+        "initiated": "已发起"
+      },
+      "defaults": {
+        "teamName": "这个团队"
+      },
       "actions": {
         "cancel": "取消",
         "sendInvite": "发送邀请"
+      },
+      "editor": {
+        "title": "编辑推特邀请文案",
+        "placeholder": "请输入要分享到推特的文案，可手动添加 {name}",
+        "hint": "链接会自动追加到文案后面"
+      },
+      "messages": {
+        "localInviteGreeting": "{name}，你好：",
+        "localInviteIntro": "我是 {inviter}，想邀请你加入 Problem vs Hero 上的团队。",
+        "localInviteTeamLine": "团队：{teamName}",
+        "localInviteLinkLine": "查看团队：{shareUrl}",
+        "localInviteClosing": "如果你感兴趣，欢迎加入一起交流。",
+        "twitterInvite": "{target} {inviter} invited you to join the team \"{teamName}\" on Problem vs Hero."
+      },
+      "toasts": {
+        "missingTeamId": "缺少团队ID，暂时无法发起邀请",
+        "incompleteUser": "用户信息不完整，暂时无法邀请",
+        "localInvited": "已邀请",
+        "twitterInitiated": "已发起邀请",
+        "twitterBrowserFallback": "Twitter app 未安装，已打开网页版分享",
+        "serviceUnavailable": "本站私信服务暂不可用，请稍后重试邀请",
+        "sendFailed": "发送邀请失败",
+        "selectTwitterUser": "请选择要邀请的推特用户",
+        "openTwitterFailed": "无法打开 Twitter"
       },
       "alerts": {
         "successTitle": "邀请成功",

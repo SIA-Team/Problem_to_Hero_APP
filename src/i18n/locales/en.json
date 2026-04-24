@@ -1540,6 +1540,79 @@
         "confirm": "OK"
       }
     },
+    "inviteTeamMember": {
+      "title": "Invite Team Members",
+      "tabs": {
+        "platform": "Local Users",
+        "twitter": "Twitter",
+        "facebook": "Facebook"
+      },
+      "search": {
+        "placeholder": "Search users",
+        "placeholderTwitter": "Search Twitter users"
+      },
+      "selectedCount": "{count} users selected",
+      "userMeta": {
+        "followers": "followers",
+        "members": "members"
+      },
+      "sections": {
+        "recommended": "Recommended",
+        "searchResults": "Search Results",
+        "invited": "Invited",
+        "initiated": "Invites Started"
+      },
+      "empty": {
+        "noSearchResults": "No matching users found",
+        "noLocalUsers": "No local users available to invite",
+        "noInvited": "Successful private-message invites will appear here",
+        "noInvitedSearch": "No matching invite records",
+        "noTwitterUsers": "No matching Twitter users",
+        "noTwitterInvites": "Saved Twitter invites will appear here",
+        "loading": "Loading..."
+      },
+      "status": {
+        "invited": "Invited",
+        "retry": "Retry",
+        "initiated": "Initiated"
+      },
+      "defaults": {
+        "teamName": "this team"
+      },
+      "actions": {
+        "cancel": "Cancel",
+        "sendInvite": "Send Invite"
+      },
+      "editor": {
+        "title": "Edit Twitter invite text",
+        "placeholder": "Enter text to share on Twitter. You can mention {name}.",
+        "hint": "The link will be appended automatically"
+      },
+      "messages": {
+        "localInviteGreeting": "Hi {name},",
+        "localInviteIntro": "I am {inviter} and would like to invite you to a team on Problem vs Hero.",
+        "localInviteTeamLine": "Team: {teamName}",
+        "localInviteLinkLine": "View team: {shareUrl}",
+        "localInviteClosing": "If you are interested, come join us.",
+        "twitterInvite": "{target} {inviter} invited you to join the team \"{teamName}\" on Problem vs Hero."
+      },
+      "toasts": {
+        "missingTeamId": "Team ID is missing, so the invite cannot be started.",
+        "incompleteUser": "User information is incomplete.",
+        "localInvited": "Invited",
+        "twitterInitiated": "Invite started",
+        "twitterBrowserFallback": "Twitter app is unavailable, so web share was opened.",
+        "serviceUnavailable": "Private messaging is temporarily unavailable. Please try again later.",
+        "sendFailed": "Failed to send invite",
+        "selectTwitterUser": "Please select a Twitter user to invite.",
+        "openTwitterFailed": "Unable to open Twitter"
+      },
+      "alerts": {
+        "successTitle": "Invitation Sent",
+        "successMessage": "Invitation sent to {count} users",
+        "confirm": "OK"
+      }
+    },
     "inviteAnswer": {
       "title": "Invite to Answer",
       "tabs": {

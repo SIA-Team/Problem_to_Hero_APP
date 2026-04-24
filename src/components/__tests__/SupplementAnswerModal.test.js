@@ -1,10 +1,11 @@
 import React from 'react';
 import renderer from 'react-test-renderer';
-import { ScrollView } from 'react-native';
+import { ScrollView, TouchableOpacity } from 'react-native';
 import SupplementAnswerModal from '../SupplementAnswerModal';
 import useKeyboardVisibility from '../../hooks/useKeyboardVisibility';
 import useMentionComposer from '../../hooks/useMentionComposer';
 import { resolveComposerScrollPadding } from '../../utils/composerLayout';
+import answerApi from '../../services/api/answerApi';
 
 jest.mock('@expo/vector-icons', () => ({
   Ionicons: 'Ionicons',
@@ -15,11 +16,14 @@ jest.mock('../ImagePickerSheet', () => 'ImagePickerSheet');
 jest.mock('../MentionSuggestionsPanel', () => 'MentionSuggestionsPanel');
 jest.mock('../ComposerModalScaffold', () => {
   const React = require('react');
-  const { View } = require('react-native');
+  const { View, TouchableOpacity, Text } = require('react-native');
 
-  return function MockComposerModalScaffold({ children, overlayContent }) {
+  return function MockComposerModalScaffold({ children, overlayContent, onSubmit }) {
     return (
       <View>
+        <TouchableOpacity onPress={onSubmit}>
+          <Text>发布</Text>
+        </TouchableOpacity>
         {children}
         {overlayContent}
       </View>
@@ -63,9 +67,6 @@ jest.mock('../../utils/toast', () => ({
     error: jest.fn(),
     success: jest.fn(),
   },
-}));
-jest.mock('../../utils/appAlert', () => ({
-  showPublishFailureAlert: jest.fn(),
 }));
 jest.mock('../../utils/localInviteUsers', () => ({
   mergeLocalInviteUsers: jest.fn(users => users),
@@ -177,5 +178,45 @@ describe('SupplementAnswerModal', () => {
         }),
       }),
     ]);
+  });
+
+  it('renders publish failures inside the supplement composer instead of behind the modal', async () => {
+    const onClose = jest.fn();
+    let tree;
+    let textInput;
+    let publishButton;
+
+    answerApi.publishSupplementAnswer.mockRejectedValueOnce(new Error('\u8865\u5145\u56de\u7b54\u53d1\u5e03\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5'));
+
+    renderer.act(() => {
+      tree = renderer.create(
+        <SupplementAnswerModal
+          visible
+          onClose={onClose}
+          answer={answer}
+          onSuccess={jest.fn()}
+        />
+      );
+    });
+
+    textInput = tree.root.findByType('TextInput');
+
+    renderer.act(() => {
+      textInput.props.onChangeText('\u6d4b\u8bd5\u8865\u5145\u5185\u5bb9');
+    });
+
+    publishButton = tree.root.findAllByType(TouchableOpacity)[0];
+
+    await renderer.act(async () => {
+      await publishButton.props.onPress();
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(
+      tree.root.findAllByProps({ children: '\u6682\u65f6\u65e0\u6cd5\u8865\u5145\u56de\u7b54' }).length
+    ).toBeGreaterThan(0);
+    expect(
+      tree.root.findAllByProps({ children: '\u8865\u5145\u56de\u7b54\u53d1\u5e03\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5' }).length
+    ).toBeGreaterThan(0);
   });
 });

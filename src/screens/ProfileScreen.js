@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Alert, Share, Modal, TextInput, ActivityIndicator, AppState, KeyboardAvoidingView, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Alert, Share, Modal, TextInput, ActivityIndicator, AppState, KeyboardAvoidingView, Platform, Keyboard, Pressable } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets, initialWindowMetrics } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import Avatar from '../components/Avatar';
-import KeyboardDismissView from '../components/KeyboardDismissView';
 import SuperLikeBalance from '../components/SuperLikeBalance';
 import LogoutConfirmModal from '../components/LogoutConfirmModal';
 import { modalTokens } from '../components/modalTokens';
@@ -21,6 +20,7 @@ import questionApi from '../services/api/questionApi';
 import { showAppAlert } from '../utils/appAlert';
 import { openOfficialRechargePage } from '../utils/externalLinks';
 import { applyMockRecharge, getWalletBalanceWithMock } from '../utils/walletMock';
+import { resolveComposerTopInset } from '../utils/composerLayout';
 import { formatTime } from '../utils/timeFormatter';
 import { formatNumber } from '../utils/numberFormatter';
 import { isVisibleMyTeam, normalizeMyTeam } from '../utils/teamTransforms';
@@ -110,7 +110,15 @@ export default function ProfileScreen({
   const {
     t
   } = useTranslation();
+  const insets = useSafeAreaInsets();
   const bottomSafeInset = useBottomSafeInset(20);
+  const initialTopInset = initialWindowMetrics?.insets?.top ?? 0;
+  const profileModalTopSafeInset = resolveComposerTopInset({
+    platform: Platform.OS,
+    topInset: insets.top,
+    initialTopInset,
+    statusBarHeight: 0
+  });
   
   /**
    * 获取所在地的显示文本（只显示最后一级）
@@ -628,6 +636,7 @@ export default function ProfileScreen({
   const [showFavoritesModal, setShowFavoritesModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showDraftsModal, setShowDraftsModal] = useState(false);
+  const [draftsModalAlert, setDraftsModalAlert] = useState(null);
 
   // Initialize activeTab with translated value
   React.useEffect(() => {
@@ -961,6 +970,7 @@ export default function ProfileScreen({
       console.log('----------------------------------------');
 
       // 显示加载提示
+      setDraftsModalAlert(null);
       setShowDraftsModal(false);
 
       // 调用接口获取草稿完整数据
@@ -1007,14 +1017,44 @@ export default function ProfileScreen({
       showAppAlert(t('profile.draftLoadFailedTitle'), t('profile.draftLoadFailedNetwork'));
     }
   };
+  const closeDraftsModal = React.useCallback(() => {
+    setDraftsModalAlert(null);
+    setShowDraftsModal(false);
+  }, []);
+  const showDraftsModalAlert = React.useCallback((title, message = '', buttons = [], options = {}) => {
+    const normalizedButtons = Array.isArray(buttons) && buttons.length > 0 ? buttons : [{
+      text: t('common.ok')
+    }];
+    setDraftsModalAlert({
+      title,
+      message: typeof message === 'string' ? message : '',
+      buttons: normalizedButtons,
+      options: options || {}
+    });
+  }, [t]);
+  const handleDraftsModalAlertClose = React.useCallback(() => {
+    setDraftsModalAlert(null);
+  }, []);
+  const handleDraftsModalAlertButtonPress = React.useCallback(button => {
+    setDraftsModalAlert(null);
+    if (typeof button?.onPress === 'function') {
+      requestAnimationFrame(() => {
+        try {
+          button.onPress();
+        } catch (error) {
+          console.error('Drafts modal alert button onPress error:', error);
+        }
+      });
+    }
+  }, []);
   const handleDeleteDraft = item => {
-    showAppAlert(t('profile.deleteDraft'), t('profile.deleteDraftConfirm'), [{
+    showDraftsModalAlert(t('profile.deleteDraft'), t('profile.deleteDraftConfirm'), [{
       text: t('common.cancel'),
       style: 'cancel'
     }, {
       text: t('common.delete'),
       style: 'destructive',
-      onPress: () => showAppAlert(t('profile.draftDeleted'), t('profile.draftDeleted'))
+      onPress: () => showDraftsModalAlert(t('profile.draftDeleted'), t('profile.draftDeleted'))
     }]);
   };
   const handleLogout = () => {
@@ -1872,9 +1912,11 @@ export default function ProfileScreen({
       </ScrollView>
 
       {/* 我的收藏弹窗 */}
-      <Modal visible={showFavoritesModal} animationType="slide" statusBarTranslucent>
-        <SafeAreaView style={styles.listModal} edges={['top']}>
-          <View style={styles.listModalHeader}>
+      <Modal visible={showFavoritesModal} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={() => setShowFavoritesModal(false)}>
+        <View style={styles.listModal}>
+          <View style={[styles.listModalHeader, {
+            paddingTop: profileModalTopSafeInset + 8
+          }]}>
             <TouchableOpacity onPress={() => setShowFavoritesModal(false)}>
               <Ionicons name="arrow-back" size={24} color="#1f2937" />
             </TouchableOpacity>
@@ -1909,13 +1951,15 @@ export default function ProfileScreen({
                 <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
               </TouchableOpacity>)}
           </ScrollView>
-        </SafeAreaView>
+        </View>
       </Modal>
 
       {/* 浏览历史弹窗 */}
-      <Modal visible={showHistoryModal} animationType="slide" statusBarTranslucent>
-        <SafeAreaView style={styles.listModal} edges={['top']}>
-          <View style={styles.listModalHeader}>
+      <Modal visible={showHistoryModal} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={() => setShowHistoryModal(false)}>
+        <View style={styles.listModal}>
+          <View style={[styles.listModalHeader, {
+            paddingTop: profileModalTopSafeInset + 8
+          }]}>
             <TouchableOpacity onPress={() => setShowHistoryModal(false)}>
               <Ionicons name="arrow-back" size={24} color="#1f2937" />
             </TouchableOpacity>
@@ -1944,14 +1988,16 @@ export default function ProfileScreen({
                 <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
               </TouchableOpacity>)}
           </ScrollView>
-        </SafeAreaView>
+        </View>
       </Modal>
 
       {/* 我的草稿弹窗 */}
-      <Modal visible={showDraftsModal} animationType="slide" statusBarTranslucent>
-        <SafeAreaView style={styles.listModal} edges={['top']}>
-          <View style={styles.listModalHeader}>
-            <TouchableOpacity onPress={() => setShowDraftsModal(false)}>
+      <Modal visible={showDraftsModal} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={closeDraftsModal}>
+        <View style={styles.listModal}>
+          <View style={[styles.listModalHeader, {
+            paddingTop: profileModalTopSafeInset + 8
+          }]}>
+            <TouchableOpacity onPress={closeDraftsModal}>
               <Ionicons name="arrow-back" size={24} color="#1f2937" />
             </TouchableOpacity>
             <Text style={styles.listModalTitle}>{t('profile.myDrafts')}</Text>
@@ -1990,19 +2036,38 @@ export default function ProfileScreen({
                   </TouchableOpacity>
                 </View>)}
           </ScrollView>
-        </SafeAreaView>
+          {draftsModalAlert ? <View style={styles.inlineAlertOverlay}>
+              {draftsModalAlert.options?.cancelable !== false ? <Pressable style={StyleSheet.absoluteFill} onPress={handleDraftsModalAlertClose} /> : null}
+              <View style={styles.inlineAlertCard}>
+                <Text style={styles.inlineAlertTitle}>{draftsModalAlert.title || t('common.confirm')}</Text>
+                {draftsModalAlert.message ? <Text style={styles.inlineAlertMessage}>{draftsModalAlert.message}</Text> : null}
+                <View style={[styles.inlineAlertButtons, draftsModalAlert.buttons.length > 2 && styles.inlineAlertButtonsVertical]}>
+                  {draftsModalAlert.buttons.map((button, index) => {
+                const isCancel = button?.style === 'cancel';
+                const isDestructive = button?.style === 'destructive';
+                return <TouchableOpacity key={`${button?.text || 'button'}-${index}`} style={[styles.inlineAlertButton, draftsModalAlert.buttons.length > 2 && styles.inlineAlertButtonVertical, isCancel && styles.inlineAlertButtonCancel, isDestructive && styles.inlineAlertButtonDestructive]} onPress={() => handleDraftsModalAlertButtonPress(button)} activeOpacity={0.85}>
+                        <Text style={[styles.inlineAlertButtonText, isCancel && styles.inlineAlertButtonTextCancel, isDestructive && styles.inlineAlertButtonTextDestructive]}>
+                          {button?.text || t('common.ok')}
+                        </Text>
+                      </TouchableOpacity>;
+              })}
+                </View>
+              </View>
+            </View> : null}
+        </View>
       </Modal>
 
       {/* 认证弹窗 */}
-      <Modal visible={showVerificationModal} animationType="slide" statusBarTranslucent>
+      <Modal visible={showVerificationModal} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={handleVerificationBack}>
         <KeyboardAvoidingView
           style={styles.verificationKeyboardView}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <KeyboardDismissView>
-            <SafeAreaView style={styles.verificationModal} edges={['top']}>
+          <View style={styles.verificationModal}>
           {/* 头部 */}
-          <View style={styles.verificationHeader}>
+          <View style={[styles.verificationHeader, {
+            paddingTop: profileModalTopSafeInset + 8
+          }]}>
             <TouchableOpacity onPress={handleVerificationBack}>
               <Ionicons name={verificationStep === 0 ? "close" : "arrow-back"} size={24} color="#1f2937" />
             </TouchableOpacity>
@@ -2018,7 +2083,7 @@ export default function ProfileScreen({
 
           <ScrollView style={styles.verificationContent} contentContainerStyle={[styles.verificationContentContainer, {
           paddingBottom: bottomSafeInset + 28
-        }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+        }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'on-drag' : 'none'} onScrollBeginDrag={Platform.OS === 'ios' ? Keyboard.dismiss : undefined}>
             {/* 步骤0: 选择认证类型 */}
             {verificationStep === 0 && <View style={styles.typeSelectionContainer}>
                 <Text style={styles.typeSelectionTitle}>{t('profile.verificationModal.selectType')}</Text>
@@ -2359,8 +2424,7 @@ export default function ProfileScreen({
                 <Text style={styles.verificationSubmitText}>{t('profile.verificationModal.submit')}</Text>
               </TouchableOpacity>
             </View>}
-            </SafeAreaView>
-          </KeyboardDismissView>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -2907,6 +2971,80 @@ const styles = StyleSheet.create({
   listModalContentContainer: {
     flexGrow: 1
   },
+  inlineAlertOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 90,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: modalTokens.backdrop
+  },
+  inlineAlertCard: {
+    borderRadius: 18,
+    backgroundColor: modalTokens.surface,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowOffset: {
+      width: 0,
+      height: 8
+    },
+    shadowRadius: 18,
+    elevation: 10
+  },
+  inlineAlertTitle: {
+    fontSize: scaleFont(18),
+    lineHeight: scaleFont(24),
+    fontWeight: '700',
+    color: modalTokens.textPrimary,
+    marginBottom: 8
+  },
+  inlineAlertMessage: {
+    fontSize: scaleFont(15),
+    lineHeight: scaleFont(22),
+    color: modalTokens.textSecondary,
+    marginBottom: 16
+  },
+  inlineAlertButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'flex-end'
+  },
+  inlineAlertButtonsVertical: {
+    flexDirection: 'column'
+  },
+  inlineAlertButton: {
+    minWidth: 84,
+    height: 40,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ef4444'
+  },
+  inlineAlertButtonVertical: {
+    width: '100%'
+  },
+  inlineAlertButtonCancel: {
+    backgroundColor: '#f3f4f6'
+  },
+  inlineAlertButtonDestructive: {
+    backgroundColor: '#dc2626'
+  },
+  inlineAlertButtonText: {
+    color: '#ffffff',
+    fontSize: scaleFont(14),
+    fontWeight: '600'
+  },
+  inlineAlertButtonTextCancel: {
+    color: '#374151'
+  },
+  inlineAlertButtonTextDestructive: {
+    color: '#ffffff'
+  },
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3171,7 +3309,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingBottom: 12,
     backgroundColor: modalTokens.surface,
     borderBottomWidth: 1,
     borderBottomColor: modalTokens.border
@@ -3261,7 +3399,6 @@ const styles = StyleSheet.create({
   },
   // 表单样式
   formContainer: {
-    flex: 1,
     backgroundColor: '#fff'
   },
   // 字段容器（每个输入项）

@@ -4,6 +4,7 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   TextInput,
   StyleSheet,
   useWindowDimensions,
@@ -14,10 +15,10 @@ import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
 import ComposerModalScaffold from './ComposerModalScaffold';
 import ComposerImageGrid from './ComposerImageGrid';
+import ComposerAlertOverlay from './ComposerAlertOverlay';
 import MentionSuggestionsPanel from './MentionSuggestionsPanel';
 import { modalTokens } from './modalTokens';
 import { toast } from '../utils/toast';
-import { showPublishFailureAlert } from '../utils/appAlert';
 import answerApi from '../services/api/answerApi';
 import uploadApi from '../services/api/uploadApi';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
@@ -36,6 +37,14 @@ import {
 import { resolveComposerScrollPadding } from '../utils/composerLayout';
 import useComposerScrollManager from '../hooks/useComposerScrollManager';
 import { scaleFont } from '../utils/responsive';
+import { sanitizeUserFacingMessage } from '../utils/userFacingMessage';
+
+const SUPPLEMENT_PUBLISH_FAILURE_TITLE = '\u6682\u65f6\u65e0\u6cd5\u8865\u5145\u56de\u7b54';
+const SUPPLEMENT_PUBLISH_FAILURE_MESSAGE =
+  '\u5f53\u524d\u56de\u7b54\u6682\u4e0d\u652f\u6301\u7ee7\u7eed\u8865\u5145\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002';
+const COMPOSER_ALERT_CONFIRM_TEXT = '\u6211\u77e5\u9053\u4e86';
+const isSupplementAnswerPublishBlockedMessage = message =>
+  typeof message === 'string' && message.includes('不允许') && message.includes('回答补充');
 
 export default function SupplementAnswerModal({
   visible,
@@ -57,6 +66,8 @@ export default function SupplementAnswerModal({
   submitting = false,
   onSubmit,
   allowImages = true,
+  blockedReason = '',
+  onPublishBlocked,
 }) {
   const bottomSafeInset = useBottomSafeInset(12, { maxAndroidInset: 24 });
   const keyboardVisible = useKeyboardVisibility(visible);
@@ -66,6 +77,7 @@ export default function SupplementAnswerModal({
   const [internalSelectedTeams, setInternalSelectedTeams] = useState([]);
   const [internalImages, setInternalImages] = useState([]);
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const [composerAlert, setComposerAlert] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [inputTop, setInputTop] = useState(0);
@@ -86,7 +98,7 @@ export default function SupplementAnswerModal({
   const imageLimitReached = isComposerImageLimitReached(currentImages);
   const hasPendingUploads = currentImages.some(image => image?.uploading);
   const submitLoading = isControlled ? submitting : isSubmitting;
-  const canSubmit = !!currentText.trim() && !submitLoading && !hasPendingUploads;
+  const canSubmit = !!currentText.trim() && !submitLoading && !hasPendingUploads && !blockedReason;
 
   function updateText(value) {
     if (onChangeText) {
@@ -153,6 +165,7 @@ export default function SupplementAnswerModal({
   useEffect(() => {
     if (!visible) {
       setShowImagePicker(false);
+      setComposerAlert(null);
       inputFocusedRef.current = false;
     }
   }, [visible]);
@@ -204,6 +217,7 @@ export default function SupplementAnswerModal({
       resetInternalState();
     }
     setShowImagePicker(false);
+    setComposerAlert(null);
     inputFocusedRef.current = false;
     onClose?.();
   };
@@ -291,6 +305,14 @@ export default function SupplementAnswerModal({
   };
 
   const handleSubmit = async () => {
+    if (blockedReason) {
+      setComposerAlert({
+        title: SUPPLEMENT_PUBLISH_FAILURE_TITLE,
+        message: blockedReason,
+      });
+      return;
+    }
+
     if (!currentText.trim()) {
       toast.error('请输入补充回答内容');
       return;
@@ -318,6 +340,8 @@ export default function SupplementAnswerModal({
       return;
     }
 
+    setComposerAlert(null);
+
     try {
       setIsSubmitting(true);
 
@@ -326,6 +350,20 @@ export default function SupplementAnswerModal({
       };
 
       const response = await answerApi.publishSupplementAnswer(answer.id, requestData);
+      const responseMessage = sanitizeUserFacingMessage(
+        response?.msg,
+        SUPPLEMENT_PUBLISH_FAILURE_MESSAGE,
+        'error'
+      );
+
+      if (response?.code !== 200 && isSupplementAnswerPublishBlockedMessage(responseMessage)) {
+        onPublishBlocked?.(responseMessage);
+        setComposerAlert({
+          title: SUPPLEMENT_PUBLISH_FAILURE_TITLE,
+          message: responseMessage,
+        });
+        return;
+      }
 
       if (response?.code === 200) {
         toast.success('补充回答发布成功');
@@ -336,13 +374,27 @@ export default function SupplementAnswerModal({
         throw new Error(response?.msg || '发布失败');
       }
     } catch (error) {
-      showPublishFailureAlert(error, {
-        title: '暂时无法补充回答',
-        fallbackMessage: '当前回答暂不支持继续补充，请稍后再试。',
+      const normalizedMessage = sanitizeUserFacingMessage(
+        error,
+        SUPPLEMENT_PUBLISH_FAILURE_MESSAGE,
+        'error'
+      );
+
+      if (isSupplementAnswerPublishBlockedMessage(normalizedMessage)) {
+        onPublishBlocked?.(normalizedMessage);
+      }
+
+      setComposerAlert({
+        title: SUPPLEMENT_PUBLISH_FAILURE_TITLE,
+        message: normalizedMessage,
       });
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const closeComposerAlert = () => {
+    setComposerAlert(null);
   };
 
   if (!answer) {
@@ -362,18 +414,61 @@ export default function SupplementAnswerModal({
         onSubmit={handleSubmit}
         submitText={renderedSubmitText}
         submitDisabled={!canSubmit}
+        headerNotice={blockedReason ? (
+          <View style={styles.blockedBanner}>
+            <Ionicons name="information-circle-outline" size={16} color="#b45309" />
+            <Text style={styles.blockedBannerText}>{blockedReason}</Text>
+          </View>
+        ) : null}
         footerPaddingBottom={bottomSafeInset + 8}
         footerBottomInset={bottomSafeInset}
         footerHidden={Boolean(pendingToolbarAction)}
-        overlayContent={showImagePicker && allowImages ? (
-          <ImagePickerSheet
-            visible={showImagePicker}
-            onClose={() => setShowImagePicker(false)}
-            onImageSelected={handleImageSelected}
-            title="选择图片"
-            renderInPlace
-          />
-        ) : null}
+        overlayContent={
+          showImagePicker || composerAlert ? (
+            <>
+              {showImagePicker && allowImages ? (
+                <ImagePickerSheet
+                  visible={showImagePicker}
+                  onClose={() => setShowImagePicker(false)}
+                  onImageSelected={handleImageSelected}
+                  title="选择图片"
+                  renderInPlace
+                />
+              ) : null}
+              {composerAlert ? (false ? (
+                <View style={styles.composerAlertOverlay}>
+                  <Pressable
+                    style={StyleSheet.absoluteFill}
+                    onPress={closeComposerAlert}
+                  />
+                  <View style={styles.composerAlertCard}>
+                    <Text style={styles.composerAlertTitle}>{composerAlert.title}</Text>
+                    {composerAlert.message ? (
+                      <Text style={styles.composerAlertMessage}>
+                        {composerAlert.message}
+                      </Text>
+                    ) : null}
+                    <TouchableOpacity
+                      style={styles.composerAlertButton}
+                      onPress={closeComposerAlert}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.composerAlertButtonText}>
+                        {COMPOSER_ALERT_CONFIRM_TEXT}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <ComposerAlertOverlay
+                  title={composerAlert.title}
+                  message={composerAlert.message}
+                  onClose={closeComposerAlert}
+                />
+              )) : null}
+            </>
+          ) : null
+        }
         footerLeft={
           <View style={styles.toolsLeft}>
             {allowImages ? (
@@ -575,6 +670,22 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     lineHeight: scaleFont(20),
   },
+  blockedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#fef3c7',
+    borderBottomWidth: 1,
+    borderBottomColor: '#fde68a',
+  },
+  blockedBannerText: {
+    flex: 1,
+    fontSize: scaleFont(13),
+    lineHeight: scaleFont(18),
+    color: '#92400e',
+  },
   contentArea: {
     flex: 1,
     backgroundColor: modalTokens.surface,
@@ -657,5 +768,57 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: scaleFont(11),
     fontWeight: '600',
+  },
+  composerAlertOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 80,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.32)',
+  },
+  composerAlertCard: {
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  composerAlertTitle: {
+    fontSize: scaleFont(18),
+    lineHeight: scaleFont(24),
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  composerAlertMessage: {
+    fontSize: scaleFont(15),
+    lineHeight: scaleFont(22),
+    color: '#4b5563',
+    marginBottom: 16,
+  },
+  composerAlertButton: {
+    alignSelf: 'flex-end',
+    minWidth: 88,
+    height: 40,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ef4444',
+  },
+  composerAlertButtonText: {
+    fontSize: scaleFont(14),
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });

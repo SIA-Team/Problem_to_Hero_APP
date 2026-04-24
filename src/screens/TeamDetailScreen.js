@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert, Modal, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
-import IdentitySelector from '../components/IdentitySelector';
 import KeyboardDismissView from '../components/KeyboardDismissView';
 import ModalSafeAreaView from '../components/ModalSafeAreaView';
-import WriteCommentModal from '../components/WriteCommentModal';
+import TeamDiscussionComposerModal from '../components/TeamDiscussionComposerModal';
+import ComposerModalScaffold from '../components/ComposerModalScaffold';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
+import useKeyboardVisibility from '../hooks/useKeyboardVisibility';
+import { getComposerImageUri } from '../utils/composerImages';
+import { resolveComposerScrollPadding } from '../utils/composerLayout';
 import { scaleFont } from '../utils/responsive';
 import teamApi from '../services/api/teamApi';
 import { buildTeamDetailRouteState } from '../utils/teamTransforms';
@@ -198,6 +201,18 @@ const flattenDiscussionReplyTree = (nodes = [], accumulator = []) => {
   return accumulator;
 };
 
+const getDiscussionEntryImages = entry => {
+  const images = Array.isArray(entry?.images) ? entry.images : [];
+  const normalizedImages = images.filter(image => Boolean(getComposerImageUri(image)));
+
+  if (normalizedImages.length > 0) {
+    return normalizedImages;
+  }
+
+  const legacyImageUri = getComposerImageUri(entry?.imageUri || '');
+  return legacyImageUri ? [legacyImageUri] : [];
+};
+
 // 团队公告数据
 // Mock-backed sections stay in place so missing backend fields remain visible.
 const announcements = [{
@@ -382,49 +397,6 @@ export default function TeamDetailScreen({
       isMounted = false;
     };
   }, [routeTeamId]);
-  React.useEffect(() => {
-    let isMounted = true;
-    const normalizedTeamId = Number(routeTeamId);
-
-    if (!isLeader || !Number.isFinite(normalizedTeamId) || normalizedTeamId <= 0) {
-      if (isMounted) {
-        setJoinRequests([]);
-      }
-      return () => {
-        isMounted = false;
-      };
-    }
-
-    const loadTeamApplications = async () => {
-      try {
-        const response = await teamApi.getTeamApplications(normalizedTeamId);
-        const isSuccess = response?.code === 0 || response?.code === 200;
-
-        if (!isSuccess) {
-          throw new Error(response?.msg || 'Failed to load team applications');
-        }
-
-        const nextApplications = Array.isArray(response?.data)
-          ? response.data.map(mapTeamApplication)
-          : [];
-
-        if (isMounted) {
-          setJoinRequests(nextApplications);
-        }
-      } catch (requestError) {
-        console.error('Failed to load team applications:', requestError);
-        if (isMounted) {
-          setJoinRequests([]);
-        }
-      }
-    };
-
-    loadTeamApplications();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [isLeader, routeTeamId]);
   const detailRouteState = React.useMemo(() => buildTeamDetailRouteState(teamDetailData, fallbackRouteState), [teamDetailData, fallbackRouteState]);
   const team = detailRouteState?.team || fallbackTeam;
   const isLeader = Boolean(team?.isLeader) || Number(team?.userRole) === 3;
@@ -434,6 +406,56 @@ export default function TeamDetailScreen({
   const isPending = joinStateOverride?.isPending !== undefined ? Boolean(joinStateOverride.isPending) : Boolean(detailRouteState?.isPending);
   const restrictedView = Boolean(detailRouteState?.restrictedView || !isJoined);
   const displayedMemberCount = Number(team?.memberCount ?? team?.members) || teamMembers.length;
+  const teamInviteExcludedUsers = React.useMemo(() => {
+    const rawUsers = [
+      ...(Array.isArray(route?.params?.teamMembers) ? route.params.teamMembers : []),
+      ...(Array.isArray(route?.params?.members) ? route.params.members : []),
+      ...(Array.isArray(teamDetailData?.memberList) ? teamDetailData.memberList : []),
+      ...(Array.isArray(teamDetailData?.members) ? teamDetailData.members : []),
+      ...(Array.isArray(detailRouteState?.team?.memberList) ? detailRouteState.team.memberList : []),
+      ...(Array.isArray(detailRouteState?.team?.members) ? detailRouteState.team.members : []),
+    ];
+    const seenIds = new Set();
+
+    return rawUsers.reduce((result, user) => {
+      const normalizedId = String(
+        user?.userId ??
+        user?.id ??
+        user?.uid ??
+        user?.memberId ??
+        ''
+      ).trim();
+
+      if (!normalizedId || seenIds.has(normalizedId)) {
+        return result;
+      }
+
+      seenIds.add(normalizedId);
+      result.push({
+        id: normalizedId,
+        userId: normalizedId,
+        username: String(user?.username ?? user?.userName ?? '').trim(),
+        nickName: String(user?.nickName ?? user?.nickname ?? user?.name ?? '').trim(),
+        avatar: String(user?.avatar ?? user?.userAvatar ?? '').trim(),
+      });
+
+      return result;
+    }, []);
+  }, [detailRouteState?.team?.memberList, detailRouteState?.team?.members, route?.params?.members, route?.params?.teamMembers, teamDetailData?.memberList, teamDetailData?.members]);
+  const handleOpenTeamInvite = React.useCallback(() => {
+    const normalizedTeamId = String(team?.id ?? routeTeamId ?? '').trim();
+
+    if (!normalizedTeamId) {
+      showAppAlert(t('screens.teamDetail.alerts.hint'), '缺少团队信息，暂时无法发起邀请');
+      return;
+    }
+
+    navigation.navigate('InviteTeamMember', {
+      teamId: normalizedTeamId,
+      teamName: String(team?.name ?? '').trim(),
+      excludedLocalUsers: teamInviteExcludedUsers,
+    });
+  }, [navigation, routeTeamId, t, team?.id, team?.name, teamInviteExcludedUsers]);
   const transferLeaderCandidates = React.useMemo(() => getTransferLeaderCandidates([route?.params?.teamMembers, route?.params?.members, teamDetailData?.memberList, teamDetailData?.members, detailRouteState?.team?.memberList, detailRouteState?.team?.members]), [detailRouteState?.team?.memberList, detailRouteState?.team?.members, route?.params?.members, route?.params?.teamMembers, teamDetailData?.memberList, teamDetailData?.members]);
   const [activeTab, setActiveTab] = useState('');
 
@@ -477,6 +499,7 @@ export default function TeamDetailScreen({
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementContent, setAnnouncementContent] = useState('');
   const [isPinned, setIsPinned] = useState(false);
+  const publishAnnouncementKeyboardVisible = useKeyboardVisibility(showPublishAnnouncementModal);
   const [joinSubmitting, setJoinSubmitting] = useState(false);
   const [approvingApplicationId, setApprovingApplicationId] = useState(null);
   const [rejectingApplicationId, setRejectingApplicationId] = useState(null);
@@ -502,6 +525,49 @@ export default function TeamDetailScreen({
 
   // 审批消息数据（仅队长可见）
   const [joinRequests, setJoinRequests] = useState([]);
+  React.useEffect(() => {
+    let isMounted = true;
+    const normalizedTeamId = Number(routeTeamId);
+
+    if (!isLeader || !Number.isFinite(normalizedTeamId) || normalizedTeamId <= 0) {
+      if (isMounted) {
+        setJoinRequests([]);
+      }
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const loadTeamApplications = async () => {
+      try {
+        const response = await teamApi.getTeamApplications(normalizedTeamId);
+        const isSuccess = response?.code === 0 || response?.code === 200;
+
+        if (!isSuccess) {
+          throw new Error(response?.msg || 'Failed to load team applications');
+        }
+
+        const nextApplications = Array.isArray(response?.data)
+          ? response.data.map(mapTeamApplication)
+          : [];
+
+        if (isMounted) {
+          setJoinRequests(nextApplications);
+        }
+      } catch (requestError) {
+        console.error('Failed to load team applications:', requestError);
+        if (isMounted) {
+          setJoinRequests([]);
+        }
+      }
+    };
+
+    loadTeamApplications();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isLeader, routeTeamId]);
   const tabs = getTabsForRole(isLeader, t);
   const activeTabType = React.useMemo(() => {
     if (!activeTab) {
@@ -765,26 +831,28 @@ export default function TeamDetailScreen({
   const closeDiscussionComposer = () => {
     restoreDiscussionComposerContext(discussionCommentTarget, discussionComposerMode);
   };
-  const handleSubmitDiscussionComment = (submittedText = '', isTeam = false, _selectedImages = []) => {
+  const handleSubmitDiscussionComment = (submittedText = '', selectedImages = []) => {
     const composerTarget = {
       ...discussionCommentTarget
     };
     const composerMode = discussionComposerMode;
     const messageId = composerTarget.messageId ?? currentDiscussionMessageId;
     const normalizedText = typeof submittedText === 'string' ? submittedText.trim() : discussionCommentText.trim();
+    const normalizedImages = Array.isArray(selectedImages) ? selectedImages.filter(image => Boolean(getComposerImageUri(image))) : [];
     const content = normalizedText;
-    if (!content) {
+    if (!content && normalizedImages.length === 0) {
       return;
     }
-    const isTeamIdentity = typeof isTeam === 'boolean' ? isTeam : discussionCommentIdentity === 'team';
-    const authorName = isTeamIdentity ? team.name : '我';
-    const authorAvatar = isTeamIdentity ? team.avatar : 'https://api.dicebear.com/7.x/avataaars/svg?seed=me';
+    const authorName = '\u6211';
+    const authorAvatar = 'https://api.dicebear.com/7.x/avataaars/svg?seed=me';
     if (composerMode === 'message') {
       const newMessage = {
         id: Date.now(),
         author: authorName,
         avatar: authorAvatar,
         content,
+        images: normalizedImages,
+        imageUri: getComposerImageUri(normalizedImages[0]),
         time: t('screens.teamDetail.chat.justNow'),
         likes: 0,
         dislikes: 0,
@@ -813,6 +881,8 @@ export default function TeamDetailScreen({
       avatar: authorAvatar,
       userAvatar: authorAvatar,
       content,
+      images: normalizedImages,
+      imageUri: getComposerImageUri(normalizedImages[0]),
       time: t('screens.teamDetail.chat.justNow'),
       likes: 0,
       dislikes: 0,
@@ -858,6 +928,53 @@ export default function TeamDetailScreen({
   const currentDiscussionTopLevelComments = currentDiscussionMessageId ? getDiscussionTopLevelComments(currentDiscussionMessageId) : [];
   const currentDiscussionRootComment = currentDiscussionMessageId && currentDiscussionCommentId ? findDiscussionCommentById(currentDiscussionMessageId, currentDiscussionCommentId) : null;
   const currentDiscussionReplyNodes = currentDiscussionRootComment ? buildDiscussionReplyTree(currentDiscussionComments.filter(comment => Number(comment.parentId || 0) > 0 && String(comment.rootCommentId) === String(currentDiscussionRootComment.id)), currentDiscussionRootComment.id) : [];
+  const renderDiscussionImageGrid = entry => {
+    const images = getDiscussionEntryImages(entry);
+
+    if (images.length === 0) {
+      return null;
+    }
+
+    return <View style={styles.discussionImageGrid}>
+        {images.map((image, index) => {
+        const imageUri = getComposerImageUri(image);
+
+        if (!imageUri) {
+          return null;
+        }
+
+        return <View key={`${imageUri}-${index}`} style={styles.discussionImageItem}>
+              <Image source={{
+            uri: imageUri
+          }} style={styles.discussionImage} />
+            </View>;
+      })}
+      </View>;
+  };
+  const discussionComposerPlaceholder = React.useMemo(() => {
+    if (discussionComposerMode === 'message') {
+      return t('screens.teamDetail.chat.inputPlaceholder');
+    }
+
+    if (discussionCommentTarget.parentId) {
+      return t('screens.teamDetail.reply.placeholder');
+    }
+
+    return '写下你的评论...';
+  }, [discussionCommentTarget.parentId, discussionComposerMode, t]);
+  const discussionComposerTitle = React.useMemo(() => {
+    if (discussionComposerMode === 'message') {
+      return String(t('screens.teamDetail.chat.inputPlaceholder') ?? '')
+        .replace(/\.\.\.$/, '')
+        .replace(/…$/, '') || '说点什么';
+    }
+
+    if (discussionCommentTarget.parentId) {
+      return `写回复${discussionCommentTarget.replyToUserName ? ` @${discussionCommentTarget.replyToUserName}` : ''}`;
+    }
+
+    return '写评论';
+  }, [discussionCommentTarget.parentId, discussionCommentTarget.replyToUserName, discussionComposerMode, t]);
 
   // 邀请用户处理
   const handleToggleUser = user => {
@@ -1141,7 +1258,8 @@ export default function TeamDetailScreen({
         }} />
           <Text style={styles.replyTime}>{reply.time}</Text>
         </TouchableOpacity>
-        <Text style={styles.replyText}>{reply.content}</Text>
+        {reply.content ? <Text style={styles.replyText}>{reply.content}</Text> : null}
+        {renderDiscussionImageGrid(reply)}
         <View style={styles.replyActions}>
           <TouchableOpacity style={[styles.replyActionBtn, isLikeInteractionDisabled(!!reply.liked, !!reply.disliked) && styles.interactionBtnDisabled]} onPress={() => toggleDiscussionCommentLike(currentDiscussionMessageId, reply.id)} disabled={isLikeInteractionDisabled(!!reply.liked, !!reply.disliked)}>
             <Ionicons name={reply.liked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={reply.liked ? "#ef4444" : isLikeInteractionDisabled(!!reply.liked, !!reply.disliked) ? "#d1d5db" : "#9ca3af"} />
@@ -1259,9 +1377,7 @@ export default function TeamDetailScreen({
           <Text style={styles.headerTitle}>{restrictedView ? t('screens.teamDetail.teamMembers') : t('screens.teamDetail.title')}</Text>
         </View>
         {!restrictedView && <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('InviteTeamMember', {
-          teamName: team.name
-        })}>
+            <TouchableOpacity style={styles.iconBtn} onPress={handleOpenTeamInvite}>
               <Ionicons name="person-add" size={22} color="#22c55e" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.iconBtn} onPress={handleOpenCreateActivity}>
@@ -1398,7 +1514,8 @@ export default function TeamDetailScreen({
                         <Text style={styles.teamChatTime}>{msg.time}</Text>
                       </View>
                       <View style={styles.teamChatContent}>
-                        <Text style={styles.teamChatText}>{msg.content}</Text>
+                        {msg.content ? <Text style={styles.teamChatText}>{msg.content}</Text> : null}
+                        {renderDiscussionImageGrid(msg)}
                         
                         <View style={styles.teamChatFooter}>
                           <View style={styles.teamChatFooterLeft}>
@@ -1596,7 +1713,8 @@ export default function TeamDetailScreen({
                     <Text style={styles.commentListTime}>{comment.time}</Text>
                   </TouchableOpacity>
                   <View style={styles.commentListContent}>
-                    <Text style={styles.commentListText}>{comment.content}</Text>
+                    {comment.content ? <Text style={styles.commentListText}>{comment.content}</Text> : null}
+                    {renderDiscussionImageGrid(comment)}
                     <View style={styles.commentListActions}>
                       <TouchableOpacity style={[styles.commentListActionBtn, isLikeInteractionDisabled(!!comment.liked, !!comment.disliked) && styles.interactionBtnDisabled]} onPress={() => toggleDiscussionCommentLike(currentDiscussionMessageId, comment.id)} disabled={isLikeInteractionDisabled(!!comment.liked, !!comment.disliked)}>
                         <Ionicons name={comment.liked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={comment.liked ? "#ef4444" : isLikeInteractionDisabled(!!comment.liked, !!comment.disliked) ? "#d1d5db" : "#9ca3af"} />
@@ -1696,7 +1814,8 @@ export default function TeamDetailScreen({
               }} />
                   <Text style={styles.originalCommentTime}>{currentDiscussionRootComment.time}</Text>
                 </TouchableOpacity>
-                <Text style={styles.originalCommentText}>{currentDiscussionRootComment.content}</Text>
+                {currentDiscussionRootComment.content ? <Text style={styles.originalCommentText}>{currentDiscussionRootComment.content}</Text> : null}
+                {renderDiscussionImageGrid(currentDiscussionRootComment)}
               </View>}
 
             <View style={styles.repliesSectionHeader}>
@@ -1728,57 +1847,15 @@ export default function TeamDetailScreen({
         </View>
       </Modal>
 
-      <WriteCommentModal visible={showDiscussionComposerModal && discussionComposerMode !== 'message'} onClose={closeDiscussionComposer} onPublish={handleSubmitDiscussionComment} originalComment={discussionCommentTarget.originalComment} publishInFooter closeOnRight placeholder={discussionCommentTarget.parentId ? '写下你的回复...' : '写下你的评论...'} title={discussionCommentTarget.parentId ? `写回复${discussionCommentTarget.replyToUserName ? ` @${discussionCommentTarget.replyToUserName}` : ''}` : '写评论'} />
-
-      <Modal visible={showDiscussionComposerModal && discussionComposerMode === 'message'} transparent animationType="slide" onRequestClose={closeDiscussionComposer} statusBarTranslucent>
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={closeDiscussionComposer} />
-          <KeyboardAvoidingView style={styles.modalKeyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <KeyboardDismissView>
-          <ModalSafeAreaView style={styles.commentListModal} edges={['top']}>
-            <View style={styles.commentListModalHandle} />
-            <View style={styles.commentListModalHeader}>
-              <TouchableOpacity onPress={closeDiscussionComposer} style={styles.commentListCloseBtn}>
-                <Ionicons name="close" size={26} color="#1f2937" />
-              </TouchableOpacity>
-              <Text style={styles.commentListModalTitle}>说点什么</Text>
-              <View style={styles.commentListHeaderRight} />
-            </View>
-
-            <ScrollView style={styles.commentListScroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" showsVerticalScrollIndicator={false}>
-              <View>
-                <TextInput style={styles.commentTextInput} placeholder="说点什么..." placeholderTextColor="#bbb" value={discussionCommentText} onChangeText={setDiscussionCommentText} multiline autoFocus textAlignVertical="top" />
-                <View style={styles.commentIdentitySection}>
-                  <IdentitySelector key={`discussion-composer-${discussionComposerKey}`} selectedIdentity={discussionCommentIdentity} selectedTeams={discussionCommentSelectedTeams} onIdentityChange={setDiscussionCommentIdentity} onTeamsChange={setDiscussionCommentSelectedTeams} />
-                </View>
-              </View>
-            </ScrollView>
-
-            <View style={[styles.commentListBottomBar, {
-            paddingBottom: commentSheetBottomSpacing
-          }]}>
-              <View style={styles.commentToolbar}>
-                <View style={styles.commentToolsLeft}>
-                  <TouchableOpacity style={styles.commentToolItem}>
-                    <Ionicons name="image-outline" size={24} color="#666" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.commentToolItem}>
-                    <Ionicons name="at-outline" size={24} color="#666" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.commentToolItem}>
-                    <Ionicons name="happy-outline" size={24} color="#666" />
-                  </TouchableOpacity>
-                </View>
-                <TouchableOpacity style={[styles.commentPublishBtn, !discussionCommentText.trim() && styles.commentPublishBtnDisabled]} onPress={handleSubmitDiscussionComment} disabled={!discussionCommentText.trim()}>
-                  <Text style={[styles.commentPublishText, !discussionCommentText.trim() && styles.commentPublishTextDisabled]}>发布</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </ModalSafeAreaView>
-          </KeyboardDismissView>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
+      <TeamDiscussionComposerModal
+        key={`discussion-composer-${discussionComposerKey}-${discussionComposerMode}`}
+        visible={showDiscussionComposerModal}
+        onClose={closeDiscussionComposer}
+        onPublish={handleSubmitDiscussionComment}
+        originalComment={discussionComposerMode === 'message' ? null : discussionCommentTarget.originalComment}
+        placeholder={discussionComposerPlaceholder}
+        title={discussionComposerTitle}
+      />
 
       {!restrictedView && <Modal visible={showMembersModal} animationType="slide" transparent onRequestClose={() => setShowMembersModal(false)}>
           <View style={styles.modalOverlay}>
@@ -1810,34 +1887,120 @@ export default function TeamDetailScreen({
           </View>
         </Modal>}
 
-      {/* 发布公告弹窗 */}
-      <Modal visible={showPublishAnnouncementModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.publishAnnouncementModal}>
-            <View style={styles.publishAnnouncementHeader}>
-              <Text style={styles.publishAnnouncementTitle}>{t('screens.teamDetail.announcement.publishTitle')}</Text>
-              <TouchableOpacity onPress={() => setShowPublishAnnouncementModal(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
-              </TouchableOpacity>
+      <ComposerModalScaffold
+        visible={showPublishAnnouncementModal}
+        onClose={() => setShowPublishAnnouncementModal(false)}
+        title={t('screens.teamDetail.announcement.publishTitle')}
+        onSubmit={handlePublishAnnouncement}
+        submitText={t('screens.teamDetail.announcement.publishButton')}
+        submitDisabled={!announcementTitle.trim() || !announcementContent.trim()}
+        closePlacement="left"
+        submitPlacement="header"
+        containerStyle={styles.publishAnnouncementComposerContainer}
+      >
+        <ScrollView
+          style={styles.publishAnnouncementScroll}
+          contentContainerStyle={[
+            styles.publishAnnouncementScrollContent,
+            {
+              paddingBottom: resolveComposerScrollPadding({
+                basePaddingBottom: bottomSafeInset + 32,
+                keyboardVisible: publishAnnouncementKeyboardVisible,
+              }),
+            },
+          ]}
+          automaticallyAdjustKeyboardInsets
+          contentInsetAdjustmentBehavior="automatic"
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+        >
+          <View style={styles.publishAnnouncementIntroCard}>
+            <View style={styles.publishAnnouncementIntroIcon}>
+              <Ionicons name="megaphone-outline" size={20} color="#f59e0b" />
             </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.publishAnnouncementForm}>
-                <Text style={styles.formLabel}>{t('screens.teamDetail.announcement.titleLabel')}</Text>
-                <TextInput style={styles.formInput} placeholder={t('screens.teamDetail.announcement.titlePlaceholder')} placeholderTextColor="#9ca3af" value={announcementTitle} onChangeText={setAnnouncementTitle} />
-                <Text style={styles.formLabel}>{t('screens.teamDetail.announcement.contentLabel')}</Text>
-                <TextInput style={[styles.formInput, styles.formTextarea]} placeholder={t('screens.teamDetail.announcement.contentPlaceholder')} placeholderTextColor="#9ca3af" value={announcementContent} onChangeText={setAnnouncementContent} multiline numberOfLines={6} textAlignVertical="top" />
-                <TouchableOpacity style={styles.pinnedCheckbox} onPress={() => setIsPinned(!isPinned)}>
-                  <Ionicons name={isPinned ? "checkbox" : "square-outline"} size={20} color={isPinned ? "#f59e0b" : "#9ca3af"} />
-                  <Text style={styles.pinnedCheckboxText}>{t('screens.teamDetail.announcement.pinnedCheckbox')}</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-            <TouchableOpacity style={styles.publishAnnouncementSubmitBtn} onPress={handlePublishAnnouncement}>
-              <Text style={styles.publishAnnouncementSubmitText}>{t('screens.teamDetail.announcement.publishButton')}</Text>
-            </TouchableOpacity>
+            <View style={styles.publishAnnouncementIntroContent}>
+              <Text style={styles.publishAnnouncementIntroTitle}>
+                {t('screens.teamDetail.announcement.publishTitle')}
+              </Text>
+              <Text style={styles.publishAnnouncementIntroText}>
+                面向团队成员发布正式通知，适合活动提醒、规则更新和重要同步。
+              </Text>
+            </View>
           </View>
-        </View>
-      </Modal>
+
+          <View style={styles.publishAnnouncementSection}>
+            <Text style={styles.publishAnnouncementSectionLabel}>
+              {t('screens.teamDetail.announcement.titleLabel')}
+            </Text>
+            <View style={styles.publishAnnouncementFieldCard}>
+              <TextInput
+                style={styles.publishAnnouncementTitleInput}
+                placeholder={t('screens.teamDetail.announcement.titlePlaceholder')}
+                placeholderTextColor="#9ca3af"
+                value={announcementTitle}
+                onChangeText={setAnnouncementTitle}
+                autoFocus
+                maxLength={40}
+                returnKeyType="next"
+              />
+              <Text style={styles.publishAnnouncementCounter}>
+                {announcementTitle.trim().length}/40
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.publishAnnouncementSection}>
+            <Text style={styles.publishAnnouncementSectionLabel}>
+              {t('screens.teamDetail.announcement.contentLabel')}
+            </Text>
+            <View style={styles.publishAnnouncementFieldCard}>
+              <TextInput
+                style={styles.publishAnnouncementContentInput}
+                placeholder={t('screens.teamDetail.announcement.contentPlaceholder')}
+                placeholderTextColor="#9ca3af"
+                value={announcementContent}
+                onChangeText={setAnnouncementContent}
+                multiline
+                numberOfLines={10}
+                maxLength={500}
+                textAlignVertical="top"
+              />
+              <View style={styles.publishAnnouncementContentFooter}>
+                <Text style={styles.publishAnnouncementHelperText}>
+                  建议先写结论，再补充时间、地点或执行要求。
+                </Text>
+                <Text style={styles.publishAnnouncementCounter}>
+                  {announcementContent.trim().length}/500
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.publishAnnouncementOptionCard,
+              isPinned && styles.publishAnnouncementOptionCardActive,
+            ]}
+            onPress={() => setIsPinned(!isPinned)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.publishAnnouncementOptionTextWrap}>
+              <Text style={styles.publishAnnouncementOptionTitle}>
+                {t('screens.teamDetail.announcement.pinnedCheckbox')}
+              </Text>
+              <Text style={styles.publishAnnouncementOptionDesc}>
+                置顶后会优先展示在公告列表顶部，适合重要消息。
+              </Text>
+            </View>
+            <Ionicons
+              name={isPinned ? 'checkmark-circle' : 'ellipse-outline'}
+              size={22}
+              color={isPinned ? '#f59e0b' : '#cbd5e1'}
+            />
+          </TouchableOpacity>
+        </ScrollView>
+      </ComposerModalScaffold>
 
       {/* 解散团队弹窗 */}
       <Modal visible={showDismissModal} animationType="slide" transparent>
@@ -2918,6 +3081,25 @@ const styles = StyleSheet.create({
     lineHeight: scaleFont(22),
     marginBottom: 10
   },
+  discussionImageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 2,
+    marginBottom: 10
+  },
+  discussionImageItem: {
+    width: 96,
+    height: 96,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#f3f4f6',
+    marginRight: 8,
+    marginBottom: 8
+  },
+  discussionImage: {
+    width: '100%',
+    height: '100%'
+  },
   commentListActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3198,73 +3380,134 @@ const styles = StyleSheet.create({
     color: '#f59e0b',
     fontWeight: '600'
   },
-  // 发布公告弹窗
-  publishAnnouncementModal: {
-    backgroundColor: modalTokens.surface,
-    borderTopLeftRadius: modalTokens.sheetRadius,
-    borderTopRightRadius: modalTokens.sheetRadius,
-    borderTopWidth: 1,
-    borderColor: modalTokens.border,
-    padding: 16,
-    maxHeight: '80%'
+  // Publish announcement composer
+  publishAnnouncementComposerContainer: {
+    backgroundColor: '#f8fafc'
   },
-  publishAnnouncementHeader: {
+  publishAnnouncementScroll: {
+    flex: 1
+  },
+  publishAnnouncementScrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    gap: 18
+  },
+  publishAnnouncementIntroCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: modalTokens.border
-  },
-  publishAnnouncementTitle: {
-    fontSize: scaleFont(16),
-    fontWeight: '600',
-    color: modalTokens.textPrimary
-  },
-  publishAnnouncementForm: {
-    marginBottom: 16
-  },
-  formLabel: {
-    fontSize: scaleFont(14),
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8
-  },
-  formInput: {
-    backgroundColor: modalTokens.surfaceSoft,
+    alignItems: 'flex-start',
+    backgroundColor: '#fff7ed',
     borderWidth: 1,
-    borderColor: modalTokens.border,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderColor: '#fed7aa',
+    borderRadius: 20,
+    padding: 16,
+    gap: 12
+  },
+  publishAnnouncementIntroIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  publishAnnouncementIntroContent: {
+    flex: 1,
+    gap: 4
+  },
+  publishAnnouncementIntroTitle: {
+    fontSize: scaleFont(15),
+    fontWeight: '700',
+    color: '#9a3412'
+  },
+  publishAnnouncementIntroText: {
+    fontSize: scaleFont(13),
+    lineHeight: scaleFont(20),
+    color: '#c2410c'
+  },
+  publishAnnouncementSection: {
+    gap: 10
+  },
+  publishAnnouncementSectionLabel: {
     fontSize: scaleFont(14),
-    color: modalTokens.textPrimary,
-    marginBottom: 16
+    fontWeight: '700',
+    color: '#334155'
   },
-  formTextarea: {
-    minHeight: 120,
-    textAlignVertical: 'top'
+  publishAnnouncementFieldCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: {
+      width: 0,
+      height: 4
+    },
+    elevation: 2
   },
-  pinnedCheckbox: {
+  publishAnnouncementTitleInput: {
+    fontSize: scaleFont(17),
+    fontWeight: '600',
+    color: '#0f172a',
+    paddingVertical: 2
+  },
+  publishAnnouncementContentInput: {
+    minHeight: 220,
+    fontSize: scaleFont(15),
+    lineHeight: scaleFont(24),
+    color: '#0f172a',
+    paddingTop: 2,
+    paddingBottom: 16
+  },
+  publishAnnouncementContentFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8
+    justifyContent: 'space-between',
+    gap: 12
   },
-  pinnedCheckboxText: {
-    fontSize: scaleFont(14),
-    color: '#374151'
+  publishAnnouncementHelperText: {
+    flex: 1,
+    fontSize: scaleFont(12),
+    lineHeight: scaleFont(18),
+    color: '#94a3b8'
   },
-  publishAnnouncementSubmitBtn: {
-    backgroundColor: '#f59e0b',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center'
+  publishAnnouncementCounter: {
+    alignSelf: 'flex-end',
+    fontSize: scaleFont(12),
+    color: '#94a3b8'
   },
-  publishAnnouncementSubmitText: {
+  publishAnnouncementOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 12
+  },
+  publishAnnouncementOptionCardActive: {
+    borderColor: '#f59e0b',
+    backgroundColor: '#fffbeb'
+  },
+  publishAnnouncementOptionTextWrap: {
+    flex: 1,
+    gap: 4
+  },
+  publishAnnouncementOptionTitle: {
     fontSize: scaleFont(15),
-    color: '#fff',
-    fontWeight: '600'
+    fontWeight: '600',
+    color: '#0f172a'
+  },
+  publishAnnouncementOptionDesc: {
+    fontSize: scaleFont(12),
+    lineHeight: scaleFont(18),
+    color: '#64748b'
   },
   // 等待审核弹窗
   pendingModal: {

@@ -10,6 +10,10 @@ import {
   TextInput,
   Modal,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -432,6 +436,9 @@ export default function QuestionTeamsScreen({ route, navigation }) {
       setApplyReasonText('');
     }
   };
+  const handleCloseCreateModal = React.useCallback(() => {
+    setShowCreateModal(false);
+  }, []);
 
   const handleCreateTeam = async () => {
     const trimmedName = newTeamName.trim();
@@ -473,7 +480,7 @@ export default function QuestionTeamsScreen({ route, navigation }) {
         createdTeam,
         ...prevTeams.filter((team) => team.id !== createdTeam.id),
       ]);
-      setShowCreateModal(false);
+      handleCloseCreateModal();
       setNewTeamName('');
       setNewTeamDesc('');
       showAppAlert(
@@ -723,63 +730,78 @@ export default function QuestionTeamsScreen({ route, navigation }) {
 
       <Modal
         visible={showCreateModal}
-        animationType="slide"
+        animationType="fade"
         transparent
-        onRequestClose={() => setShowCreateModal(false)}
+        statusBarTranslucent
+        onRequestClose={handleCloseCreateModal}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {t('screens.questionTeams.createModal.title')}
-              </Text>
-              <TouchableOpacity onPress={() => setShowCreateModal(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalBody}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>
-                  {t('screens.questionTeams.createModal.nameLabel')}{' '}
-                  {t('screens.questionTeams.createModal.nameRequired')}
+        <KeyboardAvoidingView
+          style={styles.modalCenterKeyboardView}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={styles.createModalOverlay}>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={() => {
+                Keyboard.dismiss();
+                handleCloseCreateModal();
+              }}
+            />
+            <View style={styles.createModalCard}>
+              <View style={styles.createModalHeader}>
+                <Text style={styles.modalTitle}>
+                  {t('screens.questionTeams.createModal.title')}
                 </Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder={t('screens.questionTeams.createModal.namePlaceholder')}
-                  value={newTeamName}
-                  onChangeText={setNewTeamName}
-                  maxLength={20}
-                />
+                <TouchableOpacity onPress={handleCloseCreateModal} style={styles.createModalCloseBtn}>
+                  <Ionicons name="close" size={24} color="#6b7280" />
+                </TouchableOpacity>
               </View>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>
-                  {t('screens.questionTeams.createModal.descLabel')}
-                </Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder={t('screens.questionTeams.createModal.descPlaceholder')}
-                  value={newTeamDesc}
-                  onChangeText={setNewTeamDesc}
-                  multiline
-                  numberOfLines={3}
-                  maxLength={100}
-                />
+
+              <View style={styles.createModalBody}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>
+                    {t('screens.questionTeams.createModal.nameLabel')}{' '}
+                    {t('screens.questionTeams.createModal.nameRequired')}
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder={t('screens.questionTeams.createModal.namePlaceholder')}
+                    value={newTeamName}
+                    onChangeText={setNewTeamName}
+                    maxLength={20}
+                  />
+                </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>
+                    {t('screens.questionTeams.createModal.descLabel')}
+                  </Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    placeholder={t('screens.questionTeams.createModal.descPlaceholder')}
+                    value={newTeamDesc}
+                    onChangeText={setNewTeamDesc}
+                    multiline
+                    numberOfLines={3}
+                    maxLength={100}
+                    textAlignVertical="top"
+                  />
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.submitBtn,
+                    (creatingTeam || !newTeamName.trim()) && styles.submitBtnDisabled,
+                  ]}
+                  onPress={handleCreateTeam}
+                  disabled={creatingTeam || !newTeamName.trim()}
+                >
+                  <Text style={styles.submitBtnText}>
+                    {creatingTeam ? t('common.loading') : t('screens.questionTeams.createModal.submit')}
+                  </Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                style={[
-                  styles.submitBtn,
-                  (creatingTeam || !newTeamName.trim()) && styles.submitBtnDisabled,
-                ]}
-                onPress={handleCreateTeam}
-                disabled={creatingTeam || !newTeamName.trim()}
-              >
-                <Text style={styles.submitBtnText}>
-                  {creatingTeam ? t('common.loading') : t('screens.questionTeams.createModal.submit')}
-                </Text>
-              </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* 申请加入团队理由输入模态框 */}
@@ -787,6 +809,7 @@ export default function QuestionTeamsScreen({ route, navigation }) {
         visible={showApplyReasonModal}
         animationType="fade"
         transparent
+        statusBarTranslucent
         onRequestClose={() => {
           if (!applyingTeamId) {
             setShowApplyReasonModal(false);
@@ -795,7 +818,22 @@ export default function QuestionTeamsScreen({ route, navigation }) {
           }
         }}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalCenterKeyboardView}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+        <View style={styles.applyReasonOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              Keyboard.dismiss();
+              if (!applyingTeamId) {
+                setShowApplyReasonModal(false);
+                setApplyTargetTeam(null);
+                setApplyReasonText('');
+              }
+            }}
+          />
           <View style={styles.applyReasonCard}>
             <Text style={styles.applyReasonTitle}>申请加入团队</Text>
             <Text style={styles.applyReasonTeamName}>"{applyTargetTeam?.name}"</Text>
@@ -836,6 +874,7 @@ export default function QuestionTeamsScreen({ route, navigation }) {
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
     </SafeAreaView>
@@ -1149,29 +1188,65 @@ const styles = StyleSheet.create({
     backgroundColor: modalTokens.overlay,
     justifyContent: 'flex-end',
   },
-  modalContent: {
-    backgroundColor: modalTokens.surface,
-    borderTopLeftRadius: modalTokens.sheetRadius,
-    borderTopRightRadius: modalTokens.sheetRadius,
-    borderTopWidth: 1,
-    borderColor: modalTokens.border,
-    maxHeight: '80%',
+  modalCenterKeyboardView: {
+    flex: 1,
+    justifyContent: 'center',
   },
-  modalHeader: {
+  createModalOverlay: {
+    flex: 1,
+    backgroundColor: modalTokens.overlay,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 24,
+  },
+  applyReasonOverlay: {
+    flex: 1,
+    backgroundColor: modalTokens.overlay,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 24,
+  },
+  createModalCard: {
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    flexGrow: 0,
+    flexShrink: 1,
+    borderRadius: 24,
+    backgroundColor: modalTokens.surface,
+    borderWidth: 1,
+    borderColor: modalTokens.border,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  createModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
     borderBottomWidth: 1,
     borderBottomColor: modalTokens.border,
+  },
+  createModalCloseBtn: {
+    padding: 4,
+  },
+  createModalBody: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
   },
   modalTitle: {
     fontSize: scaleFont(18),
     fontWeight: '700',
     color: modalTokens.textPrimary,
-  },
-  modalBody: {
-    padding: 20,
   },
   inputGroup: {
     marginBottom: 20,
@@ -1261,10 +1336,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   applyReasonCard: {
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    flexGrow: 0,
+    flexShrink: 1,
     backgroundColor: '#ffffff',
-    borderRadius: 16,
-    marginHorizontal: 24,
-    marginBottom: 40,
+    borderRadius: 24,
     padding: 20,
     shadowColor: '#000',
     shadowOpacity: 0.18,

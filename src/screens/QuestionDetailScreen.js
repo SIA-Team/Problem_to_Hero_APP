@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, FlatList, TouchableOpacity, Pressable, Image, TextInput, StyleSheet, Modal, Alert, RefreshControl, ActivityIndicator, Animated, Platform, Keyboard, KeyboardAvoidingView, Dimensions } from 'react-native';
+import { View, Text, ScrollView, FlatList, TouchableOpacity, Pressable, Image, TextInput, StyleSheet, Modal, Alert, RefreshControl, ActivityIndicator, Animated, Platform, Keyboard, KeyboardAvoidingView, Dimensions, InteractionManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -492,7 +492,7 @@ export default function QuestionDetailScreen({
   const commentsPageNum = currentCommentsData.pageNum;
   const commentsHasMore = currentCommentsData.hasMore;
   const [inputText, setInputText] = useState('');
-  const [activeTab, setActiveTab] = useState(''); // 初始为空字符串
+  const [activeTab, setActiveTab] = useState(''); // 当前激活的标签 key
   const [suppLiked, setSuppLiked] = useState({});
   const [suppDisliked, setSuppDisliked] = useState({});
   const [suppBookmarked, setSuppBookmarked] = useState({});
@@ -686,6 +686,8 @@ export default function QuestionDetailScreen({
   const [loadingSupplements, setLoadingSupplements] = useState(false);
   const [loadingAnswers, setLoadingAnswers] = useState(false);
   const [loadingComments, setLoadingComments] = useState(false);
+  const inviteDataInteractionRef = React.useRef(null);
+  const inviteDataLoadedQuestionIdRef = React.useRef('');
   const currentQuestionId = React.useMemo(() => {
     const candidateQuestionId = route?.params?.id ?? questionData?.id ?? questionData?.questionId;
     const normalizedQuestionId = String(candidateQuestionId ?? '').trim();
@@ -949,6 +951,26 @@ export default function QuestionDetailScreen({
       setRecommendedLocalUsers([]);
     }
   }, []);
+  const scheduleInviteDataLoad = React.useCallback((forceRefresh = false) => {
+    const normalizedQuestionId = String(currentQuestionId || '').trim();
+
+    if (!normalizedQuestionId) {
+      return;
+    }
+
+    if (!forceRefresh && inviteDataLoadedQuestionIdRef.current === normalizedQuestionId) {
+      return;
+    }
+
+    inviteDataInteractionRef.current?.cancel?.();
+    inviteDataInteractionRef.current = InteractionManager.runAfterInteractions(() => {
+      inviteDataLoadedQuestionIdRef.current = normalizedQuestionId;
+      loadInvitedLocalUsers();
+      loadInvitedTwitterUsers();
+      loadRecommendedLocalUsers();
+      inviteDataInteractionRef.current = null;
+    });
+  }, [currentQuestionId, loadInvitedLocalUsers, loadInvitedTwitterUsers, loadRecommendedLocalUsers]);
 
   const resolveFollowStateValue = React.useCallback(value => {
     if (typeof value === 'boolean') {
@@ -1072,22 +1094,6 @@ export default function QuestionDetailScreen({
   }, []);
 
   useEffect(() => {
-    loadInvitedLocalUsers();
-    loadInvitedTwitterUsers();
-    loadRecommendedLocalUsers();
-  }, [loadInvitedLocalUsers, loadInvitedTwitterUsers, loadRecommendedLocalUsers]);
-
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      loadInvitedLocalUsers();
-      loadInvitedTwitterUsers();
-      loadRecommendedLocalUsers();
-    });
-
-    return unsubscribe;
-  }, [navigation, loadInvitedLocalUsers, loadInvitedTwitterUsers, loadRecommendedLocalUsers]);
-
-  useEffect(() => {
     const normalizedKeyword = searchLocalUser.trim();
 
     if (!normalizedKeyword) {
@@ -1207,22 +1213,22 @@ export default function QuestionDetailScreen({
     const numericAmount = Number(amount);
 
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      return '$0';
+      return '$ 0';
     }
 
     if (numericAmount < 1000) {
-      return `$${numericAmount.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')}`;
+      return `$ ${numericAmount.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')}`;
     }
 
     if (numericAmount >= 1000000000) {
-      return `$${(numericAmount / 1000000000).toFixed(1).replace(/\.0$/, '')}B`;
+      return `$ ${(numericAmount / 1000000000).toFixed(1).replace(/\.0$/, '')}B`;
     }
 
     if (numericAmount >= 1000000) {
-      return `$${(numericAmount / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
+      return `$ ${(numericAmount / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
     }
 
-    return `$${(numericAmount / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+    return `$ ${(numericAmount / 1000).toFixed(1).replace(/\.0$/, '')}K`;
   }, []);
   const rewardAmountDisplayText = formatCompactRewardAmount(currentReward);
   const syncCommunitySolveVoteSummary = React.useCallback(summaryResponse => {
@@ -1615,74 +1621,90 @@ export default function QuestionDetailScreen({
     commentsTotal
   ]);
 
-  // 使用 useMemo 创建 answerTabs，优先显示详情接口中的数量，再回退到列表缓存数量
+  // 使用结构化 tabs，避免依赖翻译后的字符串做 split/比较
   const answerTabs = React.useMemo(() => {
-    return [`${t('screens.questionDetail.tabs.supplements')} (${formatCount(supplementsTotal)})`, `${t('screens.questionDetail.tabs.answers')} (${formatCount(answersTabTotal)})`, `${t('screens.questionDetail.tabs.comments')} (${formatCount(commentsTabTotal)})`, t('screens.questionDetail.tabs.invite')];
+    const safeTabLabel = (key, fallback) => {
+      const translatedLabel = t(`screens.questionDetail.tabs.${key}`);
+      return typeof translatedLabel === 'string' && translatedLabel.trim()
+        ? translatedLabel
+        : fallback;
+    };
+
+    return [
+      {
+        key: 'supplements',
+        label: `${safeTabLabel('supplements', 'Supplements')} (${formatCount(supplementsTotal)})`,
+      },
+      {
+        key: 'answers',
+        label: `${safeTabLabel('answers', 'Answers')} (${formatCount(answersTabTotal)})`,
+      },
+      {
+        key: 'comments',
+        label: `${safeTabLabel('comments', 'Comments')} (${formatCount(commentsTabTotal)})`,
+      },
+      {
+        key: 'invite',
+        label: safeTabLabel('invite', 'Invite'),
+      },
+    ];
   }, [t, supplementsTotal, answersTabTotal, commentsTabTotal]);
 
-  const getTabBaseLabel = React.useCallback(tabLabel => {
-    if (!tabLabel) {
-      return '';
-    }
-    return `${tabLabel}`.replace(/\s*\([^)]*\)\s*$/, '').trim();
-  }, []);
-
   const activeTabType = React.useMemo(() => {
-    const normalizedActiveTab = getTabBaseLabel(activeTab);
-    if (!normalizedActiveTab) {
+    if (!activeTab) {
       return '';
     }
 
-    if (normalizedActiveTab === getTabBaseLabel(t('screens.questionDetail.tabs.supplements'))) {
-      return 'supplements';
+    return answerTabs.some(tab => tab.key === activeTab) ? activeTab : '';
+  }, [activeTab, answerTabs]);
+  useEffect(() => {
+    if (activeTabType !== 'invite') {
+      return undefined;
     }
-    if (normalizedActiveTab === getTabBaseLabel(t('screens.questionDetail.tabs.answers'))) {
+
+    scheduleInviteDataLoad(false);
+    return undefined;
+  }, [activeTabType, scheduleInviteDataLoad]);
+  useEffect(() => {
+    inviteDataLoadedQuestionIdRef.current = '';
+  }, [currentQuestionId]);
+  useEffect(() => {
+    return () => {
+      inviteDataInteractionRef.current?.cancel?.();
+      inviteDataInteractionRef.current = null;
+    };
+  }, []);
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (activeTabType === 'invite') {
+        scheduleInviteDataLoad(true);
+      }
+    });
+
+    return unsubscribe;
+  }, [activeTabType, navigation, scheduleInviteDataLoad]);
+
+  const preferredInitialTabKey = React.useMemo(() => {
+    if (route?.params?.defaultTab === 'answers') {
       return 'answers';
     }
-    if (normalizedActiveTab === getTabBaseLabel(t('screens.questionDetail.tabs.comments'))) {
-      return 'comments';
-    }
-    if (normalizedActiveTab === getTabBaseLabel(t('screens.questionDetail.tabs.invite'))) {
-      return 'invite';
-    }
-
-    return '';
-  }, [activeTab, getTabBaseLabel, t]);
-
-  const preferredInitialTabIndex = React.useMemo(() => {
-    if (route?.params?.defaultTab === 'answers') {
-      return 1;
-    }
-    return 0;
+    return 'supplements';
   }, [route?.params?.defaultTab]);
 
   // 设置默认选中的标签页 - 使用 useLayoutEffect 确保在渲染前执行
   React.useLayoutEffect(() => {
-    if (!activeTab && answerTabs.length > 0) {
-      setActiveTab(answerTabs[preferredInitialTabIndex] || answerTabs[0]);
+    if (!answerTabs.length) {
+      return;
     }
-  }, [activeTab, answerTabs, preferredInitialTabIndex]);
 
-  // 当标签文本变化时，更新 activeTab 以保持同步
-  useEffect(() => {
-    if (activeTab && answerTabs.length > 0) {
-      // 检查当前 activeTab 是否还在 answerTabs 中
-      const currentTabIndex = answerTabs.findIndex(tab => {
-        // 提取标签类型（去掉数量部分）
-        const activeType = activeTab.split(' (')[0].trim();
-        const tabType = tab.split(' (')[0].trim();
-        return activeType === tabType;
-      });
+    const hasActiveTab = activeTab && answerTabs.some(tab => tab.key === activeTab);
 
-      // 如果找到匹配的标签，平滑更新为新的文本（包含最新数量）
-      if (currentTabIndex !== -1 && answerTabs[currentTabIndex] !== activeTab) {
-        // 使用 requestAnimationFrame 确保在下一帧更新，避免闪烁
-        requestAnimationFrame(() => {
-          setActiveTab(answerTabs[currentTabIndex]);
-        });
-      }
+    if (!hasActiveTab) {
+      setActiveTab(
+        answerTabs.find(tab => tab.key === preferredInitialTabKey)?.key || answerTabs[0].key
+      );
     }
-  }, [answerTabs]);
+  }, [activeTab, answerTabs, preferredInitialTabKey]);
   useEffect(() => {
     const questionId = route?.params?.id;
     const isSupplementsTab = activeTabType === 'supplements';
@@ -1716,31 +1738,6 @@ export default function QuestionDetailScreen({
       loadCommentsList(questionId, true, commentsSortBy);
     }
   }, [activeTabType, commentsSortBy, commentsCache, route?.params?.id]);
-  useEffect(() => {
-    if (!currentQuestionId || !questionData || activeTabType === 'comments' || loadingComments || commentsRefreshing || commentsLoadingMore) {
-      return;
-    }
-
-    const likesCache = commentsCache.likes;
-    const newestCache = commentsCache.newest;
-    const hasUsableCommentsCache =
-      (likesCache.loaded && !isCacheExpired(likesCache)) ||
-      (newestCache.loaded && !isCacheExpired(newestCache));
-
-    if (!hasUsableCommentsCache) {
-      loadCommentsList(currentQuestionId, true, commentsSortBy);
-    }
-  }, [
-    currentQuestionId,
-    questionData,
-    activeTabType,
-    commentsCache.likes,
-    commentsCache.newest,
-    commentsSortBy,
-    loadingComments,
-    commentsRefreshing,
-    commentsLoadingMore
-  ]);
   useEffect(() => {
     if (!showAnswerCommentListModal || !currentAnswerId) {
       return;
@@ -1855,6 +1852,24 @@ export default function QuestionDetailScreen({
   };
   const questionAdoptRate = getQuestionAdoptRate(questionData);
   const isQuestionSolvedFromAdoptRate = isQuestionSolvedByAdoptRate(questionData);
+  const rewardContributorsLabel =
+    typeof t('screens.questionDetail.reward.contributors') === 'string'
+      ? t('screens.questionDetail.reward.contributors')
+      : '';
+  const rewardContributorCount = Number(rewardContributors) || 0;
+  const rewardContributorsDisplayText = [String(rewardContributorCount), rewardContributorsLabel]
+    .filter(Boolean)
+    .join(' ');
+  const rewardParticipationHint = rewardContributorCount > 0
+    ? `${rewardContributorCount} 位用户正在一起抬高奖励池`
+    : '追加悬赏可更快吸引到高质量回答';
+  const rewardPoolStatusText = isQuestionSolvedFromAdoptRate
+    ? '该问题已进入解决状态'
+    : '奖励池开放中，仍可继续追加';
+  const adoptionProgressCaption = isQuestionSolvedFromAdoptRate
+    ? '当前问答已进入已解决状态'
+    : '采纳进度会随优质回答实时更新';
+  const rewardContributorsCaption = rewardContributorsDisplayText || '查看追加悬赏名单';
   const currentReplyComment = commentsList.find(comment => String(comment.id) === String(currentCommentId)) || Object.values(questionCommentRepliesMap).flatMap(entry => entry?.list || []).find(comment => String(comment.id) === String(currentCommentId)) || suppCommentsList.find(comment => String(comment.id) === String(currentCommentId)) || commentsData.find(comment => String(comment.id) === String(currentCommentId)) || null;
   const currentAnswerReplyComment = answerCommentsList.find(comment => String(comment.id) === String(currentAnswerCommentId)) || Object.values(answerCommentRepliesMap).flatMap(entry => entry?.list || []).find(comment => String(comment.id) === String(currentAnswerCommentId)) || null;
   const currentSuppReplyComment = suppCommentsList.find(comment => String(comment.id) === String(currentSuppCommentId)) || null;
@@ -7335,44 +7350,85 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             </View>}
           
           {/* 悬赏信息卡片 - 只在有悬赏时显示 */}
-          {questionData.bountyAmount > 0 && <View style={styles.rewardInfoCard}>
-            <View style={styles.rewardInfoLeft}>
-              {/* 金额 */}
-              <Text style={styles.rewardAmountText} numberOfLines={1}>
-                {rewardAmountDisplayText}
-              </Text>
-              
+          {Number(questionData?.bountyAmount ?? 0) > 0 && <View style={styles.rewardInfoCard}>
+            <View style={styles.rewardInfoGlowPrimary} />
+            <View style={styles.rewardInfoGlowSecondary} />
+
+            <View style={styles.rewardInfoTopRow}>
+              <View style={styles.rewardInfoHeaderCopy}>
+                <View style={styles.rewardInfoBadge}>
+                  <Ionicons name="sparkles-outline" size={12} color="#c2410c" />
+                  <Text style={styles.rewardInfoBadgeText}>悬赏激励</Text>
+                </View>
+                <Text style={styles.rewardInfoHintText}>
+                  {rewardParticipationHint}
+                </Text>
+              </View>
+
               {/* 追加按钮 */}
               <TouchableOpacity style={styles.addRewardBtn} onPress={() => navigation.navigate('AddReward', {
                 currentReward,
                 rewardContributors,
                 sourceRouteKey: route.key
               })}>
-                <Ionicons name="add" size={16} color="#fff" />
+                <Ionicons name="add-circle-outline" size={16} color="#fff" />
                 <Text style={styles.addRewardBtnText}>{t('screens.questionDetail.reward.add')}</Text>
               </TouchableOpacity>
+            </View>
 
-              {/* 采纳进度 */}
-              <View style={styles.adoptionProgressContainer}>
-                <Text style={styles.adoptionProgressText}>
-                  {isQuestionSolvedFromAdoptRate ? '已解决' : `已采纳 ${questionAdoptRate}%`}
+            <View style={styles.rewardAmountBlock}>
+              <Text style={styles.rewardAmountLabel}>当前总悬赏</Text>
+              <View style={styles.rewardAmountValueRow}>
+                <Text style={styles.rewardAmountText} numberOfLines={1}>
+                  {rewardAmountDisplayText}
                 </Text>
+              </View>
+              <View style={styles.rewardStatusPill}>
+                <View style={styles.rewardStatusDot} />
+                <Text style={styles.rewardStatusText}>{rewardPoolStatusText}</Text>
               </View>
             </View>
 
-            {/* 追加人数 - 移到右侧 */}
-            <TouchableOpacity style={styles.rewardContributorsRow} onPress={() => navigation.navigate('Contributors', {
-              currentReward,
-              rewardContributors
-            })}>
-              <Ionicons name="people-outline" size={12} color="#9ca3af" />
-              <Text style={styles.rewardContributorsText}>{rewardContributors} {t('screens.questionDetail.reward.contributors')}</Text>
-              <Ionicons name="chevron-forward" size={12} color="#9ca3af" />
-            </TouchableOpacity>
+            <View style={styles.rewardInfoMetaRow}>
+              {/* 采纳进度 */}
+              <View style={styles.adoptionProgressContainer}>
+                <View style={styles.rewardStatHeader}>
+                  <Ionicons name="pulse-outline" size={14} color="#f65b51" />
+                  <Text style={styles.rewardStatLabel}>采纳进度</Text>
+                </View>
+                <Text style={styles.rewardStatValue}>
+                  {questionAdoptRate}%
+                </Text>
+                <View style={styles.rewardStatBarTrack}>
+                  <View style={[styles.rewardStatBarFill, {
+                    width: `${Math.max(0, Math.min(questionAdoptRate, 100))}%`
+                  }]} />
+                </View>
+                <Text style={styles.rewardStatCaption}>
+                  {adoptionProgressCaption}
+                </Text>
+              </View>
+
+              {/* 追加人数 */}
+              <TouchableOpacity style={styles.rewardContributorsRow} onPress={() => navigation.navigate('Contributors', {
+                currentReward,
+                rewardContributors
+              })}>
+                <View style={styles.rewardStatHeader}>
+                  <Ionicons name="people-outline" size={14} color="#2563eb" />
+                  <Text style={styles.rewardStatLabel}>参与追加</Text>
+                </View>
+                <View style={styles.rewardContributorsValueRow}>
+                  <Text style={styles.rewardStatValue}>{rewardContributorCount}</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#64748b" />
+                </View>
+                <Text style={styles.rewardContributorsText}>{rewardContributorsCaption}</Text>
+              </TouchableOpacity>
+            </View>
           </View>}
           
           {/* 付费明细入口 - 只在付费问题中显示 */}
-          {questionData.payViewAmount > 0 && (
+          {Number(questionData?.payViewAmount ?? 0) > 0 && (
             <TouchableOpacity 
               style={styles.paidDetailsCard}
               onPress={() => navigation.navigate('PaidUsersList', {
@@ -7452,14 +7508,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         {/* 回答区域 */}
         <View style={styles.answersSection}>
           <View style={styles.answerTabs}>
-            {answerTabs.map(tab => <TouchableOpacity key={tab} style={styles.answerTabItem} onPress={() => {
-            if (tab !== activeTab) {
-              setActiveTab(tab);
+            {answerTabs.map(tab => <TouchableOpacity key={tab.key} style={styles.answerTabItem} onPress={() => {
+            if (tab.key !== activeTab) {
+              setActiveTab(tab.key);
               setSortFilter('精选');
             }
           }}>
-                <Text style={[styles.answerTabText, activeTab === tab && styles.answerTabTextActive]}>{tab}</Text>
-                {activeTab === tab && <View style={styles.answerTabIndicator} />}
+                <Text style={[styles.answerTabText, activeTab === tab.key && styles.answerTabTextActive]}>{tab.label}</Text>
+                {activeTab === tab.key && <View style={styles.answerTabIndicator} />}
               </TouchableOpacity>)}
           </View>
 
@@ -8459,12 +8515,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         <TouchableOpacity 
           style={styles.bottomInputBox} 
           onPress={() => {
-            const activeTabType = activeTab?.split(' (')[0]?.trim();
-            if (activeTabType === t('screens.questionDetail.tabs.supplements')) {
+            if (activeTabType === 'supplements') {
               openSupplementComposer();
-            } else if (activeTabType === t('screens.questionDetail.tabs.answers')) {
+            } else if (activeTabType === 'answers') {
               setShowAnswerModal(true);
-            } else if (activeTabType === t('screens.questionDetail.tabs.comments')) {
+            } else if (activeTabType === 'comments') {
               openCommentModal({
                 targetType: 1,
                 targetId: route?.params?.id,
@@ -8475,12 +8530,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         >
           <Text style={styles.bottomInputPlaceholder}>
             {(() => {
-              const activeTabType = activeTab?.split(' (')[0]?.trim();
-              if (activeTabType === t('screens.questionDetail.tabs.supplements')) {
+              if (activeTabType === 'supplements') {
                 return '补充问题';
-              } else if (activeTabType === t('screens.questionDetail.tabs.answers')) {
+              } else if (activeTabType === 'answers') {
                 return '写回答';
-              } else if (activeTabType === t('screens.questionDetail.tabs.comments')) {
+              } else if (activeTabType === 'comments') {
                 return '写评论';
               }
               return '写评论';
@@ -10055,48 +10109,157 @@ const styles = StyleSheet.create({
   questionImagesContainer: {
     marginBottom: 12
   },
-  // 悬赏信息卡片样式 - 缩小版
+  // 悬赏信息卡片样式
   rewardInfoCard: {
+    position: 'relative',
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 14,
+    gap: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#f2e2db',
+    shadowColor: '#b45309',
+    shadowOffset: {
+      width: 0,
+      height: 10
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 4
+  },
+  rewardInfoGlowPrimary: {
+    position: 'absolute',
+    top: -44,
+    right: -18,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(248, 113, 113, 0.12)'
+  },
+  rewardInfoGlowSecondary: {
+    position: 'absolute',
+    bottom: -64,
+    left: -26,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(251, 191, 36, 0.10)'
+  },
+  rewardInfoTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12
+  },
+  rewardInfoHeaderCopy: {
+    flex: 1,
+    minWidth: 180,
+    gap: 8
+  },
+  rewardInfoBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 247, 237, 0.96)',
+    borderWidth: 1,
+    borderColor: '#fed7aa'
+  },
+  rewardInfoBadgeText: {
+    fontSize: scaleFont(12),
+    fontWeight: '700',
+    color: '#9a3412',
+    letterSpacing: 0.3
+  },
+  rewardInfoHintText: {
+    fontSize: scaleFont(13),
+    lineHeight: scaleFont(19),
+    color: '#7c2d12'
+  },
+  rewardInfoMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    flexWrap: 'wrap',
+    gap: 10
+  },
+  rewardAmountBlock: {
+    width: '100%',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderRadius: 18,
+    backgroundColor: '#fff4ee',
+    borderWidth: 1,
+    borderColor: '#fbd5c5',
+    gap: 10
+  },
+  rewardAmountLabel: {
+    fontSize: scaleFont(12),
+    fontWeight: '700',
+    color: '#9a3412',
+    letterSpacing: 0.8
+  },
+  rewardAmountValueRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#fef2f2',
-    borderWidth: 1,
-    borderColor: '#fee2e2',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12
-  },
-  rewardInfoLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10
+    gap: 12
   },
   rewardAmountText: {
-    fontSize: scaleFont(24),
+    flexShrink: 1,
+    fontSize: scaleFont(30),
     fontWeight: '800',
-    color: '#ef4444',
-    letterSpacing: 0.5,
-    maxWidth: 84
+    color: '#111827',
+    letterSpacing: 0.3
+  },
+  rewardStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)'
+  },
+  rewardStatusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: '#f65b51'
+  },
+  rewardStatusText: {
+    fontSize: scaleFont(12),
+    color: '#6b7280',
+    fontWeight: '600'
   },
   addRewardBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#ef4444',
+    gap: 6,
+    backgroundColor: '#f65b51',
+    borderWidth: 1,
+    borderColor: '#f87171',
     paddingHorizontal: 14,
-    paddingVertical: 5,
-    borderRadius: 20,
-    minWidth: 76,
+    paddingVertical: 12,
+    borderRadius: 14,
+    minWidth: 126,
+    maxWidth: '100%',
+    flexShrink: 1,
     justifyContent: 'center',
-    shadowColor: '#ef4444',
+    alignSelf: 'flex-start',
+    shadowColor: '#f65b51',
     shadowOffset: {
       width: 0,
-      height: 2
+      height: 8
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
     elevation: 3
   },
   addRewardBtnText: {
@@ -10106,24 +10269,69 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3
   },
   adoptionProgressContainer: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: 16,
+    backgroundColor: '#fffaf8',
+    borderWidth: 1,
+    borderColor: '#f3dfd5',
+    flex: 1,
+    minWidth: 140,
+    gap: 10
+  },
+  rewardStatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3
+    gap: 6
   },
-  adoptionProgressText: {
+  rewardStatLabel: {
     fontSize: scaleFont(12),
-    color: '#10b981',
-    fontWeight: '600'
+    color: '#6b7280',
+    fontWeight: '700',
+    letterSpacing: 0.3
+  },
+  rewardStatValue: {
+    fontSize: scaleFont(28),
+    color: '#111827',
+    fontWeight: '800'
+  },
+  rewardStatBarTrack: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: '#f3e8e2',
+    overflow: 'hidden'
+  },
+  rewardStatBarFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: '#f65b51'
+  },
+  rewardStatCaption: {
+    fontSize: scaleFont(12),
+    lineHeight: scaleFont(18),
+    color: '#6b7280'
   },
   rewardContributorsRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: 16,
+    backgroundColor: '#f8fbff',
+    borderWidth: 1,
+    borderColor: '#dce7f7',
+    flex: 1,
+    minWidth: 140,
+    gap: 10
+  },
+  rewardContributorsValueRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 2
+    justifyContent: 'space-between',
+    gap: 10
   },
   rewardContributorsText: {
-    fontSize: scaleFont(11),
-    color: '#9ca3af'
+    fontSize: scaleFont(12),
+    lineHeight: scaleFont(18),
+    color: '#64748b'
   },
   // 付费明细卡片样式
   paidDetailsCard: {

@@ -9,6 +9,7 @@ import {
   Dimensions,
   TouchableWithoutFeedback,
   Platform,
+  Easing,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -27,34 +28,60 @@ export default function ImagePickerSheet({
   renderInPlace = false,
 }) {
   const bottomSafeInset = useBottomSafeInset(20);
-  const [slideAnim] = React.useState(new Animated.Value(SCREEN_HEIGHT));
+  const hiddenTranslateY = renderInPlace ? 56 : SCREEN_HEIGHT;
+  const [slideAnim] = React.useState(new Animated.Value(hiddenTranslateY));
+  const [backdropAnim] = React.useState(new Animated.Value(0));
 
   React.useEffect(() => {
     if (visible) {
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 65,
-        friction: 11,
-      }).start();
+      slideAnim.setValue(hiddenTranslateY);
+      backdropAnim.setValue(0);
+
+      Animated.parallel([
+        Animated.timing(backdropAnim, {
+          toValue: 1,
+          duration: renderInPlace ? 160 : 220,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        renderInPlace
+          ? Animated.timing(slideAnim, {
+              toValue: 0,
+              duration: 180,
+              easing: Easing.out(Easing.cubic),
+              useNativeDriver: true,
+            })
+          : Animated.spring(slideAnim, {
+              toValue: 0,
+              useNativeDriver: true,
+              tension: 65,
+              friction: 11,
+            }),
+      ]).start();
     } else {
-      Animated.timing(slideAnim, {
-        toValue: SCREEN_HEIGHT,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
+      slideAnim.setValue(hiddenTranslateY);
+      backdropAnim.setValue(0);
     }
-  }, [slideAnim, visible]);
+  }, [backdropAnim, hiddenTranslateY, renderInPlace, slideAnim, visible]);
 
   const handleClose = React.useCallback(() => {
-    Animated.timing(slideAnim, {
-      toValue: SCREEN_HEIGHT,
-      duration: 250,
-      useNativeDriver: true,
-    }).start(() => {
+    Animated.parallel([
+      Animated.timing(backdropAnim, {
+        toValue: 0,
+        duration: renderInPlace ? 140 : 180,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: hiddenTranslateY,
+        duration: renderInPlace ? 160 : 220,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
       onClose?.();
     });
-  }, [onClose, slideAnim]);
+  }, [backdropAnim, hiddenTranslateY, onClose, renderInPlace, slideAnim]);
 
   const requestCameraPermission = async () => {
     try {
@@ -149,6 +176,16 @@ export default function ImagePickerSheet({
         renderInPlace && styles.inlineOverlay,
       ]}
     >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          styles.backdrop,
+          {
+            opacity: backdropAnim,
+          },
+        ]}
+      />
       <TouchableWithoutFeedback onPress={handleClose}>
         <View style={StyleSheet.absoluteFill} />
       </TouchableWithoutFeedback>
@@ -225,12 +262,15 @@ export default function ImagePickerSheet({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: modalTokens.overlay,
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   inlineOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 1,
+  },
+  backdrop: {
+    backgroundColor: modalTokens.overlay,
   },
   container: {
     backgroundColor: modalTokens.surfaceSoft,

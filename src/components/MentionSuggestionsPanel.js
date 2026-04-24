@@ -31,16 +31,25 @@ export default function MentionSuggestionsPanel({
   onSelect,
   panelMaxHeight,
   listMaxHeight,
+  showHeader = true,
   users = [],
+  placement = 'overlay',
+  variant = 'default',
 }) {
   const hasKeyword = Boolean(String(activeKeyword ?? '').trim());
+  const isKeyboardInlineVariant = variant === 'keyboard-inline';
+  const isEmbeddedPlacement = placement === 'embedded';
   const title = hasKeyword ? `\u641c\u7d22 @${activeKeyword}` : '\u63a8\u8350\u7528\u6237';
   const countText = loading ? '\u641c\u7d22\u4e2d' : `${users.length}\u4eba`;
+  const avatarSize = isKeyboardInlineVariant ? 52 : 38;
+  const verifiedIconSize = isKeyboardInlineVariant ? 15 : 14;
+  const chevronSize = isKeyboardInlineVariant ? 18 : 16;
 
   const renderStatus = (iconName, text, iconColor) => (
     <View
       style={[
         styles.status,
+        isKeyboardInlineVariant && styles.statusKeyboardInline,
         {
           paddingBottom: bottomInset + 12,
         },
@@ -60,35 +69,47 @@ export default function MentionSuggestionsPanel({
   );
 
   return (
-    <View pointerEvents="box-none" style={styles.layer}>
+    <View
+      pointerEvents={isEmbeddedPlacement ? 'auto' : 'box-none'}
+      style={[styles.layer, isEmbeddedPlacement && styles.layerEmbedded]}
+    >
       {enableBackdrop ? <Pressable style={styles.backdrop} onPress={onBackdropPress} /> : null}
 
       <Animated.View
         style={[
           styles.overlay,
+          isEmbeddedPlacement && styles.overlayEmbedded,
+          isKeyboardInlineVariant && styles.overlayKeyboardInline,
+          isEmbeddedPlacement && isKeyboardInlineVariant && styles.overlayKeyboardInlineEmbedded,
           animatedStyle,
-          {
-            bottom: Math.max(Number(bottomOffset) || 0, 0),
-            maxHeight: panelMaxHeight,
-          },
+          isEmbeddedPlacement
+            ? {
+                maxHeight: panelMaxHeight,
+              }
+            : {
+                bottom: Math.max(Number(bottomOffset) || 0, 0),
+                maxHeight: panelMaxHeight,
+              },
         ]}
       >
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Ionicons
-              name={hasKeyword ? 'search-outline' : 'at-outline'}
-              size={16}
-              color="#64748b"
-            />
-            <Text style={styles.headerText} numberOfLines={1}>
-              {title}
-            </Text>
+        {showHeader ? (
+          <View style={styles.header}>
+            <View style={styles.headerLeft}>
+              <Ionicons
+                name={hasKeyword ? 'search-outline' : 'at-outline'}
+                size={16}
+                color="#64748b"
+              />
+              <Text style={styles.headerText} numberOfLines={1}>
+                {title}
+              </Text>
+            </View>
+            <View style={styles.headerRight}>
+              <Text style={styles.headerHint}>{headerHint}</Text>
+              <Text style={styles.headerCountText}>{countText}</Text>
+            </View>
           </View>
-          <View style={styles.headerRight}>
-            <Text style={styles.headerHint}>{headerHint}</Text>
-            <Text style={styles.headerCountText}>{countText}</Text>
-          </View>
-        </View>
+        ) : null}
 
         {loading ? (
           renderStatus('search-outline', loadingText, modalTokens.primary)
@@ -98,18 +119,23 @@ export default function MentionSuggestionsPanel({
             keyExtractor={(item, index) =>
               String(item?.id ?? item?.userId ?? `${buildLocalInviteDisplayName(item)}-${index}`)
             }
+            horizontal={isKeyboardInlineVariant}
             style={[
               styles.list,
+              isKeyboardInlineVariant && styles.listKeyboardInline,
               {
                 maxHeight: listMaxHeight,
               },
             ]}
             contentContainerStyle={{
-              paddingBottom: bottomInset,
+              paddingTop: isKeyboardInlineVariant ? 12 : 0,
+              paddingBottom: isKeyboardInlineVariant ? 12 : bottomInset,
+              paddingHorizontal: isKeyboardInlineVariant ? 10 : 0,
             }}
             scrollEnabled
             nestedScrollEnabled
             bounces={false}
+            showsHorizontalScrollIndicator={false}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="always"
             keyboardDismissMode="none"
@@ -125,7 +151,9 @@ export default function MentionSuggestionsPanel({
                 <Pressable
                   style={({ pressed }) => [
                     styles.item,
-                    index > 0 && styles.itemBorder,
+                    isKeyboardInlineVariant && styles.itemKeyboardInline,
+                    index > 0 && !isKeyboardInlineVariant && styles.itemBorder,
+                    index > 0 && isKeyboardInlineVariant && styles.itemKeyboardInlineSpacing,
                     pressed && styles.itemPressed,
                   ]}
                   android_ripple={{
@@ -135,26 +163,40 @@ export default function MentionSuggestionsPanel({
                 >
                   {({ pressed }) => (
                     <>
-                      <Avatar uri={user.avatar} name={displayName} size={38} />
-                      <View style={styles.meta}>
+                      <Avatar uri={user.avatar} name={displayName} size={avatarSize} />
+                      <View style={[styles.meta, isKeyboardInlineVariant && styles.metaKeyboardInline]}>
                         <View style={styles.nameRow}>
-                          <Text style={styles.name} numberOfLines={1}>
+                          <Text
+                            style={[styles.name, isKeyboardInlineVariant && styles.nameKeyboardInline]}
+                            numberOfLines={1}
+                          >
                             {displayName}
                           </Text>
                           {Number(user?.verified || 0) > 0 ? (
-                            <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />
+                            <Ionicons
+                              name="checkmark-circle"
+                              size={verifiedIconSize}
+                              color="#3b82f6"
+                            />
                           ) : null}
                         </View>
-                        <Text style={styles.desc} numberOfLines={1}>
-                          {secondaryText ||
-                            '\u9009\u62e9\u540e\u5c06\u63d2\u5165\u5230\u5f53\u524d\u5149\u6807\u4f4d\u7f6e'}
-                        </Text>
+                        {!isKeyboardInlineVariant ? (
+                          <Text
+                            style={[styles.desc, isKeyboardInlineVariant && styles.descKeyboardInline]}
+                            numberOfLines={1}
+                          >
+                            {secondaryText ||
+                              '\u9009\u62e9\u540e\u5c06\u63d2\u5165\u5230\u5f53\u524d\u5149\u6807\u4f4d\u7f6e'}
+                          </Text>
+                        ) : null}
                       </View>
-                      <Ionicons
-                        name="chevron-forward"
-                        size={16}
-                        color={pressed ? modalTokens.primary : '#9aa4b2'}
-                      />
+                      {!isKeyboardInlineVariant ? (
+                        <Ionicons
+                          name="chevron-forward"
+                          size={chevronSize}
+                          color={pressed ? modalTokens.primary : '#9aa4b2'}
+                        />
+                      ) : null}
                     </>
                   )}
                 </Pressable>
@@ -174,6 +216,14 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     zIndex: 40,
   },
+  layerEmbedded: {
+    position: 'relative',
+    top: 'auto',
+    right: 'auto',
+    bottom: 'auto',
+    left: 'auto',
+    zIndex: 0,
+  },
   backdrop: {
     flex: 1,
   },
@@ -187,6 +237,49 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#e8edf3',
     zIndex: 20,
+  },
+  overlayEmbedded: {
+    position: 'relative',
+    left: 'auto',
+    right: 'auto',
+    bottom: 'auto',
+    zIndex: 0,
+  },
+  overlayKeyboardInline: {
+    left: 12,
+    right: 12,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
+    borderTopWidth: 0,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    shadowOffset: {
+      width: 0,
+      height: -6,
+    },
+    elevation: 10,
+  },
+  overlayKeyboardInlineEmbedded: {
+    left: 'auto',
+    right: 'auto',
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    backgroundColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    elevation: 0,
+    marginBottom: 14,
   },
   header: {
     minHeight: 50,
@@ -228,6 +321,11 @@ const styles = StyleSheet.create({
     maxHeight: 320,
     backgroundColor: '#ffffff',
   },
+  listKeyboardInline: {
+    borderRadius: 0,
+    maxHeight: 118,
+    backgroundColor: 'transparent',
+  },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -235,6 +333,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     backgroundColor: '#ffffff',
+  },
+  itemKeyboardInline: {
+    width: 78,
+    minHeight: 96,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    flexDirection: 'column',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    borderRadius: 16,
+  },
+  itemKeyboardInlineSpacing: {
+    marginLeft: 8,
   },
   itemBorder: {
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -249,6 +360,13 @@ const styles = StyleSheet.create({
     marginRight: 10,
     minWidth: 0,
   },
+  metaKeyboardInline: {
+    width: '100%',
+    marginLeft: 0,
+    marginRight: 0,
+    marginTop: 8,
+    alignItems: 'center',
+  },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -259,6 +377,12 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(15),
     fontWeight: '600',
     color: modalTokens.textPrimary,
+  },
+  nameKeyboardInline: {
+    maxWidth: 60,
+    fontSize: scaleFont(12),
+    fontWeight: '500',
+    textAlign: 'center',
   },
   desc: {
     marginTop: 4,
@@ -272,6 +396,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 22,
     backgroundColor: '#ffffff',
+  },
+  statusKeyboardInline: {
+    minHeight: 96,
   },
   statusTitle: {
     marginTop: 10,

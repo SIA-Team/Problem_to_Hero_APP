@@ -21,27 +21,23 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import ImagePickerSheet from '../components/ImagePickerSheet';
 import MentionSuggestionsPanel from '../components/MentionSuggestionsPanel';
+import TeamDiscussionComposerModal from '../components/TeamDiscussionComposerModal';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
 import { showToast } from '../utils/toast';
 import apiClient from '../services/api/apiClient';
 import questionApi from '../services/api/questionApi';
-import userApi from '../services/api/userApi';
 import { API_ENDPOINTS } from '../config/api';
 import * as Updates from 'expo-updates';
 import { SIMULATE_PRODUCTION } from '../config/debugMode';
 import { isDevPreviewFeatureEnabled } from '../utils/devPreviewGate';
 import useMentionComposer from '../hooks/useMentionComposer';
-import {
-  mergeLocalInviteUsers,
-  normalizeFollowingInviteUsers,
-  normalizePublicUserSearchResponse,
-} from '../utils/localInviteUsers';
+import useRecommendedMentionUsers from '../hooks/useRecommendedMentionUsers';
 import {
   DEFAULT_MENTION_PANEL_BASE_OFFSET,
-  DEFAULT_MENTION_SEARCH_LIMIT,
 } from '../utils/mentionComposer';
+import { resolveComposerKeyboardMetrics } from '../utils/composerLayout';
 import {
   extractGroupIdsFromGroups,
   getGroupIdValue,
@@ -61,6 +57,8 @@ const DEFAULT_QUESTION = {
 const isSuccessResponse = response => response && (response.code === 200 || response.code === 0);
 const GROUP_CHAT_INTERNAL_ERROR_PATTERN = /No static resource|NOT_FOUND|SQLSyntaxErrorException|app_group/i;
 const GROUP_ALREADY_JOINED_PATTERN = /已加入该群组|已经加入该群组|already joined/i;
+
+const GROUP_CHAT_DEBUG_LOGS_ENABLED = false;
 
 const pickPreferredGroup = groups =>
   groups.find(group => Boolean(group?.isJoined)) ||
@@ -155,8 +153,14 @@ const areMessageItemsEqual = (prev = [], next = []) =>
       item?.content === nextItem?.content &&
       item?.timeLabel === nextItem?.timeLabel &&
       item?.likes === nextItem?.likes &&
+      item?.dislikes === nextItem?.dislikes &&
+      item?.shares === nextItem?.shares &&
+      item?.bookmarks === nextItem?.bookmarks &&
+      item?.reports === nextItem?.reports &&
       item?.replyCount === nextItem?.replyCount &&
       item?.liked === nextItem?.liked &&
+      item?.disliked === nextItem?.disliked &&
+      item?.collected === nextItem?.collected &&
       item?.isFeatured === nextItem?.isFeatured &&
       item?.parentId === nextItem?.parentId &&
       item?.replyToCommentId === nextItem?.replyToCommentId &&
@@ -167,6 +171,9 @@ const areMessageItemsEqual = (prev = [], next = []) =>
 
 const isSameMessageSummary = (prev, next) =>
   prev?.total === next?.total && prev?.featuredCount === next?.featuredCount;
+
+const isLikeInteractionDisabled = (likedState, dislikedState) => !likedState && !!dislikedState;
+const isDislikeInteractionDisabled = (likedState, dislikedState) => !dislikedState && !!likedState;
 
 const getGroupChatErrorMessage = (error, fallbackMessage) => {
   const rawMessage = error?.msg || error?.data?.msg || error?.message || '';
@@ -183,6 +190,9 @@ const isJoinGroupSuccessResponse = response =>
 
 const GROUP_API_REQUEST_CONFIG = {};
 const logGroupChatDebug = (...args) => {
+  if (!GROUP_CHAT_DEBUG_LOGS_ENABLED) {
+    return;
+  }
   console.log('[GroupChatDebug]', ...args);
 };
 
@@ -298,8 +308,16 @@ const normalizeMessageItem = (item, index, t) => {
     content,
     timeLabel,
     likes: toSafeNumber(item?.likeCount ?? item?.likes ?? item?.upCount),
+    dislikes: toSafeNumber(item?.dislikeCount ?? item?.dislikes ?? item?.downCount),
+    shares: toSafeNumber(item?.shareCount ?? item?.shares ?? item?.forwardCount),
+    bookmarks: toSafeNumber(
+      item?.bookmarkCount ?? item?.bookmarks ?? item?.collectCount ?? item?.favoriteCount
+    ),
+    reports: toSafeNumber(item?.reportCount ?? item?.reports),
     replyCount: toSafeNumber(item?.replyCount ?? item?.commentCount ?? item?.comments),
     liked: Boolean(item?.isLiked ?? item?.liked),
+    disliked: Boolean(item?.isDisliked ?? item?.disliked),
+    collected: Boolean(item?.isCollected ?? item?.collected ?? item?.bookmarked ?? item?.favorited),
     isFeatured,
     parentId,
     replyToCommentId,
@@ -308,16 +326,63 @@ const normalizeMessageItem = (item, index, t) => {
   };
 };
 
+const isTopLevelThreadMessage = item => {
+  if (!item?.id) {
+    return false;
+  }
+
+  const currentId = String(item.id);
+  const parentValue =
+    item?.structuralParentId ??
+    item?.parentId ??
+    item?.parent_id ??
+    item?.parentMessageId ??
+    item?.rootMessageId ??
+    item?.rootCommentId;
+
+  if (parentValue === undefined || parentValue === null || parentValue === '') {
+    return true;
+  }
+
+  const parentKey = String(parentValue);
+  return parentKey === '0' || parentKey === currentId;
+};
+
+const sanitizeTopLevelMessageItems = rows => {
+  if (!Array.isArray(rows) || !rows.length) {
+    return [];
+  }
+
+  const seenIds = new Set();
+
+  return rows.filter(item => {
+    if (!item?.id || !item?.content || !isTopLevelThreadMessage(item)) {
+      return false;
+    }
+
+    const itemKey = String(item.id);
+    if (seenIds.has(itemKey)) {
+      return false;
+    }
+
+    seenIds.add(itemKey);
+    return true;
+  });
+};
+
 const normalizeGroupMessagesResponse = (response, t) => {
   const payload = response?.data;
   const candidateList = Array.isArray(payload)
     ? payload
     : payload?.rows || payload?.list || payload?.records || payload?.comments || payload?.messages || [];
-  const messages = Array.isArray(candidateList)
-    ? hydrateThreadMessageItems(
-        candidateList
-          .map((item, index) => normalizeThreadMessageItem(item, index, t))
-          .filter(item => Boolean(item.content))
+  const normalizedRows = Array.isArray(candidateList)
+    ? candidateList
+        .map((item, index) => normalizeThreadMessageItem(item, index, t))
+        .filter(item => Boolean(item.content))
+    : [];
+  const messages = normalizedRows.length
+    ? sanitizeTopLevelMessageItems(
+        resolveThreadReplyCounts(hydrateThreadMessageItems(normalizedRows))
       )
     : [];
 
@@ -352,6 +417,7 @@ const normalizeThreadMessageItem = (item, index, t, fallback = {}) => {
 
   return {
     ...normalized,
+    replyCount: toSafeNumber(fallback.replyCount ?? item?.replyCount ?? normalized.replyCount),
     parentId,
     replyToCommentId,
     replyToUserName,
@@ -368,6 +434,77 @@ const extractGroupMessageRows = response => {
     : payload?.rows || payload?.list || payload?.records || payload?.comments || payload?.messages || [];
 
   return Array.isArray(candidateList) ? candidateList : [];
+};
+
+const extractGroupMessageTotalCount = response => {
+  const payload = response?.data;
+  return toSafeNumber(
+    payload?.total ??
+      payload?.totalCount ??
+      payload?.count ??
+      payload?.messageCount ??
+      payload?.commentCount
+  );
+};
+
+const filterThreadRowsForMessage = (rows = [], rootMessageId = null) => {
+  const normalizedRootId =
+    rootMessageId !== undefined && rootMessageId !== null ? String(rootMessageId) : '';
+
+  if (!normalizedRootId || !Array.isArray(rows) || rows.length === 0) {
+    return [];
+  }
+
+  const normalizedRows = rows.filter(item => Boolean(item?.id));
+  const includedIds = new Set();
+  const pendingRows = normalizedRows.filter(item => String(item.id) !== normalizedRootId);
+
+  const isDirectChildOfRoot = item => {
+    const parentId = String(item?.parentId ?? item?.parent_id ?? item?.parentMessageId ?? '');
+    const rootId = String(item?.rootMessageId ?? item?.rootCommentId ?? item?.threadRootId ?? '');
+    return parentId === normalizedRootId || rootId === normalizedRootId;
+  };
+
+  pendingRows.forEach(item => {
+    if (isDirectChildOfRoot(item)) {
+      includedIds.add(String(item.id));
+    }
+  });
+
+  let hasChanges = true;
+  while (hasChanges) {
+    hasChanges = false;
+
+    pendingRows.forEach(item => {
+      const currentId = String(item.id);
+      if (includedIds.has(currentId)) {
+        return;
+      }
+
+      const parentId = String(item?.parentId ?? item?.parent_id ?? item?.parentMessageId ?? '');
+      const replyTargetId = String(
+        item?.replyToCommentId ??
+          item?.replyCommentId ??
+          item?.toCommentId ??
+          item?.parentCommentId ??
+          item?.replyMessageId ??
+          ''
+      );
+      const rootId = String(item?.rootMessageId ?? item?.rootCommentId ?? item?.threadRootId ?? '');
+
+      if (
+        rootId === normalizedRootId ||
+        includedIds.has(parentId) ||
+        includedIds.has(replyTargetId) ||
+        parentId === normalizedRootId
+      ) {
+        includedIds.add(currentId);
+        hasChanges = true;
+      }
+    });
+  }
+
+  return pendingRows.filter(item => includedIds.has(String(item.id)));
 };
 
 const hydrateThreadMessageItems = (rows = [], rootMessageId = null) => {
@@ -517,6 +654,73 @@ const flattenThreadMessageTree = (nodes = [], accumulator = []) => {
   return accumulator;
 };
 
+const resolveThreadReplyCounts = (rows = [], rootId = null) => {
+  if (!Array.isArray(rows) || !rows.length) {
+    return [];
+  }
+
+  const replyCountMap = new Map();
+
+  const traverse = nodes => {
+    nodes.forEach(node => {
+      const children = Array.isArray(node.children) ? node.children : [];
+      if (children.length > 0) {
+        traverse(children);
+      }
+      const descendantCount = children.reduce((total, child) => {
+        const childDescendantCount = replyCountMap.get(String(child.id)) ?? 0;
+        return total + 1 + childDescendantCount;
+      }, 0);
+      replyCountMap.set(String(node.id), descendantCount);
+    });
+  };
+
+  const tree = buildThreadMessageTree(rows, rootId);
+  traverse(tree);
+
+  return rows.map(item => ({
+    ...item,
+    replyCount: Math.max(Number(item?.replyCount) || 0, replyCountMap.get(String(item?.id)) ?? 0),
+    raw:
+      item?.raw && typeof item.raw === 'object'
+        ? {
+            ...item.raw,
+            replyCount: Math.max(
+              Number(item?.replyCount) || 0,
+              replyCountMap.get(String(item?.id)) ?? 0
+            ),
+          }
+        : item?.raw,
+  }));
+};
+
+const applyMessagePatch = (message, patch = {}) => {
+  if (!message) {
+    return message;
+  }
+
+  const nextRaw =
+    message?.raw && typeof message.raw === 'object'
+      ? {
+          ...message.raw,
+          ...patch,
+        }
+      : message?.raw;
+
+  if (nextRaw !== undefined) {
+    return {
+      ...message,
+      ...patch,
+      raw: nextRaw,
+    };
+  }
+
+  return {
+    ...message,
+    ...patch,
+  };
+};
+
 const getGroupRoleMeta = userRole => {
   if (Number(userRole) === 2) {
     return {
@@ -567,6 +771,8 @@ export default function GroupChatScreen({ navigation, route }) {
   });
   const [messages, setMessages] = useState([]);
   const [liked, setLiked] = useState({});
+  const [disliked, setDisliked] = useState({});
+  const [bookmarked, setBookmarked] = useState({});
   const [isJoined, setIsJoined] = useState(false);
   const [showReplyModal, setShowReplyModal] = useState(false);
   const [showReplyListModal, setShowReplyListModal] = useState(false);
@@ -575,7 +781,12 @@ export default function GroupChatScreen({ navigation, route }) {
   const [writeMessageText, setWriteMessageText] = useState('');
   const [showMessageImagePicker, setShowMessageImagePicker] = useState(false);
   const [selectedMessageImage, setSelectedMessageImage] = useState('');
-  const [recommendedMentionUsers, setRecommendedMentionUsers] = useState([]);
+  const [messageComposerKeyboardVisible, setMessageComposerKeyboardVisible] = useState(false);
+  const [androidComposerKeyboardOffset, setAndroidComposerKeyboardOffset] = useState(0);
+  const [androidComposerReady, setAndroidComposerReady] = useState(Platform.OS !== 'android');
+  const [pendingComposerToolbarAction, setPendingComposerToolbarAction] = useState(null);
+  const [isComposerMentionPanelPinned, setIsComposerMentionPanelPinned] = useState(false);
+  const [composerSheetHeight, setComposerSheetHeight] = useState(0);
   const [replyTarget, setReplyTarget] = useState(null);
   const [replyText, setReplyText] = useState('');
   const [replyParentMessageId, setReplyParentMessageId] = useState(null);
@@ -611,10 +822,15 @@ export default function GroupChatScreen({ navigation, route }) {
   const locale = i18n?.locale || 'en';
   const composerInputRef = useRef(null);
   const showWriteMessageModalRef = useRef(false);
-  const keepComposerOpenRef = useRef(false);
-  const autoJoinAttemptedGroupIdsRef = useRef(new Set());
+  const composerFocusTimeoutsRef = useRef([]);
+  const composerFocusInteractionRef = useRef(null);
+  const composerLayoutFocusedRef = useRef(false);
   const joinRequestMapRef = useRef(new Map());
   const getMessageLikedState = message => liked[message?.id] !== undefined ? liked[message.id] : !!message?.liked;
+  const getMessageDislikedState = message =>
+    disliked[message?.id] !== undefined ? disliked[message.id] : !!message?.disliked;
+  const getMessageBookmarkedState = message =>
+    bookmarked[message?.id] !== undefined ? bookmarked[message.id] : !!message?.collected;
   const currentReplyMessage =
     messages.find(item => String(item.id) === String(currentReplyMessageId)) || null;
   const currentMessageReplies = currentReplyMessageId ? messageRepliesMap[currentReplyMessageId] || [] : [];
@@ -622,11 +838,18 @@ export default function GroupChatScreen({ navigation, route }) {
   const currentReplyError = currentReplyMessageId ? replyErrorMap[currentReplyMessageId] || '' : '';
   const topLevelMessageNodes = useMemo(() => buildThreadMessageTree(messages), [messages]);
   const {
+    recommendedMentionUsers,
+    resetRecommendedMentionUsers,
+  } = useRecommendedMentionUsers({
+    visible: showWriteMessageModal,
+    scene: 'group-message',
+  });
+  const {
     activeMention,
     candidateUsers,
     focusInput: focusMentionInput,
     handleMentionPress: triggerMentionPress,
-    handleMentionSelect,
+    handleMentionSelect: handleComposerMentionSelect,
     handleSelectionChange: handleComposerSelectionChange,
     listMaxHeight: composerMentionListMaxHeight,
     mentionBottomInset: composerMentionBottomInset,
@@ -648,16 +871,28 @@ export default function GroupChatScreen({ navigation, route }) {
     onInvalidMention: () => showToast('该用户缺少可用名称', 'warning'),
   });
 
+  const clearComposerFocusRequests = () => {
+    composerFocusTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId));
+    composerFocusTimeoutsRef.current = [];
+    composerFocusInteractionRef.current?.cancel?.();
+    composerFocusInteractionRef.current = null;
+  };
+
   const focusComposerInput = () => {
+    clearComposerFocusRequests();
+
     const triggerFocus = () => {
-      composerInputRef.current?.focus();
+      if (showWriteMessageModalRef.current) {
+        composerInputRef.current?.focus();
+      }
     };
 
-    triggerFocus();
     requestAnimationFrame(triggerFocus);
-    setTimeout(triggerFocus, 80);
-    setTimeout(triggerFocus, 180);
-    InteractionManager.runAfterInteractions(triggerFocus);
+    composerFocusTimeoutsRef.current = [
+      setTimeout(triggerFocus, 60),
+      setTimeout(triggerFocus, 140),
+    ];
+    composerFocusInteractionRef.current = InteractionManager.runAfterInteractions(triggerFocus);
   };
 
   useEffect(() => {
@@ -666,64 +901,105 @@ export default function GroupChatScreen({ navigation, route }) {
 
   useEffect(() => {
     if (!showWriteMessageModal) {
-      setRecommendedMentionUsers([]);
+      clearComposerFocusRequests();
+      composerLayoutFocusedRef.current = false;
+      setMessageComposerKeyboardVisible(false);
+      setAndroidComposerKeyboardOffset(0);
+      setAndroidComposerReady(Platform.OS !== 'android');
+      setPendingComposerToolbarAction(null);
+      setIsComposerMentionPanelPinned(false);
+      setComposerSheetHeight(0);
       return undefined;
     }
 
-    let isActive = true;
-    const fallbackSearchKeywords = ['a', 'e', 'm', '1', '8'];
+    if (Platform.OS === 'android') {
+      composerLayoutFocusedRef.current = false;
+      setAndroidComposerReady(false);
+    }
 
-    const loadRecommendedUsers = async () => {
-      try {
-        let mergedUsers = [];
+    const handleKeyboardShow = event => {
+      setMessageComposerKeyboardVisible(true);
 
-        try {
-          const response = await userApi.getFollowing({
-            pageNum: 1,
-            page: 1,
-            pageSize: 20,
-            size: 20,
-            limit: 20,
-          });
-          mergedUsers = mergeLocalInviteUsers(normalizeFollowingInviteUsers(response));
-        } catch (followError) {
-          console.warn('[GroupChat] Failed to load mention following users:', followError);
-        }
+      if (Platform.OS === 'android') {
+        const keyboardMetrics = resolveComposerKeyboardMetrics({
+          platform: Platform.OS,
+          windowHeight,
+          keyboardHeight: event?.endCoordinates?.height || 0,
+          keyboardScreenY: event?.endCoordinates?.screenY ?? windowHeight,
+          footerBottomInset: Math.max(insets.bottom, 12),
+          androidFooterClearance: 0,
+        });
 
-        if (mergedUsers.length < 6) {
-          const fallbackResults = await Promise.allSettled(
-            fallbackSearchKeywords.map(keyword => userApi.searchPublicProfiles(keyword, 10))
-          );
+        setAndroidComposerKeyboardOffset(Math.max(keyboardMetrics.overlayOffset, 0));
+        setAndroidComposerReady(true);
+      }
+    };
+    const handleKeyboardHide = () => {
+      setMessageComposerKeyboardVisible(false);
 
-          fallbackResults.forEach(result => {
-            if (result.status !== 'fulfilled') {
-              return;
-            }
-
-            mergedUsers = mergeLocalInviteUsers([
-              ...mergedUsers,
-              ...normalizePublicUserSearchResponse(result.value),
-            ]);
-          });
-        }
-
-        if (isActive) {
-          setRecommendedMentionUsers(mergedUsers.slice(0, DEFAULT_MENTION_SEARCH_LIMIT));
-        }
-      } catch (error) {
-        if (isActive) {
-          console.warn('[GroupChat] Failed to load mention recommended users:', error);
-          setRecommendedMentionUsers([]);
-        }
+      if (Platform.OS === 'android') {
+        setAndroidComposerKeyboardOffset(0);
       }
     };
 
-    loadRecommendedUsers();
+    const subscriptions = [
+      Keyboard.addListener('keyboardDidShow', handleKeyboardShow),
+      Keyboard.addListener('keyboardDidHide', handleKeyboardHide),
+    ];
+
+    if (Platform.OS === 'ios') {
+      subscriptions.push(Keyboard.addListener('keyboardWillShow', handleKeyboardShow));
+      subscriptions.push(Keyboard.addListener('keyboardWillHide', handleKeyboardHide));
+    }
 
     return () => {
-      isActive = false;
+      subscriptions.forEach(subscription => subscription.remove());
     };
-  }, [showWriteMessageModal]);
+  }, [insets.bottom, showWriteMessageModal, windowHeight]);
+
+  useEffect(() => {
+    if (!showWriteMessageModal || !pendingComposerToolbarAction) {
+      return undefined;
+    }
+
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      runComposerToolbarAction(pendingComposerToolbarAction);
+      setPendingComposerToolbarAction(null);
+    });
+
+    return () => {
+      hideSubscription.remove();
+    };
+  }, [pendingComposerToolbarAction, showWriteMessageModal]);
+
+  useEffect(() => {
+    if (!isComposerMentionPanelPinned) {
+      return undefined;
+    }
+
+    if (shouldRenderComposerMentionPanel) {
+      return undefined;
+    }
+
+    const normalizedText = String(writeMessageText ?? '');
+    const cursor = Math.max(
+      0,
+      Math.min(Number(composerSelection?.start ?? normalizedText.length) || 0, normalizedText.length)
+    );
+    const textBeforeCursor = normalizedText.slice(0, cursor);
+
+    if (textBeforeCursor.endsWith('@')) {
+      return undefined;
+    }
+
+    setIsComposerMentionPanelPinned(false);
+    return undefined;
+  }, [
+    composerSelection?.start,
+    isComposerMentionPanelPinned,
+    shouldRenderComposerMentionPanel,
+    writeMessageText,
+  ]);
 
   useEffect(() => {
     logGroupChatDebug('screen init', {
@@ -790,6 +1066,7 @@ export default function GroupChatScreen({ navigation, route }) {
 
   useEffect(() => {
     let isMounted = true;
+    let interactionTask = null;
 
     if (!questionId) {
       setQuestionGroups(prev => (prev.length ? [] : prev));
@@ -829,10 +1106,15 @@ export default function GroupChatScreen({ navigation, route }) {
       }
     };
 
-    loadQuestionGroups();
+    interactionTask = InteractionManager.runAfterInteractions(() => {
+      if (isMounted) {
+        loadQuestionGroups();
+      }
+    });
 
     return () => {
       isMounted = false;
+      interactionTask?.cancel?.();
     };
   }, [questionId]);
 
@@ -973,20 +1255,19 @@ export default function GroupChatScreen({ navigation, route }) {
   };
 
   useEffect(() => {
-    if (!hasGroupIdValue(currentGroupId)) {
-      return undefined;
-    }
-
-    const groupIdKey = String(currentGroupId).trim();
-    if (!groupIdKey || autoJoinAttemptedGroupIdsRef.current.has(groupIdKey)) {
-      return undefined;
-    }
-
-    autoJoinAttemptedGroupIdsRef.current.add(groupIdKey);
-
-    ensureJoinedGroup(currentGroupId).catch(() => {});
-
-    return undefined;
+    setCurrentReplyMessageId(null);
+    setCurrentReplyRootId(null);
+    setReplyTarget(null);
+    setReplyParentMessageId(null);
+    setReplyText('');
+    setReplyComposerReturnTarget(null);
+    setShowReplyModal(false);
+    setShowReplyListModal(false);
+    setShowReplyThreadModal(false);
+    setReplyKeyboardOffset(0);
+    setMessageRepliesMap(prev => (Object.keys(prev).length ? {} : prev));
+    setReplyLoadingMap(prev => (Object.keys(prev).length ? {} : prev));
+    setReplyErrorMap(prev => (Object.keys(prev).length ? {} : prev));
   }, [currentGroupId]);
 
   useEffect(() => {
@@ -995,13 +1276,18 @@ export default function GroupChatScreen({ navigation, route }) {
         return prev;
       }
 
-      const localizedMessages = hydrateThreadMessageItems(
-        prev.map((item, index) =>
-          normalizeThreadMessageItem(item?.raw ?? item, index, t, {
-            parentId: item?.parentId,
-            replyToCommentId: item?.replyToCommentId,
-            replyToUserName: item?.replyToUserName,
-          })
+      const localizedMessages = sanitizeTopLevelMessageItems(
+        resolveThreadReplyCounts(
+          hydrateThreadMessageItems(
+            prev.map((item, index) =>
+              normalizeThreadMessageItem(item?.raw ?? item, index, t, {
+                parentId: item?.parentId,
+                replyToCommentId: item?.replyToCommentId,
+                replyToUserName: item?.replyToUserName,
+                replyCount: item?.replyCount,
+              })
+            )
+          )
         )
       );
       return areMessageItemsEqual(prev, localizedMessages) ? prev : localizedMessages;
@@ -1010,6 +1296,7 @@ export default function GroupChatScreen({ navigation, route }) {
 
   useEffect(() => {
     let isMounted = true;
+    let interactionTask = null;
 
     if (!hasGroupIdValue(currentGroupId)) {
       setMessages(prev => (prev.length ? [] : prev));
@@ -1050,11 +1337,21 @@ export default function GroupChatScreen({ navigation, route }) {
             result[item.id] = Boolean(item.liked);
             return result;
           }, {});
+          const nextDislikedState = normalizedResult.messages.reduce((result, item) => {
+            result[item.id] = Boolean(item.disliked);
+            return result;
+          }, {});
+          const nextBookmarkedState = normalizedResult.messages.reduce((result, item) => {
+            result[item.id] = Boolean(item.collected);
+            return result;
+          }, {});
 
           setMessages(prev =>
             areMessageItemsEqual(prev, normalizedResult.messages) ? prev : normalizedResult.messages
           );
           setLiked(nextLikedState);
+          setDisliked(nextDislikedState);
+          setBookmarked(nextBookmarkedState);
           setMessageSummary(prev =>
             isSameMessageSummary(prev, {
               total: normalizedResult.total,
@@ -1091,10 +1388,15 @@ export default function GroupChatScreen({ navigation, route }) {
       }
     };
 
-    loadGroupMessages();
+    interactionTask = InteractionManager.runAfterInteractions(() => {
+      if (isMounted) {
+        loadGroupMessages();
+      }
+    });
 
     return () => {
       isMounted = false;
+      interactionTask?.cancel?.();
     };
   }, [activeTab, currentGroupId, messageReloadKey]);
 
@@ -1103,11 +1405,30 @@ export default function GroupChatScreen({ navigation, route }) {
       return undefined;
     }
 
-    const focusTimer = setTimeout(() => {
-      focusComposerInput();
-    }, 60);
+    let androidRevealTimer = null;
+    let androidRefocusTimer = null;
 
-    return () => clearTimeout(focusTimer);
+    focusComposerInput();
+
+    if (Platform.OS === 'android') {
+      androidRefocusTimer = setTimeout(() => {
+        focusComposerInput();
+      }, 80);
+
+      androidRevealTimer = setTimeout(() => {
+        setAndroidComposerReady(true);
+      }, 260);
+    }
+
+    return () => {
+      if (androidRevealTimer) {
+        clearTimeout(androidRevealTimer);
+      }
+      if (androidRefocusTimer) {
+        clearTimeout(androidRefocusTimer);
+      }
+      clearComposerFocusRequests();
+    };
   }, [showWriteMessageModal]);
 
   useEffect(() => {
@@ -1153,32 +1474,11 @@ export default function GroupChatScreen({ navigation, route }) {
   }, [insets.bottom, showReplyModal, windowHeight]);
 
   useEffect(() => {
-    const handleComposerKeyboardHide = () => {
-      if (!showWriteMessageModalRef.current || keepComposerOpenRef.current) {
-        return;
-      }
-
-      setShowWriteMessageModal(false);
-      setWriteMessageText('');
-      setSelectedMessageImage('');
-    };
-
-    const hideSubscription = Keyboard.addListener('keyboardDidHide', handleComposerKeyboardHide);
-    const willHideSubscription =
-      Platform.OS === 'ios' ? Keyboard.addListener('keyboardWillHide', handleComposerKeyboardHide) : null;
-
-    return () => {
-      hideSubscription.remove();
-      willHideSubscription?.remove();
-    };
-  }, []);
-
-  useEffect(() => {
     if (canOpenMessageComposer || !showWriteMessageModal) {
       return;
     }
 
-    keepComposerOpenRef.current = false;
+    clearComposerFocusRequests();
     setShowWriteMessageModal(false);
     setWriteMessageText('');
     setSelectedMessageImage('');
@@ -1274,10 +1574,9 @@ export default function GroupChatScreen({ navigation, route }) {
 
       return nextMessages.map(message =>
         String(message.id) === String(parentMessageId)
-          ? {
-              ...message,
+          ? applyMessagePatch(message, {
               replyCount: (message.replyCount || 0) + 1,
-            }
+            })
           : message
       );
     });
@@ -1285,6 +1584,14 @@ export default function GroupChatScreen({ navigation, route }) {
     setLiked(prev => ({
       ...prev,
       [createdMessage.id]: Boolean(createdMessage.liked),
+    }));
+    setDisliked(prev => ({
+      ...prev,
+      [createdMessage.id]: Boolean(createdMessage.disliked),
+    }));
+    setBookmarked(prev => ({
+      ...prev,
+      [createdMessage.id]: Boolean(createdMessage.collected),
     }));
 
     setMessageSummary(prev => ({
@@ -1359,6 +1666,212 @@ export default function GroupChatScreen({ navigation, route }) {
       )
     : [];
 
+  const requestMessageRepliesSnapshot = async messageId => {
+    const resolvedMessageId = Number(messageId) || 0;
+
+    if (!resolvedMessageId) {
+      return {
+        replies: [],
+        totalCount: 0,
+      };
+    }
+
+    const resolvedGroupId = await ensureCurrentGroupId();
+    const token = await AsyncStorage.getItem('authToken');
+    const requestParams = {
+      groupId: Number(resolvedGroupId) || 0,
+      parentId: resolvedMessageId,
+      pageNum: 1,
+      pageSize: 200,
+    };
+    const requestCandidates = [
+      {
+        endpoint: API_ENDPOINTS.GROUP.MESSAGE_PUBLIC_LIST,
+        params: {
+          ...requestParams,
+          isBoutique: 0,
+        },
+        headers: undefined,
+        validateRows: rows => Array.isArray(rows),
+      },
+      {
+        endpoint: API_ENDPOINTS.GROUP.MESSAGE_LIST,
+        params: requestParams,
+        headers: token
+          ? {
+              token,
+            }
+          : undefined,
+      },
+    ];
+
+    let response = null;
+    let responseRows = [];
+    let lastLoadError = null;
+
+    for (const candidate of requestCandidates) {
+      try {
+        const nextResponse = await apiClient.get(candidate.endpoint, {
+          ...GROUP_API_REQUEST_CONFIG,
+          params: candidate.params,
+          headers: candidate.headers,
+        });
+
+        if (!isSuccessResponse(nextResponse)) {
+          throw new Error(getGroupChatErrorMessage(nextResponse, t('screens.groupChat.loadFailed')));
+        }
+
+        const nextRows = extractGroupMessageRows(nextResponse);
+        const isValidResponse = candidate.validateRows ? candidate.validateRows(nextRows) : true;
+
+        if (!isValidResponse) {
+          throw new Error('Reply list response did not contain threaded rows');
+        }
+
+        response = nextResponse;
+        responseRows = nextRows;
+        lastLoadError = null;
+        break;
+      } catch (candidateError) {
+        lastLoadError = candidateError;
+        console.warn('[GroupChat] Reply list request failed:', {
+          endpoint: candidate.endpoint,
+          params: candidate.params,
+          error: candidateError,
+        });
+      }
+    }
+
+    if (!response) {
+      throw lastLoadError || new Error(t('screens.groupChat.loadFailed'));
+    }
+
+    const filteredRows = filterThreadRowsForMessage(responseRows, resolvedMessageId);
+    const responseReplyRowCount = responseRows.filter(
+      item => String(item?.id ?? '') !== String(resolvedMessageId)
+    ).length;
+    const allRowsBelongToCurrentRoot =
+      filteredRows.length > 0 && filteredRows.length === responseReplyRowCount;
+    const responseTotalCount = extractGroupMessageTotalCount(response);
+    const hydratedReplies = resolveThreadReplyCounts(
+      hydrateThreadMessageItems(
+        filteredRows
+          .map((item, index) =>
+            normalizeThreadMessageItem(item, index, t, {
+              parentId:
+                item?.parentId ??
+                item?.parent_id ??
+                item?.parentMessageId ??
+                item?.rootMessageId ??
+                item?.rootCommentId ??
+                resolvedMessageId,
+            })
+          )
+          .filter(item => String(item.id) !== String(resolvedMessageId)),
+        resolvedMessageId
+      ),
+      resolvedMessageId
+    );
+
+    return {
+      replies: hydratedReplies,
+      totalCount: allRowsBelongToCurrentRoot
+        ? Math.max(responseTotalCount, hydratedReplies.length)
+        : hydratedReplies.length,
+    };
+  };
+
+  const updateMessageItemById = (targetId, updater) => {
+    if (!targetId || typeof updater !== 'function') {
+      return;
+    }
+
+    setMessages(prevMessages =>
+      prevMessages.map(item =>
+        String(item.id) === String(targetId) ? applyMessagePatch(item, updater(item)) : item
+      )
+    );
+
+    setMessageRepliesMap(prevMap => {
+      let hasChanged = false;
+      const nextMap = Object.keys(prevMap).reduce((result, key) => {
+        const currentList = Array.isArray(prevMap[key]) ? prevMap[key] : [];
+        const nextList = currentList.map(item => {
+          if (String(item.id) !== String(targetId)) {
+            return item;
+          }
+
+          hasChanged = true;
+          return applyMessagePatch(item, updater(item));
+        });
+
+        result[key] = nextList;
+        return result;
+      }, {});
+
+      return hasChanged ? nextMap : prevMap;
+    });
+  };
+
+  const toggleMessageLike = message => {
+    const targetId = message?.id;
+    const likedState = getMessageLikedState(message);
+    const dislikedState = getMessageDislikedState(message);
+
+    if (!targetId || isLikeInteractionDisabled(likedState, dislikedState)) {
+      return;
+    }
+
+    const nextLikedState = !likedState;
+    setLiked(prev => ({
+      ...prev,
+      [targetId]: nextLikedState,
+    }));
+    updateMessageItemById(targetId, currentItem => ({
+      liked: nextLikedState,
+      likes: Math.max((Number(currentItem?.likes) || 0) + (nextLikedState ? 1 : -1), 0),
+    }));
+  };
+
+  const toggleMessageDislike = message => {
+    const targetId = message?.id;
+    const likedState = getMessageLikedState(message);
+    const dislikedState = getMessageDislikedState(message);
+
+    if (!targetId || isDislikeInteractionDisabled(likedState, dislikedState)) {
+      return;
+    }
+
+    const nextDislikedState = !dislikedState;
+    setDisliked(prev => ({
+      ...prev,
+      [targetId]: nextDislikedState,
+    }));
+    updateMessageItemById(targetId, currentItem => ({
+      disliked: nextDislikedState,
+      dislikes: Math.max((Number(currentItem?.dislikes) || 0) + (nextDislikedState ? 1 : -1), 0),
+    }));
+  };
+
+  const toggleMessageBookmark = message => {
+    const targetId = message?.id;
+    const bookmarkedState = getMessageBookmarkedState(message);
+
+    if (!targetId) {
+      return;
+    }
+
+    const nextBookmarkedState = !bookmarkedState;
+    setBookmarked(prev => ({
+      ...prev,
+      [targetId]: nextBookmarkedState,
+    }));
+    updateMessageItemById(targetId, currentItem => ({
+      collected: nextBookmarkedState,
+      bookmarks: Math.max((Number(currentItem?.bookmarks) || 0) + (nextBookmarkedState ? 1 : -1), 0),
+    }));
+  };
+
   const loadMessageReplies = async (messageId, options = {}) => {
     const { forceRefresh = false } = options;
     const resolvedMessageId = Number(messageId) || 0;
@@ -1385,87 +1898,7 @@ export default function GroupChatScreen({ navigation, route }) {
         [resolvedMessageId]: '',
       }));
 
-      const resolvedGroupId = await ensureCurrentGroupId();
-      const token = await AsyncStorage.getItem('authToken');
-      const requestParams = {
-        groupId: Number(resolvedGroupId) || 0,
-        parentId: resolvedMessageId,
-        pageNum: 1,
-        pageSize: 200,
-      };
-      const requestCandidates = [
-        {
-          endpoint: API_ENDPOINTS.GROUP.MESSAGE_PUBLIC_LIST,
-          params: {
-            ...requestParams,
-            isBoutique: 0,
-          },
-          headers: undefined,
-          // Some environments return reply rows without explicit relation fields.
-          // Since this request already filters by parentId, we can safely hydrate
-          // the missing parent relationship from the request parameters.
-          validateRows: rows => Array.isArray(rows),
-        },
-        {
-          endpoint: API_ENDPOINTS.GROUP.MESSAGE_LIST,
-          params: requestParams,
-          headers: token
-            ? {
-                token,
-              }
-            : undefined,
-        },
-      ];
-
-      let response = null;
-      let responseRows = [];
-      let lastLoadError = null;
-
-      for (const candidate of requestCandidates) {
-        try {
-          const nextResponse = await apiClient.get(candidate.endpoint, {
-            ...GROUP_API_REQUEST_CONFIG,
-            params: candidate.params,
-            headers: candidate.headers,
-          });
-
-          if (!isSuccessResponse(nextResponse)) {
-            throw new Error(getGroupChatErrorMessage(nextResponse, t('screens.groupChat.loadFailed')));
-          }
-
-          const nextRows = extractGroupMessageRows(nextResponse);
-          const isValidResponse = candidate.validateRows ? candidate.validateRows(nextRows) : true;
-
-          if (!isValidResponse) {
-            throw new Error('Reply list response did not contain threaded rows');
-          }
-
-          response = nextResponse;
-          responseRows = nextRows;
-          lastLoadError = null;
-          break;
-        } catch (candidateError) {
-          lastLoadError = candidateError;
-          console.warn('[GroupChat] Reply list request failed:', {
-            endpoint: candidate.endpoint,
-            params: candidate.params,
-            error: candidateError,
-          });
-        }
-      }
-
-      if (!response) {
-        throw lastLoadError || new Error(t('screens.groupChat.loadFailed'));
-      }
-
-      const hydratedReplies = hydrateThreadMessageItems(
-        responseRows
-          .map((item, index) =>
-            normalizeThreadMessageItem(item, index, t, {
-              parentId: item?.parentId ?? resolvedMessageId,
-            })
-          )
-          .filter(item => String(item.id) !== String(resolvedMessageId)),
+      const { replies: hydratedReplies, totalCount } = await requestMessageRepliesSnapshot(
         resolvedMessageId
       );
 
@@ -1477,10 +1910,9 @@ export default function GroupChatScreen({ navigation, route }) {
       setMessages(prev =>
         prev.map(message =>
           String(message.id) === String(resolvedMessageId)
-            ? {
-                ...message,
-                replyCount: hydratedReplies.length,
-              }
+            ? applyMessagePatch(message, {
+                replyCount: totalCount,
+              })
             : message
         )
       );
@@ -1533,24 +1965,30 @@ export default function GroupChatScreen({ navigation, route }) {
     }
 
     setMessages(prev => {
-      const nextMessages = [createdReply, ...prev].filter(
-        (item, index, list) => list.findIndex(candidate => String(candidate.id) === String(item.id)) === index
-      );
+      let hasPatchedTarget = false;
+      const nextMessages = prev.map(message => {
+        if (String(message.id) !== String(messageId)) {
+          return message;
+        }
 
-      return nextMessages.map(message =>
-        String(message.id) === String(messageId)
-          ? {
-              ...message,
-              replyCount: Math.max((Number(message.replyCount) || 0) + 1, 1),
-            }
-          : message
-      );
+        hasPatchedTarget = true;
+        return applyMessagePatch(message, {
+          replyCount: Math.max((Number(message.replyCount) || 0) + 1, 1),
+        });
+      });
+
+      return hasPatchedTarget
+        ? nextMessages
+        : prev;
     });
 
     setMessageRepliesMap(prev => {
       const currentReplies = prev[messageId] || [];
-      const hydratedReplies = hydrateThreadMessageItems(
-        [...currentReplies, createdReply].filter(item => String(item.id) !== String(messageId)),
+      const hydratedReplies = resolveThreadReplyCounts(
+        hydrateThreadMessageItems(
+          [...currentReplies, createdReply].filter(item => String(item.id) !== String(messageId)),
+          messageId
+        ),
         messageId
       );
 
@@ -1564,22 +2002,30 @@ export default function GroupChatScreen({ navigation, route }) {
       ...prev,
       [createdReply.id]: Boolean(createdReply.liked),
     }));
-
-    setMessageSummary(prev => ({
+    setDisliked(prev => ({
       ...prev,
-      total: Math.max((prev?.total ?? 0) + 1, 1),
-      featuredCount:
-        (prev?.featuredCount ?? 0) + (createdReply.isFeatured ? 1 : 0),
+      [createdReply.id]: Boolean(createdReply.disliked),
+    }));
+    setBookmarked(prev => ({
+      ...prev,
+      [createdReply.id]: Boolean(createdReply.collected),
+    }));
+
+    setReplyErrorMap(prev => ({
+      ...prev,
+      [messageId]: '',
     }));
   };
 
-  const handlePublishMessage = async (content = '') => {
+  const handlePublishMessage = async (content = '', selectedImages = []) => {
     const trimmedContent = content.trim();
-    if ((!trimmedContent && !selectedMessageImage) || publishingMessage) return;
+    const normalizedSelectedImages = Array.isArray(selectedImages) ? selectedImages.filter(Boolean) : [];
 
-    if (selectedMessageImage) {
+    if ((!trimmedContent && normalizedSelectedImages.length === 0) || publishingMessage) return;
+
+    if (normalizedSelectedImages.length > 0) {
       showToast(t('screens.groupChat.imageUploadUnsupported'), 'warning');
-      return;
+      return false;
     }
 
     try {
@@ -1593,7 +2039,8 @@ export default function GroupChatScreen({ navigation, route }) {
       setActiveTab('all');
       setWriteMessageText('');
       setSelectedMessageImage('');
-      setRecommendedMentionUsers([]);
+      setIsComposerMentionPanelPinned(false);
+      resetRecommendedMentionUsers();
       setShowWriteMessageModal(false);
       Keyboard.dismiss();
     } catch (error) {
@@ -1611,37 +2058,81 @@ export default function GroupChatScreen({ navigation, route }) {
     }
 
     setShowWriteMessageModal(true);
-    setTimeout(() => {
-      focusComposerInput();
-    }, 0);
   };
 
   const closeWriteMessageModal = () => {
-    keepComposerOpenRef.current = false;
+    clearComposerFocusRequests();
+    setPendingComposerToolbarAction(null);
+    setMessageComposerKeyboardVisible(false);
+    setIsComposerMentionPanelPinned(false);
+    setShowMessageImagePicker(false);
     setShowWriteMessageModal(false);
     setWriteMessageText('');
     setSelectedMessageImage('');
-    setRecommendedMentionUsers([]);
+    resetRecommendedMentionUsers();
     Keyboard.dismiss();
   };
 
-  const handleOpenMessageImagePicker = () => {
-    keepComposerOpenRef.current = true;
-    setShowMessageImagePicker(true);
-    Keyboard.dismiss();
+  const runComposerToolbarAction = action => {
+    if (action === 'image') {
+      setShowMessageImagePicker(true);
+      return;
+    }
+
+    if (action === 'mention') {
+      setIsComposerMentionPanelPinned(true);
+      triggerMentionPress({ focusInput: !messageComposerKeyboardVisible });
+    }
   };
+
+  const handlePinnedComposerMentionSelect = user => {
+    setIsComposerMentionPanelPinned(false);
+    handleComposerMentionSelect(user);
+  };
+
+  const handleOpenMessageImagePicker = () => {
+    clearComposerFocusRequests();
+    setPendingComposerToolbarAction(null);
+    setIsComposerMentionPanelPinned(false);
+    runComposerToolbarAction('image');
+    if (messageComposerKeyboardVisible) {
+      Keyboard.dismiss();
+    }
+  };
+
+  const handleMentionPress = () => {
+    clearComposerFocusRequests();
+    runComposerToolbarAction('mention');
+  };
+
+  const shouldShowPinnedComposerMentionPanel =
+    shouldRenderComposerMentionPanel || (showWriteMessageModal && isComposerMentionPanelPinned);
+  const composerMentionPanelUsers = activeMention ? candidateUsers : recommendedMentionUsers;
+  const resolvedComposerMentionPanelAnimatedStyle =
+    isComposerMentionPanelPinned && !shouldRenderComposerMentionPanel
+      ? {
+          opacity: 1,
+          transform: [{ translateY: 0 }, { scale: 1 }],
+        }
+      : composerMentionPanelAnimatedStyle;
+  const resolvedComposerMentionPanelMaxHeight = Math.min(
+    composerMentionPanelMaxHeight,
+    composerSheetHeight > 0
+      ? Math.max(96, windowHeight - composerSheetHeight - Math.max(insets.top, 24) - 24)
+      : composerMentionPanelMaxHeight
+  );
+  const resolvedComposerMentionListMaxHeight = Math.min(
+    composerMentionListMaxHeight,
+    Math.max(72, resolvedComposerMentionPanelMaxHeight - composerMentionBottomInset)
+  );
 
   const handleSelectMessageImage = imageUri => {
     setSelectedMessageImage(imageUri);
     setShowMessageImagePicker(false);
-    keepComposerOpenRef.current = false;
+    setPendingComposerToolbarAction(null);
     setTimeout(() => {
       focusComposerInput();
     }, 120);
-  };
-
-  const handleMentionPress = () => {
-    triggerMentionPress();
   };
 
   const handleExitGroup = () => {
@@ -1728,7 +2219,10 @@ export default function GroupChatScreen({ navigation, route }) {
     const messageId = msg?.raw?.id ?? msg?.id ?? null;
     const normalizedMessageId = Number(messageId) || 0;
     const cachedReplies = normalizedMessageId ? getThreadReplies(normalizedMessageId) : [];
-    const knownReplyCount = Number(msg?.replyCount ?? msg?.raw?.replyCount ?? 0) || 0;
+    const expectedReplyCount = Number(msg?.replyCount ?? msg?.raw?.replyCount ?? 0) || 0;
+    const shouldForceRefresh =
+      normalizedMessageId > 0 &&
+      (cachedReplies.length === 0 || cachedReplies.length !== expectedReplyCount);
 
     setCurrentReplyMessageId(messageId);
     setCurrentReplyRootId(null);
@@ -1739,27 +2233,7 @@ export default function GroupChatScreen({ navigation, route }) {
       return;
     }
 
-    if (cachedReplies.length === 0 && knownReplyCount === 0) {
-      setReplyErrorMap(prev => ({
-        ...prev,
-        [normalizedMessageId]: '',
-      }));
-      setReplyLoadingMap(prev => ({
-        ...prev,
-        [normalizedMessageId]: false,
-      }));
-      setMessageRepliesMap(prev =>
-        prev[normalizedMessageId]
-          ? prev
-          : {
-              ...prev,
-              [normalizedMessageId]: [],
-            }
-      );
-      return;
-    }
-
-    void loadMessageReplies(messageId, { forceRefresh: true });
+    void loadMessageReplies(messageId, { forceRefresh: shouldForceRefresh });
   };
 
   const handleReply = async () => {
@@ -1794,6 +2268,9 @@ export default function GroupChatScreen({ navigation, route }) {
     const relationReplyId = Number(reply?.replyToCommentId ?? 0) || 0;
     const relationReply = relationReplyId ? findReplyById(currentReplyMessageId, relationReplyId) : null;
     const relationUserName = reply?.replyToUserName || relationReply?.author || '';
+    const likedState = getMessageLikedState(reply);
+    const dislikedState = getMessageDislikedState(reply);
+    const bookmarkedState = getMessageBookmarkedState(reply);
     const shouldHideContextRelation =
       contextReplyId !== null && String(relationReplyId) === String(contextReplyId);
     const shouldShowRelation =
@@ -1825,17 +2302,90 @@ export default function GroupChatScreen({ navigation, route }) {
         <Text style={styles.threadReplyContent}>{reply.content}</Text>
 
         <View style={styles.threadReplyActions}>
-          <View style={styles.threadReplyMetaGroup}>
-            <Ionicons name="heart-outline" size={12} color="#9ca3af" />
-            <Text style={styles.threadReplyMetaText}>{Number(reply.likes || 0)}</Text>
+          <View style={styles.threadReplyActionsLeft}>
+            <TouchableOpacity
+              style={[
+                styles.threadReplyActionBtn,
+                isLikeInteractionDisabled(likedState, dislikedState) && styles.msgActionBtnDisabled,
+              ]}
+              onPress={() => toggleMessageLike(reply)}
+              disabled={isLikeInteractionDisabled(likedState, dislikedState)}
+            >
+              <Ionicons
+                name={likedState ? 'thumbs-up' : 'thumbs-up-outline'}
+                size={12}
+                color={
+                  likedState
+                    ? '#ef4444'
+                    : isLikeInteractionDisabled(likedState, dislikedState)
+                      ? '#d1d5db'
+                      : '#9ca3af'
+                }
+              />
+              <Text
+                style={[
+                  styles.threadReplyMetaText,
+                  likedState && styles.msgActionTextLiked,
+                  isLikeInteractionDisabled(likedState, dislikedState) && styles.msgActionTextDisabled,
+                ]}
+              >
+                {Number(reply.likes || 0)}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.threadReplyActionBtn} onPress={() => openReplyComposer(reply, currentReplyMessageId)}>
+              <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
+              <Text style={styles.threadReplyMetaText}>{Number(reply.replyCount || reply.replies || 0)}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.threadReplyActionBtn}>
+              <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
+              <Text style={styles.threadReplyMetaText}>{Number(reply.shares || 0)}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.threadReplyActionBtn} onPress={() => toggleMessageBookmark(reply)}>
+              <Ionicons
+                name={bookmarkedState ? 'star' : 'star-outline'}
+                size={12}
+                color={bookmarkedState ? '#f59e0b' : '#9ca3af'}
+              />
+              <Text style={[styles.threadReplyMetaText, bookmarkedState && styles.msgActionTextBookmarked]}>
+                {Number(reply.bookmarks || 0)}
+              </Text>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.threadReplyActionBtn}
-            onPress={() => openReplyComposer(reply, currentReplyMessageId)}
-          >
-            <Ionicons name="chatbubble-outline" size={12} color="#ef4444" />
-            <Text style={styles.threadReplyActionText}>{t('screens.groupChat.reply')}</Text>
-          </TouchableOpacity>
+          <View style={styles.threadReplyActionsRight}>
+            <TouchableOpacity
+              style={[
+                styles.threadReplyActionBtn,
+                isDislikeInteractionDisabled(likedState, dislikedState) && styles.msgActionBtnDisabled,
+              ]}
+              onPress={() => toggleMessageDislike(reply)}
+              disabled={isDislikeInteractionDisabled(likedState, dislikedState)}
+            >
+              <Ionicons
+                name={dislikedState ? 'thumbs-down' : 'thumbs-down-outline'}
+                size={12}
+                color={
+                  dislikedState
+                    ? '#6b7280'
+                    : isDislikeInteractionDisabled(likedState, dislikedState)
+                      ? '#d1d5db'
+                      : '#9ca3af'
+                }
+              />
+              <Text
+                style={[
+                  styles.threadReplyMetaText,
+                  dislikedState && styles.msgActionTextDisliked,
+                  isDislikeInteractionDisabled(likedState, dislikedState) && styles.msgActionTextDisabled,
+                ]}
+              >
+                {Number(reply.dislikes || 0)}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.threadReplyActionBtn} onPress={handleReport}>
+              <Ionicons name="flag-outline" size={12} color="#ef4444" />
+              <Text style={styles.threadReplyMetaText}>{Number(reply.reports || 0)}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
@@ -2040,15 +2590,15 @@ export default function GroupChatScreen({ navigation, route }) {
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.sortFilterBtn, activeTab === 'all' && styles.sortFilterBtnActive]}
-                onPress={() => setActiveTab('all')}
-              >
-                <Ionicons name="list" size={14} color={activeTab === 'all' ? '#ef4444' : '#9ca3af'} />
-                <Text style={[styles.sortFilterText, activeTab === 'all' && styles.sortFilterTextActive]}>
-                  {t('screens.groupChat.allTab')}
-                </Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.sortFilterBtn, activeTab === 'all' && styles.sortFilterBtnActive]}
+                  onPress={() => setActiveTab('all')}
+                >
+                  <Ionicons name="time" size={14} color={activeTab === 'all' ? '#ef4444' : '#9ca3af'} />
+                  <Text style={[styles.sortFilterText, activeTab === 'all' && styles.sortFilterTextActive]}>
+                    {t('common.latest')}
+                  </Text>
+                </TouchableOpacity>
             </View>
           </View>
 
@@ -2076,8 +2626,9 @@ export default function GroupChatScreen({ navigation, route }) {
 
           {!messageLoading && !messageError
             ? topLevelMessageNodes.map(msg => {
-                const childNodes = Array.isArray(msg.children) ? msg.children : [];
-                const flatReplies = childNodes.length > 0 ? flattenThreadMessageTree(childNodes) : [];
+                const likedState = getMessageLikedState(msg);
+                const dislikedState = getMessageDislikedState(msg);
+                const bookmarkedState = getMessageBookmarkedState(msg);
 
                 return (
                   <View key={msg.id} style={styles.messageCard}>
@@ -2089,23 +2640,102 @@ export default function GroupChatScreen({ navigation, route }) {
                     {msg.content ? <Text style={styles.msgText}>{msg.content}</Text> : null}
                     {msg.imageUri ? <Image source={{ uri: msg.imageUri }} style={styles.msgImage} /> : null}
 
-                    {childNodes.length > 0 ? (
-                      <View style={styles.inlineRepliesContainer}>
-                        {renderInlineMessageReplyNodes(childNodes, {
-                          rootMessageId: msg.id,
-                          flatReplies,
-                        })}
-                      </View>
-                    ) : null}
-
                     <View style={styles.msgActions}>
-                      <TouchableOpacity style={styles.replyBtn} onPress={() => openReplyModal(msg)}>
-                        <Ionicons name="chatbubble-outline" size={14} color="#ef4444" />
-                        <Text style={styles.replyBtnText}>
-                          {t('screens.groupChat.reply')}
-                          {msg.replyCount > 0 ? ` (${msg.replyCount})` : ''}
-                        </Text>
-                      </TouchableOpacity>
+                      <View style={styles.msgActionsLeft}>
+                        <TouchableOpacity
+                          style={[
+                            styles.msgActionBtn,
+                            isLikeInteractionDisabled(likedState, dislikedState) &&
+                              styles.msgActionBtnDisabled,
+                          ]}
+                          onPress={() => toggleMessageLike(msg)}
+                          disabled={isLikeInteractionDisabled(likedState, dislikedState)}
+                        >
+                          <Ionicons
+                            name={likedState ? 'thumbs-up' : 'thumbs-up-outline'}
+                            size={14}
+                            color={
+                              likedState
+                                ? '#ef4444'
+                                : isLikeInteractionDisabled(likedState, dislikedState)
+                                  ? '#d1d5db'
+                                  : '#9ca3af'
+                            }
+                          />
+                          <Text
+                            style={[
+                              styles.msgActionText,
+                              likedState && styles.msgActionTextLiked,
+                              isLikeInteractionDisabled(likedState, dislikedState) &&
+                                styles.msgActionTextDisabled,
+                            ]}
+                          >
+                            {Number(msg.likes || 0)}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.msgActionBtn} onPress={() => openReplyModal(msg)}>
+                          <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
+                          <Text style={styles.msgActionText}>{Number(msg.replyCount || 0)}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.msgActionBtn}>
+                          <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
+                          <Text style={styles.msgActionText}>{Number(msg.shares || 0)}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.msgActionBtn}
+                          onPress={() => toggleMessageBookmark(msg)}
+                        >
+                          <Ionicons
+                            name={bookmarkedState ? 'star' : 'star-outline'}
+                            size={14}
+                            color={bookmarkedState ? '#f59e0b' : '#9ca3af'}
+                          />
+                          <Text
+                            style={[
+                              styles.msgActionText,
+                              bookmarkedState && styles.msgActionTextBookmarked,
+                            ]}
+                          >
+                            {Number(msg.bookmarks || 0)}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                      <View style={styles.msgActionsRight}>
+                        <TouchableOpacity
+                          style={[
+                            styles.msgActionBtn,
+                            isDislikeInteractionDisabled(likedState, dislikedState) &&
+                              styles.msgActionBtnDisabled,
+                          ]}
+                          onPress={() => toggleMessageDislike(msg)}
+                          disabled={isDislikeInteractionDisabled(likedState, dislikedState)}
+                        >
+                          <Ionicons
+                            name={dislikedState ? 'thumbs-down' : 'thumbs-down-outline'}
+                            size={14}
+                            color={
+                              dislikedState
+                                ? '#6b7280'
+                                : isDislikeInteractionDisabled(likedState, dislikedState)
+                                  ? '#d1d5db'
+                                  : '#9ca3af'
+                            }
+                          />
+                          <Text
+                            style={[
+                              styles.msgActionText,
+                              dislikedState && styles.msgActionTextDisliked,
+                              isDislikeInteractionDisabled(likedState, dislikedState) &&
+                                styles.msgActionTextDisabled,
+                            ]}
+                          >
+                            {Number(msg.dislikes || 0)}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.msgActionBtn} onPress={handleReport}>
+                          <Ionicons name="flag-outline" size={14} color="#ef4444" />
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   </View>
                 );
@@ -2172,7 +2802,12 @@ export default function GroupChatScreen({ navigation, route }) {
                 ) : null}
 
                 {!currentReplyLoading && !currentReplyError
-                  ? currentTopLevelReplies.map(reply => (
+                  ? currentTopLevelReplies.map(reply => {
+                      const likedState = getMessageLikedState(reply);
+                      const dislikedState = getMessageDislikedState(reply);
+                      const bookmarkedState = getMessageBookmarkedState(reply);
+
+                      return (
                       <View key={reply.id} style={styles.threadListCard}>
                         <View style={styles.threadReplyHeader}>
                           <Avatar uri={reply.avatar} name={reply.author} size={24} />
@@ -2184,19 +2819,111 @@ export default function GroupChatScreen({ navigation, route }) {
                         </View>
                         <Text style={styles.threadReplyContent}>{reply.content}</Text>
                         <View style={styles.threadListActions}>
-                          <TouchableOpacity
-                            style={styles.threadReplyActionBtn}
-                            onPress={() => openReplyThreadLayer(reply.id)}
-                          >
-                            <Ionicons name="chatbubble-outline" size={12} color="#ef4444" />
-                            <Text style={styles.threadReplyActionText}>
-                              {t('screens.groupChat.reply')}
-                              {Number(reply.replyCount || 0) > 0 ? ` (${Number(reply.replyCount || 0)})` : ''}
-                            </Text>
-                          </TouchableOpacity>
+                          <View style={styles.threadListActionsLeft}>
+                            <TouchableOpacity
+                              style={[
+                                styles.threadReplyActionBtn,
+                                isLikeInteractionDisabled(likedState, dislikedState) &&
+                                  styles.msgActionBtnDisabled,
+                              ]}
+                              onPress={() => toggleMessageLike(reply)}
+                              disabled={isLikeInteractionDisabled(likedState, dislikedState)}
+                            >
+                              <Ionicons
+                                name={likedState ? 'thumbs-up' : 'thumbs-up-outline'}
+                                size={12}
+                                color={
+                                  likedState
+                                    ? '#ef4444'
+                                    : isLikeInteractionDisabled(likedState, dislikedState)
+                                      ? '#d1d5db'
+                                      : '#9ca3af'
+                                }
+                              />
+                              <Text
+                                style={[
+                                  styles.threadReplyMetaText,
+                                  likedState && styles.msgActionTextLiked,
+                                  isLikeInteractionDisabled(likedState, dislikedState) &&
+                                    styles.msgActionTextDisabled,
+                                ]}
+                              >
+                                {Number(reply.likes || 0)}
+                              </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.threadReplyActionBtn}
+                              onPress={() => openReplyThreadLayer(reply.id)}
+                            >
+                              <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
+                              <Text style={styles.threadReplyMetaText}>
+                                {Number(reply.replyCount || 0)}
+                              </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.threadReplyActionBtn}>
+                              <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
+                              <Text style={styles.threadReplyMetaText}>{Number(reply.shares || 0)}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.threadReplyActionBtn}
+                              onPress={() => toggleMessageBookmark(reply)}
+                            >
+                              <Ionicons
+                                name={bookmarkedState ? 'star' : 'star-outline'}
+                                size={12}
+                                color={bookmarkedState ? '#f59e0b' : '#9ca3af'}
+                              />
+                              <Text
+                                style={[
+                                  styles.threadReplyMetaText,
+                                  bookmarkedState && styles.msgActionTextBookmarked,
+                                ]}
+                              >
+                                {Number(reply.bookmarks || 0)}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                          <View style={styles.threadListActionsRight}>
+                            <TouchableOpacity
+                              style={[
+                                styles.threadReplyActionBtn,
+                                isDislikeInteractionDisabled(likedState, dislikedState) &&
+                                  styles.msgActionBtnDisabled,
+                              ]}
+                              onPress={() => toggleMessageDislike(reply)}
+                              disabled={isDislikeInteractionDisabled(likedState, dislikedState)}
+                            >
+                              <Ionicons
+                                name={dislikedState ? 'thumbs-down' : 'thumbs-down-outline'}
+                                size={12}
+                                color={
+                                  dislikedState
+                                    ? '#6b7280'
+                                    : isDislikeInteractionDisabled(likedState, dislikedState)
+                                      ? '#d1d5db'
+                                      : '#9ca3af'
+                                }
+                              />
+                              <Text
+                                style={[
+                                  styles.threadReplyMetaText,
+                                  dislikedState && styles.msgActionTextDisliked,
+                                  isDislikeInteractionDisabled(likedState, dislikedState) &&
+                                    styles.msgActionTextDisabled,
+                                ]}
+                              >
+                                {Number(reply.dislikes || 0)}
+                              </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.threadReplyActionBtn} onPress={handleReport}>
+                              <Ionicons name="flag-outline" size={12} color="#ef4444" />
+                              <Text style={styles.threadReplyMetaText}>{Number(reply.reports || 0)}</Text>
+                            </TouchableOpacity>
+                          </View>
                         </View>
                       </View>
-                    ))
+                    );
+                    })
                   : null}
               </ScrollView>
 
@@ -2434,118 +3161,13 @@ export default function GroupChatScreen({ navigation, route }) {
         </View>
       ) : null}
 
-      {showWriteMessageModal ? (
-        <View style={styles.composerPortal} pointerEvents="box-none">
-          <TouchableOpacity style={styles.composerBackdrop} activeOpacity={1} onPress={closeWriteMessageModal} />
-          <KeyboardAvoidingView
-            style={styles.composerOverlay}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-          >
-            <TouchableOpacity
-              activeOpacity={1}
-              style={[
-                styles.composerSheet,
-                {
-                  paddingBottom: Math.max(insets.bottom, 12) + 8,
-                },
-              ]}
-            >
-              <View style={styles.composerHandle} />
-              <View style={styles.composerHeader}>
-                <Text style={styles.composerTitle}>{t('screens.groupChat.inputPlaceholder').replace('...', '')}</Text>
-                <TouchableOpacity onPress={closeWriteMessageModal} style={styles.composerCloseBtn}>
-                  <Ionicons name="close" size={20} color="#9ca3af" />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.composerTextBox}>
-                <TextInput
-                  ref={composerInputRef}
-                  style={styles.composerInput}
-                  placeholder={t('screens.groupChat.inputPlaceholder')}
-                  placeholderTextColor="#9ca3af"
-                  value={writeMessageText}
-                  onChangeText={setWriteMessageText}
-                  onSelectionChange={handleComposerSelectionChange}
-                  selection={composerSelection}
-                  multiline
-                  autoFocus
-                  showSoftInputOnFocus
-                  maxLength={500}
-                  selectionColor={modalTokens.danger}
-                  textAlignVertical="top"
-                />
-                {selectedMessageImage ? (
-                  <View style={styles.composerImagePreview}>
-                    <Image source={{ uri: selectedMessageImage }} style={styles.composerPreviewImage} />
-                    <TouchableOpacity
-                      style={styles.composerRemoveImageBtn}
-                      onPress={() => setSelectedMessageImage('')}
-                    >
-                      <Ionicons name="close-circle" size={20} color="#ef4444" />
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-                <TouchableOpacity
-                  style={[
-                    styles.composerSendBtn,
-                    (!writeMessageText.trim() && !selectedMessageImage) && styles.composerSendBtnDisabled,
-                    publishingMessage && styles.composerSendBtnDisabled,
-                  ]}
-                  onPress={() => handlePublishMessage(writeMessageText)}
-                  disabled={(!writeMessageText.trim() && !selectedMessageImage) || publishingMessage}
-                >
-                  {publishingMessage ? (
-                    <ActivityIndicator size="small" color="#ffffff" />
-                  ) : (
-                    <Ionicons name="send" size={18} color="#fff" />
-                  )}
-                </TouchableOpacity>
-              </View>
-              <View style={styles.composerToolbar}>
-                <View style={styles.composerTools}>
-                  <TouchableOpacity
-                    style={styles.composerToolBtn}
-                    onPress={handleOpenMessageImagePicker}
-                  >
-                    <Ionicons name="image-outline" size={20} color="#6b7280" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.composerToolBtn} onPress={handleMentionPress}>
-                    <Ionicons name="at-outline" size={20} color="#6b7280" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </TouchableOpacity>
-            {shouldRenderComposerMentionPanel ? (
-              <MentionSuggestionsPanel
-                activeKeyword={activeMention?.keyword ?? ''}
-                animatedStyle={composerMentionPanelAnimatedStyle}
-                bottomInset={composerMentionBottomInset}
-                bottomOffset={composerMentionPanelBottomOffset}
-                listMaxHeight={composerMentionListMaxHeight}
-                loading={composerMentionLoading}
-                onBackdropPress={focusMentionInput}
-                onSelect={handleMentionSelect}
-                panelMaxHeight={composerMentionPanelMaxHeight}
-                users={candidateUsers}
-              />
-            ) : null}
-          </KeyboardAvoidingView>
-        </View>
-      ) : null}
-      <ImagePickerSheet
-        visible={showMessageImagePicker}
-        onClose={() => {
-          keepComposerOpenRef.current = false;
-          setShowMessageImagePicker(false);
-          setTimeout(() => {
-            if (showWriteMessageModalRef.current) {
-              focusComposerInput();
-            }
-          }, 120);
-        }}
-        onImageSelected={handleSelectMessageImage}
-        title={t('screens.groupChat.uploadImageTitle')}
+      <TeamDiscussionComposerModal
+        visible={showWriteMessageModal}
+        onClose={closeWriteMessageModal}
+        onPublish={handlePublishMessage}
+        placeholder={t('screens.groupChat.inputPlaceholder')}
+        title={t('screens.groupChat.inputPlaceholder').replace('...', '')}
+        submitting={publishingMessage}
       />
     </SafeAreaView>
   );
@@ -2748,31 +3370,30 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   messageCard: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#f3f4f6',
   },
   msgHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
     gap: 8,
   },
   msgAuthor: {
     fontSize: scaleFont(12),
     fontWeight: '500',
     color: '#9ca3af',
+    flex: 1,
   },
   msgTime: {
     fontSize: scaleFont(12),
     color: '#9ca3af',
-    marginLeft: 'auto',
   },
   msgText: {
-    fontSize: scaleFont(14),
-    color: '#4b5563',
-    lineHeight: scaleFont(20),
+    fontSize: scaleFont(15),
+    color: '#1f2937',
+    lineHeight: scaleFont(22),
     marginBottom: 10,
   },
   msgImage: {
@@ -2785,7 +3406,19 @@ const styles = StyleSheet.create({
   msgActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  msgActionsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
+    flex: 1,
+  },
+  msgActionsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   inlineRepliesContainer: {
     marginTop: 2,
@@ -2971,7 +3604,19 @@ const styles = StyleSheet.create({
   threadListActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: 10,
+  },
+  threadListActionsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  threadListActionsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   threadModalBottomBar: {
     paddingHorizontal: 16,
@@ -3063,6 +3708,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 10,
+  },
+  threadReplyActionsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  threadReplyActionsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   threadReplyMetaGroup: {
     flexDirection: 'row',
@@ -3309,6 +3965,9 @@ const styles = StyleSheet.create({
         elevation: 18,
       },
     }),
+  },
+  composerSheetHidden: {
+    opacity: 0,
   },
   composerHandle: {
     alignSelf: 'center',
