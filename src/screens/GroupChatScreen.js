@@ -19,7 +19,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
-import ImagePickerSheet from '../components/ImagePickerSheet';
 import MentionSuggestionsPanel from '../components/MentionSuggestionsPanel';
 import TeamDiscussionComposerModal from '../components/TeamDiscussionComposerModal';
 import { modalTokens } from '../components/modalTokens';
@@ -27,6 +26,7 @@ import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
 import { showToast } from '../utils/toast';
 import apiClient from '../services/api/apiClient';
+import uploadApi from '../services/api/uploadApi';
 import questionApi from '../services/api/questionApi';
 import { API_ENDPOINTS } from '../config/api';
 import * as Updates from 'expo-updates';
@@ -151,6 +151,7 @@ const areMessageItemsEqual = (prev = [], next = []) =>
       item?.id === nextItem?.id &&
       item?.author === nextItem?.author &&
       item?.content === nextItem?.content &&
+      item?.imageUri === nextItem?.imageUri &&
       item?.timeLabel === nextItem?.timeLabel &&
       item?.likes === nextItem?.likes &&
       item?.dislikes === nextItem?.dislikes &&
@@ -199,6 +200,61 @@ const logGroupChatDebug = (...args) => {
 const toSafeNumber = value => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const normalizeMessageImages = item => {
+  const rawImages = Array.isArray(item?.imageUrls)
+    ? item.imageUrls
+    : Array.isArray(item?.images)
+      ? item.images
+      : Array.isArray(item?.imgUrls)
+        ? item.imgUrls
+        : [];
+  const singleImageCandidates = [item?.imageUrl, item?.image, item?.imgUrl, item?.coverImage];
+  const normalizedImages = rawImages
+    .concat(singleImageCandidates)
+    .filter(image => typeof image === 'string' && image.trim())
+    .map(image => image.trim());
+
+  return normalizedImages.filter((image, index) => normalizedImages.indexOf(image) === index);
+};
+
+const extractUploadedImageUrl = response => {
+  const payload = response?.data;
+
+  if (typeof payload === 'string' && payload.trim()) {
+    return payload.trim();
+  }
+
+  if (payload && typeof payload === 'object') {
+    const nestedUrl = [payload.url, payload.imageUrl, payload.fileUrl, payload.path].find(
+      value => typeof value === 'string' && value.trim()
+    );
+
+    if (nestedUrl) {
+      return nestedUrl.trim();
+    }
+  }
+
+  return '';
+};
+
+const inferUploadMimeType = imageUri => {
+  const normalizedUri = String(imageUri || '').toLowerCase();
+
+  if (normalizedUri.endsWith('.png')) {
+    return 'image/png';
+  }
+
+  if (normalizedUri.endsWith('.webp')) {
+    return 'image/webp';
+  }
+
+  if (normalizedUri.endsWith('.heic') || normalizedUri.endsWith('.heif')) {
+    return 'image/heic';
+  }
+
+  return 'image/jpeg';
 };
 
 const parseDateValue = value => {
@@ -285,6 +341,7 @@ const normalizeMessageItem = (item, index, t) => {
     item?.creatorAvatar ||
     `https://api.dicebear.com/7.x/avataaars/svg?seed=group-message-${authorId}`;
   const content = item?.content || item?.messageContent || item?.message || item?.text || '';
+  const imageUrls = normalizeMessageImages(item);
   const rawTime = item?.time ?? item?.createTime ?? item?.createdAt ?? item?.gmtCreate ?? item?.createDate;
   const timeLabel = item?.createTimeDesc || item?.timeDesc || formatMessageTime(rawTime, t);
   const isFeatured =
@@ -306,6 +363,8 @@ const normalizeMessageItem = (item, index, t) => {
     authorId,
     avatar,
     content,
+    imageUrls,
+    imageUri: imageUrls[0] || '',
     timeLabel,
     likes: toSafeNumber(item?.likeCount ?? item?.likes ?? item?.upCount),
     dislikes: toSafeNumber(item?.dislikeCount ?? item?.dislikes ?? item?.downCount),
@@ -417,6 +476,17 @@ const normalizeThreadMessageItem = (item, index, t, fallback = {}) => {
 
   return {
     ...normalized,
+    imageUrls:
+      normalized.imageUrls.length > 0
+        ? normalized.imageUrls
+        : Array.isArray(fallback.imageUrls)
+          ? fallback.imageUrls
+          : [],
+    imageUri:
+      normalized.imageUri ||
+      (Array.isArray(fallback.imageUrls) && fallback.imageUrls.length > 0
+        ? fallback.imageUrls[0]
+        : ''),
     replyCount: toSafeNumber(fallback.replyCount ?? item?.replyCount ?? normalized.replyCount),
     parentId,
     replyToCommentId,
@@ -1522,10 +1592,14 @@ export default function GroupChatScreen({ navigation, route }) {
     parentId = 0,
     replyToCommentId = 0,
     replyToUserName = '',
+    imageUrls = [],
   }) => {
     const resolvedGroupId = await ensureCurrentGroupId();
     await ensureJoinedGroup(resolvedGroupId, { refreshOnSuccess: !isJoined });
     const token = await AsyncStorage.getItem('authToken');
+    const normalizedImageUrls = Array.isArray(imageUrls)
+      ? imageUrls.filter(url => typeof url === 'string' && url.trim())
+      : [];
     logGroupChatDebug('createGroupMessage:payload', {
       resolvedGroupId,
       currentGroupId,
@@ -1533,6 +1607,7 @@ export default function GroupChatScreen({ navigation, route }) {
       questionGroupIds,
       parentId,
       contentLength: String(content ?? '').trim().length,
+      imageCount: normalizedImageUrls.length,
     });
     const response = await apiClient.post(
       API_ENDPOINTS.GROUP.MESSAGE_CREATE,
@@ -1541,6 +1616,13 @@ export default function GroupChatScreen({ navigation, route }) {
         content: String(content ?? '').trim(),
         parentId: Number(parentId) || 0,
         isBoutique: 0,
+        ...(normalizedImageUrls.length > 0
+          ? {
+              imageUrls: normalizedImageUrls,
+              images: normalizedImageUrls,
+              imageUrl: normalizedImageUrls[0],
+            }
+          : {}),
       },
       {
         ...GROUP_API_REQUEST_CONFIG,
@@ -1561,6 +1643,7 @@ export default function GroupChatScreen({ navigation, route }) {
       parentId,
       replyToCommentId,
       replyToUserName,
+      imageUrls: normalizedImageUrls,
     });
   };
 
@@ -2023,16 +2106,32 @@ export default function GroupChatScreen({ navigation, route }) {
 
     if ((!trimmedContent && normalizedSelectedImages.length === 0) || publishingMessage) return;
 
-    if (normalizedSelectedImages.length > 0) {
-      showToast(t('screens.groupChat.imageUploadUnsupported'), 'warning');
-      return false;
-    }
-
     try {
       setPublishingMessage(true);
+      const uploadedImageUrls = [];
+
+      if (normalizedSelectedImages.length > 0) {
+        for (let index = 0; index < normalizedSelectedImages.length; index += 1) {
+          const imageUri = normalizedSelectedImages[index];
+          const uploadResponse = await uploadApi.uploadImage({
+            uri: imageUri,
+            name: `group_message_${Date.now()}_${index}.jpg`,
+            type: inferUploadMimeType(imageUri),
+          });
+          const uploadedImageUrl = extractUploadedImageUrl(uploadResponse);
+
+          if (!isSuccessResponse(uploadResponse) || !uploadedImageUrl) {
+            throw new Error(t('screens.groupChat.publishFailed'));
+          }
+
+          uploadedImageUrls.push(uploadedImageUrl);
+        }
+      }
+
       const createdMessage = await createGroupMessage({
         content: trimmedContent,
         parentId: 0,
+        imageUrls: uploadedImageUrls,
       });
 
       appendCreatedMessage(createdMessage);
@@ -2638,7 +2737,17 @@ export default function GroupChatScreen({ navigation, route }) {
                       <Text style={styles.msgTime}>{msg.timeLabel || t('screens.groupChat.justNow')}</Text>
                     </View>
                     {msg.content ? <Text style={styles.msgText}>{msg.content}</Text> : null}
-                    {msg.imageUri ? <Image source={{ uri: msg.imageUri }} style={styles.msgImage} /> : null}
+                    {Array.isArray(msg.imageUrls) && msg.imageUrls.length > 0 ? (
+                      <View style={styles.msgImageGrid}>
+                        {msg.imageUrls.map((imageUrl, imageIndex) => (
+                          <Image
+                            key={`${msg.id}-image-${imageIndex}`}
+                            source={{ uri: imageUrl }}
+                            style={styles.msgImage}
+                          />
+                        ))}
+                      </View>
+                    ) : null}
 
                     <View style={styles.msgActions}>
                       <View style={styles.msgActionsLeft}>
@@ -3396,11 +3505,16 @@ const styles = StyleSheet.create({
     lineHeight: scaleFont(22),
     marginBottom: 10,
   },
+  msgImageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
   msgImage: {
     width: 148,
     height: 148,
     borderRadius: 14,
-    marginBottom: 10,
     backgroundColor: '#e5e7eb',
   },
   msgActions: {

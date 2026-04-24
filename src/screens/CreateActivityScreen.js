@@ -141,10 +141,13 @@ export default function CreateActivityScreen({
       });
     }
   };
-  return <SafeAreaView style={styles.container} edges={['top']}>
+  const headerSafeAreaStyle = {
+    paddingTop: insets.top + 8
+  };
+  return <SafeAreaView style={styles.container} edges={['bottom']}>
       <KeyboardDismissView>
       <View style={styles.screenContent}>
-      <View style={styles.header}>
+      <View style={[styles.header, headerSafeAreaStyle]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn} hitSlop={{
         top: 15,
         bottom: 15,
@@ -345,16 +348,15 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6'
   },
   closeBtn: {
     padding: 8,
-    minWidth: 44,
+    width: 56,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center'
@@ -364,11 +366,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1f2937',
     flex: 1,
-    textAlign: 'center'
+    textAlign: 'center',
+    paddingHorizontal: 8
   },
   submitBtn: {
     padding: 8,
-    minWidth: 44,
+    minWidth: 56,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center'

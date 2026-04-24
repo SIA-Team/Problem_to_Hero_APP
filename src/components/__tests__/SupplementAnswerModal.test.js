@@ -18,7 +18,12 @@ jest.mock('../ComposerModalScaffold', () => {
   const React = require('react');
   const { View, TouchableOpacity, Text } = require('react-native');
 
-  return function MockComposerModalScaffold({ children, overlayContent, onSubmit }) {
+  return function MockComposerModalScaffold({
+    children,
+    overlayContent,
+    floatingOverlay,
+    onSubmit,
+  }) {
     return (
       <View>
         <TouchableOpacity onPress={onSubmit}>
@@ -26,6 +31,7 @@ jest.mock('../ComposerModalScaffold', () => {
         </TouchableOpacity>
         {children}
         {overlayContent}
+        {floatingOverlay}
       </View>
     );
   };
@@ -218,5 +224,45 @@ describe('SupplementAnswerModal', () => {
     expect(
       tree.root.findAllByProps({ children: '\u8865\u5145\u56de\u7b54\u53d1\u5e03\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5' }).length
     ).toBeGreaterThan(0);
+  });
+
+  it('uses the team-detail mention suggestion style', () => {
+    useMentionComposer.mockReturnValue({
+      activeMention: { start: 0, end: 1, keyword: '' },
+      candidateUsers: [{ id: 1, username: 'tester' }],
+      focusInput: jest.fn(),
+      handleMentionPress: jest.fn(),
+      handleMentionSelect: jest.fn(),
+      handleSelectionChange: jest.fn(),
+      listMaxHeight: 240,
+      mentionBottomInset: 12,
+      mentionLoading: false,
+      panelAnimatedStyle: null,
+      panelBottomOffset: 0,
+      panelMaxHeight: 240,
+      renderMentionPanel: true,
+      selection: { start: 1, end: 1 },
+      shouldShowMentionPanel: true,
+    });
+
+    let tree;
+
+    renderer.act(() => {
+      tree = renderer.create(
+        <SupplementAnswerModal
+          visible
+          onClose={jest.fn()}
+          answer={answer}
+          onSuccess={jest.fn()}
+        />
+      );
+    });
+
+    const mentionPanel = tree.root.findByType('MentionSuggestionsPanel');
+
+    expect(mentionPanel.props.variant).toBe('keyboard-inline');
+    expect(mentionPanel.props.showHeader).toBe(false);
+    expect(mentionPanel.props.keyboardInlineContentPadding).toBe(5);
+    expect(mentionPanel.props.keyboardInlineTransparentItem).toBe(true);
   });
 });

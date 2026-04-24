@@ -69,6 +69,7 @@ export function resolveComposerScrollPadding({
 export function resolveComposerInputScrollTarget({
   inputTop = 0,
   marginTop = DEFAULT_COMPOSER_INPUT_SCROLL_MARGIN,
+  revealOffset = 0,
 } = {}) {
-  return Math.max(inputTop - marginTop, 0);
+  return Math.max(inputTop - marginTop + Math.max(revealOffset, 0), 0);
 }

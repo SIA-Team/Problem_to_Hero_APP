@@ -35,6 +35,10 @@ export default function MentionSuggestionsPanel({
   users = [],
   placement = 'overlay',
   variant = 'default',
+  keyboardInlineContentPadding = 10,
+  keyboardInlineItemStyle = null,
+  keyboardInlineTransparentItem = false,
+  keyboardInlineSeamless = false,
 }) {
   const hasKeyword = Boolean(String(activeKeyword ?? '').trim());
   const isKeyboardInlineVariant = variant === 'keyboard-inline';
@@ -80,6 +84,7 @@ export default function MentionSuggestionsPanel({
           styles.overlay,
           isEmbeddedPlacement && styles.overlayEmbedded,
           isKeyboardInlineVariant && styles.overlayKeyboardInline,
+          isKeyboardInlineVariant && keyboardInlineSeamless && styles.overlayKeyboardInlineSeamless,
           isEmbeddedPlacement && isKeyboardInlineVariant && styles.overlayKeyboardInlineEmbedded,
           animatedStyle,
           isEmbeddedPlacement
@@ -130,7 +135,7 @@ export default function MentionSuggestionsPanel({
             contentContainerStyle={{
               paddingTop: isKeyboardInlineVariant ? 12 : 0,
               paddingBottom: isKeyboardInlineVariant ? 12 : bottomInset,
-              paddingHorizontal: isKeyboardInlineVariant ? 10 : 0,
+              paddingHorizontal: isKeyboardInlineVariant ? keyboardInlineContentPadding : 0,
             }}
             scrollEnabled
             nestedScrollEnabled
@@ -152,6 +157,10 @@ export default function MentionSuggestionsPanel({
                   style={({ pressed }) => [
                     styles.item,
                     isKeyboardInlineVariant && styles.itemKeyboardInline,
+                    isKeyboardInlineVariant &&
+                      keyboardInlineTransparentItem &&
+                      styles.itemKeyboardInlineTransparent,
+                    isKeyboardInlineVariant && keyboardInlineItemStyle,
                     index > 0 && !isKeyboardInlineVariant && styles.itemBorder,
                     index > 0 && isKeyboardInlineVariant && styles.itemKeyboardInlineSpacing,
                     pressed && styles.itemPressed,
@@ -264,6 +273,25 @@ const styles = StyleSheet.create({
     },
     elevation: 10,
   },
+  overlayKeyboardInlineSeamless: {
+    left: 0,
+    right: 0,
+    backgroundColor: 'transparent',
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderTopWidth: 0,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    elevation: 0,
+  },
   overlayKeyboardInlineEmbedded: {
     left: 'auto',
     right: 'auto',
@@ -343,6 +371,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     alignItems: 'center',
     borderRadius: 16,
+  },
+  itemKeyboardInlineTransparent: {
+    backgroundColor: 'transparent',
   },
   itemKeyboardInlineSpacing: {
     marginLeft: 8,

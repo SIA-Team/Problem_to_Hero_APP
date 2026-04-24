@@ -14,6 +14,7 @@ import { applyPaidQuestionAccessState } from './paidQuestionAccess';
 import { getQuestionAdoptRate, getQuestionPayViewAmount, shouldRequirePaidQuestionAccess } from './questionAccessRules';
 import { centsToAmount } from './rewardAmount';
 import questionApi from '../services/api/questionApi';
+import { applyPersistedQuestionInteractionSnapshots } from '../services/questionInteractionSync';
 
 /**
  * 处理标题字段
@@ -86,6 +87,50 @@ const resolveLocationParts = (item = {}) => {
   };
 };
 
+const normalizeCount = (...values) => {
+  for (const value of values) {
+    const numericValue = Number(value);
+    if (Number.isFinite(numericValue)) {
+      return numericValue;
+    }
+  }
+
+  return 0;
+};
+
+const normalizeFlag = (...values) => {
+  for (const value of values) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    if (typeof value === 'number') {
+      return value > 0;
+    }
+
+    if (typeof value === 'string') {
+      const normalizedValue = value.trim().toLowerCase();
+      if (!normalizedValue) {
+        continue;
+      }
+
+      if (['1', 'true', 'yes', 'y', 'on', 'liked', 'collected', 'disliked', 'favorited'].includes(normalizedValue)) {
+        return true;
+      }
+
+      if (['0', 'false', 'no', 'n', 'off', 'unliked', 'uncollected', 'undisliked'].includes(normalizedValue)) {
+        return false;
+      }
+    }
+  }
+
+  return false;
+};
+
 /**
  * 将补充API数据转换为组件期望的格式
  */
@@ -130,11 +175,11 @@ const transformSupplementDataToFormat = (apiData) => {
     const normalizedShareCount = Number(item.shareCount ?? item.shares ?? item.share_count) || 0;
     const normalizedCollectCount = Number(item.collectCount ?? item.bookmarkCount ?? item.bookmarks ?? item.collect_count) || 0;
     const normalizedAnswerCount = Number(item.answerCount ?? item.answers ?? item.answer_count) || 0;
-    const normalizedSuperLikeCount = Number(item.superLikeCount ?? item.superLikes ?? item.super_like_count) || 0;
-    const normalizedLiked = item.liked ?? item.isLiked ?? false;
-    const normalizedDisliked = item.disliked ?? item.isDisliked ?? false;
-    const normalizedCollected = item.collected ?? item.isCollected ?? false;
-    const normalizedCanEdit = item.canEdit ?? item.editable ?? false;
+    const normalizedSuperLikeCount = normalizeCount(item.superLikeCount, item.superLikes, item.super_like_count);
+    const normalizedLiked = normalizeFlag(item.liked, item.isLiked, item.likeStatus);
+    const normalizedDisliked = normalizeFlag(item.disliked, item.isDisliked, item.dislikeStatus);
+    const normalizedCollected = normalizeFlag(item.collected, item.isCollected, item.bookmarked, item.isBookmarked, item.favorited, item.isFavorited);
+    const normalizedCanEdit = normalizeFlag(item.canEdit, item.editable);
     // 生成一个合理的时间（如果API没有提供时间字段）
     let timeDisplay = '刚刚';
     
@@ -248,6 +293,14 @@ const transformApiDataToHomeFormat = (apiData) => {
     const normalizedPayViewAmount = getQuestionPayViewAmount(item);
     const normalizedBountyAmount = Number(item.bountyAmount ?? 0) || 0;
     const normalizedAdoptRate = getQuestionAdoptRate(item);
+    const normalizedLikeCount = normalizeCount(item.likeCount, item.likes, item.like_count, item.likeNum, item.likesCount, item.thumbsUpCount, item.upCount);
+    const normalizedDislikeCount = normalizeCount(item.dislikeCount, item.dislikes, item.dislike_count, item.dislikeNum, item.dislikesCount, item.thumbsDownCount, item.downCount);
+    const normalizedAnswerCount = normalizeCount(item.answerCount, item.answers, item.answer_count);
+    const normalizedShareCount = normalizeCount(item.shareCount, item.shares, item.share_count, item.forwardCount);
+    const normalizedCollectCount = normalizeCount(item.collectCount, item.bookmarkCount, item.bookmarks, item.collect_count, item.collectNum, item.favoriteCount, item.favoritesCount);
+    const normalizedLiked = normalizeFlag(item.liked, item.isLiked, item.likeStatus);
+    const normalizedDisliked = normalizeFlag(item.disliked, item.isDisliked, item.dislikeStatus);
+    const normalizedCollected = normalizeFlag(item.collected, item.isCollected, item.bookmarked, item.isBookmarked, item.favorited, item.isFavorited);
     const requiresPaidView = shouldRequirePaidQuestionAccess({
       adoptRate: normalizedAdoptRate,
       payViewAmount: normalizedPayViewAmount,
@@ -268,11 +321,24 @@ const transformApiDataToHomeFormat = (apiData) => {
         `https://api.dicebear.com/7.x/avataaars/svg?seed=user${normalizedQuestionId}`,
       authorAvatar: item.authorAvatar || item.userAvatar || null,
       time: timeDisplay,
-      likeCount: item.likeCount || 0,
-      dislikeCount: item.dislikeCount || 0,
-      answerCount: item.answerCount || 0,
-      shareCount: item.shareCount || 0,
-      collectCount: item.collectCount || 0,
+      liked: normalizedLiked,
+      isLiked: normalizedLiked,
+      disliked: normalizedDisliked,
+      isDisliked: normalizedDisliked,
+      collected: normalizedCollected,
+      isCollected: normalizedCollected,
+      bookmarked: normalizedCollected,
+      isBookmarked: normalizedCollected,
+      likeCount: normalizedLikeCount,
+      likes: normalizedLikeCount,
+      dislikeCount: normalizedDislikeCount,
+      dislikes: normalizedDislikeCount,
+      answerCount: normalizedAnswerCount,
+      shareCount: normalizedShareCount,
+      shares: normalizedShareCount,
+      collectCount: normalizedCollectCount,
+      bookmarkCount: normalizedCollectCount,
+      bookmarks: normalizedCollectCount,
       location: locationParts.location || '未知',
       country: locationParts.country || locationParts.location || '未知',
       city: locationParts.city || locationParts.location || locationParts.country || '未知',
@@ -548,7 +614,12 @@ export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onD
       if (cached) {
         // 返回缓存数据，同时在后台更新
         scheduleBackgroundUpdate(tabType, page, onDebugUpdate);
-        return { data: await applyPaidQuestionAccessState(cached), fromCache: true };
+        return {
+          data: await applyPersistedQuestionInteractionSnapshots(
+            await applyPaidQuestionAccessState(cached)
+          ),
+          fromCache: true,
+        };
       }
       
       // 2. 从网络加载数据
@@ -560,12 +631,20 @@ export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onD
         await setCache('questions', { tabType, page }, response);
       }
       
-      return { data: decoratedResponse, fromCache: false };
+      return {
+        data: await applyPersistedQuestionInteractionSnapshots(decoratedResponse),
+        fromCache: false,
+      };
     } catch (error) {
       // 如果网络请求失败，尝试返回缓存数据
       const cached = await getCache('questions', { tabType, page });
       if (cached) {
-        return { data: await applyPaidQuestionAccessState(cached), fromCache: true };
+        return {
+          data: await applyPersistedQuestionInteractionSnapshots(
+            await applyPaidQuestionAccessState(cached)
+          ),
+          fromCache: true,
+        };
       }
       
       throw error;
@@ -664,7 +743,7 @@ const fetchQuestionsByTab = async (tabType, page, onDebugUpdate) => {
     if (response && response.code === 200) {
       const rawData = response.data?.rows || response.rows || response.data || [];
       const transformedData = transformApiDataToHomeFormat(rawData);
-      return transformedData;
+      return applyPersistedQuestionInteractionSnapshots(transformedData);
     } else {
       return [];
     }

@@ -76,7 +76,7 @@ export default function ComposerModalScaffold({
       });
 
       setKeyboardOffset(keyboardMetrics.footerOffset);
-      setFloatingOverlayOffset(keyboardMetrics.overlayOffset);
+      setFloatingOverlayOffset(keyboardMetrics.footerOffset);
     };
     const resetKeyboardOffset = () => {
       setKeyboardOffset(0);
@@ -198,7 +198,23 @@ export default function ComposerModalScaffold({
           {headerNotice}
 
           <View style={styles.body}>
-            <View style={styles.content}>{children}</View>
+            <View style={styles.content}>
+              {children}
+
+              {floatingOverlay ? (
+                <View
+                  pointerEvents="box-none"
+                  style={[
+                    styles.floatingOverlayHost,
+                    {
+                      bottom: floatingOverlayOffset > 0 ? floatingOverlayOffset : 0,
+                    },
+                  ]}
+                >
+                  {floatingOverlay}
+                </View>
+              ) : null}
+            </View>
 
             {shouldRenderFooter ? (
               <View
@@ -224,20 +240,6 @@ export default function ComposerModalScaffold({
         {overlayContent ? (
           <View pointerEvents="box-none" style={styles.overlayContentHost}>
             {overlayContent}
-          </View>
-        ) : null}
-
-        {floatingOverlay ? (
-          <View
-            pointerEvents="box-none"
-            style={[
-              styles.floatingOverlayHost,
-              {
-                bottom: floatingOverlayOffset > 0 ? floatingOverlayOffset : 0,
-              },
-            ]}
-          >
-            {floatingOverlay}
           </View>
         ) : null}
       </View>
@@ -287,6 +289,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    position: 'relative',
   },
   submitButton: {
     minWidth: 72,

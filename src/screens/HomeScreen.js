@@ -33,6 +33,12 @@ import questionApi from '../services/api/questionApi';
 import userApi from '../services/api/userApi';
 import { getBlockedUserIds, subscribeBlockedUsers } from '../services/blacklistState';
 import { loadComboChannels } from '../services/channelSubscriptionService';
+import {
+  applyQuestionInteractionSnapshot,
+  buildQuestionInteractionSnapshot,
+  publishQuestionInteractionSync,
+  subscribeQuestionInteractionSync,
+} from '../services/questionInteractionSync';
 
 import { scaleFont } from '../utils/responsive';
 const { width: screenWidth } = Dimensions.get('window');
@@ -576,15 +582,78 @@ export default function HomeScreen({ navigation }) {
     return !!getQuestionById(id)?.disliked;
   };
 
+  const getQuestionBookmarkState = (id) => {
+    if (bookmarkedItems[id] !== undefined) {
+      return bookmarkedItems[id];
+    }
+
+    const question = getQuestionById(id);
+    return !!(question?.collected ?? question?.isCollected ?? question?.bookmarked ?? question?.isBookmarked);
+  };
+
+  const syncHomeQuestionInteractionState = useCallback((snapshot) => {
+    const normalizedId = String(snapshot?.id ?? '').trim();
+    if (!normalizedId) {
+      return;
+    }
+
+    setLikedItems(prev => ({ ...prev, [normalizedId]: !!snapshot.liked }));
+    setDislikedItems(prev => ({ ...prev, [normalizedId]: !!snapshot.disliked }));
+    setBookmarkedItems(prev => ({ ...prev, [normalizedId]: !!snapshot.collected }));
+    setQuestionList(prevList =>
+      prevList.map(item =>
+        String(item?.id) === normalizedId ? applyQuestionInteractionSnapshot(item, snapshot) : item
+      )
+    );
+    setSelectedQuestion(prev =>
+      prev && String(prev.id) === normalizedId ? applyQuestionInteractionSnapshot(prev, snapshot) : prev
+    );
+  }, [setQuestionList]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeQuestionInteractionSync(syncHomeQuestionInteractionState);
+    return unsubscribe;
+  }, [syncHomeQuestionInteractionState]);
+
+  const publishHomeQuestionInteractionState = useCallback((id, overrides = {}) => {
+    const currentQuestion = getQuestionById(id);
+    const snapshot = buildQuestionInteractionSnapshot(currentQuestion, {
+      id,
+      liked: overrides.liked ?? getQuestionLikeState(id),
+      disliked: overrides.disliked ?? getQuestionDislikeState(id),
+      collected: overrides.collected ?? getQuestionBookmarkState(id),
+      likeCount: overrides.likeCount ?? currentQuestion?.likeCount ?? currentQuestion?.likes ?? 0,
+      dislikeCount: overrides.dislikeCount ?? currentQuestion?.dislikeCount ?? currentQuestion?.dislikes ?? 0,
+      collectCount: overrides.collectCount ?? currentQuestion?.collectCount ?? currentQuestion?.bookmarkCount ?? currentQuestion?.bookmarks ?? 0,
+    });
+
+    if (!snapshot) {
+      return;
+    }
+
+    publishQuestionInteractionSync(snapshot);
+  }, [bookmarkedItems, dislikedItems, likedItems, questionList]);
+
+  const getQuestionLikeCount = (question) =>
+    Number(question?.likeCount ?? question?.likes ?? 0) || 0;
+
+  const getQuestionDislikeCount = (question) =>
+    Number(question?.dislikeCount ?? question?.dislikes ?? 0) || 0;
+
+  const getQuestionCollectCount = (question) =>
+    Number(question?.collectCount ?? question?.bookmarkCount ?? question?.bookmarks ?? 0) || 0;
+
   const toggleLike = async (id) => {
     const currentState = getQuestionLikeState(id);
     const currentDislikedState = getQuestionDislikeState(id);
+    const currentQuestion = getQuestionById(id);
 
     if (!currentState && currentDislikedState) {
       return;
     }
 
     const newState = !currentState;
+    const nextLikeCount = Math.max(getQuestionLikeCount(currentQuestion) + (newState ? 1 : -1), 0);
     
     // 乐观更新UI
     setLikedItems(prev => ({ ...prev, [id]: newState }));
@@ -593,7 +662,7 @@ export default function HomeScreen({ navigation }) {
     setQuestionList(prevList => 
       prevList.map(item => 
         item.id === id 
-          ? { ...item, likeCount: (item.likeCount || 0) + (newState ? 1 : -1) }
+          ? { ...item, likeCount: nextLikeCount, likes: nextLikeCount }
           : item
       )
     );
@@ -608,6 +677,12 @@ export default function HomeScreen({ navigation }) {
         await questionApi.unlikeQuestion(id);
         showToast(t('home.unlikeSuccess'), 'success');
       }
+      publishHomeQuestionInteractionState(id, {
+        liked: newState,
+        likeCount: nextLikeCount,
+        dislikeCount: getQuestionDislikeCount(currentQuestion),
+        collectCount: getQuestionCollectCount(currentQuestion),
+      });
     } catch (error) {
       console.error('点赞操作失败:', error);
       // 失败时回滚UI
@@ -615,7 +690,11 @@ export default function HomeScreen({ navigation }) {
       setQuestionList(prevList => 
         prevList.map(item => 
           item.id === id 
-            ? { ...item, likeCount: (item.likeCount || 0) + (currentState ? 1 : -1) }
+            ? {
+                ...item,
+                likeCount: getQuestionLikeCount(currentQuestion),
+                likes: getQuestionLikeCount(currentQuestion),
+              }
             : item
         )
       );
@@ -625,8 +704,10 @@ export default function HomeScreen({ navigation }) {
 
   // 收藏问题
   const toggleBookmark = async (id) => {
-    const currentState = bookmarkedItems[id];
+    const currentState = getQuestionBookmarkState(id);
+    const currentQuestion = getQuestionById(id);
     const newState = !currentState;
+    const nextCollectCount = Math.max(getQuestionCollectCount(currentQuestion) + (newState ? 1 : -1), 0);
     
     // 乐观更新UI
     setBookmarkedItems(prev => ({ ...prev, [id]: newState }));
@@ -635,7 +716,7 @@ export default function HomeScreen({ navigation }) {
     setQuestionList(prevList => 
       prevList.map(item => 
         item.id === id 
-          ? { ...item, collectCount: (item.collectCount || 0) + (newState ? 1 : -1) }
+          ? { ...item, collectCount: nextCollectCount, bookmarkCount: nextCollectCount, bookmarks: nextCollectCount }
           : item
       )
     );
@@ -650,6 +731,12 @@ export default function HomeScreen({ navigation }) {
         await questionApi.uncollectQuestion(id);
         showToast(t('home.uncollectSuccess'), 'success');
       }
+      publishHomeQuestionInteractionState(id, {
+        collected: newState,
+        likeCount: getQuestionLikeCount(currentQuestion),
+        dislikeCount: getQuestionDislikeCount(currentQuestion),
+        collectCount: nextCollectCount,
+      });
     } catch (error) {
       console.error('收藏操作失败:', error);
       // 失败时回滚UI
@@ -657,7 +744,12 @@ export default function HomeScreen({ navigation }) {
       setQuestionList(prevList => 
         prevList.map(item => 
           item.id === id 
-            ? { ...item, collectCount: (item.collectCount || 0) + (currentState ? 1 : -1) }
+            ? {
+                ...item,
+                collectCount: getQuestionCollectCount(currentQuestion),
+                bookmarkCount: getQuestionCollectCount(currentQuestion),
+                bookmarks: getQuestionCollectCount(currentQuestion),
+              }
             : item
         )
       );
@@ -669,12 +761,14 @@ export default function HomeScreen({ navigation }) {
   const toggleDislike = async (id) => {
     const currentState = getQuestionDislikeState(id);
     const currentLikedState = getQuestionLikeState(id);
+    const currentQuestion = getQuestionById(id);
 
     if (!currentState && currentLikedState) {
       return;
     }
 
     const newState = !currentState;
+    const nextDislikeCount = Math.max(getQuestionDislikeCount(currentQuestion) + (newState ? 1 : -1), 0);
     
     // 乐观更新UI
     setDislikedItems(prev => ({ ...prev, [id]: newState }));
@@ -683,7 +777,7 @@ export default function HomeScreen({ navigation }) {
     setQuestionList(prevList => 
       prevList.map(item => 
         item.id === id 
-          ? { ...item, dislikeCount: (item.dislikeCount || 0) + (newState ? 1 : -1) }
+          ? { ...item, dislikeCount: nextDislikeCount, dislikes: nextDislikeCount }
           : item
       )
     );
@@ -700,6 +794,12 @@ export default function HomeScreen({ navigation }) {
       }
       // 点踩成功后关闭弹窗
       setShowActionModal(false);
+      publishHomeQuestionInteractionState(id, {
+        disliked: newState,
+        likeCount: getQuestionLikeCount(currentQuestion),
+        dislikeCount: nextDislikeCount,
+        collectCount: getQuestionCollectCount(currentQuestion),
+      });
     } catch (error) {
       console.error('点踩操作失败:', error);
       // 失败时回滚UI
@@ -707,7 +807,11 @@ export default function HomeScreen({ navigation }) {
       setQuestionList(prevList => 
         prevList.map(item => 
           item.id === id 
-            ? { ...item, dislikeCount: (item.dislikeCount || 0) + (currentState ? 1 : -1) }
+            ? {
+                ...item,
+                dislikeCount: getQuestionDislikeCount(currentQuestion),
+                dislikes: getQuestionDislikeCount(currentQuestion),
+              }
             : item
         )
       );
@@ -1591,9 +1695,9 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.actionItemText}>分享 ({formatNumber(selectedQuestion?.shareCount || 0)})</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionItem} onPress={() => { if (selectedQuestion) toggleBookmark(selectedQuestion.id); setShowActionModal(false); }}>
-              <Ionicons name={selectedQuestion && bookmarkedItems[selectedQuestion.id] ? "star" : "star-outline"} size={22} color={selectedQuestion && bookmarkedItems[selectedQuestion.id] ? "#f59e0b" : "#1f2937"} />
-              <Text style={[styles.actionItemText, selectedQuestion && bookmarkedItems[selectedQuestion.id] && { color: '#f59e0b' }]}>
-                {selectedQuestion && bookmarkedItems[selectedQuestion.id] ? t('home.bookmarked') : t('home.bookmark')} ({formatNumber(selectedQuestion?.collectCount || 0)})
+              <Ionicons name={selectedQuestion && getQuestionBookmarkState(selectedQuestion.id) ? "star" : "star-outline"} size={22} color={selectedQuestion && getQuestionBookmarkState(selectedQuestion.id) ? "#f59e0b" : "#1f2937"} />
+              <Text style={[styles.actionItemText, selectedQuestion && getQuestionBookmarkState(selectedQuestion.id) && { color: '#f59e0b' }]}>
+                {selectedQuestion && getQuestionBookmarkState(selectedQuestion.id) ? t('home.bookmarked') : t('home.bookmark')} ({formatNumber(selectedQuestion?.collectCount || 0)})
               </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionItem} onPress={() => { setShowActionModal(false); showToast(t('home.joinTeamFeature'), 'info'); }}>

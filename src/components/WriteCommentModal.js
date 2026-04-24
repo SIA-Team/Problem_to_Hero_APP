@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
+  Platform,
   View,
   Text,
   TouchableOpacity,
@@ -9,6 +11,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import Avatar from './Avatar';
 import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
@@ -27,12 +30,11 @@ import {
   isComposerImageLimitReached,
   removeComposerImageAt,
 } from '../utils/composerImages';
-import {
-  DEFAULT_MENTION_PANEL_BASE_OFFSET,
-} from '../utils/mentionComposer';
 import { resolveComposerScrollPadding } from '../utils/composerLayout';
 import useComposerScrollManager from '../hooks/useComposerScrollManager';
 import { scaleFont } from '../utils/responsive';
+
+const SEND_BUTTON_COLOR = '#f472b6';
 
 const WriteCommentModal = ({
   visible,
@@ -87,10 +89,9 @@ const WriteCommentModal = ({
     windowHeight: commentWindowHeight,
     bottomInset: bottomSafeInset,
     recommendedUsers: recommendedMentionUsers,
-    baseBottomOffset: DEFAULT_MENTION_PANEL_BASE_OFFSET,
+    baseBottomOffset: 0,
     onInvalidMention: () => showToast('\u8be5\u7528\u6237\u7f3a\u5c11\u53ef\u7528\u540d\u79f0', 'warning'),
   });
-
   const runToolbarAction = React.useCallback((action) => {
     if (action === 'image') {
       setShowImagePicker(true);
@@ -162,6 +163,43 @@ const WriteCommentModal = ({
     setShowImagePicker(false);
   };
 
+  const handleSelectImageSource = async source => {
+    try {
+      const permissionStatus =
+        source === 'camera'
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (permissionStatus?.status !== 'granted') {
+        showToast(
+          source === 'camera' ? '需要相机权限才能拍照' : '需要相册权限才能选择图片',
+          'error'
+        );
+        return;
+      }
+
+      const result =
+        source === 'camera'
+          ? await ImagePicker.launchCameraAsync({
+              mediaTypes: ['images'],
+              allowsEditing: false,
+              quality: 0.8,
+            })
+          : await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              allowsEditing: false,
+              quality: 0.8,
+            });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        handleImageSelected(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Failed to select composer image:', error);
+      showToast(source === 'camera' ? '拍照失败，请重试' : '选择图片失败，请重试', 'error');
+    }
+  };
+
   const removeImage = index => {
     setSelectedImages(prev => removeComposerImageAt(prev, index));
   };
@@ -175,11 +213,20 @@ const WriteCommentModal = ({
   };
 
   const handleOpenImagePicker = () => {
+    if (Platform.OS === 'ios') {
+      Alert.alert('选择图片', '请选择图片来源', [
+        { text: '拍照', onPress: () => handleSelectImageSource('camera') },
+        { text: '从相册选择', onPress: () => handleSelectImageSource('library') },
+        { text: '取消', style: 'cancel' },
+      ]);
+      return;
+    }
+
     triggerToolbarAction('image');
   };
 
   const handleToolbarMentionPress = () => {
-    triggerToolbarAction('mention');
+    handleMentionPress({ focusInput: true });
   };
 
   const closeComposerAlert = () => {
@@ -194,7 +241,7 @@ const WriteCommentModal = ({
         title={title}
         onSubmit={handlePublish}
         submitDisabled={!canPublish}
-        submitPlacement={publishInFooter ? 'footer' : 'header'}
+        submitPlacement="none"
         closePlacement={closeOnRight ? 'right' : 'left'}
         footerPaddingBottom={bottomSafeInset + 8}
         footerBottomInset={bottomSafeInset}
@@ -251,7 +298,21 @@ const WriteCommentModal = ({
             </TouchableOpacity>
           </View>
         }
-        footerRight={<Text style={styles.charCount}>{text.length}/500</Text>}
+        footerRight={
+          <View style={styles.footerActionGroup}>
+            <Text style={styles.charCount}>{text.length}/500</Text>
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                (!canPublish || composerAlert) && styles.sendButtonDisabled,
+              ]}
+              onPress={handlePublish}
+              disabled={!canPublish}
+            >
+              <Ionicons name="send" size={18} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
+        }
         floatingOverlay={
           renderMentionPanel ? (
             <MentionSuggestionsPanel
@@ -264,7 +325,12 @@ const WriteCommentModal = ({
               onBackdropPress={focusInput}
               onSelect={handleMentionSelect}
               panelMaxHeight={panelMaxHeight}
+              showHeader={false}
               users={candidateUsers}
+              variant="keyboard-inline"
+              keyboardInlineContentPadding={5}
+              keyboardInlineTransparentItem
+              keyboardInlineSeamless
             />
           ) : null
         }
@@ -417,9 +483,31 @@ const styles = StyleSheet.create({
   toolbarBtn: {
     padding: 10,
   },
+  footerActionGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
   charCount: {
     fontSize: scaleFont(13),
     color: modalTokens.textMuted,
+    marginRight: 10,
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: SEND_BUTTON_COLOR,
+  },
+  sendButtonDisabled: {
+    backgroundColor: SEND_BUTTON_COLOR,
   },
   imageGrid: {
     flexDirection: 'row',

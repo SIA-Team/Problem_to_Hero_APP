@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets, initialWindowMetrics } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import KeyboardDismissView from '../components/KeyboardDismissView';
 import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
 import { showToast } from '../utils/toast';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
+import { resolveComposerTopInset } from '../utils/composerLayout';
 
 import { scaleFont } from '../utils/responsive';
 const activitiesData = [
@@ -18,6 +19,13 @@ const activitiesData = [
 export default function QuestionActivityListScreen({ navigation, route }) {
   const { t } = useTranslation();
   const { questionId, questionTitle } = route?.params || {};
+  const insets = useSafeAreaInsets();
+  const initialTopInset = initialWindowMetrics?.insets?.top ?? 0;
+  const activityModalTopInset = resolveComposerTopInset({
+    platform: Platform.OS,
+    topInset: insets.top,
+    initialTopInset,
+  });
   const bottomSafeInset = useBottomSafeInset(20);
   const [joinedActivities, setJoinedActivities] = useState({});
   const [showActivityModal, setShowActivityModal] = useState(false);
@@ -234,11 +242,11 @@ export default function QuestionActivityListScreen({ navigation, route }) {
       </ScrollView>
 
       {/* 发起活动弹窗 */}
-      <Modal visible={showActivityModal} animationType="slide" statusBarTranslucent>
+      <Modal visible={showActivityModal} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent>
         <KeyboardAvoidingView style={styles.modalKeyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <KeyboardDismissView>
-        <SafeAreaView style={styles.activityModal} edges={['top']}>
-          <View style={styles.activityModalHeader}>
+        <SafeAreaView style={styles.activityModal} edges={['bottom']}>
+          <View style={[styles.activityModalHeader, { paddingTop: activityModalTopInset + 8 }]}>
             <TouchableOpacity onPress={() => setShowActivityModal(false)} style={styles.activityCloseBtn}>
               <Ionicons name="close" size={26} color="#333" />
             </TouchableOpacity>
@@ -479,11 +487,11 @@ const styles = StyleSheet.create({
   // 发起活动弹窗样式
   modalKeyboardView: { flex: 1 },
   activityModal: { flex: 1, backgroundColor: modalTokens.surface },
-  activityModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
-  activityCloseBtn: { padding: 4 },
+  activityModalHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
+  activityCloseBtn: { width: 56, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   activityHeaderCenter: { flex: 1, alignItems: 'center' },
   activityModalTitle: { fontSize: scaleFont(17), fontWeight: '600', color: modalTokens.textPrimary },
-  activityPublishBtn: { backgroundColor: modalTokens.danger, paddingHorizontal: modalTokens.actionPaddingX, paddingVertical: modalTokens.actionPaddingY, borderRadius: modalTokens.actionRadius },
+  activityPublishBtn: { minWidth: 56, backgroundColor: modalTokens.danger, paddingHorizontal: modalTokens.actionPaddingX, paddingVertical: modalTokens.actionPaddingY, borderRadius: modalTokens.actionRadius, alignItems: 'center', justifyContent: 'center' },
   activityPublishBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   activityPublishText: { fontSize: scaleFont(14), color: '#fff', fontWeight: '600' },
   activityPublishTextDisabled: { color: '#fff' },

@@ -131,6 +131,30 @@ const notificationApi = {
       throw error;
     });
   },
+  markConversationRead: (conversationId) => {
+    const requestUrl = replaceUrlParams(`${PRIVATE_MESSAGE_BASE_PATH}/conversation/:conversationId/read`, {
+      conversationId,
+    });
+
+    console.log('\n========================================');
+    console.log('[API Request]', requestUrl);
+    console.log('Request conversationId:', conversationId);
+    console.log('========================================\n');
+
+    return apiClient.post(requestUrl).then(response => {
+      console.log('\n========================================');
+      console.log('[API Response]', requestUrl);
+      console.log('Response data:', JSON.stringify(response, null, 2));
+      console.log('========================================\n');
+      return response;
+    }).catch(error => {
+      console.log('\n========================================');
+      console.log('[API Error]', requestUrl);
+      console.log('Error:', error);
+      console.log('========================================\n');
+      throw error;
+    });
+  },
 };
 
 export default notificationApi;

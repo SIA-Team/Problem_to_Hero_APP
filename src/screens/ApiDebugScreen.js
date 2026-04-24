@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,10 +6,16 @@ import { useTranslation } from '../i18n/withTranslation';
 import { API_CONFIG, API_ENDPOINTS } from '../config/api';
 import { getApiServerUrl, updateDynamicServer } from '../config/env';
 import { getCurrentServer, getCustomServerUrl } from '../utils/serverSwitcher';
+import {
+  clearStartupTraceLogs,
+  getStartupTraceLogs,
+  subscribeStartupTraceLogs,
+} from '../services/startupTrace';
 
 // API 日志存储
 let apiLogs = [];
 const MAX_LOGS = 50;
+const MAX_STARTUP_LOGS_PREVIEW = 20;
 
 // 拦截器函数 - 需要在 apiClient 中调用
 export const logApiRequest = (config) => {
@@ -23,31 +29,33 @@ export const logApiRequest = (config) => {
     headers: config.headers,
     params: config.params,
     data: config.data,
-    type: 'request'
+    type: 'request',
   };
-  
+
   apiLogs.unshift(log);
   if (apiLogs.length > MAX_LOGS) {
     apiLogs = apiLogs.slice(0, MAX_LOGS);
   }
-  
+
   return log.id;
 };
 
 export const logApiResponse = (logId, response, error = null) => {
-  const logIndex = apiLogs.findIndex(log => log.id === logId);
+  const logIndex = apiLogs.findIndex((log) => log.id === logId);
   if (logIndex !== -1) {
     apiLogs[logIndex] = {
       ...apiLogs[logIndex],
       status: error ? 'error' : response?.status,
       statusText: error ? 'Error' : response?.statusText,
       responseData: error ? error.message : response?.data,
-      error: error ? {
-        message: error.message,
-        code: error.code,
-        response: error.response?.data
-      } : null,
-      duration: Date.now() - apiLogs[logIndex].id
+      error: error
+        ? {
+            message: error.message,
+            code: error.code,
+            response: error.response?.data,
+          }
+        : null,
+      duration: Date.now() - apiLogs[logIndex].id,
     };
   }
 };
@@ -57,8 +65,9 @@ export const clearApiLogs = () => {
 };
 
 function ApiDebugScreen({ navigation }) {
-  const { t } = useTranslation();
+  useTranslation();
   const [logs, setLogs] = useState([]);
+  const [startupLogs, setStartupLogs] = useState(() => getStartupTraceLogs());
   const [selectedLog, setSelectedLog] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [serverInfo, setServerInfo] = useState({
@@ -68,6 +77,11 @@ function ApiDebugScreen({ navigation }) {
 
   useEffect(() => {
     let mounted = true;
+    const unsubscribeStartupTrace = subscribeStartupTraceLogs((nextLogs) => {
+      if (mounted) {
+        setStartupLogs(nextLogs);
+      }
+    });
 
     const loadServerInfo = async () => {
       try {
@@ -105,12 +119,15 @@ function ApiDebugScreen({ navigation }) {
     return () => {
       mounted = false;
       clearInterval(interval);
+      unsubscribeStartupTrace();
     };
   }, [autoRefresh]);
 
   const handleClearLogs = () => {
     clearApiLogs();
+    clearStartupTraceLogs();
     setLogs([]);
+    setStartupLogs([]);
     setSelectedLog(null);
   };
 
@@ -145,7 +162,7 @@ ${log.error ? `错误: ${JSON.stringify(log.error, null, 2)}` : ''}
           styles.logItem,
           isError && styles.logItemError,
           isSuccess && styles.logItemSuccess,
-          isPending && styles.logItemPending
+          isPending && styles.logItemPending,
         ]}
         onPress={() => setSelectedLog(selectedLog?.id === log.id ? null : log)}
       >
@@ -157,11 +174,11 @@ ${log.error ? `错误: ${JSON.stringify(log.error, null, 2)}` : ''}
           </View>
           <Text style={styles.logTime}>{log.timestamp}</Text>
         </View>
-        
+
         <Text style={styles.logUrl} numberOfLines={2}>
           {log.fullURL}
         </Text>
-        
+
         <View style={styles.logFooter}>
           {log.status && (
             <Text style={[styles.statusText, isError && styles.errorText]}>
@@ -236,6 +253,52 @@ ${log.error ? `错误: ${JSON.stringify(log.error, null, 2)}` : ''}
     );
   };
 
+  const renderStartupLogItem = (log) => {
+    const isFail = log.type === 'fail';
+    const isSuccess = log.type === 'success';
+    const isStart = log.type === 'start';
+    const durationText = typeof log.durationMs === 'number' ? `${log.durationMs}ms` : null;
+
+    return (
+      <View
+        key={log.id}
+        style={[
+          styles.startupLogItem,
+          isFail && styles.startupLogItemFail,
+          isSuccess && styles.startupLogItemSuccess,
+          isStart && styles.startupLogItemStart,
+        ]}
+      >
+        <View style={styles.startupLogHeader}>
+          <Text style={styles.startupLogEvent}>{log.event}</Text>
+          <Text style={styles.startupLogTime}>{log.timestamp}</Text>
+        </View>
+
+        <View style={styles.startupLogMetaRow}>
+          <Text
+            style={[
+              styles.startupLogType,
+              isFail && styles.startupLogTypeFail,
+              isSuccess && styles.startupLogTypeSuccess,
+              isStart && styles.startupLogTypeStart,
+            ]}
+          >
+            {log.type}
+          </Text>
+          {durationText ? (
+            <Text style={styles.startupLogDuration}>{durationText}</Text>
+          ) : null}
+        </View>
+
+        {log.payload && Object.keys(log.payload).length > 0 ? (
+          <Text style={styles.startupLogPayload} selectable>
+            {JSON.stringify(log.payload, null, 2)}
+          </Text>
+        ) : null}
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
@@ -249,9 +312,9 @@ ${log.error ? `错误: ${JSON.stringify(log.error, null, 2)}` : ''}
             style={styles.headerButton}
           >
             <Ionicons
-              name={autoRefresh ? "pause" : "play"}
+              name={autoRefresh ? 'pause' : 'play'}
               size={20}
-              color={autoRefresh ? "#ef4444" : "#22c55e"}
+              color={autoRefresh ? '#ef4444' : '#22c55e'}
             />
           </TouchableOpacity>
           <TouchableOpacity onPress={handleClearLogs} style={styles.headerButton}>
@@ -274,23 +337,49 @@ ${log.error ? `错误: ${JSON.stringify(log.error, null, 2)}` : ''}
           </Text>
         </View>
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>日志数量:</Text>
+          <Text style={styles.infoLabel}>API 日志:</Text>
           <Text style={styles.infoValue}>{logs.length} / {MAX_LOGS}</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>启动追踪:</Text>
+          <Text style={styles.infoValue}>{startupLogs.length} / 200</Text>
         </View>
       </View>
 
       <ScrollView style={styles.logsList}>
-        {logs.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="analytics-outline" size={64} color="#d1d5db" />
-            <Text style={styles.emptyText}>暂无 API 请求日志</Text>
-            <Text style={styles.emptyHint}>
-              使用应用功能后，这里会显示所有的 API 请求
-            </Text>
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>冷启动追踪</Text>
+            <Text style={styles.sectionHint}>仅开发环境可见</Text>
           </View>
-        ) : (
-          logs.map(renderLogItem)
-        )}
+          {startupLogs.length === 0 ? (
+            <Text style={styles.sectionEmptyText}>
+              暂无启动追踪，重启 App 后再进入这里可以直接看到每一步耗时和失败点。
+            </Text>
+          ) : (
+            startupLogs
+              .slice(0, MAX_STARTUP_LOGS_PREVIEW)
+              .map(renderStartupLogItem)
+          )}
+        </View>
+
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>API 请求日志</Text>
+            <Text style={styles.sectionHint}>实时刷新</Text>
+          </View>
+          {logs.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="analytics-outline" size={64} color="#d1d5db" />
+              <Text style={styles.emptyText}>暂无 API 请求日志</Text>
+              <Text style={styles.emptyHint}>
+                使用应用功能后，这里会显示所有 API 请求。
+              </Text>
+            </View>
+          ) : (
+            logs.map(renderLogItem)
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -299,7 +388,7 @@ ${log.error ? `错误: ${JSON.stringify(log.error, null, 2)}` : ''}
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6'
+    backgroundColor: '#f3f4f6',
   },
   header: {
     flexDirection: 'row',
@@ -309,137 +398,235 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb'
+    borderBottomColor: '#e5e7eb',
   },
   backButton: {
-    padding: 4
+    padding: 4,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#1f2937',
     flex: 1,
-    marginLeft: 12
+    marginLeft: 12,
   },
   headerRight: {
     flexDirection: 'row',
-    gap: 12
+    gap: 12,
   },
   headerButton: {
-    padding: 4
+    padding: 4,
   },
   infoCard: {
     backgroundColor: '#fff',
     margin: 12,
     padding: 16,
     borderRadius: 12,
-    gap: 12
+    gap: 12,
   },
   infoRow: {
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
   },
   infoLabel: {
     fontSize: 14,
     color: '#6b7280',
-    width: 90
+    width: 90,
   },
   infoValue: {
     fontSize: 14,
     color: '#1f2937',
     flex: 1,
-    fontWeight: '500'
+    fontWeight: '500',
   },
   logsList: {
-    flex: 1
+    flex: 1,
+  },
+  sectionCard: {
+    backgroundColor: '#fff',
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  sectionHint: {
+    fontSize: 12,
+    color: '#9ca3af',
+  },
+  sectionEmptyText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#6b7280',
+    paddingHorizontal: 12,
+  },
+  startupLogItem: {
+    marginHorizontal: 12,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  startupLogItemStart: {
+    borderColor: '#fde68a',
+    backgroundColor: '#fffbeb',
+  },
+  startupLogItemSuccess: {
+    borderColor: '#bbf7d0',
+    backgroundColor: '#f0fdf4',
+  },
+  startupLogItemFail: {
+    borderColor: '#fecaca',
+    backgroundColor: '#fef2f2',
+  },
+  startupLogHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  startupLogEvent: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  startupLogTime: {
+    fontSize: 11,
+    color: '#9ca3af',
+  },
+  startupLogMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 8,
+  },
+  startupLogType: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    color: '#6b7280',
+  },
+  startupLogTypeStart: {
+    color: '#b45309',
+  },
+  startupLogTypeSuccess: {
+    color: '#15803d',
+  },
+  startupLogTypeFail: {
+    color: '#dc2626',
+  },
+  startupLogDuration: {
+    fontSize: 11,
+    color: '#6b7280',
+  },
+  startupLogPayload: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#374151',
+    fontFamily: 'monospace',
   },
   logItem: {
-    backgroundColor: '#fff',
+    backgroundColor: '#f9fafb',
     marginHorizontal: 12,
     marginBottom: 8,
     padding: 12,
     borderRadius: 8,
     borderLeftWidth: 4,
-    borderLeftColor: '#d1d5db'
+    borderLeftColor: '#d1d5db',
   },
   logItemSuccess: {
-    borderLeftColor: '#22c55e'
+    borderLeftColor: '#22c55e',
   },
   logItemError: {
-    borderLeftColor: '#ef4444'
+    borderLeftColor: '#ef4444',
   },
   logItemPending: {
-    borderLeftColor: '#f59e0b'
+    borderLeftColor: '#f59e0b',
   },
   logHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8
+    marginBottom: 8,
   },
   logMethod: {
     backgroundColor: '#f3f4f6',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 4
+    borderRadius: 4,
   },
   methodText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#1f2937'
+    color: '#1f2937',
   },
   logTime: {
     fontSize: 11,
-    color: '#9ca3af'
+    color: '#9ca3af',
   },
   logUrl: {
     fontSize: 13,
     color: '#1f2937',
-    marginBottom: 8
+    marginBottom: 8,
   },
   logFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12
+    gap: 12,
   },
   statusText: {
     fontSize: 12,
     color: '#22c55e',
-    fontWeight: '500'
+    fontWeight: '500',
   },
   durationText: {
     fontSize: 12,
-    color: '#6b7280'
+    color: '#6b7280',
   },
   pendingText: {
     fontSize: 12,
-    color: '#f59e0b'
+    color: '#f59e0b',
   },
   errorText: {
-    color: '#ef4444'
+    color: '#ef4444',
   },
   logDetails: {
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb'
+    borderTopColor: '#e5e7eb',
   },
   detailSection: {
-    marginBottom: 12
+    marginBottom: 12,
   },
   detailTitle: {
     fontSize: 13,
     fontWeight: '600',
     color: '#1f2937',
-    marginBottom: 4
+    marginBottom: 4,
   },
   detailText: {
     fontSize: 12,
     color: '#4b5563',
-    fontFamily: 'monospace'
+    fontFamily: 'monospace',
   },
   responseScroll: {
-    maxHeight: 200
+    maxHeight: 200,
   },
   shareButton: {
     flexDirection: 'row',
@@ -450,31 +637,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: '#eff6ff',
     borderRadius: 6,
-    marginTop: 8
+    marginTop: 8,
   },
   shareButtonText: {
     fontSize: 14,
     color: '#3b82f6',
-    fontWeight: '500'
+    fontWeight: '500',
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60
+    paddingVertical: 60,
   },
   emptyText: {
     fontSize: 16,
     color: '#6b7280',
     marginTop: 16,
-    fontWeight: '500'
+    fontWeight: '500',
   },
   emptyHint: {
     fontSize: 14,
     color: '#9ca3af',
     marginTop: 8,
     textAlign: 'center',
-    paddingHorizontal: 32
-  }
+    paddingHorizontal: 32,
+  },
 });
 
 export default ApiDebugScreen;

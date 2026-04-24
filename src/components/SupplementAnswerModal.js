@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
+  Platform,
   View,
   Text,
   ScrollView,
@@ -10,6 +12,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import Avatar from './Avatar';
 import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
@@ -31,9 +34,6 @@ import {
   isComposerImageLimitReached,
   removeComposerImageAt,
 } from '../utils/composerImages';
-import {
-  DEFAULT_MENTION_PANEL_BASE_OFFSET,
-} from '../utils/mentionComposer';
 import { resolveComposerScrollPadding } from '../utils/composerLayout';
 import useComposerScrollManager from '../hooks/useComposerScrollManager';
 import { scaleFont } from '../utils/responsive';
@@ -43,6 +43,7 @@ const SUPPLEMENT_PUBLISH_FAILURE_TITLE = '\u6682\u65f6\u65e0\u6cd5\u8865\u5145\u
 const SUPPLEMENT_PUBLISH_FAILURE_MESSAGE =
   '\u5f53\u524d\u56de\u7b54\u6682\u4e0d\u652f\u6301\u7ee7\u7eed\u8865\u5145\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002';
 const COMPOSER_ALERT_CONFIRM_TEXT = '\u6211\u77e5\u9053\u4e86';
+const SEND_BUTTON_COLOR = '#f472b6';
 const isSupplementAnswerPublishBlockedMessage = message =>
   typeof message === 'string' && message.includes('不允许') && message.includes('回答补充');
 
@@ -133,10 +134,9 @@ export default function SupplementAnswerModal({
     windowHeight: answerWindowHeight,
     bottomInset: bottomSafeInset,
     recommendedUsers: recommendedMentionUsers,
-    baseBottomOffset: DEFAULT_MENTION_PANEL_BASE_OFFSET,
+    baseBottomOffset: 0,
     onInvalidMention: () => toast.warning('该用户缺少可用名称'),
   });
-
   const runToolbarAction = React.useCallback((action) => {
     if (action === 'image') {
       setShowImagePicker(true);
@@ -288,12 +288,55 @@ export default function SupplementAnswerModal({
     updateImages(removeComposerImageAt(currentImages, index));
   };
 
+  const handleSelectImageSource = async source => {
+    try {
+      const permissionStatus =
+        source === 'camera'
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (permissionStatus?.status !== 'granted') {
+        toast.error(source === 'camera' ? '需要相机权限才能拍照' : '需要相册权限才能选择图片');
+        return;
+      }
+
+      const result =
+        source === 'camera'
+          ? await ImagePicker.launchCameraAsync({
+              mediaTypes: ['images'],
+              allowsEditing: false,
+              quality: 0.8,
+            })
+          : await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              allowsEditing: false,
+              quality: 0.8,
+            });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        await handleImageSelected(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Failed to select supplement answer image:', error);
+      toast.error(source === 'camera' ? '拍照失败，请重试' : '选择图片失败，请重试');
+    }
+  };
+
   const handleOpenImagePicker = () => {
+    if (Platform.OS === 'ios') {
+      Alert.alert('选择图片', '请选择图片来源', [
+        { text: '拍照', onPress: () => handleSelectImageSource('camera') },
+        { text: '从相册选择', onPress: () => handleSelectImageSource('library') },
+        { text: '取消', style: 'cancel' },
+      ]);
+      return;
+    }
+
     triggerToolbarAction('image');
   };
 
   const handleToolbarMentionPress = () => {
-    triggerToolbarAction('mention');
+    handleMentionPress({ focusInput: true });
   };
 
   const handleChangeSupplementAnswerText = value => {
@@ -422,6 +465,7 @@ export default function SupplementAnswerModal({
         ) : null}
         footerPaddingBottom={bottomSafeInset + 8}
         footerBottomInset={bottomSafeInset}
+        submitPlacement="none"
         footerHidden={Boolean(pendingToolbarAction)}
         overlayContent={
           showImagePicker || composerAlert ? (
@@ -498,7 +542,18 @@ export default function SupplementAnswerModal({
             </TouchableOpacity>
           </View>
         }
-        footerRight={<Text style={styles.wordCount}>{currentText.length}/2000</Text>}
+        footerRight={
+          <View style={styles.footerActionGroup}>
+            <Text style={styles.wordCount}>{currentText.length}/2000</Text>
+            <TouchableOpacity
+              style={[styles.sendButton, !canSubmit && styles.sendButtonDisabled]}
+              onPress={handleSubmit}
+              disabled={!canSubmit}
+            >
+              <Ionicons name="send" size={18} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
+        }
         floatingOverlay={
           renderMentionPanel ? (
             <MentionSuggestionsPanel
@@ -511,7 +566,12 @@ export default function SupplementAnswerModal({
               onBackdropPress={focusInput}
               onSelect={handleMentionSelect}
               panelMaxHeight={panelMaxHeight}
+              showHeader={false}
               users={candidateUsers}
+              variant="keyboard-inline"
+              keyboardInlineContentPadding={5}
+              keyboardInlineTransparentItem
+              keyboardInlineSeamless
             />
           ) : null
         }
@@ -711,9 +771,31 @@ const styles = StyleSheet.create({
   toolItem: {
     padding: 10,
   },
+  footerActionGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
   wordCount: {
     fontSize: scaleFont(13),
     color: modalTokens.textMuted,
+    marginRight: 10,
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: SEND_BUTTON_COLOR,
+  },
+  sendButtonDisabled: {
+    backgroundColor: SEND_BUTTON_COLOR,
   },
   imagesContainer: {
     flexDirection: 'row',

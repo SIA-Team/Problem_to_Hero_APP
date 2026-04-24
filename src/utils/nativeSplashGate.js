@@ -1,6 +1,12 @@
 export const canHideNativeSplashScreen = ({
   fontsLoaded = false,
   rootLayoutReady = false,
+  rootLayoutWatchdogPassed = false,
+  forceHideSplash = false,
 } = {}) => {
-  return fontsLoaded && rootLayoutReady;
+  if (forceHideSplash) {
+    return true;
+  }
+
+  return fontsLoaded && (rootLayoutReady || rootLayoutWatchdogPassed);
 };

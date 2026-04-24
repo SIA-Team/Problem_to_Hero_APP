@@ -16,7 +16,12 @@ jest.mock('../ComposerModalScaffold', () => {
   const React = require('react');
   const { View, TouchableOpacity, Text } = require('react-native');
 
-  return function MockComposerModalScaffold({ children, overlayContent, onSubmit }) {
+  return function MockComposerModalScaffold({
+    children,
+    overlayContent,
+    floatingOverlay,
+    onSubmit,
+  }) {
     return (
       <View>
         <TouchableOpacity onPress={onSubmit}>
@@ -24,6 +29,7 @@ jest.mock('../ComposerModalScaffold', () => {
         </TouchableOpacity>
         {children}
         {overlayContent}
+        {floatingOverlay}
       </View>
     );
   };
@@ -209,5 +215,45 @@ describe('WriteAnswerModal', () => {
     expect(
       tree.root.findAllByProps({ children: '回答发布失败，请稍后重试' }).length
     ).toBeGreaterThan(0);
+  });
+
+  it('uses the team-detail mention suggestion style', () => {
+    useMentionComposer.mockReturnValue({
+      activeMention: { start: 0, end: 1, keyword: '' },
+      candidateUsers: [{ id: 1, username: 'tester' }],
+      focusInput: jest.fn(),
+      handleMentionPress: jest.fn(),
+      handleMentionSelect: jest.fn(),
+      handleSelectionChange: jest.fn(),
+      listMaxHeight: 240,
+      mentionBottomInset: 12,
+      mentionLoading: false,
+      panelAnimatedStyle: null,
+      panelBottomOffset: 0,
+      panelMaxHeight: 240,
+      renderMentionPanel: true,
+      selection: { start: 1, end: 1 },
+      shouldShowMentionPanel: true,
+    });
+
+    let tree;
+
+    renderer.act(() => {
+      tree = renderer.create(
+        <WriteAnswerModal
+          visible
+          onClose={jest.fn()}
+          onSubmit={jest.fn()}
+          onChangeText={jest.fn()}
+        />
+      );
+    });
+
+    const mentionPanel = tree.root.findByType('MentionSuggestionsPanel');
+
+    expect(mentionPanel.props.variant).toBe('keyboard-inline');
+    expect(mentionPanel.props.showHeader).toBe(false);
+    expect(mentionPanel.props.keyboardInlineContentPadding).toBe(5);
+    expect(mentionPanel.props.keyboardInlineTransparentItem).toBe(true);
   });
 });

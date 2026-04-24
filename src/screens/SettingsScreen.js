@@ -463,10 +463,7 @@ export default function SettingsScreen({
     setIsLoading(true);
     try {
       const updatedProfile = await UserCacheService.updateUserProfile({
-        nickName: null,
-        signature: null,
-        profession: newOccupation.trim() || null,
-        location: null
+        profession: newOccupation.trim() || null
       });
 
       if (updatedProfile) {
@@ -562,17 +559,11 @@ export default function SettingsScreen({
       return;
     }
 
-    // 构建API请求数据：只发送当前编辑的字段，其他字段设为null
+    // 只发送当前编辑字段，避免未编辑资料被 null 覆盖。
     const requestData = {
-      nickName: null,
-      signature: null,
-      profession: null,
-      location: null
+      [apiFieldName]: newValue.trim() || null
     };
 
-    // 设置当前编辑的字段值（空字符串也发送null）
-    requestData[apiFieldName] = newValue.trim() || null;
-    
     console.log('=== 发送给后端的数据 ===');
     console.log('requestData:', requestData);
     console.log('========================');
@@ -635,17 +626,11 @@ export default function SettingsScreen({
       return;
     }
 
-    // 构建API请求数据：只发送当前编辑的字段，其他字段设为null
+    // 只发送当前编辑字段，避免未编辑资料被 null 覆盖。
     const requestData = {
-      nickName: null,
-      signature: null,
-      profession: null,
-      location: null
+      [apiFieldName]: newValue.trim() || null
     };
 
-    // 设置当前编辑的字段值（空字符串也发送null）
-    requestData[apiFieldName] = newValue.trim() || null;
-    
     console.log('=== 发送给后端的数据 ===');
     console.log('requestData:', requestData);
     console.log('========================');

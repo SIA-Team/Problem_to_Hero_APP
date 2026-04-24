@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
+  Platform,
   View,
   Text,
   ScrollView,
@@ -10,6 +12,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import IdentitySelector from './IdentitySelector';
 import ImagePickerSheet from './ImagePickerSheet';
 import ComposerModalScaffold from './ComposerModalScaffold';
@@ -26,14 +29,12 @@ import {
   isComposerImageLimitReached,
   removeComposerImageAt,
 } from '../utils/composerImages';
-import {
-  DEFAULT_MENTION_PANEL_BASE_OFFSET,
-} from '../utils/mentionComposer';
 import { resolveComposerScrollPadding } from '../utils/composerLayout';
 import useComposerScrollManager from '../hooks/useComposerScrollManager';
 import { scaleFont } from '../utils/responsive';
 
 const COMPOSER_ALERT_CONFIRM_TEXT = '我知道了';
+const SEND_BUTTON_COLOR = '#f472b6';
 
 export default function WriteAnswerModal({
   visible,
@@ -98,10 +99,9 @@ export default function WriteAnswerModal({
     windowHeight: answerWindowHeight,
     bottomInset: bottomSafeInset,
     recommendedUsers: recommendedMentionUsers,
-    baseBottomOffset: DEFAULT_MENTION_PANEL_BASE_OFFSET,
+    baseBottomOffset: 0,
     onInvalidMention: () => showToast('该用户缺少可用名称', 'warning'),
   });
-
   const runToolbarAction = React.useCallback((action) => {
     if (action === 'image') {
       setShowImagePicker(true);
@@ -145,6 +145,43 @@ export default function WriteAnswerModal({
     setShowImagePicker(false);
   };
 
+  const handleSelectImageSource = async source => {
+    try {
+      const permissionStatus =
+        source === 'camera'
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (permissionStatus?.status !== 'granted') {
+        showToast(
+          source === 'camera' ? '需要相机权限才能拍照' : '需要相册权限才能选择图片',
+          'error'
+        );
+        return;
+      }
+
+      const result =
+        source === 'camera'
+          ? await ImagePicker.launchCameraAsync({
+              mediaTypes: ['images'],
+              allowsEditing: false,
+              quality: 0.8,
+            })
+          : await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              allowsEditing: false,
+              quality: 0.8,
+            });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        handleAddImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Failed to select answer image:', error);
+      showToast(source === 'camera' ? '拍照失败，请重试' : '选择图片失败，请重试', 'error');
+    }
+  };
+
   const handleRemoveImage = index => {
     onChangeImages?.(removeComposerImageAt(currentImages, index));
   };
@@ -152,6 +189,15 @@ export default function WriteAnswerModal({
   const handleOpenImagePicker = () => {
     if (imageLimitReached) {
       showToast('最多只能添加9张图片', 'warning');
+      return;
+    }
+
+    if (Platform.OS === 'ios') {
+      Alert.alert('选择图片', '请选择图片来源', [
+        { text: '拍照', onPress: () => handleSelectImageSource('camera') },
+        { text: '从相册选择', onPress: () => handleSelectImageSource('library') },
+        { text: '取消', style: 'cancel' },
+      ]);
       return;
     }
 
@@ -167,7 +213,7 @@ export default function WriteAnswerModal({
   };
 
   const handleToolbarMentionPress = () => {
-    triggerToolbarAction('mention');
+    handleMentionPress({ focusInput: true });
   };
 
   const closeComposerAlert = () => {
@@ -198,6 +244,7 @@ export default function WriteAnswerModal({
         submitDisabled={!canSubmit}
         footerPaddingBottom={bottomSafeInset + 8}
         footerBottomInset={bottomSafeInset}
+        submitPlacement="none"
         footerHidden={Boolean(pendingToolbarAction)}
         overlayContent={
           showImagePicker || composerAlert ? (
@@ -253,9 +300,18 @@ export default function WriteAnswerModal({
           </View>
         }
         footerRight={
-          <Text style={styles.answerWordCount}>
-            {text.length}/{wordLimit}
-          </Text>
+          <View style={styles.footerActionGroup}>
+            <Text style={styles.answerWordCount}>
+              {text.length}/{wordLimit}
+            </Text>
+            <TouchableOpacity
+              style={[styles.sendButton, !canSubmit && styles.sendButtonDisabled]}
+              onPress={handleSubmitAnswer}
+              disabled={!canSubmit}
+            >
+              <Ionicons name="send" size={18} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
         }
         floatingOverlay={
           renderMentionPanel ? (
@@ -269,7 +325,12 @@ export default function WriteAnswerModal({
               onBackdropPress={focusInput}
               onSelect={handleMentionSelect}
               panelMaxHeight={panelMaxHeight}
+              showHeader={false}
               users={candidateUsers}
+              variant="keyboard-inline"
+              keyboardInlineContentPadding={5}
+              keyboardInlineTransparentItem
+              keyboardInlineSeamless
             />
           ) : null
         }
@@ -460,9 +521,31 @@ const styles = StyleSheet.create({
   answerToolItem: {
     padding: 10,
   },
+  footerActionGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
   answerWordCount: {
     fontSize: scaleFont(13),
     color: '#999',
+    marginRight: 10,
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: SEND_BUTTON_COLOR,
+  },
+  sendButtonDisabled: {
+    backgroundColor: SEND_BUTTON_COLOR,
   },
   composerAlertOverlay: {
     ...StyleSheet.absoluteFillObject,

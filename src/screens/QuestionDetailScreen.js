@@ -1,8 +1,9 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, FlatList, TouchableOpacity, Pressable, Image, TextInput, StyleSheet, Modal, Alert, RefreshControl, ActivityIndicator, Animated, Platform, Keyboard, KeyboardAvoidingView, Dimensions, InteractionManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets, initialWindowMetrics } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import Avatar from '../components/Avatar';
 import CommentBottomSheet, {
   CommentBottomSheetCommentCard,
@@ -39,6 +40,13 @@ import {
   setQuestionDetailCache,
   setQuestionDetailListCaches,
 } from '../services/questionDetailCache';
+import {
+  applyQuestionInteractionSnapshot,
+  buildQuestionInteractionSnapshot,
+  getQuestionInteractionSnapshotAsync,
+  publishQuestionInteractionSync,
+  subscribeQuestionInteractionSync,
+} from '../services/questionInteractionSync';
 import { loadQuestionSupplements } from '../utils/dataLoader';
 import { showToast } from '../utils/toast';
 import {
@@ -56,12 +64,10 @@ import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import useKeyboardVisibility from '../hooks/useKeyboardVisibility';
 import useMentionComposer from '../hooks/useMentionComposer';
-import {
-  DEFAULT_MENTION_PANEL_BASE_OFFSET,
-  DEFAULT_MENTION_SEARCH_LIMIT,
-} from '../utils/mentionComposer';
+import { DEFAULT_MENTION_SEARCH_LIMIT } from '../utils/mentionComposer';
 import {
   resolveComposerInputScrollTarget,
+  resolveComposerTopInset,
   resolveComposerScrollPadding,
 } from '../utils/composerLayout';
 import { scaleFont } from '../utils/responsive';
@@ -80,6 +86,9 @@ import {
   isPrivateMessagingServiceUnavailableError,
   sendPlainPrivateMessage,
 } from '../utils/privateShareService';
+
+const SEND_BUTTON_COLOR = '#f472b6';
+
 const answers = [{
   id: 1,
   author: 'Python老司机',
@@ -668,6 +677,12 @@ export default function QuestionDetailScreen({
 
   // 获取安全区域
   const insets = useSafeAreaInsets();
+  const initialTopInset = initialWindowMetrics?.insets?.top ?? 0;
+  const activityModalTopInset = resolveComposerTopInset({
+    platform: Platform.OS,
+    topInset: insets.top,
+    initialTopInset,
+  });
   const bottomSafeInset = useBottomSafeInset(20);
   const supplementKeyboardVisible = useKeyboardVisibility(showSupplementModal);
   const windowHeight = Dimensions.get('window').height;
@@ -695,6 +710,34 @@ export default function QuestionDetailScreen({
     const normalizedQuestionId = String(candidateQuestionId ?? '').trim();
     return normalizedQuestionId || null;
   }, [route?.params?.id, questionData?.id, questionData?.questionId]);
+  const syncQuestionInteractionToDetail = React.useCallback(snapshot => {
+    const normalizedSnapshotId = String(snapshot?.id ?? '').trim();
+    if (!normalizedSnapshotId || !currentQuestionId || normalizedSnapshotId !== currentQuestionId) {
+      return;
+    }
+
+    setQuestionData(prev => (prev ? applyQuestionInteractionSnapshot(prev, snapshot) : prev));
+    setLiked(prev => ({
+      ...prev,
+      main: !!snapshot.liked,
+      dislike: !!snapshot.disliked,
+    }));
+    setBookmarked(!!snapshot.collected);
+  }, [currentQuestionId]);
+
+  const publishDetailQuestionInteractionState = React.useCallback((question, overrides = {}) => {
+    if (!question) {
+      return null;
+    }
+
+    const snapshot = buildQuestionInteractionSnapshot(question, overrides);
+    if (!snapshot) {
+      return null;
+    }
+
+    publishQuestionInteractionSync(snapshot);
+    return snapshot;
+  }, []);
   const normalizedCurrentUserId = React.useMemo(() => String(currentInviteUserId || '').trim(), [currentInviteUserId]);
   const {
     activeMention: supplementActiveMention,
@@ -721,7 +764,7 @@ export default function QuestionDetailScreen({
     bottomInset: bottomSafeInset,
     recommendedUsers: recommendedLocalUsers,
     currentUserId: normalizedCurrentUserId,
-    baseBottomOffset: DEFAULT_MENTION_PANEL_BASE_OFFSET,
+    baseBottomOffset: 0,
     onInvalidMention: () => showToast('该用户缺少可用名称', 'warning'),
   });
   useEffect(() => {
@@ -862,6 +905,26 @@ export default function QuestionDetailScreen({
 
     setQuestionDetailCache(currentQuestionId, questionData);
   }, [currentQuestionId, questionData]);
+
+  useEffect(() => {
+    if (!currentQuestionId) {
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    getQuestionInteractionSnapshotAsync(currentQuestionId).then((cachedInteractionSnapshot) => {
+      if (isMounted && cachedInteractionSnapshot) {
+        syncQuestionInteractionToDetail(cachedInteractionSnapshot);
+      }
+    });
+
+    const unsubscribe = subscribeQuestionInteractionSync(syncQuestionInteractionToDetail);
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [currentQuestionId, syncQuestionInteractionToDetail]);
 
   useEffect(() => {
     if (!currentQuestionId) {
@@ -1835,24 +1898,13 @@ export default function QuestionDetailScreen({
   };
   const questionAdoptRate = getQuestionAdoptRate(questionData);
   const isQuestionSolvedFromAdoptRate = isQuestionSolvedByAdoptRate(questionData);
-  const rewardContributorsLabel =
-    typeof t('screens.questionDetail.reward.contributors') === 'string'
-      ? t('screens.questionDetail.reward.contributors')
-      : '';
   const rewardContributorCount = Number(rewardContributors) || 0;
-  const rewardContributorsDisplayText = [String(rewardContributorCount), rewardContributorsLabel]
-    .filter(Boolean)
-    .join(' ');
   const rewardParticipationHint = rewardContributorCount > 0
     ? `${rewardContributorCount} 位用户正在一起抬高奖励池`
     : '追加悬赏可更快吸引到高质量回答';
   const rewardPoolStatusText = isQuestionSolvedFromAdoptRate
     ? '该问题已进入解决状态'
     : '奖励池开放中，仍可继续追加';
-  const adoptionProgressCaption = isQuestionSolvedFromAdoptRate
-    ? '当前问答已进入已解决状态'
-    : '采纳进度会随优质回答实时更新';
-  const rewardContributorsCaption = rewardContributorsDisplayText || '查看追加悬赏名单';
   const currentReplyComment = commentsList.find(comment => String(comment.id) === String(currentCommentId)) || Object.values(questionCommentRepliesMap).flatMap(entry => entry?.list || []).find(comment => String(comment.id) === String(currentCommentId)) || suppCommentsList.find(comment => String(comment.id) === String(currentCommentId)) || commentsData.find(comment => String(comment.id) === String(currentCommentId)) || null;
   const currentAnswerReplyComment = answerCommentsList.find(comment => String(comment.id) === String(currentAnswerCommentId)) || Object.values(answerCommentRepliesMap).flatMap(entry => entry?.list || []).find(comment => String(comment.id) === String(currentAnswerCommentId)) || null;
   const currentSuppReplyComment = suppCommentsList.find(comment => String(comment.id) === String(currentSuppCommentId)) || null;
@@ -1956,16 +2008,16 @@ export default function QuestionDetailScreen({
     const normalizedBountyAmount = Number(question.bountyAmount ?? question.rewardAmount ?? 0) || 0;
     const normalizedPayViewAmount = getQuestionPayViewAmount(question);
     const normalizedViewCount = Number(question.viewCount ?? question.views ?? 0) || 0;
-    const normalizedLikeCount = Number(question.likeCount ?? question.likes ?? 0) || 0;
-    const normalizedCollectCount = Number(question.collectCount ?? question.bookmarkCount ?? question.bookmarks ?? 0) || 0;
+    const normalizedLikeCount = Number(question.likeCount ?? question.likes ?? question.likeNum ?? question.likesCount ?? question.thumbsUpCount ?? 0) || 0;
+    const normalizedCollectCount = Number(question.collectCount ?? question.bookmarkCount ?? question.bookmarks ?? question.collectNum ?? question.favoriteCount ?? question.favoritesCount ?? 0) || 0;
     const normalizedCommentCount = Number(question.commentCount ?? question.comments ?? 0) || 0;
     const normalizedAnswerCount = Number(question.answerCount ?? question.answers ?? 0) || 0;
     const normalizedSupplementCount = Number(question.supplementCount ?? question.supplements ?? question.supplementQuestionCount ?? question.supplement_question_count ?? 0) || 0;
     const normalizedAdoptRate = getQuestionAdoptRate(question);
     const normalizedCreateTime = question.createTime ?? question.createdAt ?? null;
-    const normalizedLiked = !!(question.liked ?? question.isLiked);
-    const normalizedCollected = !!(question.collected ?? question.isCollected ?? question.bookmarked ?? question.isBookmarked);
-    const normalizedDisliked = !!(question.disliked ?? question.isDisliked);
+    const normalizedLiked = normalizeFlag(question.liked, question.isLiked, question.likeStatus);
+    const normalizedCollected = normalizeFlag(question.collected, question.isCollected, question.bookmarked, question.isBookmarked, question.favorited, question.isFavorited);
+    const normalizedDisliked = normalizeFlag(question.disliked, question.isDisliked, question.dislikeStatus);
     const normalizedQuestionCanAdopt = normalizeFlag(
       question.canAdoptAnswer,
       question.canAcceptAnswer,
@@ -2232,16 +2284,20 @@ export default function QuestionDetailScreen({
         }
 
         const cachedQuestionDetail = detailReloadVersion === 0 ? getQuestionDetailCache(questionId) : null;
+        const interactionSnapshot = await getQuestionInteractionSnapshotAsync(questionId);
 
         if (cachedQuestionDetail) {
+          const resolvedCachedQuestionDetail = interactionSnapshot
+            ? applyQuestionInteractionSnapshot(cachedQuestionDetail, interactionSnapshot)
+            : cachedQuestionDetail;
           fadeAnim.setValue(1);
-          setQuestionData(cachedQuestionDetail);
+          setQuestionData(resolvedCachedQuestionDetail);
           setLiked(prev => ({
             ...prev,
-            main: !!cachedQuestionDetail.liked,
-            dislike: !!cachedQuestionDetail.disliked
+            main: !!resolvedCachedQuestionDetail.liked,
+            dislike: !!resolvedCachedQuestionDetail.disliked
           }));
-          setBookmarked(!!cachedQuestionDetail.collected);
+          setBookmarked(!!resolvedCachedQuestionDetail.collected);
           setLoading(false);
           setError(null);
           void refreshCommunitySolveVoteSummary(questionId);
@@ -2266,14 +2322,17 @@ export default function QuestionDetailScreen({
         }
 
         const normalizedQuestionDetail = normalizeQuestionDetail(detailResponse.data);
-        setQuestionData(normalizedQuestionDetail);
-        setQuestionDetailCache(questionId, normalizedQuestionDetail);
+        const resolvedQuestionDetail = interactionSnapshot
+          ? applyQuestionInteractionSnapshot(normalizedQuestionDetail, interactionSnapshot)
+          : normalizedQuestionDetail;
+        setQuestionData(resolvedQuestionDetail);
+        setQuestionDetailCache(questionId, resolvedQuestionDetail);
         setLiked(prev => ({
           ...prev,
-          main: !!normalizedQuestionDetail.liked,
-          dislike: !!normalizedQuestionDetail.disliked
+          main: !!resolvedQuestionDetail.liked,
+          dislike: !!resolvedQuestionDetail.disliked
         }));
-        setBookmarked(!!normalizedQuestionDetail.collected);
+        setBookmarked(!!resolvedQuestionDetail.collected);
         setLoading(false);
 
         setTimeout(() => {
@@ -6109,6 +6168,66 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       return;
     }
 
+    if (Platform.OS === 'ios') {
+      Alert.alert('选择图片', '请选择图片来源', [
+        {
+          text: '拍照',
+          onPress: async () => {
+            try {
+              const permissionStatus = await ImagePicker.requestCameraPermissionsAsync();
+              if (permissionStatus?.status !== 'granted') {
+                showToast('需要相机权限才能拍照', 'error');
+                return;
+              }
+
+              const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ['images'],
+                allowsEditing: false,
+                quality: 0.8,
+              });
+
+              if (!result.canceled && result.assets && result.assets.length > 0) {
+                setSupplementImages(prevImages => [...prevImages, result.assets[0].uri]);
+              }
+            } catch (error) {
+              console.error('Failed to take supplement photo:', error);
+              showToast('拍照失败，请重试', 'error');
+            }
+          },
+        },
+        {
+          text: '从相册选择',
+          onPress: async () => {
+            try {
+              const permissionStatus = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (permissionStatus?.status !== 'granted') {
+                showToast('需要相册权限才能选择图片', 'error');
+                return;
+              }
+
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: false,
+                quality: 0.8,
+              });
+
+              if (!result.canceled && result.assets && result.assets.length > 0) {
+                setSupplementImages(prevImages => [...prevImages, result.assets[0].uri]);
+              }
+            } catch (error) {
+              console.error('Failed to pick supplement image:', error);
+              showToast('选择图片失败，请重试', 'error');
+            }
+          },
+        },
+        {
+          text: '取消',
+          style: 'cancel',
+        },
+      ]);
+      return;
+    }
+
     if (supplementKeyboardVisible) {
       setSupplementPendingToolbarAction('image');
       dismissSupplementComposerKeyboard();
@@ -6125,18 +6244,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
   ]);
 
   const handleSupplementToolbarMentionPress = React.useCallback(() => {
-    if (supplementKeyboardVisible) {
-      setSupplementPendingToolbarAction('mention');
-      dismissSupplementComposerKeyboard();
-      return;
-    }
-
-    dismissSupplementComposerKeyboard();
-    runSupplementToolbarAction('mention');
+    handleSupplementMentionPress({ focusInput: true });
   }, [
-    dismissSupplementComposerKeyboard,
-    runSupplementToolbarAction,
-    supplementKeyboardVisible,
+    handleSupplementMentionPress,
   ]);
 
   const closeSupplementComposerAlert = React.useCallback(() => {
@@ -6842,6 +6952,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           main: !!updatedQuestion.liked
         }));
         setQuestionData(updatedQuestion);
+        publishDetailQuestionInteractionState(updatedQuestion);
         showToast(updatedQuestion.liked ? '已点赞' : '已取消点赞', 'success');
       } else {
         showToast(response?.msg || '操作失败', 'error');
@@ -6870,6 +6981,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         });
         setBookmarked(!!updatedQuestion.collected);
         setQuestionData(updatedQuestion);
+        publishDetailQuestionInteractionState(updatedQuestion);
         showToast(updatedQuestion.collected ? '已收藏' : '已取消收藏', 'success');
       } else {
         showToast(response?.msg || '操作失败', 'error');
@@ -6905,6 +7017,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           dislike: !!updatedQuestion.disliked
         }));
         setQuestionData(updatedQuestion);
+        publishDetailQuestionInteractionState(updatedQuestion);
         showToast(updatedQuestion.disliked ? '已踩' : '已取消踩', 'success');
       } else {
         showToast(response?.msg || '操作失败', 'error');
@@ -7337,16 +7450,18 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           
           {/* 悬赏信息卡片 - 只在有悬赏时显示 */}
           {Number(questionData?.bountyAmount ?? 0) > 0 && <View style={styles.rewardInfoCard}>
-            <View style={styles.rewardInfoGlowPrimary} />
-            <View style={styles.rewardInfoGlowSecondary} />
-
             <View style={styles.rewardInfoTopRow}>
               <View style={styles.rewardInfoHeaderCopy}>
-                <View style={styles.rewardInfoBadge}>
-                  <Ionicons name="sparkles-outline" size={12} color="#c2410c" />
-                  <Text style={styles.rewardInfoBadgeText}>悬赏激励</Text>
+                <View style={styles.rewardAmountValueRow}>
+                  <View style={styles.rewardInfoBadge}>
+                    <Ionicons name="sparkles-outline" size={12} color="#f59e0b" />
+                    <Text style={styles.rewardInfoBadgeText}>悬赏</Text>
+                  </View>
+                  <Text style={styles.rewardAmountText} numberOfLines={1}>
+                    {rewardAmountDisplayText}
+                  </Text>
                 </View>
-                <Text style={styles.rewardInfoHintText}>
+                <Text style={styles.rewardInfoHintText} numberOfLines={1}>
                   {rewardParticipationHint}
                 </Text>
               </View>
@@ -7357,22 +7472,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 rewardContributors,
                 sourceRouteKey: route.key
               })}>
-                <Ionicons name="add-circle-outline" size={16} color="#fff" />
+                <Ionicons name="add-circle-outline" size={16} color="#f65b51" />
                 <Text style={styles.addRewardBtnText}>{t('screens.questionDetail.reward.add')}</Text>
               </TouchableOpacity>
-            </View>
-
-            <View style={styles.rewardAmountBlock}>
-              <Text style={styles.rewardAmountLabel}>当前总悬赏</Text>
-              <View style={styles.rewardAmountValueRow}>
-                <Text style={styles.rewardAmountText} numberOfLines={1}>
-                  {rewardAmountDisplayText}
-                </Text>
-              </View>
-              <View style={styles.rewardStatusPill}>
-                <View style={styles.rewardStatusDot} />
-                <Text style={styles.rewardStatusText}>{rewardPoolStatusText}</Text>
-              </View>
             </View>
 
             <View style={styles.rewardInfoMetaRow}>
@@ -7381,18 +7483,15 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 <View style={styles.rewardStatHeader}>
                   <Ionicons name="pulse-outline" size={14} color="#f65b51" />
                   <Text style={styles.rewardStatLabel}>采纳进度</Text>
+                  <Text style={styles.rewardStatValue}>
+                    {questionAdoptRate}%
+                  </Text>
                 </View>
-                <Text style={styles.rewardStatValue}>
-                  {questionAdoptRate}%
-                </Text>
                 <View style={styles.rewardStatBarTrack}>
                   <View style={[styles.rewardStatBarFill, {
                     width: `${Math.max(0, Math.min(questionAdoptRate, 100))}%`
                   }]} />
                 </View>
-                <Text style={styles.rewardStatCaption}>
-                  {adoptionProgressCaption}
-                </Text>
               </View>
 
               {/* 追加人数 */}
@@ -7403,13 +7502,15 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 <View style={styles.rewardStatHeader}>
                   <Ionicons name="people-outline" size={14} color="#2563eb" />
                   <Text style={styles.rewardStatLabel}>参与追加</Text>
-                </View>
-                <View style={styles.rewardContributorsValueRow}>
                   <Text style={styles.rewardStatValue}>{rewardContributorCount}</Text>
                   <Ionicons name="chevron-forward" size={16} color="#64748b" />
                 </View>
-                <Text style={styles.rewardContributorsText}>{rewardContributorsCaption}</Text>
               </TouchableOpacity>
+            </View>
+
+            <View style={styles.rewardStatusPill}>
+              <View style={styles.rewardStatusDot} />
+              <Text style={styles.rewardStatusText} numberOfLines={1}>{rewardPoolStatusText}</Text>
             </View>
           </View>}
           
@@ -8941,6 +9042,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         onSubmit={handleSubmitSupplement}
         submitText="发布"
         submitDisabled={!supplementText.trim() || Boolean(supplementPublishBlockedReason)}
+        submitPlacement="none"
         footerPaddingBottom={bottomSafeInset + 8}
         footerBottomInset={bottomSafeInset}
         footerHidden={Boolean(supplementPendingToolbarAction)}
@@ -9013,7 +9115,22 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             </TouchableOpacity>
           </View>
         }
-        footerRight={<Text style={styles.answerWordCount}>{supplementText.length}/500</Text>}
+        footerRight={
+          <View style={styles.footerActionGroup}>
+            <Text style={styles.answerWordCount}>{supplementText.length}/500</Text>
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                (!supplementText.trim() || Boolean(supplementPublishBlockedReason)) &&
+                  styles.sendButtonDisabled,
+              ]}
+              onPress={handleSubmitSupplement}
+              disabled={!supplementText.trim() || Boolean(supplementPublishBlockedReason)}
+            >
+              <Ionicons name="send" size={18} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
+        }
         floatingOverlay={
           renderSupplementMentionPanel ? (
             <MentionSuggestionsPanel
@@ -9026,7 +9143,12 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               onBackdropPress={focusSupplementInput}
               onSelect={handleSupplementMentionSelect}
               panelMaxHeight={supplementMentionPanelMaxHeight}
+              showHeader={false}
               users={supplementMentionCandidateUsers}
+              variant="keyboard-inline"
+              keyboardInlineContentPadding={5}
+              keyboardInlineTransparentItem
+              keyboardInlineSeamless
             />
           ) : null
         }
@@ -9215,14 +9337,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       </CommentBottomSheet>
 
       {/* 发起活动弹窗 */}
-      <Modal visible={showActivityModal} animationType="slide" statusBarTranslucent>
+      <Modal visible={showActivityModal} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent>
         <KeyboardAvoidingView
           style={styles.modalKeyboardView}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <KeyboardDismissView>
-            <SafeAreaView style={styles.activityModal} edges={['top']}>
-          <View style={styles.activityModalHeader}>
+            <SafeAreaView style={styles.activityModal} edges={['bottom']}>
+          <View style={[styles.activityModalHeader, { paddingTop: activityModalTopInset + 8 }]}>
             <TouchableOpacity onPress={() => setShowActivityModal(false)} style={styles.activityCloseBtn}>
               <Ionicons name="close" size={26} color="#333" />
             </TouchableOpacity>
@@ -10099,192 +10221,149 @@ const styles = StyleSheet.create({
   rewardInfoCard: {
     position: 'relative',
     backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 14,
-    gap: 14,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+    gap: 10,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#f2e2db',
-    shadowColor: '#b45309',
+    borderColor: '#e5e7eb',
+    shadowColor: '#0f172a',
     shadowOffset: {
       width: 0,
-      height: 10
+      height: 4
     },
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-    elevation: 4
-  },
-  rewardInfoGlowPrimary: {
-    position: 'absolute',
-    top: -44,
-    right: -18,
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: 'rgba(248, 113, 113, 0.12)'
-  },
-  rewardInfoGlowSecondary: {
-    position: 'absolute',
-    bottom: -64,
-    left: -26,
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(251, 191, 36, 0.10)'
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 1
   },
   rewardInfoTopRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12
+    gap: 10
   },
   rewardInfoHeaderCopy: {
     flex: 1,
-    minWidth: 180,
-    gap: 8
+    minWidth: 0,
+    gap: 5
   },
   rewardInfoBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: 'rgba(255, 247, 237, 0.96)',
+    backgroundColor: '#fff7ed',
     borderWidth: 1,
-    borderColor: '#fed7aa'
+    borderColor: '#ffedd5'
   },
   rewardInfoBadgeText: {
-    fontSize: scaleFont(12),
+    fontSize: scaleFont(11),
     fontWeight: '700',
-    color: '#9a3412',
-    letterSpacing: 0.3
+    color: '#b45309',
+    letterSpacing: 0.2
   },
   rewardInfoHintText: {
-    fontSize: scaleFont(13),
-    lineHeight: scaleFont(19),
-    color: '#7c2d12'
+    fontSize: scaleFont(12),
+    lineHeight: scaleFont(17),
+    color: '#64748b'
   },
   rewardInfoMetaRow: {
     flexDirection: 'row',
-    alignItems: 'stretch',
-    flexWrap: 'wrap',
-    gap: 10
-  },
-  rewardAmountBlock: {
-    width: '100%',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderRadius: 18,
-    backgroundColor: '#fff4ee',
-    borderWidth: 1,
-    borderColor: '#fbd5c5',
-    gap: 10
-  },
-  rewardAmountLabel: {
-    fontSize: scaleFont(12),
-    fontWeight: '700',
-    color: '#9a3412',
-    letterSpacing: 0.8
+    alignItems: 'center',
+    gap: 8
   },
   rewardAmountValueRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12
+    gap: 8
   },
   rewardAmountText: {
     flexShrink: 1,
-    fontSize: scaleFont(30),
+    fontSize: scaleFont(20),
     fontWeight: '800',
     color: '#111827',
-    letterSpacing: 0.3
+    letterSpacing: 0.1
   },
   rewardStatusPill: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)'
+    backgroundColor: '#f8fafc'
   },
   rewardStatusDot: {
-    width: 7,
-    height: 7,
+    width: 6,
+    height: 6,
     borderRadius: 999,
     backgroundColor: '#f65b51'
   },
   rewardStatusText: {
-    fontSize: scaleFont(12),
+    fontSize: scaleFont(11),
     color: '#6b7280',
     fontWeight: '600'
   },
   addRewardBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#f65b51',
+    gap: 4,
+    backgroundColor: '#fff5f5',
     borderWidth: 1,
-    borderColor: '#f87171',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 14,
-    minWidth: 126,
+    borderColor: '#fecaca',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
     maxWidth: '100%',
     flexShrink: 1,
     justifyContent: 'center',
-    alignSelf: 'flex-start',
-    shadowColor: '#f65b51',
-    shadowOffset: {
-      width: 0,
-      height: 8
-    },
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    elevation: 3
+    alignSelf: 'flex-start'
   },
   addRewardBtnText: {
-    fontSize: scaleFont(14),
-    color: '#fff',
+    fontSize: scaleFont(12),
+    color: '#f65b51',
     fontWeight: '700',
-    letterSpacing: 0.3
+    letterSpacing: 0.2
   },
   adoptionProgressContainer: {
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderRadius: 16,
-    backgroundColor: '#fffaf8',
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 12,
+    backgroundColor: '#fffafa',
     borderWidth: 1,
-    borderColor: '#f3dfd5',
+    borderColor: '#fee2e2',
     flex: 1,
-    minWidth: 140,
-    gap: 10
+    minWidth: 0,
+    gap: 7
   },
   rewardStatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6
+    gap: 5
   },
   rewardStatLabel: {
+    flex: 1,
     fontSize: scaleFont(12),
     color: '#6b7280',
     fontWeight: '700',
-    letterSpacing: 0.3
+    letterSpacing: 0.2
   },
   rewardStatValue: {
-    fontSize: scaleFont(28),
+    fontSize: scaleFont(16),
     color: '#111827',
-    fontWeight: '800'
+    fontWeight: '800',
+    marginLeft: 'auto'
   },
   rewardStatBarTrack: {
-    height: 6,
+    height: 4,
     borderRadius: 999,
-    backgroundColor: '#f3e8e2',
+    backgroundColor: '#fee2e2',
     overflow: 'hidden'
   },
   rewardStatBarFill: {
@@ -10292,32 +10371,15 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: '#f65b51'
   },
-  rewardStatCaption: {
-    fontSize: scaleFont(12),
-    lineHeight: scaleFont(18),
-    color: '#6b7280'
-  },
   rewardContributorsRow: {
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 12,
     backgroundColor: '#f8fbff',
     borderWidth: 1,
-    borderColor: '#dce7f7',
+    borderColor: '#e0ecff',
     flex: 1,
-    minWidth: 140,
-    gap: 10
-  },
-  rewardContributorsValueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10
-  },
-  rewardContributorsText: {
-    fontSize: scaleFont(12),
-    lineHeight: scaleFont(18),
-    color: '#64748b'
+    minWidth: 0
   },
   // 付费明细卡片样式
   paidDetailsCard: {
@@ -12030,9 +12092,31 @@ const styles = StyleSheet.create({
   answerToolItem: {
     padding: 10
   },
+  footerActionGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0'
+  },
   answerWordCount: {
     fontSize: scaleFont(13),
-    color: '#999'
+    color: '#999',
+    marginRight: 10
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: SEND_BUTTON_COLOR
+  },
+  sendButtonDisabled: {
+    backgroundColor: SEND_BUTTON_COLOR
   },
   // 补充回答弹窗样式
   supplementAnswerContext: {
@@ -12076,14 +12160,16 @@ const styles = StyleSheet.create({
   activityModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0'
   },
   activityCloseBtn: {
-    padding: 4,
+    width: 56,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
     zIndex: 10
   },
   activityHeaderCenter: {
@@ -12096,10 +12182,13 @@ const styles = StyleSheet.create({
     color: '#222'
   },
   activityPublishBtn: {
+    minWidth: 56,
     backgroundColor: '#ef4444',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
     zIndex: 1
   },
   activityPublishBtnDisabled: {

@@ -7,6 +7,7 @@ export default function useComposerScrollManager({
   keyboardVisible,
   inputTop,
   runToolbarAction,
+  revealOffset = 0,
 }) {
   const [pendingToolbarAction, setPendingToolbarAction] = React.useState(null);
   const scrollViewRef = React.useRef(null);
@@ -31,12 +32,13 @@ export default function useComposerScrollManager({
         scrollViewRef.current?.scrollTo({
           y: resolveComposerInputScrollTarget({
             inputTop,
+            revealOffset,
           }),
           animated: true,
         });
       });
     }
-  }, [inputTop, keyboardVisible, visible]);
+  }, [inputTop, keyboardVisible, revealOffset, visible]);
 
   React.useEffect(() => {
     if (!visible) {
@@ -70,14 +72,15 @@ export default function useComposerScrollManager({
     }
 
     pendingScrollFrameRef.current = requestAnimationFrame(() => {
-      scrollViewRef.current?.scrollTo({
-        y: resolveComposerInputScrollTarget({
-          inputTop,
-        }),
-        animated,
+        scrollViewRef.current?.scrollTo({
+          y: resolveComposerInputScrollTarget({
+            inputTop,
+            revealOffset,
+          }),
+          animated,
+        });
       });
-    });
-  }, [inputTop, visible]);
+  }, [inputTop, revealOffset, visible]);
 
   const handleInputFocus = React.useCallback(() => {
     inputFocusedRef.current = true;

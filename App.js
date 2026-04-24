@@ -45,6 +45,10 @@ import {
   APP_LAUNCH_EXPERIENCE,
   resolveLaunchExperience,
 } from './src/utils/appLaunch';
+import {
+  logStartupTrace,
+  startStartupTraceStep,
+} from './src/services/startupTrace';
 import { EmergencyProvider } from './src/contexts/EmergencyContext';
 
 import HomeScreen from './src/screens/HomeScreen';
@@ -124,6 +128,8 @@ const DEV_CONSOLE_ERROR_SILENCE_PATTERNS = [
 const APP_DEBUG_LOG_ENABLED = false;
 const ROOT_LAYOUT_READY_WATCHDOG_MS = 1200;
 const STARTUP_FONT_LOAD_TIMEOUT_MS = 2500;
+const STARTUP_STORAGE_READ_TIMEOUT_MS = 2500;
+const NATIVE_SPLASH_FORCE_HIDE_TIMEOUT_MS = 4500;
 
 const getPublishScreen = () => require('./src/screens/PublishScreen').default;
 const getProfileScreen = () => require('./src/screens/ProfileScreen').default;
@@ -155,6 +161,13 @@ const SafeTopicDetailScreen = createSafeLazyScreenSafe(getTopicDetailScreen, '�
 const SafeInterestOnboardingScreen = createSafeLazyScreenSafe(getInterestOnboardingScreen, '兴趣引导');
 
 const appDebugLog = (...args) => {
+  if (__DEV__) {
+    logStartupTrace(
+      args.map((item) => stringifyDevConsoleArg(item)).join(' '),
+      { source: 'appDebugLog' }
+    );
+  }
+
   if (__DEV__ && APP_DEBUG_LOG_ENABLED) {
     console.log(...args);
   }
@@ -845,6 +858,8 @@ function AppContent() {
     APP_LAUNCH_EXPERIENCE.RETURNING_USER
   );
   const [rootLayoutReady, setRootLayoutReady] = useState(false);
+  const [rootLayoutWatchdogPassed, setRootLayoutWatchdogPassed] = useState(false);
+  const [forceHideSplash, setForceHideSplash] = useState(false);
   const [startupStatus, setStartupStatus] = useState({
     title: '正在准备应用',
     message: '正在加载基础资源，请稍候...',
@@ -862,6 +877,8 @@ function AppContent() {
   const canHideSplashScreen = canHideNativeSplashScreen({
     fontsLoaded,
     rootLayoutReady,
+    rootLayoutWatchdogPassed,
+    forceHideSplash,
   });
 
   const hideNativeSplashScreen = React.useCallback(async () => {
@@ -890,21 +907,40 @@ function AppContent() {
 
   const handleRootLayout = React.useCallback(() => {
     setRootLayoutReady(true);
+    setRootLayoutWatchdogPassed(false);
   }, []);
 
   useEffect(() => {
     if (rootLayoutReady) {
+      setRootLayoutWatchdogPassed(false);
       return undefined;
     }
 
     const timer = setTimeout(() => {
       console.warn(
-        'Root layout readiness watchdog triggered; keeping native splash visible until the first real layout is rendered'
+        'Root layout readiness watchdog triggered; allowing native splash to hide with the JS loading screen fallback'
       );
+      logStartupTrace('root-layout-watchdog-triggered');
+      setRootLayoutWatchdogPassed(true);
     }, ROOT_LAYOUT_READY_WATCHDOG_MS);
 
     return () => clearTimeout(timer);
   }, [rootLayoutReady]);
+
+  useEffect(() => {
+    if (nativeSplashStateRef.current === 'hidden') {
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      console.warn('Native splash hard-timeout triggered; forcing JS loading fallback to become visible');
+      logStartupTrace('native-splash-hard-timeout-triggered');
+      setForceHideSplash(true);
+      setRootLayoutWatchdogPassed(true);
+    }, NATIVE_SPLASH_FORCE_HIDE_TIMEOUT_MS);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (!canHideSplashScreen || nativeSplashStateRef.current === 'hidden') {
@@ -922,7 +958,9 @@ function AppContent() {
     let mounted = true;
 
     const inspectOtaLaunch = async () => {
+      const trace = startStartupTraceStep('ota-launch-inspection');
       if (__DEV__ || !Updates.isEnabled) {
+        trace.success({ skipped: true, reason: 'dev-or-updates-disabled' });
         return;
       }
 
@@ -930,6 +968,7 @@ function AppContent() {
       appDebugLog('OTA launch info:', launchInfo);
 
       if (!launchInfo.isEmergencyLaunch) {
+        trace.success({ emergencyLaunch: false });
         return;
       }
 
@@ -949,9 +988,17 @@ function AppContent() {
           recentErrors
         )
       );
+      trace.success({
+        emergencyLaunch: true,
+        emergencyLaunchReason: launchInfo.emergencyLaunchReason,
+      });
     };
 
-    inspectOtaLaunch();
+    inspectOtaLaunch().catch((error) => {
+      logStartupTrace('ota-launch-inspection-unhandled', {
+        error: error?.message || String(error),
+      });
+    });
 
     return () => {
       mounted = false;
@@ -1043,6 +1090,7 @@ function AppContent() {
     let fontWatchdogTimer = null;
 
     async function loadFonts() {
+      const trace = startStartupTraceStep('font-load');
       try {
         appDebugLog('🔤 正在加载字体...');
         fontWatchdogTimer = setTimeout(() => {
@@ -1051,6 +1099,7 @@ function AppContent() {
           }
 
           console.warn('Font loading watchdog triggered, continuing startup with system fonts');
+          logStartupTrace('font-load-watchdog-triggered');
           setFontsLoaded(true);
         }, STARTUP_FONT_LOAD_TIMEOUT_MS);
 
@@ -1065,12 +1114,14 @@ function AppContent() {
         if (isMounted) {
           setFontsLoaded(true);
         }
+        trace.success();
       } catch (error) {
         console.error('❌ 字体加载失败:', error);
         // 即使加载失败也继续，避免卡住
         if (isMounted) {
           setFontsLoaded(true);
         }
+        trace.fail(error);
       } finally {
         if (fontWatchdogTimer) {
           clearTimeout(fontWatchdogTimer);
@@ -1095,6 +1146,9 @@ function AppContent() {
       fingerprint,
       { maxRetries = 2, timeoutMs = STARTUP_AUTH_REQUEST_TIMEOUT_MS } = {}
     ) => {
+      const trace = startStartupTraceStep('fingerprint-register', {
+        maxRetries,
+      });
       startupAuthInFlightRef.current = true;
 
       for (let i = 0; i < maxRetries; i++) {
@@ -1109,6 +1163,10 @@ function AppContent() {
           if (response.code === 200 && response.data) {
             appDebugLog('✅ 自动注册成功！');
             startupAuthInFlightRef.current = false;
+            trace.success({
+              attempt: i + 1,
+              code: response.code,
+            });
             return { success: true, data: response.data };
           } else {
             updateStartupStatus('正在创建账号', '首次启动正在为你准备默认账号...');
@@ -1127,10 +1185,12 @@ function AppContent() {
       }
       
       startupAuthInFlightRef.current = false;
+      trace.fail(new Error('fingerprint register exhausted retries'));
       return { success: false };
     };
 
     const initializeApp = async () => {
+      const trace = startStartupTraceStep('initialize-app');
       try {
         appDebugLog('🚀 应用启动中...');
         appDebugLog('⚙️  环境:', __DEV__ ? '开发环境' : '生产环境');
@@ -1138,23 +1198,43 @@ function AppContent() {
         updateStartupStatus('正在初始化应用', '正在校验启动环境并连接服务...');
         
         // 初始化超级赞积分系统（异步，不阻塞）
-        const startupStorageValues = await AsyncStorage.multiGet([
-          SERVER_SELECTION_STORAGE_KEY,
-          'authToken',
-          MANUAL_LOGOUT_STORAGE_KEY,
-          'deviceFingerprint',
-          APP_BOOTSTRAP_COMPLETED_STORAGE_KEY,
-        ]);
+        const storageTrace = startStartupTraceStep('startup-storage-read');
+        const startupStorageValues = await withTimeout(
+          () =>
+            AsyncStorage.multiGet([
+              SERVER_SELECTION_STORAGE_KEY,
+              'authToken',
+              MANUAL_LOGOUT_STORAGE_KEY,
+              'deviceFingerprint',
+              APP_BOOTSTRAP_COMPLETED_STORAGE_KEY,
+            ]),
+          STARTUP_STORAGE_READ_TIMEOUT_MS,
+          'startup storage read'
+        );
+        storageTrace.success();
         const startupStorageMap = Object.fromEntries(startupStorageValues);
         const selectedServer = startupStorageMap[SERVER_SELECTION_STORAGE_KEY] || 'server2';
         const cacheIdentity = `${selectedServer}|${getCurrentBundleFingerprint()}`;
-        const cacheIdentityResult = await syncCacheIdentity(cacheIdentity);
-
-        if (cacheIdentityResult.changed) {
-          appDebugLog('🧹 检测到服务器或 bundle 指纹变化，已自动清理业务缓存');
-          appDebugLog('   上次身份:', cacheIdentityResult.previousIdentity || '无');
-          appDebugLog('   当前身份:', cacheIdentityResult.currentIdentity);
-        }
+        const cacheIdentityTrace = startStartupTraceStep('cache-identity-sync');
+        withTimeout(
+          () => syncCacheIdentity(cacheIdentity),
+          STARTUP_STORAGE_READ_TIMEOUT_MS,
+          'cache identity sync'
+        )
+          .then((cacheIdentityResult) => {
+            if (cacheIdentityResult?.changed) {
+              appDebugLog('🧹 检测到服务器或 bundle 指纹变化，已自动清理业务缓存');
+              appDebugLog('   上次身份:', cacheIdentityResult.previousIdentity || '无');
+              appDebugLog('   当前身份:', cacheIdentityResult.currentIdentity);
+            }
+            cacheIdentityTrace.success({
+              changed: !!cacheIdentityResult?.changed,
+            });
+          })
+          .catch((error) => {
+            console.warn('Cache identity sync deferred due to startup guard:', error?.message || error);
+            cacheIdentityTrace.fail(error);
+          });
 
         superLikeCreditService.initialize().catch(error => {
           console.error('⚠️ Service initialization failed:', error);
@@ -1183,6 +1263,7 @@ function AppContent() {
           
           try {
             // 尝试使用 token 自动登录
+            const tokenLoginTrace = startStartupTraceStep('token-login');
             startupAuthInFlightRef.current = true;
             const tokenLoginResponse = await withTimeout(
               () => authApi.tokenLogin(),
@@ -1193,6 +1274,7 @@ function AppContent() {
             
             if (tokenLoginResponse.code === 200) {
               appDebugLog('✅ Token 自动登录成功');
+              tokenLoginTrace.success({ code: tokenLoginResponse.code });
               await markBootstrapCompleted();
               
               // 立即设置登录状态，让用户进入应用
@@ -1214,6 +1296,9 @@ function AppContent() {
               
               return; // 成功登录，退出初始化流程
             } else {
+              tokenLoginTrace.fail(new Error(tokenLoginResponse.msg || 'token login failed'), {
+                code: tokenLoginResponse.code,
+              });
               appDebugLog('⚠️ Token 自动登录失败:', tokenLoginResponse.msg);
               appDebugLog('   Token 可能已过期，尝试设备指纹重新注册...');
               
@@ -1222,6 +1307,9 @@ function AppContent() {
             }
           } catch (tokenLoginError) {
             startupAuthInFlightRef.current = false;
+            logStartupTrace('token-login-exception', {
+              error: tokenLoginError?.message || String(tokenLoginError),
+            });
             console.error('❌ Token 自动登录异常:', tokenLoginError.message);
             appDebugLog('   尝试设备指纹重新注册...');
             
@@ -1399,7 +1487,11 @@ function AppContent() {
         console.error('❌ Failed to initialize app:', error);
         console.error('Error stack:', error.stack);
         setIsInitializing(false);
+        trace.fail(error);
+        return;
       }
+
+      trace.success();
     };
 
     initializeApp();
@@ -1424,11 +1516,13 @@ function AppContent() {
     let mounted = true;
 
     const checkInterestOnboardingStatus = async () => {
+      const trace = startStartupTraceStep('interest-onboarding-check');
       if (!isLoggedIn) {
         if (!mounted) return;
         setShouldShowInterestOnboardingScreen(false);
         setIsCheckingInterestOnboarding(false);
         setInterestOnboardingUserId(null);
+        trace.success({ skipped: true, reason: 'not-logged-in' });
         return;
       }
 
@@ -1440,6 +1534,7 @@ function AppContent() {
       ) {
         if (!mounted) return;
         setIsCheckingInterestOnboarding(false);
+        trace.success({ preserved: true });
         return;
       }
 
@@ -1463,6 +1558,7 @@ function AppContent() {
             setInterestOnboardingUserId(null);
             setShouldShowInterestOnboardingScreen(false);
           }
+          trace.success({ skipped: true, reason: 'missing-user-id' });
           return;
         }
 
@@ -1476,11 +1572,16 @@ function AppContent() {
 
         setInterestOnboardingUserId(currentUserId);
         setShouldShowInterestOnboardingScreen(shouldShow);
+        trace.success({
+          userId: currentUserId,
+          shouldShow,
+        });
       } catch (error) {
         console.error('Failed to check interest onboarding status:', error);
         if (mounted) {
           setShouldShowInterestOnboardingScreen(false);
         }
+        trace.fail(error);
       } finally {
         if (mounted) {
           setIsCheckingInterestOnboarding(false);
@@ -1493,7 +1594,7 @@ function AppContent() {
     return () => {
       mounted = false;
     };
-  }, [interestOnboardingUserId, isLoggedIn, shouldShowInterestOnboardingScreen]);
+  }, [isLoggedIn]);
 
   const markBootstrapCompleted = React.useCallback(async () => {
     try {
@@ -1568,29 +1669,6 @@ function AppContent() {
   if (loadingView) {
     appDebugLog('馃攧 App loading state:', { fontsLoaded, isInitializing });
     return loadingView;
-  }
-
-  const onboardingCheckingView =
-    isLoggedIn && isCheckingInterestOnboarding ? (
-      <StartupLoadingScreen
-        title={startupStatus.title}
-        message={startupStatus.message}
-        accent="个性化设置中"
-      />
-    ) : null;
-
-  const resolvedOnboardingCheckingView =
-    isLoggedIn &&
-    isCheckingInterestOnboarding &&
-    launchExperience !== APP_LAUNCH_EXPERIENCE.NEW_USER ? (
-      <LaunchLoadingScreen
-        title={startupStatus.title}
-        message={startupStatus.message}
-      />
-    ) : onboardingCheckingView;
-
-  if (resolvedOnboardingCheckingView) {
-    return resolvedOnboardingCheckingView;
   }
 
   appDebugLog('✅ App ready, isLoggedIn:', isLoggedIn);

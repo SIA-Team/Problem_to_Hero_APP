@@ -1,10 +1,9 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Alert,
   InteractionManager,
   Keyboard,
-  KeyboardAvoidingView,
-  Modal,
   Platform,
   StyleSheet,
   Text,
@@ -14,10 +13,12 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from './Avatar';
 import ComposerImageGrid from './ComposerImageGrid';
 import ImagePickerSheet from './ImagePickerSheet';
+import ComposerModalScaffold from './ComposerModalScaffold';
 import MentionSuggestionsPanel from './MentionSuggestionsPanel';
 import { modalTokens } from './modalTokens';
 import useMentionComposer from '../hooks/useMentionComposer';
@@ -31,6 +32,8 @@ import { DEFAULT_MENTION_PANEL_BASE_OFFSET } from '../utils/mentionComposer';
 import { resolveComposerKeyboardMetrics } from '../utils/composerLayout';
 import { scaleFont } from '../utils/responsive';
 import { showToast } from '../utils/toast';
+
+const TEAM_DISCUSSION_SEND_BUTTON_COLOR = '#f472b6';
 
 export default function TeamDiscussionComposerModal({
   visible,
@@ -53,6 +56,9 @@ export default function TeamDiscussionComposerModal({
   const inputRef = React.useRef(null);
   const androidFocusAnimationFrameRef = React.useRef(null);
   const androidFocusTimeoutRef = React.useRef(null);
+  const imageSourceAlertTimeoutRef = React.useRef(null);
+  const visibleRef = React.useRef(visible);
+  const imagePickerBusyRef = React.useRef(false);
   const [text, setText] = React.useState('');
   const [selectedImages, setSelectedImages] = React.useState([]);
   const [showImagePicker, setShowImagePicker] = React.useState(false);
@@ -72,6 +78,7 @@ export default function TeamDiscussionComposerModal({
     mentionBottomInset,
     mentionLoading,
     panelAnimatedStyle,
+    panelBottomOffset,
     panelMaxHeight,
     renderMentionPanel,
     selection,
@@ -101,13 +108,27 @@ export default function TeamDiscussionComposerModal({
     }
   }, []);
 
+  const clearImageSourceAlertTimeout = React.useCallback(() => {
+    if (imageSourceAlertTimeoutRef.current !== null) {
+      clearTimeout(imageSourceAlertTimeoutRef.current);
+      imageSourceAlertTimeoutRef.current = null;
+    }
+  }, []);
+
+  React.useEffect(() => {
+    visibleRef.current = visible;
+  }, [visible]);
+
   React.useEffect(() => {
     if (!visible) {
       clearAndroidOpenSequence();
+      clearImageSourceAlertTimeout();
       setText('');
       setSelectedImages([]);
       setShowImagePicker(false);
       setAndroidKeyboardOffset(0);
+      imagePickerBusyRef.current = false;
+      Keyboard.dismiss();
       inputRef.current?.blur();
       resetRecommendedMentionUsers();
       return undefined;
@@ -126,8 +147,10 @@ export default function TeamDiscussionComposerModal({
     return () => {
       clearTimeout(timer);
       clearAndroidOpenSequence();
+      clearImageSourceAlertTimeout();
+      imagePickerBusyRef.current = false;
     };
-  }, [clearAndroidOpenSequence, resetRecommendedMentionUsers, visible]);
+  }, [clearAndroidOpenSequence, clearImageSourceAlertTimeout, resetRecommendedMentionUsers, visible]);
 
   const handleModalShow = React.useCallback(() => {
     if (Platform.OS !== 'android' || !visible) {
@@ -201,9 +224,13 @@ export default function TeamDiscussionComposerModal({
   }, [insets.bottom, visible, windowHeight]);
 
   const handleClose = React.useCallback(() => {
+    clearImageSourceAlertTimeout();
     setShowImagePicker(false);
+    imagePickerBusyRef.current = false;
+    Keyboard.dismiss();
+    inputRef.current?.blur();
     onClose?.();
-  }, [onClose]);
+  }, [clearImageSourceAlertTimeout, onClose]);
 
   const handlePublishPress = React.useCallback(async () => {
     if (!canPublish || submitting) {
@@ -225,34 +252,138 @@ export default function TeamDiscussionComposerModal({
     resetRecommendedMentionUsers();
   }, [canPublish, onPublish, resetRecommendedMentionUsers, selectedImages, submitting, text]);
 
-  const handleOpenImagePicker = React.useCallback(() => {
-    Keyboard.dismiss();
-    setShowImagePicker(true);
+  const requestCameraPermission = React.useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+
+      if (status !== 'granted') {
+        showToast('需要相机权限才能拍照', 'error');
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Failed to request camera permission:', error);
+      showToast('请求相机权限失败', 'error');
+      return false;
+    }
   }, []);
 
+  const requestMediaLibraryPermission = React.useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (status !== 'granted') {
+        showToast('需要相册权限才能选择图片', 'error');
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Failed to request media library permission:', error);
+      showToast('请求相册权限失败', 'error');
+      return false;
+    }
+  }, []);
+
+  const handleSelectComposerImage = React.useCallback(async (source) => {
+    if (!visibleRef.current || imagePickerBusyRef.current) {
+      return;
+    }
+
+    imagePickerBusyRef.current = true;
+
+    try {
+      const hasPermission =
+        source === 'camera'
+          ? await requestCameraPermission()
+          : await requestMediaLibraryPermission();
+
+      if (!hasPermission) {
+        return;
+      }
+
+      const result =
+        source === 'camera'
+          ? await ImagePicker.launchCameraAsync({
+              allowsEditing: false,
+              quality: 0.8,
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            })
+          : await ImagePicker.launchImageLibraryAsync({
+              allowsEditing: false,
+              quality: 0.8,
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            });
+
+      if (!result.canceled && Array.isArray(result.assets) && result.assets.length > 0) {
+        const selectedImageUri = result.assets[0].uri;
+
+        if (isComposerImageLimitReached(selectedImages)) {
+          showToast('最多只能添加9张图片', 'warning');
+        } else {
+          setSelectedImages(prevImages => appendComposerImage(prevImages, selectedImageUri));
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to ${source === 'camera' ? 'take photo' : 'pick image'}:`, error);
+      showToast(source === 'camera' ? '拍照失败，请重试' : '选择图片失败，请重试', 'error');
+    } finally {
+      imagePickerBusyRef.current = false;
+    }
+  }, [requestCameraPermission, requestMediaLibraryPermission, selectedImages]);
+
+  const handleOpenImagePicker = React.useCallback(() => {
+    if (!visibleRef.current || imagePickerBusyRef.current) {
+      return;
+    }
+
+    clearImageSourceAlertTimeout();
+    Keyboard.dismiss();
+
+    if (Platform.OS === 'android') {
+      setShowImagePicker(true);
+      return;
+    }
+
+    imageSourceAlertTimeoutRef.current = setTimeout(() => {
+      if (!visibleRef.current) {
+        imageSourceAlertTimeoutRef.current = null;
+        return;
+      }
+
+      imageSourceAlertTimeoutRef.current = null;
+      Alert.alert('选择图片', '请选择图片来源', [
+        {
+          text: '拍照',
+          onPress: () => {
+            handleSelectComposerImage('camera');
+          },
+        },
+        {
+          text: '从相册选择',
+          onPress: () => {
+            handleSelectComposerImage('library');
+          },
+        },
+        {
+          text: '取消',
+          style: 'cancel',
+        },
+      ]);
+    }, Platform.OS === 'ios' ? 180 : 60);
+  }, [clearImageSourceAlertTimeout, handleSelectComposerImage]);
+
   const handleImageSelected = React.useCallback((imageUri) => {
+    imagePickerBusyRef.current = false;
+    setShowImagePicker(false);
+
     if (isComposerImageLimitReached(selectedImages)) {
       showToast('最多只能添加9张图片', 'warning');
     } else {
       setSelectedImages(prevImages => appendComposerImage(prevImages, imageUri));
     }
-
-    setShowImagePicker(false);
-
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 120);
   }, [selectedImages]);
-
-  const handleCloseImagePicker = React.useCallback(() => {
-    setShowImagePicker(false);
-
-    setTimeout(() => {
-      if (visible) {
-        inputRef.current?.focus();
-      }
-    }, 120);
-  }, [visible]);
 
   const handleRemoveImage = React.useCallback((index) => {
     setSelectedImages(prevImages => removeComposerImageAt(prevImages, index));
@@ -261,124 +392,131 @@ export default function TeamDiscussionComposerModal({
   const bottomPadding = Math.max(insets.bottom, 12) + 8;
 
   return (
-    <Modal
+    <ComposerModalScaffold
       visible={visible}
-      transparent
-      animationType={Platform.OS === 'android' ? 'none' : 'fade'}
-      onRequestClose={handleClose}
-      onShow={handleModalShow}
-      statusBarTranslucent
-      navigationBarTranslucent
-    >
-      <View style={styles.portal} pointerEvents="box-none">
-        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={handleClose} />
-
-        <KeyboardAvoidingView
-          style={styles.overlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={0}
-        >
-          <View
-            style={[
-              styles.sheet,
-              {
-                paddingBottom: bottomPadding,
-              },
-              Platform.OS === 'android' && androidKeyboardOffset > 0
-                ? {
-                    marginBottom: androidKeyboardOffset,
-                  }
-                : null,
-            ]}
+      onClose={handleClose}
+      title={title}
+      submitPlacement="none"
+      overlayContent={
+        Platform.OS === 'android' && showImagePicker ? (
+          <ImagePickerSheet
+            visible={showImagePicker}
+            onClose={() => setShowImagePicker(false)}
+            onImageSelected={handleImageSelected}
+            title="添加图片"
+            renderInPlace
+          />
+        ) : null
+      }
+      footerPaddingBottom={bottomPadding}
+      footerBottomInset={Math.max(insets.bottom, 12)}
+      footerLeft={
+        <View style={styles.toolbarLeft}>
+          <TouchableOpacity
+            testID="team-discussion-composer-image-button"
+            style={styles.toolButton}
+            onPress={handleOpenImagePicker}
           >
-            <View style={styles.handle} />
-
-            <View style={styles.header}>
-              <View style={styles.headerSpacer} />
-              <Text style={styles.title} numberOfLines={1}>
-                {title}
-              </Text>
-              <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-                <Ionicons name="close" size={22} color="#374151" />
-              </TouchableOpacity>
-            </View>
-
-            {renderMentionPanel ? (
-              <MentionSuggestionsPanel
-                activeKeyword={activeMention?.keyword ?? ''}
-                animatedStyle={panelAnimatedStyle}
-                bottomInset={mentionBottomInset}
-                listMaxHeight={listMaxHeight}
-                loading={mentionLoading}
-                onBackdropPress={focusInput}
-                onSelect={handleMentionSelect}
-                panelMaxHeight={panelMaxHeight}
-                placement="embedded"
-                showHeader={false}
-                users={candidateUsers}
-                variant="keyboard-inline"
+            <Ionicons name="image-outline" size={22} color="#6b7280" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.toolButton}
+            onPress={() => handleMentionPress({ focusInput: true })}
+          >
+            <Ionicons name="at-outline" size={22} color="#6b7280" />
+          </TouchableOpacity>
+        </View>
+      }
+      footerRight={
+        <View style={styles.toolbarRight}>
+          <Text style={styles.charCount}>{text.length}/500</Text>
+          <TouchableOpacity
+            testID="team-discussion-composer-send-button"
+            style={[
+              styles.sendButton,
+              (!canPublish || submitting) && styles.sendButtonDisabled,
+            ]}
+            onPress={handlePublishPress}
+            disabled={!canPublish || submitting}
+          >
+            {submitting ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <Ionicons name="send" size={18} color="#ffffff" />
+            )}
+          </TouchableOpacity>
+        </View>
+      }
+    >
+      <View style={styles.sheet} testID="team-discussion-composer-toolbar">
+        {originalComment ? (
+          <View style={styles.originalCommentCard}>
+            <View style={styles.originalCommentHeader}>
+              <Avatar
+                uri={originalComment.userAvatar || originalComment.avatar}
+                name={originalComment.userName || originalComment.author}
+                size={28}
               />
-            ) : null}
-
-            {originalComment ? (
-              <View style={styles.originalCommentCard}>
-                <View style={styles.originalCommentHeader}>
-                  <Avatar
-                    uri={originalComment.userAvatar || originalComment.avatar}
-                    name={originalComment.userName || originalComment.author}
-                    size={28}
-                  />
-                  <View style={styles.originalCommentMeta}>
-                    <Text style={styles.originalCommentAuthor} numberOfLines={1}>
-                      {originalComment.userName || originalComment.author}
-                    </Text>
-                    <Text style={styles.originalCommentTime} numberOfLines={1}>
-                      {originalComment.time}
-                    </Text>
-                  </View>
-                </View>
-                {originalComment.content ? (
-                  <Text style={styles.originalCommentText} numberOfLines={2}>
-                    {originalComment.content}
-                  </Text>
-                ) : null}
+              <View style={styles.originalCommentMeta}>
+                <Text style={styles.originalCommentAuthor} numberOfLines={1}>
+                  {originalComment.userName || originalComment.author}
+                </Text>
+                <Text style={styles.originalCommentTime} numberOfLines={1}>
+                  {originalComment.time}
+                </Text>
               </View>
-            ) : null}
-
-            <View style={styles.textBox}>
-              <TextInput
-                ref={inputRef}
-                style={styles.input}
-                placeholder={placeholder}
-                placeholderTextColor="#9ca3af"
-                value={text}
-                onChangeText={setText}
-                onSelectionChange={handleSelectionChange}
-                selection={selection}
-                multiline
-                autoFocus={Platform.OS !== 'android'}
-                showSoftInputOnFocus
-                maxLength={500}
-                selectionColor={modalTokens.danger}
-                textAlignVertical="top"
-              />
-
-              <TouchableOpacity
-                style={[
-                  styles.sendButton,
-                  (!canPublish || submitting) && styles.sendButtonDisabled,
-                ]}
-                onPress={handlePublishPress}
-                disabled={!canPublish || submitting}
-              >
-                {submitting ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Ionicons name="send" size={18} color="#ffffff" />
-                )}
-              </TouchableOpacity>
             </View>
+            {originalComment.content ? (
+              <Text style={styles.originalCommentText} numberOfLines={2}>
+                {originalComment.content}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
 
+        <View style={styles.textBox} testID="team-discussion-composer-input-box">
+          <TextInput
+            ref={inputRef}
+            style={styles.input}
+            placeholder={placeholder}
+            placeholderTextColor="#9ca3af"
+            value={text}
+            onChangeText={setText}
+            onSelectionChange={handleSelectionChange}
+            selection={selection}
+            multiline
+            autoFocus
+            showSoftInputOnFocus
+            maxLength={500}
+            selectionColor={modalTokens.danger}
+            textAlignVertical="top"
+          />
+        </View>
+
+        {renderMentionPanel ? (
+          <View style={styles.mentionSection}>
+            <MentionSuggestionsPanel
+              activeKeyword={activeMention?.keyword ?? ''}
+              animatedStyle={panelAnimatedStyle}
+              bottomInset={mentionBottomInset}
+              bottomOffset={panelBottomOffset}
+              listMaxHeight={listMaxHeight}
+              loading={mentionLoading}
+              onBackdropPress={focusInput}
+              onSelect={handleMentionSelect}
+            panelMaxHeight={panelMaxHeight}
+            placement="embedded"
+            showHeader={false}
+            users={candidateUsers}
+            variant="keyboard-inline"
+            keyboardInlineContentPadding={5}
+            keyboardInlineTransparentItem
+          />
+        </View>
+      ) : null}
+
+        {selectedImages.length > 0 ? (
+          <View style={styles.attachmentsSection}>
             <ComposerImageGrid
               images={selectedImages}
               onRemove={handleRemoveImage}
@@ -387,34 +525,10 @@ export default function TeamDiscussionComposerModal({
               imageStyle={styles.imagePreview}
               removeButtonStyle={styles.removeImage}
             />
-
-            <View style={styles.toolbar}>
-              <View style={styles.toolbarLeft}>
-                <TouchableOpacity style={styles.toolButton} onPress={handleOpenImagePicker}>
-                  <Ionicons name="image-outline" size={22} color="#6b7280" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.toolButton}
-                  onPress={() => handleMentionPress({ focusInput: true })}
-                >
-                  <Ionicons name="at-outline" size={22} color="#6b7280" />
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.charCount}>{text.length}/500</Text>
-            </View>
           </View>
-
-          <ImagePickerSheet
-            visible={showImagePicker}
-            onClose={handleCloseImagePicker}
-            onImageSelected={handleImageSelected}
-            title="添加图片"
-            renderInPlace
-          />
-        </KeyboardAvoidingView>
+        ) : null}
       </View>
-    </Modal>
+    </ComposerModalScaffold>
   );
 }
 
@@ -432,16 +546,10 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 10,
-    paddingHorizontal: 20,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    elevation: 16,
+    flex: 1,
+    backgroundColor: '#f8fafc',
+    paddingTop: 16,
+    paddingHorizontal: 15,
   },
   handle: {
     alignSelf: 'center',
@@ -474,11 +582,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   originalCommentCard: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#ffffff',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    padding: 12,
+    borderColor: '#e2e8f0',
+    padding: 14,
     marginBottom: 14,
   },
   originalCommentHeader: {
@@ -506,70 +614,97 @@ const styles = StyleSheet.create({
     color: '#4b5563',
   },
   textBox: {
-    minHeight: 168,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#ffffff',
-    paddingTop: 14,
-    paddingLeft: 16,
-    paddingRight: 68,
-    paddingBottom: 14,
+    minHeight: 164,
+    paddingTop: 8,
+    paddingHorizontal: 0,
+    paddingBottom: 8,
   },
   input: {
-    minHeight: 120,
+    minHeight: 116,
     fontSize: scaleFont(16),
     lineHeight: 24,
     color: '#111827',
   },
+  mentionSection: {
+    marginTop: 6,
+    marginBottom: 2,
+  },
+  attachmentsSection: {
+    marginTop: 10,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#dbe4ee',
+  },
   sendButton: {
-    position: 'absolute',
-    right: 14,
-    bottom: 14,
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: modalTokens.warning,
+    backgroundColor: TEAM_DISCUSSION_SEND_BUTTON_COLOR,
   },
   sendButtonDisabled: {
-    backgroundColor: '#fbcfe8',
+    backgroundColor: TEAM_DISCUSSION_SEND_BUTTON_COLOR,
   },
   imageGrid: {
-    marginTop: 14,
-    marginBottom: 4,
+    marginTop: 0,
+    marginBottom: 0,
   },
   imageItem: {
+    width: 88,
+    height: 88,
     borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#f3f4f6',
+    marginRight: 10,
+    marginBottom: 10,
   },
   imagePreview: {
+    width: '100%',
+    height: '100%',
     borderRadius: 16,
+    backgroundColor: '#f3f4f6',
   },
   removeImage: {
-    top: 8,
-    right: 8,
+    top: 6,
+    right: 6,
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
   },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 8,
+    marginTop: 8,
   },
   toolbarLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+  toolbarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
   toolButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 6,
+    marginRight: 10,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
   charCount: {
     fontSize: scaleFont(12),
     color: '#9ca3af',
+    marginRight: 10,
   },
 });

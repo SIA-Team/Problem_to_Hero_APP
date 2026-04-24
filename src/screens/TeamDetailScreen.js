@@ -1422,7 +1422,9 @@ export default function TeamDetailScreen({
           <Ionicons name="arrow-back" size={24} color="#374151" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>{restrictedView ? t('screens.teamDetail.teamMembers') : t('screens.teamDetail.title')}</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {restrictedView ? t('screens.teamDetail.teamMembers') : t('screens.teamDetail.title')}
+          </Text>
         </View>
         {!restrictedView && <View style={styles.headerActions}>
             <TouchableOpacity style={styles.iconBtn} onPress={handleOpenTeamInvite}>
@@ -2224,7 +2226,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingLeft: 8,
+    paddingRight: 12,
     paddingVertical: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
@@ -2235,34 +2238,40 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10
+    flexShrink: 0
   },
   headerCenter: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1
+    minWidth: 0,
+    paddingHorizontal: 8
   },
   headerTitle: {
     fontSize: scaleFont(18),
     fontWeight: '600',
-    color: '#1f2937'
+    color: '#1f2937',
+    maxWidth: '100%'
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    zIndex: 10
+    flexShrink: 0,
+    gap: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    borderRadius: 22,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#eef2f7'
   },
   iconBtn: {
-    width: 40,
-    height: 40,
+    width: 34,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 20,
-    backgroundColor: '#f9fafb'
+    borderRadius: 17,
+    backgroundColor: '#ffffff'
   },
   moreActionsBtn: {
     width: 40,

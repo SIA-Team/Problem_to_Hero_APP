@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
@@ -35,6 +36,14 @@ const normalizeRouteParamString = (value) => {
 const toSafeNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const normalizeComparableText = (value) => {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  return `${value}`.trim().toLowerCase();
 };
 
 const parseDateValue = (value) => {
@@ -159,9 +168,19 @@ const resolveMessageText = (item, payload) => {
   return '';
 };
 
-const normalizeConversationMessage = (item, index, peerUserId) => {
+const normalizeConversationMessage = (
+  item,
+  index,
+  peerUserId,
+  currentUserId = '',
+  currentUserNames = [],
+  peerNames = [],
+  currentUserAvatar = '',
+  peerAvatar = ''
+) => {
   const payload = safeJsonParse(item?.payload || item?.bizPayload || item?.ext || item?.extraData);
   const senderId =
+    item?.senderId ??
     item?.senderUserId ??
     item?.fromUserId ??
     item?.sendUserId ??
@@ -172,18 +191,72 @@ const normalizeConversationMessage = (item, index, peerUserId) => {
     item?.user?.id ??
     null;
   const receiverId =
+    item?.receiverId ??
     item?.receiverUserId ??
     item?.receiveUserId ??
     item?.toUserId ??
     item?.targetUserId ??
     item?.peerUserId ??
     null;
+  const senderName =
+    item?.senderNickName ||
+    item?.senderNickname ||
+    item?.nickName ||
+    item?.nickname ||
+    item?.userName ||
+    item?.username ||
+    '';
+  const senderAvatar =
+    item?.senderAvatar ||
+    item?.avatar ||
+    item?.userAvatar ||
+    item?.authorAvatar ||
+    '';
+  const directionFlag =
+    item?.direction ??
+    item?.messageDirection ??
+    item?.directionType ??
+    item?.msgDirection ??
+    item?.ownerType ??
+    item?.fromType ??
+    item?.sendType ??
+    item?.outbound ??
+    item?.outgoing ??
+    item?.mine ??
+    payload?.direction ??
+    payload?.messageDirection ??
+    payload?.ownerType ??
+    null;
 
+  const normalizedCurrentUserId = normalizeRouteParamString(currentUserId);
+  const normalizedDirectionFlag = normalizeComparableText(directionFlag);
+  const normalizedSenderName = normalizeComparableText(senderName);
+  const normalizedSenderAvatar = normalizeComparableText(senderAvatar);
+  const normalizedCurrentUserNames = currentUserNames.map(normalizeComparableText).filter(Boolean);
+  const normalizedPeerNames = peerNames.map(normalizeComparableText).filter(Boolean);
+  const normalizedCurrentUserAvatar = normalizeComparableText(currentUserAvatar);
+  const normalizedPeerAvatar = normalizeComparableText(peerAvatar);
   let isSelf = false;
   if (typeof item?.isSelf === 'boolean') {
     isSelf = item.isSelf;
   } else if (typeof item?.isMine === 'boolean') {
     isSelf = item.isMine;
+  } else if (['self', 'mine', 'me', 'out', 'outgoing', 'send', 'sender', '1'].includes(normalizedDirectionFlag)) {
+    isSelf = true;
+  } else if (['peer', 'other', 'in', 'incoming', 'receive', 'receiver', '0'].includes(normalizedDirectionFlag)) {
+    isSelf = false;
+  } else if (senderId !== null && senderId !== undefined && normalizedCurrentUserId) {
+    isSelf = String(senderId) === normalizedCurrentUserId;
+  } else if (receiverId !== null && receiverId !== undefined && normalizedCurrentUserId) {
+    isSelf = String(receiverId) !== normalizedCurrentUserId;
+  } else if (normalizedSenderName && normalizedCurrentUserNames.includes(normalizedSenderName)) {
+    isSelf = true;
+  } else if (normalizedSenderName && normalizedPeerNames.includes(normalizedSenderName)) {
+    isSelf = false;
+  } else if (normalizedSenderAvatar && normalizedCurrentUserAvatar && normalizedSenderAvatar === normalizedCurrentUserAvatar) {
+    isSelf = true;
+  } else if (normalizedSenderAvatar && normalizedPeerAvatar && normalizedSenderAvatar === normalizedPeerAvatar) {
+    isSelf = false;
   } else if (senderId !== null && senderId !== undefined && peerUserId) {
     isSelf = String(senderId) !== String(peerUserId);
   } else if (receiverId !== null && receiverId !== undefined && peerUserId) {
@@ -207,20 +280,8 @@ const normalizeConversationMessage = (item, index, peerUserId) => {
     payload,
     isSelf,
     senderId: senderId !== null && senderId !== undefined ? String(senderId) : '',
-    senderName:
-      item?.senderNickName ||
-      item?.senderNickname ||
-      item?.nickName ||
-      item?.nickname ||
-      item?.userName ||
-      item?.username ||
-      '',
-    senderAvatar:
-      item?.senderAvatar ||
-      item?.avatar ||
-      item?.userAvatar ||
-      item?.authorAvatar ||
-      '',
+    senderName,
+    senderAvatar,
     rawTime,
     timestamp: parsedDate?.getTime() || 0,
   };
@@ -236,6 +297,11 @@ export default function PrivateConversationScreen({ navigation, route }) {
   const [refreshing, setRefreshing] = useState(false);
   const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState('');
+  const [currentUserProfile, setCurrentUserProfile] = useState({
+    userId: '',
+    name: '',
+    avatar: '',
+  });
 
   const routeConversationId = normalizeRouteParamString(route?.params?.conversationId);
   const peerUserId = normalizeRouteParamString(
@@ -266,6 +332,90 @@ export default function PrivateConversationScreen({ navigation, route }) {
   }, [peerAvatar, peerNickName, peerUserId, route?.params, routeConversationId]);
 
   const displayName = peerNickName || `User ${peerUserId || activeConversationId || ''}`.trim();
+  const currentUserDisplayName = currentUserProfile.name || 'Me';
+  const currentUserId = normalizeRouteParamString(currentUserProfile.userId);
+  const currentUserNames = useMemo(() => [
+    currentUserProfile.name,
+    currentUserProfile.userId,
+  ].filter(Boolean), [currentUserProfile.name, currentUserProfile.userId]);
+  const peerDisplayNames = useMemo(() => [
+    peerNickName,
+    route?.params?.username,
+    route?.params?.name,
+    peerUserId,
+  ].filter(Boolean), [peerNickName, peerUserId, route?.params?.name, route?.params?.username]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCurrentUserProfile = async () => {
+      try {
+        const userInfoRaw = await AsyncStorage.getItem('userInfo');
+        if (!userInfoRaw || !isMounted) {
+          return;
+        }
+
+        const userInfo = JSON.parse(userInfoRaw);
+        if (!userInfo || typeof userInfo !== 'object') {
+          return;
+        }
+
+        const normalizedUserId = normalizeRouteParamString(
+          userInfo?.userId ?? userInfo?.id ?? userInfo?.uid
+        );
+        const resolvedName =
+          userInfo?.nickName ||
+          userInfo?.nickname ||
+          userInfo?.userName ||
+          userInfo?.username ||
+          userInfo?.name ||
+          '';
+        const resolvedAvatar =
+          userInfo?.avatar ||
+          userInfo?.avatarUrl ||
+          userInfo?.userAvatar ||
+          '';
+
+        if (isMounted) {
+          setCurrentUserProfile({
+            userId: normalizedUserId,
+            name: resolvedName,
+            avatar: resolvedAvatar,
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load current user info for private conversation:', error);
+      }
+    };
+
+    loadCurrentUserProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!__DEV__) {
+      return;
+    }
+
+    console.log('[PrivateConversation] current user profile:', {
+      currentUserId,
+      currentUserDisplayName,
+      currentUserAvatar: currentUserProfile.avatar,
+      peerUserId,
+      peerNickName,
+      activeConversationId,
+    });
+  }, [
+    activeConversationId,
+    currentUserDisplayName,
+    currentUserId,
+    currentUserProfile.avatar,
+    peerNickName,
+    peerUserId,
+  ]);
 
   const loadConversationMessages = async ({ silent = false, conversationIdOverride = '' } = {}) => {
     if (!silent) {
@@ -297,8 +447,28 @@ export default function PrivateConversationScreen({ navigation, route }) {
       }
 
       const nextMessages = extractListFromPayload(response?.data)
-        .map((item, index) => normalizeConversationMessage(item, index, peerUserId))
+        .map((item, index) => normalizeConversationMessage(
+          item,
+          index,
+          peerUserId,
+          currentUserId,
+          currentUserNames,
+          peerDisplayNames,
+          currentUserProfile.avatar,
+          peerAvatar
+        ))
         .sort((left, right) => left.timestamp - right.timestamp);
+
+      if (__DEV__) {
+        console.log('[PrivateConversation] normalized messages:', nextMessages.map(message => ({
+          id: message.id,
+          senderId: message.senderId,
+          senderName: message.senderName,
+          isSelf: message.isSelf,
+          rawTime: message.rawTime,
+          contentPreview: `${message.content || ''}`.slice(0, 60),
+        })));
+      }
 
       setMessages(nextMessages);
     } catch (error) {
@@ -330,7 +500,7 @@ export default function PrivateConversationScreen({ navigation, route }) {
   useEffect(() => {
     loadConversationMessages();
     markConversationRead();
-  }, [activeConversationId, peerUserId]);
+  }, [activeConversationId, currentUserId, currentUserNames, peerAvatar, peerDisplayNames, peerUserId, currentUserProfile.avatar]);
 
   useEffect(() => {
     if (!messages.length) {
@@ -463,16 +633,19 @@ export default function PrivateConversationScreen({ navigation, route }) {
           >
             {messages.map((message) => {
               const shareCard = message.payload?.kind === 'content_share' ? message.payload : null;
-              const senderDisplayName = message.senderName || displayName;
+              const senderDisplayName = message.isSelf
+                ? currentUserDisplayName
+                : message.senderName || displayName;
+              const senderAvatar = message.isSelf
+                ? currentUserProfile.avatar
+                : message.senderAvatar || peerAvatar;
 
               return (
                 <View
                   key={String(message.id)}
                   style={[styles.messageRow, message.isSelf ? styles.messageRowSelf : styles.messageRowPeer]}
                 >
-                  {!message.isSelf ? (
-                    <Avatar uri={message.senderAvatar || peerAvatar} name={senderDisplayName} size={32} />
-                  ) : null}
+                  {!message.isSelf ? <Avatar uri={senderAvatar} name={senderDisplayName} size={32} /> : null}
                   <View style={[styles.messageBody, message.isSelf ? styles.messageBodySelf : styles.messageBodyPeer]}>
                     <View style={[styles.bubble, message.isSelf ? styles.selfBubble : styles.peerBubble]}>
                       {shareCard ? (
@@ -504,6 +677,7 @@ export default function PrivateConversationScreen({ navigation, route }) {
                       {formatMessageTime(message.rawTime)}
                     </Text>
                   </View>
+                  {message.isSelf ? <Avatar uri={senderAvatar} name={senderDisplayName} size={32} /> : null}
                 </View>
               );
             })}

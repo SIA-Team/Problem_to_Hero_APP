@@ -62,6 +62,17 @@ const QUICK_ENTRY_CONFIGS = [{
   bucketKey: 'FOLLOW'
 }];
 
+const MESSAGE_COPY = {
+  interaction: '\u4e92\u52a8\u6d88\u606f',
+  system: '\u7cfb\u7edf\u6d88\u606f',
+  activity: '\u6d3b\u52a8\u6d88\u606f',
+  allNotifications: '\u5168\u90e8\u901a\u77e5',
+  noNotifications: '\u6682\u65e0\u901a\u77e5',
+  notificationFallbackTitle: '\u901a\u77e5\u6d88\u606f',
+  notificationFallbackSummary: '\u6682\u65e0\u66f4\u591a\u5185\u5bb9',
+  clearFilter: '\u67e5\u770b\u5168\u90e8'
+};
+
 const CATEGORY_CONFIGS = [{
   key: 'INTERACTION',
   title: '浜掑姩',
@@ -143,6 +154,32 @@ const safeJsonParse = value => {
   } catch (error) {
     return null;
   }
+};
+
+const isLikelyMojibakeText = value => {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  return /娑堟|鏆傛|閫氱煡|鍒嗛挓|灏忔椂|缁|妫ら|鍙戦€?/.test(trimmed);
+};
+
+const sanitizeDisplayText = (value, fallback = '') => {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed || isLikelyMojibakeText(trimmed)) {
+    return fallback;
+  }
+
+  return trimmed;
 };
 
 const formatRelativeTime = value => {
@@ -467,6 +504,25 @@ export default function MessagesScreen({
     follow: t('screens.messagesScreen.quickEntries.followSubscribe')
   };
   const quickEntries = buildQuickEntries(notificationSummary);
+  const notificationGroupsDisplay = CATEGORY_CONFIGS.map(category => {
+    const preview = categoryPreviewMap[category.key];
+    const resolvedTitle = category.key === 'INTERACTION'
+      ? MESSAGE_COPY.interaction
+      : category.key === 'SYSTEM'
+        ? MESSAGE_COPY.system
+        : category.key === 'ACTIVITY'
+          ? MESSAGE_COPY.activity
+          : category.title;
+
+    return {
+      ...category,
+      title: resolvedTitle,
+      unread: toSafeNumber(notificationSummary.byCategory?.[category.key]),
+      lastMessage: sanitizeDisplayText(preview?.summary, '') || sanitizeDisplayText(preview?.title, '') || MESSAGE_COPY.noNotifications,
+      time: formatRelativeTime(preview?.createTime)
+    };
+  });
+  const currentFilterTitleDisplay = sanitizeDisplayText(notificationFilter.title, MESSAGE_COPY.allNotifications);
   const notificationGroups = CATEGORY_CONFIGS.map(category => {
     const preview = categoryPreviewMap[category.key];
     return {
@@ -1182,7 +1238,7 @@ export default function MessagesScreen({
 
         {/* 娑堟伅鍒嗙粍 */}
         <View style={styles.messageGroupSection}>
-          {notificationGroups.map(group => <TouchableOpacity key={group.key} style={[styles.messageGroupItem, notificationFilter.mode === 'category' && notificationFilter.category === group.key && styles.messageGroupItemActive]} onPress={() => handleCategoryPress(group)}>
+          {notificationGroupsDisplay.map(group => <TouchableOpacity key={group.key} style={[styles.messageGroupItem, notificationFilter.mode === 'category' && notificationFilter.category === group.key && styles.messageGroupItemActive]} onPress={() => handleCategoryPress(group)}>
               <View style={[styles.groupIcon, {
             backgroundColor: group.iconBg
           }]}>
@@ -1206,7 +1262,38 @@ export default function MessagesScreen({
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
               <Ionicons name="notifications-outline" size={18} color="#ef4444" />
-              <Text style={styles.sectionTitle}>{currentFilterTitle}</Text>
+              <Text style={styles.sectionTitle}>{currentFilterTitleDisplay}</Text>
+            </View>
+            {notificationFilter.mode !== 'all' && <TouchableOpacity onPress={() => setNotificationFilter(DEFAULT_NOTIFICATION_FILTER)}>
+                <Text style={styles.sectionMore}>{MESSAGE_COPY.clearFilter}</Text>
+              </TouchableOpacity>}
+          </View>
+          {notificationLoading ? <View style={styles.sectionLoading}>
+              <ActivityIndicator color="#ef4444" />
+            </View> : notificationItems.length === 0 ? <View style={styles.sectionEmpty}>
+              <Text style={styles.sectionEmptyText}>{MESSAGE_COPY.noNotifications}</Text>
+            </View> : <>
+              {notificationItems.map(item => <TouchableOpacity key={item.id} style={[styles.notificationItem, toSafeNumber(item.readFlag) !== 1 && styles.notificationItemUnread]} onPress={() => handleNotificationPress(item)}>
+                  <View style={styles.notificationBody}>
+                    <View style={styles.notificationHeader}>
+                      <Text style={styles.notificationTitle} numberOfLines={1}>{sanitizeDisplayText(item.title, MESSAGE_COPY.notificationFallbackTitle)}</Text>
+                      <Text style={styles.notificationTime}>{formatRelativeTime(item.createTime)}</Text>
+                    </View>
+                    <Text style={styles.notificationSummary} numberOfLines={2}>{sanitizeDisplayText(item.summary, '') || sanitizeDisplayText(item.eventType, MESSAGE_COPY.notificationFallbackSummary) || MESSAGE_COPY.notificationFallbackSummary}</Text>
+                  </View>
+                  {toSafeNumber(item.readFlag) !== 1 && <View style={styles.notificationUnreadDot} />}
+                </TouchableOpacity>)}
+              {canLoadMoreNotifications && <TouchableOpacity style={styles.loadMoreButton} onPress={handleLoadMoreNotifications} disabled={notificationLoadingMore}>
+                  {notificationLoadingMore ? <ActivityIndicator size="small" color="#ef4444" /> : <Text style={styles.loadMoreText}>{'\u52a0\u8f7d\u66f4\u591a'}</Text>}
+                </TouchableOpacity>}
+            </>}
+        </View>
+
+        {false && (<View style={styles.notificationSection}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleRow}>
+              <Ionicons name="notifications-outline" size={18} color="#ef4444" />
+              <Text style={styles.sectionTitle}>{currentFilterTitleDisplay}</Text>
             </View>
             {notificationFilter.mode !== 'all' && <TouchableOpacity onPress={() => setNotificationFilter(DEFAULT_NOTIFICATION_FILTER)}>
                 <Text style={styles.sectionMore}>鏌ョ湅鍏ㄩ儴</Text>
@@ -1231,7 +1318,7 @@ export default function MessagesScreen({
                   {notificationLoadingMore ? <ActivityIndicator size="small" color="#ef4444" /> : <Text style={styles.loadMoreText}>鍔犺浇鏇村</Text>}
                 </TouchableOpacity>}
             </>}
-        </View>
+        </View>)}
 
         <View style={styles.privateSection}>
           <View style={styles.sectionHeader}>

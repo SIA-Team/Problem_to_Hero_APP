@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, StatusBar, Keyboard, useWindowDimensions } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import KeyboardDismissView from '../components/KeyboardDismissView';
@@ -52,6 +52,13 @@ export default function MyTeamsScreen({
   navigation
 }) {
   const bottomSafeInset = useBottomSafeInset(20);
+  const { height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const createModalTopInset = Math.max(
+    insets.top,
+    Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0,
+    12
+  );
   const [teams, setTeams] = useState([]);
   const [loadingMyTeams, setLoadingMyTeams] = useState(false);
   const [hasLoadedMyTeams, setHasLoadedMyTeams] = useState(false);
@@ -59,6 +66,7 @@ export default function MyTeamsScreen({
   const [teamName, setTeamName] = useState('');
   const [teamDescription, setTeamDescription] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createTeamFocusSpacerHeight, setCreateTeamFocusSpacerHeight] = useState(0);
   const [creatingTeam, setCreatingTeam] = useState(false);
   const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);
   const [exitConfirmTeam, setExitConfirmTeam] = useState(null);
@@ -67,6 +75,145 @@ export default function MyTeamsScreen({
   const [selectedExitTeam, setSelectedExitTeam] = useState(null);
   const [selectedNewLeader, setSelectedNewLeader] = useState(null);
   const [exitSubmitting, setExitSubmitting] = useState(false);
+  const createTeamScrollRef = React.useRef(null);
+  const createTeamScrollYRef = React.useRef(0);
+  const createTeamViewportHeightRef = React.useRef(0);
+  const createTeamNameTopRef = React.useRef(0);
+  const createTeamNameHeightRef = React.useRef(88);
+  const createTeamDescriptionTopRef = React.useRef(0);
+  const createTeamDescriptionHeightRef = React.useRef(150);
+  const focusedCreateTeamFieldRef = React.useRef(null);
+  const createTeamFocusSpacerTimerRef = React.useRef(null);
+  const clearCreateTeamFocusSpacer = React.useCallback(() => {
+    if (createTeamFocusSpacerTimerRef.current !== null) {
+      clearTimeout(createTeamFocusSpacerTimerRef.current);
+      createTeamFocusSpacerTimerRef.current = null;
+    }
+
+    setCreateTeamFocusSpacerHeight(0);
+  }, []);
+  const estimatedCreateTeamKeyboardHeight = React.useMemo(
+    () => Math.round(Math.min(Math.max(windowHeight * 0.38, 260), 380)),
+    [windowHeight]
+  );
+  const scrollCreateTeamFieldToFocusPosition = React.useCallback(top => {
+    const scrollTarget = Math.max(Number(top) - 18, 0);
+    const scrollToPreparedTarget = () => {
+      createTeamScrollYRef.current = scrollTarget;
+
+      createTeamScrollRef.current?.scrollTo({
+        y: scrollTarget,
+        animated: true
+      });
+    };
+
+    requestAnimationFrame(scrollToPreparedTarget);
+    setTimeout(scrollToPreparedTarget, 40);
+  }, []);
+  const scrollCreateTeamFieldIntoView = React.useCallback((top, height) => {
+    const scrollToTarget = () => {
+      const currentScrollY = createTeamScrollYRef.current;
+      const viewportHeight = createTeamViewportHeightRef.current;
+
+      if (!viewportHeight) {
+        return;
+      }
+
+      const fieldTop = Number(top) || 0;
+      const fieldBottom = fieldTop + (Number(height) || 0);
+      const visibleTop = currentScrollY + 12;
+      const visibleBottom = currentScrollY + viewportHeight - 18;
+
+      if (fieldTop >= visibleTop && fieldBottom <= visibleBottom) {
+        return;
+      }
+
+      const scrollTarget = fieldTop < visibleTop
+        ? Math.max(fieldTop - 18, 0)
+        : Math.max(fieldBottom - viewportHeight + 18, 0);
+
+      createTeamScrollRef.current?.scrollTo({
+        y: scrollTarget,
+        animated: true
+      });
+    };
+
+    requestAnimationFrame(() => {
+      scrollToTarget();
+    });
+
+    setTimeout(scrollToTarget, 120);
+  }, []);
+  const scrollFocusedCreateTeamFieldIntoView = React.useCallback(() => {
+    if (focusedCreateTeamFieldRef.current === 'name') {
+      scrollCreateTeamFieldIntoView(createTeamNameTopRef.current, createTeamNameHeightRef.current);
+      return;
+    }
+
+    if (focusedCreateTeamFieldRef.current === 'description') {
+      scrollCreateTeamFieldIntoView(
+        createTeamDescriptionTopRef.current,
+        createTeamDescriptionHeightRef.current
+      );
+    }
+  }, [scrollCreateTeamFieldIntoView]);
+  const handleCreateTeamFieldFocus = React.useCallback(field => {
+    focusedCreateTeamFieldRef.current = field;
+  }, []);
+  const handleCreateTeamFieldPressIn = React.useCallback(field => {
+    focusedCreateTeamFieldRef.current = field;
+    setCreateTeamFocusSpacerHeight(estimatedCreateTeamKeyboardHeight);
+
+    if (createTeamFocusSpacerTimerRef.current !== null) {
+      clearTimeout(createTeamFocusSpacerTimerRef.current);
+    }
+    createTeamFocusSpacerTimerRef.current = setTimeout(() => {
+      setCreateTeamFocusSpacerHeight(0);
+      createTeamFocusSpacerTimerRef.current = null;
+    }, 140);
+
+    if (field === 'name') {
+      scrollCreateTeamFieldToFocusPosition(createTeamNameTopRef.current);
+      return;
+    }
+
+    if (field === 'description') {
+      scrollCreateTeamFieldToFocusPosition(createTeamDescriptionTopRef.current);
+    }
+  }, [estimatedCreateTeamKeyboardHeight, scrollCreateTeamFieldToFocusPosition]);
+  React.useEffect(() => {
+    if (!showCreateModal) {
+      focusedCreateTeamFieldRef.current = null;
+      clearCreateTeamFocusSpacer();
+      return undefined;
+    }
+
+    const syncFocusedField = () => {
+      setTimeout(scrollFocusedCreateTeamFieldIntoView, 80);
+      setTimeout(scrollFocusedCreateTeamFieldIntoView, 220);
+    };
+    const subscriptions = [];
+    const keyboardEvents = Platform.OS === 'ios'
+      ? ['keyboardWillShow', 'keyboardDidShow', 'keyboardWillChangeFrame']
+      : ['keyboardDidShow'];
+
+    keyboardEvents.forEach(eventName => {
+      subscriptions.push(Keyboard.addListener(eventName, syncFocusedField));
+    });
+    subscriptions.push(
+      Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', clearCreateTeamFocusSpacer)
+    );
+    subscriptions.push(
+      Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardDidShow' : 'keyboardDidShow', clearCreateTeamFocusSpacer)
+    );
+    subscriptions.push(
+      Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', clearCreateTeamFocusSpacer)
+    );
+
+    return () => {
+      subscriptions.forEach(subscription => subscription.remove());
+    };
+  }, [clearCreateTeamFocusSpacer, scrollFocusedCreateTeamFieldIntoView, showCreateModal]);
   const handleOpenCreateModal = () => {
     setShowCreateModal(true);
   };
@@ -459,23 +606,46 @@ export default function MyTeamsScreen({
         </View>
       </Modal>
 
-      <Modal visible={showCreateModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleCloseCreateModal} statusBarTranslucent>
+      <Modal
+        visible={showCreateModal}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={handleCloseCreateModal}
+      >
         <KeyboardAvoidingView
           style={styles.modalKeyboardView}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
         >
           <KeyboardDismissView>
-            <SafeAreaView style={styles.modalContainer} edges={['top']}>
-          <View style={styles.sheetHeader}>
+            <View style={styles.modalContainer}>
+          <View style={[styles.sheetHeader, {
+            paddingTop: createModalTopInset + 10
+          }]}>
+            <View style={styles.sheetHeaderRight} />
             <Text style={styles.sheetTitle}>创建团队</Text>
             <TouchableOpacity onPress={handleCloseCreateModal} style={styles.sheetCloseBtn}>
               <Ionicons name="close" size={24} color="#6b7280" />
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.sheetContent} contentContainerStyle={[styles.sheetContentContainer, {
-          paddingBottom: bottomSafeInset + 96
-        }]} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+          <ScrollView
+            ref={createTeamScrollRef}
+            style={styles.sheetContent}
+            contentContainerStyle={[styles.sheetContentContainer, {
+              paddingBottom: 18 + createTeamFocusSpacerHeight
+            }]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            showsVerticalScrollIndicator={false}
+            onLayout={event => {
+              createTeamViewportHeightRef.current = event.nativeEvent.layout.height;
+            }}
+            onScroll={event => {
+              createTeamScrollYRef.current = event.nativeEvent.contentOffset.y;
+            }}
+            scrollEventThrottle={16}
+          >
           {/* 选择问题 */}
           <View style={styles.formGroup}>
             <Text style={styles.formLabel}>选择问题</Text>
@@ -503,33 +673,42 @@ export default function MyTeamsScreen({
           </View>
 
           {/* 团队名称 */}
-          <View style={styles.formGroup}>
+          <View
+            style={styles.formGroup}
+            onLayout={event => {
+              createTeamNameTopRef.current = event.nativeEvent.layout.y;
+              createTeamNameHeightRef.current = event.nativeEvent.layout.height;
+            }}
+          >
             <Text style={styles.formLabel}>团队名称 <Text style={{
                 color: '#ef4444'
               }}>*</Text></Text>
-            <TextInput style={styles.textInput} placeholder="给团队起个响亮的名字..." placeholderTextColor="#9ca3af" value={teamName} onChangeText={setTeamName} maxLength={30} />
+            <TextInput style={styles.textInput} placeholder="给团队起个响亮的名字..." placeholderTextColor="#9ca3af" value={teamName} onChangeText={setTeamName} maxLength={30} returnKeyType="next" onPressIn={() => handleCreateTeamFieldPressIn('name')} onFocus={() => handleCreateTeamFieldFocus('name')} />
             <Text style={styles.charCount}>{teamName.length}/30</Text>
           </View>
 
           {/* 团队说明 */}
-          <View style={styles.formGroup}>
+          <View
+            style={styles.formGroup}
+            onLayout={event => {
+              createTeamDescriptionTopRef.current = event.nativeEvent.layout.y;
+              createTeamDescriptionHeightRef.current = event.nativeEvent.layout.height;
+            }}
+          >
             <Text style={styles.formLabel}>团队说明</Text>
-            <TextInput style={styles.textArea} placeholder="介绍一下这个团队的目标和规则..." placeholderTextColor="#9ca3af" value={teamDescription} onChangeText={setTeamDescription} multiline numberOfLines={4} />
+            <TextInput style={styles.textArea} placeholder="介绍一下这个团队的目标和规则..." placeholderTextColor="#9ca3af" value={teamDescription} onChangeText={setTeamDescription} multiline numberOfLines={4} textAlignVertical="top" onPressIn={() => handleCreateTeamFieldPressIn('description')} onFocus={() => handleCreateTeamFieldFocus('description')} />
           </View>
 
-          <View style={{
-            height: 100
-          }} />
           </ScrollView>
 
           <View style={[styles.sheetFooter, {
-          paddingBottom: bottomSafeInset
+          paddingBottom: bottomSafeInset + 12
         }]}>
             <TouchableOpacity style={[styles.submitBtn, (!teamName.trim() || creatingTeam) && styles.submitBtnDisabled]} onPress={submitCreateTeam} disabled={!teamName.trim() || creatingTeam}>
               <Text style={styles.submitBtnText}>{creatingTeam ? '\u521b\u5efa\u4e2d...' : '创建团队'}</Text>
             </TouchableOpacity>
           </View>
-            </SafeAreaView>
+            </View>
           </KeyboardDismissView>
         </KeyboardAvoidingView>
       </Modal>
@@ -884,7 +1063,7 @@ const styles = StyleSheet.create({
   // Modal 样式
   modalContainer: {
     flex: 1,
-    backgroundColor: modalTokens.surface
+    backgroundColor: '#f8fafc'
   },
   modalKeyboardView: {
     flex: 1
@@ -892,11 +1071,12 @@ const styles = StyleSheet.create({
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: modalTokens.border
+    borderBottomColor: modalTokens.border,
+    backgroundColor: '#ffffff'
   },
   sheetTitle: {
     fontSize: scaleFont(17),
@@ -904,26 +1084,39 @@ const styles = StyleSheet.create({
     color: modalTokens.textPrimary
   },
   sheetCloseBtn: {
-    position: 'absolute',
-    right: 16,
-    padding: 4
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  sheetHeaderRight: {
+    width: 40,
+    height: 40
   },
   sheetContent: {
     flex: 1
   },
   sheetContentContainer: {
     paddingHorizontal: 16,
-    paddingTop: 16
+    paddingTop: 18
   },
   sheetFooter: {
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: modalTokens.border,
-    backgroundColor: modalTokens.surface
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOffset: {
+      width: 0,
+      height: -4
+    },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 8
   },
   formGroup: {
-    marginBottom: 20
+    marginBottom: 22
   },
   formLabel: {
     fontSize: scaleFont(14),
@@ -937,7 +1130,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   textInput: {
-    backgroundColor: modalTokens.surfaceSoft,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: modalTokens.border,
     borderRadius: 12,
@@ -955,7 +1148,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: modalTokens.surfaceSoft,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: modalTokens.border,
     borderRadius: 12,
@@ -1021,7 +1214,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ef4444'
   },
   textArea: {
-    backgroundColor: modalTokens.surfaceSoft,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: modalTokens.border,
     borderRadius: 12,

@@ -126,6 +126,8 @@ const saveToStorage = async (key, data) => {
   }
 };
 
+const getCacheKeyPrefix = (prefix) => `cache_${prefix}_`;
+
 /**
  * 获取缓存数据（多级缓存）
  * 
@@ -165,6 +167,49 @@ export const setCache = async (prefix, params = {}, data) => {
   saveToMemory(key, data);
   await saveToStorage(key, data);
   
+};
+
+export const updateCacheEntries = async (prefix, updater) => {
+  if (typeof updater !== 'function') {
+    return;
+  }
+
+  const keyPrefix = getCacheKeyPrefix(prefix);
+
+  try {
+    const storageKeys = await AsyncStorage.getAllKeys();
+    const candidateKeys = new Set([
+      ...Array.from(memoryCache.keys()).filter((key) => key.startsWith(keyPrefix)),
+      ...storageKeys.filter((key) => key.startsWith(keyPrefix)),
+    ]);
+
+    await Promise.all(
+      Array.from(candidateKeys).map(async (key) => {
+        const memoryEntry = memoryCache.get(key);
+        let currentData = null;
+
+        if (memoryEntry && !isExpired(memoryEntry.timestamp, CACHE_CONFIG.MEMORY_TTL)) {
+          currentData = memoryEntry.data;
+        } else {
+          currentData = await getFromStorage(key);
+        }
+
+        if (currentData === null || currentData === undefined) {
+          return;
+        }
+
+        const nextData = await updater(currentData, { key });
+        if (nextData === undefined || nextData === currentData) {
+          return;
+        }
+
+        saveToMemory(key, nextData);
+        await saveToStorage(key, nextData);
+      })
+    );
+  } catch (error) {
+    console.error('更新缓存条目失败:', error);
+  }
 };
 
 /**
