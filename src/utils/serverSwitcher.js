@@ -10,7 +10,12 @@ const normalizeServerUrl = (url) => {
     return '';
   }
 
-  return url.trim().replace(/\/+$/, '');
+  const normalizedUrl = url.trim().replace(/\/+$/, '');
+
+  return normalizedUrl.replace(
+    /^([a-z][a-z0-9+.-]*):\/\//i,
+    (_, protocol) => `${protocol.toLowerCase()}://`
+  );
 };
 
 export const SERVERS = {
