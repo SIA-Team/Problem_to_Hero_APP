@@ -150,14 +150,14 @@ android {
 def ensureExpoRuntimeFingerprintScript = new File(projectRoot, "scripts/ensure-expo-runtime-fingerprint.js")
 
 tasks.register("ensureExpoRuntimeFingerprint", Exec) {
-    onlyIf { ensureExpoRuntimeFingerprintScript.exists() }
+    onlyIf { false } // 禁用此任务
     workingDir projectRoot
     commandLine "node", ensureExpoRuntimeFingerprintScript.absolutePath
     environment "NODE_ENV", System.getenv("NODE_ENV") ?: "production"
 }
 
 tasks.named("preBuild").configure {
-    dependsOn("ensureExpoRuntimeFingerprint")
+    // dependsOn("ensureExpoRuntimeFingerprint") // 移除依赖
 }
 
 // Apply static values from `gradle.properties` to the `android.packagingOptions`
