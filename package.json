@@ -13,7 +13,6 @@
     "start:tunnel": "expo start --tunnel --go",
     "android": "expo run:android",
     "android:clean": "cd android && gradlew clean && cd ..",
-    "android:fingerprint:sync": "node scripts/ensure-expo-runtime-fingerprint.js",
     "android:build:prod": "eas build --profile production --platform android",
     "android:build:prod:apk": "eas build --profile production-apk --platform android",
     "android:build:prod:aab": "eas build --profile production --platform android",

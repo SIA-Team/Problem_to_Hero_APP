@@ -80,6 +80,12 @@ android/app/src/main/assets/fingerprint
 .env.local
 .env.*.local
 
+# Keystore and credentials (敏感信息)
+*.keystore
+!debug.keystore
+credentials.json
+keystore.properties
+
 # IDE
 .vscode/
 .idea/
@@ -148,6 +154,8 @@ ADOPT_*.md
 # QR codes and images
 *.png
 !assets/*.png
+!android/app/src/main/res/mipmap-*/ic_launcher.png
+!android/app/src/main/res/mipmap-*/ic_launcher_round.png
 expo-qrcode.png
 expo-public-qrcode.png
 expo-tunnel-page.html
