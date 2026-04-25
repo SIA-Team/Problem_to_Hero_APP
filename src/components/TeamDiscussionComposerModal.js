@@ -19,6 +19,8 @@ import Avatar from './Avatar';
 import ComposerImageGrid from './ComposerImageGrid';
 import ImagePickerSheet from './ImagePickerSheet';
 import MentionSuggestionsPanel from './MentionSuggestionsPanel';
+import TwemojiPickerSheet from './TwemojiPickerSheet';
+import TwemojiText from './TwemojiText';
 import { modalTokens } from './modalTokens';
 import useMentionComposer from '../hooks/useMentionComposer';
 import useRecommendedMentionUsers from '../hooks/useRecommendedMentionUsers';
@@ -31,6 +33,8 @@ import { DEFAULT_MENTION_PANEL_BASE_OFFSET } from '../utils/mentionComposer';
 import { resolveComposerKeyboardMetrics } from '../utils/composerLayout';
 import { scaleFont } from '../utils/responsive';
 import { showToast } from '../utils/toast';
+import { insertTextAtSelection } from '../utils/emojiInsert';
+import { countDisplayCharacters } from '../utils/twemoji';
 
 export default function TeamDiscussionComposerModal({
   visible,
@@ -56,6 +60,7 @@ export default function TeamDiscussionComposerModal({
   const [text, setText] = React.useState('');
   const [selectedImages, setSelectedImages] = React.useState([]);
   const [showImagePicker, setShowImagePicker] = React.useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = React.useState(false);
   const [androidKeyboardOffset, setAndroidKeyboardOffset] = React.useState(0);
   const { recommendedMentionUsers, resetRecommendedMentionUsers } = useRecommendedMentionUsers({
     visible,
@@ -75,6 +80,7 @@ export default function TeamDiscussionComposerModal({
     panelMaxHeight,
     renderMentionPanel,
     selection,
+    setSelection,
   } = useMentionComposer({
     visible,
     text,
@@ -107,6 +113,7 @@ export default function TeamDiscussionComposerModal({
       setText('');
       setSelectedImages([]);
       setShowImagePicker(false);
+      setShowEmojiPicker(false);
       setAndroidKeyboardOffset(0);
       inputRef.current?.blur();
       resetRecommendedMentionUsers();
@@ -227,7 +234,14 @@ export default function TeamDiscussionComposerModal({
 
   const handleOpenImagePicker = React.useCallback(() => {
     Keyboard.dismiss();
+    setShowEmojiPicker(false);
     setShowImagePicker(true);
+  }, []);
+
+  const handleOpenEmojiPicker = React.useCallback(() => {
+    Keyboard.dismiss();
+    setShowImagePicker(false);
+    setShowEmojiPicker(true);
   }, []);
 
   const handleImageSelected = React.useCallback((imageUri) => {
@@ -253,6 +267,26 @@ export default function TeamDiscussionComposerModal({
       }
     }, 120);
   }, [visible]);
+
+  const handleCloseEmojiPicker = React.useCallback(() => {
+    setShowEmojiPicker(false);
+
+    setTimeout(() => {
+      if (visible) {
+        inputRef.current?.focus();
+      }
+    }, 120);
+  }, [visible]);
+
+  const handleEmojiSelected = React.useCallback((emoji) => {
+    const { nextText, nextSelection } = insertTextAtSelection(text, selection, emoji);
+    setText(nextText);
+    setSelection(nextSelection);
+
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 80);
+  }, [selection, setSelection, text]);
 
   const handleRemoveImage = React.useCallback((index) => {
     setSelectedImages(prevImages => removeComposerImageAt(prevImages, index));
@@ -338,9 +372,11 @@ export default function TeamDiscussionComposerModal({
                   </View>
                 </View>
                 {originalComment.content ? (
-                  <Text style={styles.originalCommentText} numberOfLines={2}>
-                    {originalComment.content}
-                  </Text>
+                  <TwemojiText
+                    style={styles.originalCommentText}
+                    numberOfLines={2}
+                    text={originalComment.content}
+                  />
                 ) : null}
               </View>
             ) : null}
@@ -393,6 +429,9 @@ export default function TeamDiscussionComposerModal({
                 <TouchableOpacity style={styles.toolButton} onPress={handleOpenImagePicker}>
                   <Ionicons name="image-outline" size={22} color="#6b7280" />
                 </TouchableOpacity>
+                <TouchableOpacity style={styles.toolButton} onPress={handleOpenEmojiPicker}>
+                  <Ionicons name="happy-outline" size={22} color="#6b7280" />
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.toolButton}
                   onPress={() => handleMentionPress({ focusInput: true })}
@@ -401,7 +440,7 @@ export default function TeamDiscussionComposerModal({
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.charCount}>{text.length}/500</Text>
+              <Text style={styles.charCount}>{countDisplayCharacters(text)}/500</Text>
             </View>
           </View>
 
@@ -410,6 +449,13 @@ export default function TeamDiscussionComposerModal({
             onClose={handleCloseImagePicker}
             onImageSelected={handleImageSelected}
             title="添加图片"
+            renderInPlace
+          />
+          <TwemojiPickerSheet
+            visible={showEmojiPicker}
+            onClose={handleCloseEmojiPicker}
+            onEmojiSelected={handleEmojiSelected}
+            title="插入表情"
             renderInPlace
           />
         </KeyboardAvoidingView>

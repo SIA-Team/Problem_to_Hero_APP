@@ -17,6 +17,8 @@ import ComposerModalScaffold from './ComposerModalScaffold';
 import ComposerImageGrid from './ComposerImageGrid';
 import ComposerAlertOverlay from './ComposerAlertOverlay';
 import MentionSuggestionsPanel from './MentionSuggestionsPanel';
+import TwemojiPickerSheet from './TwemojiPickerSheet';
+import TwemojiText from './TwemojiText';
 import { modalTokens } from './modalTokens';
 import { toast } from '../utils/toast';
 import answerApi from '../services/api/answerApi';
@@ -38,6 +40,8 @@ import { resolveComposerScrollPadding } from '../utils/composerLayout';
 import useComposerScrollManager from '../hooks/useComposerScrollManager';
 import { scaleFont } from '../utils/responsive';
 import { sanitizeUserFacingMessage } from '../utils/userFacingMessage';
+import { insertTextAtSelection } from '../utils/emojiInsert';
+import { countDisplayCharacters } from '../utils/twemoji';
 
 const SUPPLEMENT_PUBLISH_FAILURE_TITLE = '\u6682\u65f6\u65e0\u6cd5\u8865\u5145\u56de\u7b54';
 const SUPPLEMENT_PUBLISH_FAILURE_MESSAGE =
@@ -77,6 +81,7 @@ export default function SupplementAnswerModal({
   const [internalSelectedTeams, setInternalSelectedTeams] = useState([]);
   const [internalImages, setInternalImages] = useState([]);
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [composerAlert, setComposerAlert] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
@@ -124,6 +129,7 @@ export default function SupplementAnswerModal({
     panelMaxHeight,
     renderMentionPanel,
     selection,
+    setSelection,
     shouldShowMentionPanel,
   } = useMentionComposer({
     visible,
@@ -140,6 +146,11 @@ export default function SupplementAnswerModal({
   const runToolbarAction = React.useCallback((action) => {
     if (action === 'image') {
       setShowImagePicker(true);
+      return;
+    }
+
+    if (action === 'emoji') {
+      setShowEmojiPicker(true);
       return;
     }
 
@@ -165,6 +176,7 @@ export default function SupplementAnswerModal({
   useEffect(() => {
     if (!visible) {
       setShowImagePicker(false);
+      setShowEmojiPicker(false);
       setComposerAlert(null);
       inputFocusedRef.current = false;
     }
@@ -296,6 +308,20 @@ export default function SupplementAnswerModal({
     triggerToolbarAction('mention');
   };
 
+  const handleToolbarEmojiPress = () => {
+    triggerToolbarAction('emoji');
+  };
+
+  const handleEmojiSelected = emoji => {
+    const { nextText, nextSelection } = insertTextAtSelection(currentText, selection, emoji);
+    updateText(nextText);
+    setSelection(nextSelection);
+
+    setTimeout(() => {
+      answerInputRef.current?.focus();
+    }, 80);
+  };
+
   const handleChangeSupplementAnswerText = value => {
     updateText(value);
 
@@ -424,7 +450,7 @@ export default function SupplementAnswerModal({
         footerBottomInset={bottomSafeInset}
         footerHidden={Boolean(pendingToolbarAction)}
         overlayContent={
-          showImagePicker || composerAlert ? (
+          showImagePicker || showEmojiPicker || composerAlert ? (
             <>
               {showImagePicker && allowImages ? (
                 <ImagePickerSheet
@@ -432,6 +458,15 @@ export default function SupplementAnswerModal({
                   onClose={() => setShowImagePicker(false)}
                   onImageSelected={handleImageSelected}
                   title="选择图片"
+                  renderInPlace
+                />
+              ) : null}
+              {showEmojiPicker ? (
+                <TwemojiPickerSheet
+                  visible={showEmojiPicker}
+                  onClose={() => setShowEmojiPicker(false)}
+                  onEmojiSelected={handleEmojiSelected}
+                  title="插入表情"
                   renderInPlace
                 />
               ) : null}
@@ -493,12 +528,15 @@ export default function SupplementAnswerModal({
                 ) : null}
               </TouchableOpacity>
             ) : null}
+            <TouchableOpacity style={styles.toolItem} onPress={handleToolbarEmojiPress}>
+              <Ionicons name="happy-outline" size={24} color="#666" />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.toolItem} onPress={handleToolbarMentionPress}>
               <Ionicons name="at-outline" size={24} color="#666" />
             </TouchableOpacity>
           </View>
         }
-        footerRight={<Text style={styles.wordCount}>{currentText.length}/2000</Text>}
+        footerRight={<Text style={styles.wordCount}>{countDisplayCharacters(currentText)}/2000</Text>}
         floatingOverlay={
           renderMentionPanel ? (
             <MentionSuggestionsPanel
@@ -529,9 +567,7 @@ export default function SupplementAnswerModal({
             />
             <Text style={styles.originalAnswerAuthorName}>{answerAuthorName}</Text>
           </View>
-          <Text style={styles.originalAnswerContent} numberOfLines={3}>
-            {answer.content}
-          </Text>
+          <TwemojiText style={styles.originalAnswerContent} numberOfLines={3} text={answer.content} />
         </View>
 
         <ScrollView

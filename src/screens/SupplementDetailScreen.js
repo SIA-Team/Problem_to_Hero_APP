@@ -4,6 +4,7 @@ import { CommonActions } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import TwemojiText from '../components/TwemojiText';
 import IdentitySelector from '../components/IdentitySelector';
 import ShareModal from '../components/ShareModal';
 import WriteCommentModal from '../components/WriteCommentModal';
@@ -1420,7 +1421,7 @@ export default function SupplementDetailScreen({
           <View style={{ flex: 1 }} />
           <Text style={styles.replyTime}>{reply.time}</Text>
         </TouchableOpacity>
-        <Text style={styles.replyText}>{reply.content}</Text>
+        <TwemojiText style={styles.replyText} text={reply.content} />
         <View style={styles.replyActions}>
           <TouchableOpacity style={[styles.replyActionBtn, isLikeDisabled && styles.interactionBtnDisabled]} onPress={() => handleCommentLike(reply.id)} disabled={commentLikeLoading[reply.id] || isLikeDisabled}>
             <Ionicons name={isLiked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={isLiked ? "#ef4444" : isLikeDisabled ? "#d1d5db" : "#9ca3af"} />
@@ -2524,7 +2525,7 @@ export default function SupplementDetailScreen({
                       <Text style={styles.answerAuthorTitle}>{answer.title || ' '}</Text>
                     </View>
                   </TouchableOpacity>
-                  <Text style={styles.answerContent}>{answer.content}</Text>
+                  <TwemojiText style={styles.answerContent} text={answer.content} />
                   <View style={styles.answerFooter}>
                     <View style={styles.answerFooterLeft}>
                       <TouchableOpacity style={styles.answerActionBtn} onPress={() => setAnswerLiked({
@@ -2725,7 +2726,7 @@ export default function SupplementDetailScreen({
                       <Text style={styles.commentTime}>{comment.time}</Text>
                     </TouchableOpacity>
                     <View style={styles.commentContent}>
-                      <Text style={styles.commentText}>{comment.content}</Text>
+                      <TwemojiText style={styles.commentText} text={comment.content} />
                       <View style={styles.commentFooter}>
                         <View style={styles.commentFooterLeft}>
                           <TouchableOpacity style={[styles.commentActionBtn, isLikeInteractionDisabled(isLiked, isDisliked) && styles.interactionBtnDisabled]} onPress={() => handleCommentLike(comment.id)} disabled={commentLikeLoading[comment.id] || isLikeInteractionDisabled(isLiked, isDisliked)}>
@@ -2949,7 +2950,7 @@ export default function SupplementDetailScreen({
                   <View style={{ flex: 1 }} />
                   <Text style={styles.originalCommentTime}>{currentReplyComment.time}</Text>
                 </TouchableOpacity>
-                <Text style={styles.originalCommentText}>{currentReplyComment.content}</Text>
+                <TwemojiText style={styles.originalCommentText} text={currentReplyComment.content} />
               </View>}
 
             <View style={styles.repliesSectionHeader}>
