@@ -16,12 +16,8 @@
       "**/*"
     ],
     "updates": {
-      "enabled": true,
-      "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0,
-      "url": "https://u.expo.dev/2e6de8bb-4642-4ad3-9a2b-f914db1c07cc"
+      "enabled": false
     },
-    "runtimeVersion": "1.0.3",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.problemvshero.app",
