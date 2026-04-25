@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import MentionSuggestionsPanel from '../components/MentionSuggestionsPanel';
 import TeamDiscussionComposerModal from '../components/TeamDiscussionComposerModal';
+import TwemojiText from '../components/TwemojiText';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
@@ -2398,7 +2399,7 @@ export default function GroupChatScreen({ navigation, route }) {
           <Text style={styles.threadReplyTime}>{reply.timeLabel || t('screens.groupChat.justNow')}</Text>
         </View>
 
-        <Text style={styles.threadReplyContent}>{reply.content}</Text>
+        <TwemojiText style={styles.threadReplyContent} text={reply.content} />
 
         <View style={styles.threadReplyActions}>
           <View style={styles.threadReplyActionsLeft}>
@@ -2529,7 +2530,7 @@ export default function GroupChatScreen({ navigation, route }) {
             </View>
           </View>
 
-          <Text style={styles.inlineReplyContent}>{reply.content}</Text>
+          <TwemojiText style={styles.inlineReplyContent} text={reply.content} />
 
           <View style={styles.inlineReplyActions}>
             <TouchableOpacity
@@ -2736,7 +2737,7 @@ export default function GroupChatScreen({ navigation, route }) {
                       <Text style={styles.msgAuthor}>{msg.author}</Text>
                       <Text style={styles.msgTime}>{msg.timeLabel || t('screens.groupChat.justNow')}</Text>
                     </View>
-                    {msg.content ? <Text style={styles.msgText}>{msg.content}</Text> : null}
+                    {msg.content ? <TwemojiText style={styles.msgText} text={msg.content} /> : null}
                     {Array.isArray(msg.imageUrls) && msg.imageUrls.length > 0 ? (
                       <View style={styles.msgImageGrid}>
                         {msg.imageUrls.map((imageUrl, imageIndex) => (
@@ -2926,7 +2927,7 @@ export default function GroupChatScreen({ navigation, route }) {
                             {reply.timeLabel || t('screens.groupChat.justNow')}
                           </Text>
                         </View>
-                        <Text style={styles.threadReplyContent}>{reply.content}</Text>
+                        <TwemojiText style={styles.threadReplyContent} text={reply.content} />
                         <View style={styles.threadListActions}>
                           <View style={styles.threadListActionsLeft}>
                             <TouchableOpacity
@@ -3094,7 +3095,7 @@ export default function GroupChatScreen({ navigation, route }) {
                       {currentThreadRootReply.timeLabel || t('screens.groupChat.justNow')}
                     </Text>
                   </View>
-                  <Text style={styles.originalReplyContent}>{currentThreadRootReply.content}</Text>
+                  <TwemojiText style={styles.originalReplyContent} text={currentThreadRootReply.content} />
                 </View>
               ) : null}
 
@@ -3184,9 +3185,11 @@ export default function GroupChatScreen({ navigation, route }) {
                       <Avatar uri={replyTarget.avatar} name={replyTarget.author} size={32} />
                       <View style={styles.replyTargetInfo}>
                         <Text style={styles.replyTargetAuthor}>{replyTarget.author}</Text>
-                        <Text style={styles.replyTargetContent} numberOfLines={2}>
-                          {replyTarget.content}
-                        </Text>
+                        <TwemojiText
+                          style={styles.replyTargetContent}
+                          numberOfLines={2}
+                          text={replyTarget.content}
+                        />
                       </View>
                     </View>
                   ) : null}

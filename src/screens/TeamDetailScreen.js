@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import TwemojiText from '../components/TwemojiText';
 import KeyboardDismissView from '../components/KeyboardDismissView';
 import ModalSafeAreaView from '../components/ModalSafeAreaView';
 import TeamDiscussionComposerModal from '../components/TeamDiscussionComposerModal';
@@ -1282,7 +1283,7 @@ export default function TeamDetailScreen({
         }} />
           <Text style={styles.replyTime}>{reply.time}</Text>
         </TouchableOpacity>
-        {reply.content ? <Text style={styles.replyText}>{reply.content}</Text> : null}
+        {reply.content ? <TwemojiText style={styles.replyText} text={reply.content} /> : null}
         {renderDiscussionImageGrid(reply)}
         <View style={styles.replyActions}>
           <TouchableOpacity style={[styles.replyActionBtn, isLikeInteractionDisabled(!!reply.liked, !!reply.disliked) && styles.interactionBtnDisabled]} onPress={() => toggleDiscussionCommentLike(currentDiscussionMessageId, reply.id)} disabled={isLikeInteractionDisabled(!!reply.liked, !!reply.disliked)}>
@@ -1564,7 +1565,7 @@ export default function TeamDetailScreen({
                         <Text style={styles.teamChatTime}>{msg.time}</Text>
                       </View>
                       <View style={styles.teamChatContent}>
-                        {msg.content ? <Text style={styles.teamChatText}>{msg.content}</Text> : null}
+                        {msg.content ? <TwemojiText style={styles.teamChatText} text={msg.content} /> : null}
                         {renderDiscussionImageGrid(msg)}
                         
                         <View style={styles.teamChatFooter}>
@@ -1763,7 +1764,7 @@ export default function TeamDetailScreen({
                     <Text style={styles.commentListTime}>{comment.time}</Text>
                   </TouchableOpacity>
                   <View style={styles.commentListContent}>
-                    {comment.content ? <Text style={styles.commentListText}>{comment.content}</Text> : null}
+                    {comment.content ? <TwemojiText style={styles.commentListText} text={comment.content} /> : null}
                     {renderDiscussionImageGrid(comment)}
                     <View style={styles.commentListActions}>
                       <TouchableOpacity style={[styles.commentListActionBtn, isLikeInteractionDisabled(!!comment.liked, !!comment.disliked) && styles.interactionBtnDisabled]} onPress={() => toggleDiscussionCommentLike(currentDiscussionMessageId, comment.id)} disabled={isLikeInteractionDisabled(!!comment.liked, !!comment.disliked)}>
@@ -1864,7 +1865,12 @@ export default function TeamDetailScreen({
               }} />
                   <Text style={styles.originalCommentTime}>{currentDiscussionRootComment.time}</Text>
                 </TouchableOpacity>
-                {currentDiscussionRootComment.content ? <Text style={styles.originalCommentText}>{currentDiscussionRootComment.content}</Text> : null}
+                {currentDiscussionRootComment.content ? (
+                  <TwemojiText
+                    style={styles.originalCommentText}
+                    text={currentDiscussionRootComment.content}
+                  />
+                ) : null}
                 {renderDiscussionImageGrid(currentDiscussionRootComment)}
               </View>}
 

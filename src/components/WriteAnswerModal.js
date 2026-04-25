@@ -19,6 +19,7 @@ import ComposerModalScaffold from './ComposerModalScaffold';
 import ComposerImageGrid from './ComposerImageGrid';
 import ComposerAlertOverlay from './ComposerAlertOverlay';
 import MentionSuggestionsPanel from './MentionSuggestionsPanel';
+import TwemojiPickerSheet from './TwemojiPickerSheet';
 import { showToast } from '../utils/toast';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import useKeyboardVisibility from '../hooks/useKeyboardVisibility';
@@ -32,6 +33,8 @@ import {
 import { resolveComposerScrollPadding } from '../utils/composerLayout';
 import useComposerScrollManager from '../hooks/useComposerScrollManager';
 import { scaleFont } from '../utils/responsive';
+import { insertTextAtSelection } from '../utils/emojiInsert';
+import { countDisplayCharacters } from '../utils/twemoji';
 
 const COMPOSER_ALERT_CONFIRM_TEXT = '我知道了';
 const SEND_BUTTON_COLOR = '#f472b6';
@@ -64,6 +67,7 @@ export default function WriteAnswerModal({
   const keyboardVisible = useKeyboardVisibility(visible);
   const { height: answerWindowHeight } = useWindowDimensions();
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [composerAlert, setComposerAlert] = useState(null);
   const [inputTop, setInputTop] = useState(0);
   const answerInputRef = React.useRef(null);
@@ -90,6 +94,7 @@ export default function WriteAnswerModal({
     panelMaxHeight,
     renderMentionPanel,
     selection,
+    setSelection,
     shouldShowMentionPanel,
   } = useMentionComposer({
     visible,
@@ -105,6 +110,11 @@ export default function WriteAnswerModal({
   const runToolbarAction = React.useCallback((action) => {
     if (action === 'image') {
       setShowImagePicker(true);
+      return;
+    }
+
+    if (action === 'emoji') {
+      setShowEmojiPicker(true);
       return;
     }
 
@@ -130,6 +140,7 @@ export default function WriteAnswerModal({
   useEffect(() => {
     if (!visible) {
       setShowImagePicker(false);
+      setShowEmojiPicker(false);
       setComposerAlert(null);
       inputFocusedRef.current = false;
     }
@@ -216,6 +227,20 @@ export default function WriteAnswerModal({
     handleMentionPress({ focusInput: true });
   };
 
+  const handleToolbarEmojiPress = () => {
+    triggerToolbarAction('emoji');
+  };
+
+  const handleEmojiSelected = emoji => {
+    const { nextText, nextSelection } = insertTextAtSelection(text, selection, emoji);
+    onChangeText?.(nextText);
+    setSelection(nextSelection);
+
+    setTimeout(() => {
+      answerInputRef.current?.focus();
+    }, 80);
+  };
+
   const closeComposerAlert = () => {
     setComposerAlert(null);
   };
@@ -247,13 +272,22 @@ export default function WriteAnswerModal({
         submitPlacement="none"
         footerHidden={Boolean(pendingToolbarAction)}
         overlayContent={
-          showImagePicker || composerAlert ? (
+          showImagePicker || showEmojiPicker || composerAlert ? (
             <>
               {showImagePicker ? (
                 <ImagePickerSheet
                   visible={showImagePicker}
                   onClose={() => setShowImagePicker(false)}
                   onImageSelected={handleAddImage}
+                  renderInPlace
+                />
+              ) : null}
+              {showEmojiPicker ? (
+                <TwemojiPickerSheet
+                  visible={showEmojiPicker}
+                  onClose={() => setShowEmojiPicker(false)}
+                  onEmojiSelected={handleEmojiSelected}
+                  title="插入表情"
                   renderInPlace
                 />
               ) : null}
@@ -294,6 +328,9 @@ export default function WriteAnswerModal({
             <TouchableOpacity style={styles.answerToolItem} onPress={handleOpenImagePicker}>
               <Ionicons name="image-outline" size={24} color="#666" />
             </TouchableOpacity>
+            <TouchableOpacity style={styles.answerToolItem} onPress={handleToolbarEmojiPress}>
+              <Ionicons name="happy-outline" size={24} color="#666" />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.answerToolItem} onPress={handleToolbarMentionPress}>
               <Ionicons name="at-outline" size={24} color="#666" />
             </TouchableOpacity>
@@ -302,7 +339,7 @@ export default function WriteAnswerModal({
         footerRight={
           <View style={styles.footerActionGroup}>
             <Text style={styles.answerWordCount}>
-              {text.length}/{wordLimit}
+              {countDisplayCharacters(text)}/{wordLimit}
             </Text>
             <TouchableOpacity
               style={[styles.sendButton, !canSubmit && styles.sendButtonDisabled]}

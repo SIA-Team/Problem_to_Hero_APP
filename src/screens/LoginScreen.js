@@ -175,7 +175,19 @@ export default function LoginScreen({ navigation, onLogin }) {
   const handleDeviceLogin = async () => {
     setDeviceLoading(true);
 
+    const getDeviceLoginErrorMessage = (error) => {
+      const message = error?.message || '';
+
+      if (/unsupported protocol/i.test(message)) {
+        return 'Server URL is invalid. Please check that it starts with http:// or https://.';
+      }
+
+      return null;
+    };
+
     const loginWithRetry = async (fingerprint, maxRetries = 3) => {
+      let lastError = null;
+
       for (let i = 0; i < maxRetries; i++) {
         try {
           console.log(`Trying device login (${i + 1}/${maxRetries})...`);
@@ -188,8 +200,13 @@ export default function LoginScreen({ navigation, onLogin }) {
             console.error(`Device login attempt ${i + 1} failed:`, response.msg);
           }
         } catch (error) {
+          lastError = error;
           console.error(`Device login attempt ${i + 1} errored:`, error.message);
-          
+
+          if (getDeviceLoginErrorMessage(error)) {
+            break;
+          }
+
           if (i < maxRetries - 1) {
             const delay = Math.pow(2, i) * 1000;
             console.log(`Retrying in ${delay}ms...`);
@@ -197,8 +214,8 @@ export default function LoginScreen({ navigation, onLogin }) {
           }
         }
       }
-      
-      return { success: false };
+
+      return { success: false, error: lastError };
     };
 
     try {
@@ -239,7 +256,10 @@ export default function LoginScreen({ navigation, onLogin }) {
         }
       } else {
         console.error('Device login failed after retries');
-        showToast(t('screens.login.toasts.deviceLoginFailed'), 'error');
+        showToast(
+          getDeviceLoginErrorMessage(result.error) || t('screens.login.toasts.deviceLoginFailed'),
+          'error'
+        );
       }
     } catch (error) {
       console.error('Device login error:', error);

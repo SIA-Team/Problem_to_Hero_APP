@@ -19,6 +19,8 @@ import ComposerModalScaffold from './ComposerModalScaffold';
 import ComposerImageGrid from './ComposerImageGrid';
 import ComposerAlertOverlay from './ComposerAlertOverlay';
 import MentionSuggestionsPanel from './MentionSuggestionsPanel';
+import TwemojiPickerSheet from './TwemojiPickerSheet';
+import TwemojiText from './TwemojiText';
 import { showToast } from '../utils/toast';
 import { modalTokens } from './modalTokens';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
@@ -33,6 +35,8 @@ import {
 import { resolveComposerScrollPadding } from '../utils/composerLayout';
 import useComposerScrollManager from '../hooks/useComposerScrollManager';
 import { scaleFont } from '../utils/responsive';
+import { insertTextAtSelection } from '../utils/emojiInsert';
+import { countDisplayCharacters } from '../utils/twemoji';
 
 const SEND_BUTTON_COLOR = '#f472b6';
 
@@ -53,6 +57,7 @@ const WriteCommentModal = ({
   const [selectedIdentity, setSelectedIdentity] = useState('personal');
   const [selectedImages, setSelectedImages] = useState([]);
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [composerAlert, setComposerAlert] = useState(null);
   const [inputTop, setInputTop] = useState(0);
   const commentInputRef = React.useRef(null);
@@ -80,6 +85,7 @@ const WriteCommentModal = ({
     panelMaxHeight,
     renderMentionPanel,
     selection,
+    setSelection,
     shouldShowMentionPanel,
   } = useMentionComposer({
     visible,
@@ -95,6 +101,11 @@ const WriteCommentModal = ({
   const runToolbarAction = React.useCallback((action) => {
     if (action === 'image') {
       setShowImagePicker(true);
+      return;
+    }
+
+    if (action === 'emoji') {
+      setShowEmojiPicker(true);
       return;
     }
 
@@ -120,6 +131,7 @@ const WriteCommentModal = ({
   useEffect(() => {
     if (!visible) {
       setShowImagePicker(false);
+      setShowEmojiPicker(false);
       setComposerAlert(null);
       inputFocusedRef.current = false;
     }
@@ -229,6 +241,20 @@ const WriteCommentModal = ({
     handleMentionPress({ focusInput: true });
   };
 
+  const handleToolbarEmojiPress = () => {
+    triggerToolbarAction('emoji');
+  };
+
+  const handleEmojiSelected = emoji => {
+    const { nextText, nextSelection } = insertTextAtSelection(text, selection, emoji);
+    setText(nextText);
+    setSelection(nextSelection);
+
+    setTimeout(() => {
+      commentInputRef.current?.focus();
+    }, 80);
+  };
+
   const closeComposerAlert = () => {
     setComposerAlert(null);
   };
@@ -247,7 +273,7 @@ const WriteCommentModal = ({
         footerBottomInset={bottomSafeInset}
         footerHidden={Boolean(pendingToolbarAction)}
         overlayContent={
-          showImagePicker || composerAlert ? (
+          showImagePicker || showEmojiPicker || composerAlert ? (
             <>
               {showImagePicker ? (
                 <ImagePickerSheet
@@ -255,6 +281,15 @@ const WriteCommentModal = ({
                   onClose={() => setShowImagePicker(false)}
                   onImageSelected={handleImageSelected}
                   title="添加图片"
+                  renderInPlace
+                />
+              ) : null}
+              {showEmojiPicker ? (
+                <TwemojiPickerSheet
+                  visible={showEmojiPicker}
+                  onClose={() => setShowEmojiPicker(false)}
+                  onEmojiSelected={handleEmojiSelected}
+                  title="插入表情"
                   renderInPlace
                 />
               ) : null}
@@ -293,6 +328,9 @@ const WriteCommentModal = ({
             <TouchableOpacity style={styles.toolbarBtn} onPress={handleOpenImagePicker}>
               <Ionicons name="image-outline" size={24} color="#6b7280" />
             </TouchableOpacity>
+            <TouchableOpacity style={styles.toolbarBtn} onPress={handleToolbarEmojiPress}>
+              <Ionicons name="happy-outline" size={24} color="#6b7280" />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.toolbarBtn} onPress={handleToolbarMentionPress}>
               <Ionicons name="at-outline" size={24} color="#6b7280" />
             </TouchableOpacity>
@@ -300,7 +338,7 @@ const WriteCommentModal = ({
         }
         footerRight={
           <View style={styles.footerActionGroup}>
-            <Text style={styles.charCount}>{text.length}/500</Text>
+            <Text style={styles.charCount}>{countDisplayCharacters(text)}/500</Text>
             <TouchableOpacity
               style={[
                 styles.sendButton,
@@ -376,7 +414,7 @@ const WriteCommentModal = ({
                 </View>
               </View>
               {originalComment.content ? (
-                <Text style={styles.originalCommentText}>{originalComment.content}</Text>
+                <TwemojiText style={styles.originalCommentText} text={originalComment.content} />
               ) : null}
             </View>
           ) : null}

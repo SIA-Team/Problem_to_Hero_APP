@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CommonActions, useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import TwemojiText from '../components/TwemojiText';
 import IdentitySelector from '../components/IdentitySelector';
 import { modalTokens } from '../components/modalTokens';
 import SupplementAnswerSkeleton from '../components/SupplementAnswerSkeleton';
@@ -2351,7 +2352,7 @@ export default function AnswerDetailScreen({
           <View style={{ flex: 1 }} />
           <Text style={styles.replyTime}>{reply.time}</Text>
         </TouchableOpacity>
-        <Text style={styles.replyText}>{reply.content}</Text>
+        <TwemojiText style={styles.replyText} text={reply.content} />
         <View style={styles.replyActions}>
           <TouchableOpacity style={[styles.replyActionBtn, isReplyLikeDisabled && styles.interactionBtnDisabled]} onPress={() => handleSupplementCommentLike(reply.id)} disabled={supplementCommentLikeLoading[reply.id] || isReplyLikeDisabled}>
             <Ionicons name={isReplyLiked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={isReplyLiked ? "#ef4444" : isReplyLikeDisabled ? "#d1d5db" : "#9ca3af"} />
@@ -2411,7 +2412,7 @@ export default function AnswerDetailScreen({
           <View style={{ flex: 1 }} />
           <Text style={styles.replyTime}>{reply.time}</Text>
         </TouchableOpacity>
-        <Text style={styles.replyText}>{reply.content}</Text>
+        <TwemojiText style={styles.replyText} text={reply.content} />
         <View style={styles.replyActions}>
           <TouchableOpacity style={[styles.replyActionBtn, isReplyLikeDisabled && styles.interactionBtnDisabled]} onPress={() => handleAnswerCommentLike(reply.id)} disabled={answerCommentLikeLoading[reply.id] || isReplyLikeDisabled}>
             <Ionicons name={isReplyLiked ? "thumbs-up" : "thumbs-up-outline"} size={12} color={isReplyLiked ? "#ef4444" : isReplyLikeDisabled ? "#d1d5db" : "#9ca3af"} />
@@ -2682,7 +2683,7 @@ export default function AnswerDetailScreen({
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.answerContent}>{answer.content}</Text>
+          <TwemojiText style={styles.answerContent} text={answer.content} />
 
           {/* 鏃堕棿鍜屾爣绛惧尯鍩?- 鍚堝苟鍦ㄤ竴琛?*/}
           <View style={styles.answerMetaWithBadges}>
@@ -2799,7 +2800,7 @@ export default function AnswerDetailScreen({
                       </View>
                       </TouchableOpacity>
                     </View>
-                    <Text style={styles.supplementContent}>{supplement.content}</Text>
+                    <TwemojiText style={styles.supplementContent} text={supplement.content} />
                     <View style={styles.supplementActions}>
                       <View style={styles.supplementActionsLeft}>
                         <TouchableOpacity style={[styles.supplementActionBtn, isLikeInteractionDisabled(getSupplementAnswerLikedState(supplement), getSupplementAnswerDislikedState(supplement)) && styles.interactionBtnDisabled]} onPress={() => handleSupplementLike(supplement.id)} disabled={!!supplementLikeLoading[supplement.id] || isLikeInteractionDisabled(getSupplementAnswerLikedState(supplement), getSupplementAnswerDislikedState(supplement))}>
@@ -2882,7 +2883,7 @@ export default function AnswerDetailScreen({
                       <Text style={styles.commentAuthor}>{comment.userName || comment.userNickname || comment.author}</Text>
                       <Text style={styles.commentTime}>{comment.time}</Text>
                     </TouchableOpacity>
-                    <Text style={styles.commentText}>{comment.content}</Text>
+                    <TwemojiText style={styles.commentText} text={comment.content} />
                     <View style={styles.commentActions}>
                       <View style={styles.commentActionsLeft}>
                         <TouchableOpacity style={[styles.commentActionBtn, isLikeInteractionDisabled(isCommentLiked, isCommentDisliked) && styles.interactionBtnDisabled]} onPress={() => handleAnswerCommentLike(comment.id)} disabled={answerCommentLikeLoading[comment.id] || isLikeInteractionDisabled(isCommentLiked, isCommentDisliked)}>
@@ -2999,7 +3000,7 @@ export default function AnswerDetailScreen({
                   <View style={{ flex: 1 }} />
                   <Text style={styles.originalCommentTime}>{currentAnswerReplyComment.time}</Text>
                 </TouchableOpacity>
-                <Text style={styles.originalCommentText}>{currentAnswerReplyComment.content}</Text>
+                <TwemojiText style={styles.originalCommentText} text={currentAnswerReplyComment.content} />
               </View>}
 
             <View style={styles.repliesSectionHeader}>
@@ -3064,7 +3065,7 @@ export default function AnswerDetailScreen({
                         <Text style={styles.commentListTime}>{comment.time}</Text>
                       </TouchableOpacity>
                       <View style={styles.commentListContent}>
-                        <Text style={styles.commentListText}>{comment.content}</Text>
+                        <TwemojiText style={styles.commentListText} text={comment.content} />
                         <View style={styles.commentListActions}>
                           <TouchableOpacity style={[styles.commentListActionBtn, isLikeInteractionDisabled(isCommentLiked, isCommentDisliked) && styles.interactionBtnDisabled]} onPress={() => handleSupplementCommentLike(comment.id)} disabled={supplementCommentLikeLoading[comment.id] || isLikeInteractionDisabled(isCommentLiked, isCommentDisliked)}>
                             <Ionicons name={isCommentLiked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={isCommentLiked ? "#ef4444" : isLikeInteractionDisabled(isCommentLiked, isCommentDisliked) ? "#d1d5db" : "#9ca3af"} />
@@ -3159,7 +3160,10 @@ export default function AnswerDetailScreen({
                   <View style={{ flex: 1 }} />
                   <Text style={styles.originalCommentTime}>{currentSupplementReplyComment.time}</Text>
                 </TouchableOpacity>
-                <Text style={styles.originalCommentText}>{currentSupplementReplyComment.content}</Text>
+                <TwemojiText
+                  style={styles.originalCommentText}
+                  text={currentSupplementReplyComment.content}
+                />
               </View>}
 
             <View style={styles.repliesSectionHeader}>

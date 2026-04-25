@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from './Avatar';
+import TwemojiText from './TwemojiText';
 
 function resolveCommentAuthor(comment) {
   return comment?.userName || comment?.userNickname || comment?.author || '';
@@ -204,7 +205,7 @@ export function CommentBottomSheetOriginalComment({
         <View style={{ flex: 1 }} />
         <Text style={styles.originalCommentTime}>{comment.time}</Text>
       </TouchableOpacity>
-      <Text style={styles.originalCommentText}>{comment.content}</Text>
+      <TwemojiText style={styles.originalCommentText} text={comment.content} />
     </View>
   );
 }
@@ -273,7 +274,7 @@ export function CommentBottomSheetCommentCard({
         <Text style={styles.commentListTime}>{comment?.time}</Text>
       </TouchableOpacity>
       <View style={styles.commentListContent}>
-        <Text style={styles.commentListText}>{comment?.content}</Text>
+        <TwemojiText style={styles.commentListText} text={comment?.content} />
         <CommentBottomSheetActionRow
           styles={styles}
           variant="comment"
@@ -366,7 +367,7 @@ export function CommentBottomSheetReplyCard({
         <View style={{ flex: 1 }} />
         <Text style={styles.replyTime}>{reply?.time}</Text>
       </TouchableOpacity>
-      <Text style={styles.replyText}>{reply?.content}</Text>
+      <TwemojiText style={styles.replyText} text={reply?.content} />
       <CommentBottomSheetActionRow
         styles={styles}
         variant="reply"

@@ -19,6 +19,8 @@ import ComposerImageGrid from './ComposerImageGrid';
 import ImagePickerSheet from './ImagePickerSheet';
 import ComposerModalScaffold from './ComposerModalScaffold';
 import MentionSuggestionsPanel from './MentionSuggestionsPanel';
+import TwemojiPickerSheet from './TwemojiPickerSheet';
+import TwemojiText from './TwemojiText';
 import { modalTokens } from './modalTokens';
 import useMentionComposer from '../hooks/useMentionComposer';
 import useRecommendedMentionUsers from '../hooks/useRecommendedMentionUsers';
@@ -29,6 +31,8 @@ import {
 } from '../utils/composerImages';
 import { scaleFont } from '../utils/responsive';
 import { showToast } from '../utils/toast';
+import { insertTextAtSelection } from '../utils/emojiInsert';
+import { countDisplayCharacters } from '../utils/twemoji';
 
 const TEAM_DISCUSSION_SEND_BUTTON_COLOR = '#f472b6';
 
@@ -50,6 +54,7 @@ export default function TeamDiscussionComposerModal({
   const [text, setText] = React.useState('');
   const [selectedImages, setSelectedImages] = React.useState([]);
   const [showImagePicker, setShowImagePicker] = React.useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = React.useState(false);
   const { recommendedMentionUsers, resetRecommendedMentionUsers } = useRecommendedMentionUsers({
     visible,
     scene: 'team-discussion',
@@ -100,6 +105,7 @@ export default function TeamDiscussionComposerModal({
       setText('');
       setSelectedImages([]);
       setShowImagePicker(false);
+      setShowEmojiPicker(false);
       imagePickerBusyRef.current = false;
       Keyboard.dismiss();
       inputRef.current?.blur();
@@ -121,6 +127,7 @@ export default function TeamDiscussionComposerModal({
   const handleClose = React.useCallback(() => {
     clearImageSourceAlertTimeout();
     setShowImagePicker(false);
+    setShowEmojiPicker(false);
     imagePickerBusyRef.current = false;
     Keyboard.dismiss();
     inputRef.current?.blur();
@@ -279,6 +286,41 @@ export default function TeamDiscussionComposerModal({
       setSelectedImages(prevImages => appendComposerImage(prevImages, imageUri));
     }
   }, [selectedImages]);
+
+  const handleOpenEmojiPicker = React.useCallback(() => {
+    Keyboard.dismiss();
+    setShowImagePicker(false);
+    setShowEmojiPicker(true);
+  }, []);
+
+  const handleCloseImagePicker = React.useCallback(() => {
+    setShowImagePicker(false);
+
+    setTimeout(() => {
+      if (visible) {
+        inputRef.current?.focus();
+      }
+    }, 120);
+  }, [visible]);
+
+  const handleCloseEmojiPicker = React.useCallback(() => {
+    setShowEmojiPicker(false);
+
+    setTimeout(() => {
+      if (visible) {
+        inputRef.current?.focus();
+      }
+    }, 120);
+  }, [visible]);
+
+  const handleEmojiSelected = React.useCallback((emoji) => {
+    const { nextText } = insertTextAtSelection(text, selection, emoji);
+    setText(nextText);
+
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 80);
+  }, [selection, text]);
 
   const handleRemoveImage = React.useCallback((index) => {
     setSelectedImages(prevImages => removeComposerImageAt(prevImages, index));

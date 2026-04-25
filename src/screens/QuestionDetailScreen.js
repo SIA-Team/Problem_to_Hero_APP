@@ -19,6 +19,8 @@ import ImagePickerSheet from '../components/ImagePickerSheet';
 import KeyboardDismissView from '../components/KeyboardDismissView';
 import MentionSuggestionsPanel from '../components/MentionSuggestionsPanel';
 import ModalSafeAreaView from '../components/ModalSafeAreaView';
+import TwemojiPickerSheet from '../components/TwemojiPickerSheet';
+import TwemojiText from '../components/TwemojiText';
 import WriteAnswerModal from '../components/WriteAnswerModal';
 import WriteCommentModal from '../components/WriteCommentModal';
 import SupplementAnswerModal from '../components/SupplementAnswerModal';
@@ -70,7 +72,9 @@ import {
   resolveComposerTopInset,
   resolveComposerScrollPadding,
 } from '../utils/composerLayout';
+import { insertTextAtSelection } from '../utils/emojiInsert';
 import { scaleFont } from '../utils/responsive';
+import { countDisplayCharacters } from '../utils/twemoji';
 import { buildProblemToHeroInviteText, buildProblemToHeroLocalInviteText, buildShareUrl, openTwitterShare } from '../utils/shareService';
 import twitterInviteUsers from '../utils/twitterInviteUsers';
 import { getTwitterInviteStatusText, loadQuestionTwitterInvites, saveQuestionTwitterInvite } from '../services/twitterInviteState';
@@ -529,6 +533,7 @@ export default function QuestionDetailScreen({
   const supplementInputFocusedRef = React.useRef(false);
   const supplementPendingScrollFrameRef = React.useRef(null);
   const [showSupplementImagePicker, setShowSupplementImagePicker] = useState(false);
+  const [showSupplementEmojiPicker, setShowSupplementEmojiPicker] = useState(false);
   const [supplementInputTop, setSupplementInputTop] = useState(0);
   const [supplementPendingToolbarAction, setSupplementPendingToolbarAction] = useState(null);
   const [supplementComposerAlert, setSupplementComposerAlert] = useState(null);
@@ -753,6 +758,7 @@ export default function QuestionDetailScreen({
     panelMaxHeight: supplementMentionPanelMaxHeight,
     renderMentionPanel: renderSupplementMentionPanel,
     selection: supplementSelection,
+    setSelection: setSupplementSelection,
     shouldShowMentionPanel: shouldShowSupplementMentionPanel,
     mentionLoading: supplementMentionLoading,
   } = useMentionComposer({
@@ -879,6 +885,7 @@ export default function QuestionDetailScreen({
     }
 
     setShowSupplementImagePicker(false);
+    setShowSupplementEmojiPicker(false);
     setSupplementPendingToolbarAction(null);
     setSupplementComposerAlert(null);
     supplementInputFocusedRef.current = false;
@@ -6142,6 +6149,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       return;
     }
 
+    if (action === 'emoji') {
+      setShowSupplementEmojiPicker(true);
+      return;
+    }
+
     if (action === 'mention') {
       handleSupplementMentionPress({ focusInput: false });
     }
@@ -6248,6 +6260,35 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
   }, [
     handleSupplementMentionPress,
   ]);
+
+  const handleOpenSupplementEmojiPicker = React.useCallback(() => {
+    if (supplementKeyboardVisible) {
+      setSupplementPendingToolbarAction('emoji');
+      dismissSupplementComposerKeyboard();
+      return;
+    }
+
+    dismissSupplementComposerKeyboard();
+    runSupplementToolbarAction('emoji');
+  }, [
+    dismissSupplementComposerKeyboard,
+    runSupplementToolbarAction,
+    supplementKeyboardVisible,
+  ]);
+
+  const handleSupplementEmojiSelected = React.useCallback((emoji) => {
+    const { nextText, nextSelection } = insertTextAtSelection(
+      supplementText,
+      supplementSelection,
+      emoji
+    );
+    setSupplementText(nextText);
+    setSupplementSelection(nextSelection);
+
+    setTimeout(() => {
+      supplementInputRef.current?.focus();
+    }, 80);
+  }, [setSupplementSelection, supplementSelection, supplementText]);
 
   const closeSupplementComposerAlert = React.useCallback(() => {
     setSupplementComposerAlert(null);
@@ -7777,7 +7818,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     </TouchableOpacity>
                   </View>
                   <View style={styles.suppContentContainer}>
-                    <Text style={styles.suppContent}>{item.content}</Text>
+                    <TwemojiText style={styles.suppContent} text={item.content} />
                     <View style={styles.suppMetaBottom}>
                       {Boolean(supplementIpLocation) && (
                         <Text style={styles.suppIpBottom}>
@@ -7929,7 +7970,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     <Text style={styles.commentTime}>{comment.time}</Text>
                   </TouchableOpacity>
                   <View style={styles.commentContent}>
-                    <Text style={styles.commentText}>{comment.content}</Text>
+                    <TwemojiText style={styles.commentText} text={comment.content} />
                     
                     <View style={styles.commentFooter}>
                       <View style={styles.commentFooterLeft}>
@@ -8364,9 +8405,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               
               {/* 回答内容 - 可展开/收起 */}
               <View style={styles.answerContentContainer}>
-                <Text style={styles.answerContent} numberOfLines={answerExpanded[answer.id] ? undefined : 5}>
-                  {answer.content}
-                </Text>
+                <TwemojiText
+                  style={styles.answerContent}
+                  numberOfLines={answerExpanded[answer.id] ? undefined : 5}
+                  text={answer.content}
+                />
                 
                 {Boolean(answerNeedsExpand[answer.id]) && <TouchableOpacity style={styles.answerExpandBtnInline} onPress={e => {
                     e.stopPropagation();
@@ -9047,7 +9090,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         footerBottomInset={bottomSafeInset}
         footerHidden={Boolean(supplementPendingToolbarAction)}
         overlayContent={
-          showSupplementImagePicker || supplementComposerAlert ? (
+          showSupplementImagePicker || showSupplementEmojiPicker || supplementComposerAlert ? (
             <>
               {showSupplementImagePicker ? (
                 <ImagePickerSheet
@@ -9058,6 +9101,15 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     setShowSupplementImagePicker(false);
                   }}
                   title="选择图片"
+                  renderInPlace
+                />
+              ) : null}
+              {showSupplementEmojiPicker ? (
+                <TwemojiPickerSheet
+                  visible={showSupplementEmojiPicker}
+                  onClose={() => setShowSupplementEmojiPicker(false)}
+                  onEmojiSelected={handleSupplementEmojiSelected}
+                  title="插入表情"
                   renderInPlace
                 />
               ) : null}
@@ -9109,6 +9161,12 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.answerToolItem}
+              onPress={handleOpenSupplementEmojiPicker}
+            >
+              <Ionicons name="happy-outline" size={24} color="#666" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.answerToolItem}
               onPress={handleSupplementToolbarMentionPress}
             >
               <Ionicons name="at-outline" size={24} color="#666" />
@@ -9117,7 +9175,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }
         footerRight={
           <View style={styles.footerActionGroup}>
-            <Text style={styles.answerWordCount}>{supplementText.length}/500</Text>
+            <Text style={styles.answerWordCount}>{countDisplayCharacters(supplementText)}/500</Text>
             <TouchableOpacity
               style={[
                 styles.sendButton,
