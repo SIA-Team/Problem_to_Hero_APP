@@ -27,11 +27,15 @@
         "buildType": "apk"
       }
     },
-    "production": {
+    "production-apk": {
+      "distribution": "internal",
       "channel": "production",
       "android": {
         "buildType": "apk"
-      },
+      }
+    },
+    "production": {
+      "channel": "production",
       "ios": {
         "simulator": false
       }

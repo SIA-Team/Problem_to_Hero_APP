@@ -1040,6 +1040,7 @@ export default function HomeScreen({ navigation }) {
     const result = await openOfficialRechargePage({
       userId: currentUserProfile.userId,
       username: currentUserProfile.username,
+      entryPoint: 'paid_question_unlock',
     });
 
     if (result?.ok) {

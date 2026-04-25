@@ -16,7 +16,9 @@ import { DEFAULT_MY_ACTIVITIES, DEFAULT_MY_GROUPS } from '../data/profileMenuMoc
 import authApi from '../services/api/authApi';
 import teamApi from '../services/api/teamApi';
 import userApi from '../services/api/userApi';
+import walletApi from '../services/api/walletApi';
 import questionApi from '../services/api/questionApi';
+import deviceRiskService from '../services/deviceRiskService';
 import { showAppAlert } from '../utils/appAlert';
 import { openOfficialRechargePage } from '../utils/externalLinks';
 import { applyMockRecharge, getWalletBalanceWithMock } from '../utils/walletMock';
@@ -909,7 +911,8 @@ export default function ProfileScreen({
       case 'recharge': {
         const result = await openOfficialRechargePage({
           userId: userProfile.userId,
-          username: userProfile.username
+          username: userProfile.username,
+          entryPoint: 'profile_wallet'
         });
 
         if (result.ok) {
@@ -929,7 +932,34 @@ export default function ProfileScreen({
       case 'withdraw':
         showAppAlert(t('profile.withdraw'), t('profile.withdrawableAmount') + ': ' + formattedWalletBalance, [{
           text: t('profile.withdrawAll'),
-          onPress: () => showAppAlert(t('profile.withdrawSuccess'), t('profile.withdrawSuccess') + ': ' + t('profile.withdrawEstimate'))
+          onPress: async () => {
+            try {
+              await deviceRiskService.recordWithdrawAttempt({
+                entryPoint: 'profile_wallet',
+                amount: walletBalance,
+                currency: walletCurrency,
+                userId: userProfile.userId,
+                username: userProfile.username,
+              });
+
+              const withdrawResponse = await walletApi.createWithdraw({
+                amount: walletBalance,
+                currency: walletCurrency,
+                destinationType: 'default',
+                metadata: {
+                  entryPoint: 'profile_wallet',
+                  userId: userProfile.userId,
+                  username: userProfile.username,
+                },
+              });
+
+              console.log('Withdraw request response:', JSON.stringify(withdrawResponse, null, 2));
+            } catch (error) {
+              console.warn('Failed to create withdraw request:', error);
+            }
+
+            showAppAlert(t('profile.withdrawSuccess'), t('profile.withdrawSuccess') + ': ' + t('profile.withdrawEstimate'));
+          }
         }, {
           text: t('common.cancel'),
           style: 'cancel'

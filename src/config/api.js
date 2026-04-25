@@ -75,6 +75,10 @@ export const API_ENDPOINTS = {
 
   WALLET: {
     BALANCE: buildApiPath(SERVICES.USER, '/app/wallet/balance'),
+    RECHARGE_CREATE: buildApiPath(SERVICES.USER, '/app/wallet/recharge/create'),
+    RECHARGE_CONFIRM: buildApiPath(SERVICES.USER, '/app/wallet/recharge/confirm'),
+    WITHDRAW_CREATE: buildApiPath(SERVICES.USER, '/app/wallet/withdraw/create'),
+    WITHDRAW_LIST: buildApiPath(SERVICES.USER, '/app/wallet/withdraw/list'),
   },
 
   GROUP: {

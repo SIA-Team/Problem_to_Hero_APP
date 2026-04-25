@@ -243,6 +243,37 @@ describe('TeamDiscussionComposerModal', () => {
     }
   });
 
+  it('prevents toolbar button presses from bubbling to the keyboard dismiss wrapper', () => {
+    let tree;
+
+    renderer.act(() => {
+      tree = renderer.create(
+        <TeamDiscussionComposerModal
+          visible
+          onClose={jest.fn()}
+          onPublish={jest.fn()}
+        />
+      );
+    });
+
+    const imageButton = tree.root.findByProps({
+      testID: 'team-discussion-composer-image-button',
+    });
+    const sendButton = tree.root.findByProps({
+      testID: 'team-discussion-composer-send-button',
+    });
+    const imageStopPropagation = jest.fn();
+    const sendStopPropagation = jest.fn();
+
+    renderer.act(() => {
+      imageButton.props.onPress({ stopPropagation: imageStopPropagation });
+      sendButton.props.onPress({ stopPropagation: sendStopPropagation });
+    });
+
+    expect(imageStopPropagation).toHaveBeenCalled();
+    expect(sendStopPropagation).toHaveBeenCalled();
+  });
+
   it('does not render a duplicate publish button in the header', () => {
     let tree;
 
@@ -261,7 +292,7 @@ describe('TeamDiscussionComposerModal', () => {
     ).toHaveLength(0);
   });
 
-  it('renders the mention suggestions as the previous horizontal inline strip', () => {
+  it('renders the mention suggestions as a floating inline strip above the bottom toolbar', () => {
     useMentionComposer.mockReturnValueOnce({
       activeMention: { keyword: '' },
       candidateUsers: [{ id: 1, username: 'tester', name: '测试用户' }],
@@ -294,9 +325,9 @@ describe('TeamDiscussionComposerModal', () => {
     const mentionPanel = tree.root.findByType('MentionSuggestionsPanel');
 
     expect(mentionPanel.props.variant).toBe('keyboard-inline');
-    expect(mentionPanel.props.placement).toBe('embedded');
     expect(mentionPanel.props.showHeader).toBe(false);
     expect(mentionPanel.props.keyboardInlineContentPadding).toBe(5);
     expect(mentionPanel.props.keyboardInlineTransparentItem).toBe(true);
+    expect(mentionPanel.props.keyboardInlineSeamless).toBe(true);
   });
 });

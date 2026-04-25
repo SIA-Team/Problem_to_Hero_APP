@@ -11,6 +11,7 @@ import uploadApi from './uploadApi';
 import reportApi from './reportApi';
 import emergencyApi from './emergencyApi';
 import regionApi from './regionApi';
+import walletApi from './walletApi';
 
 export {
   authApi,
@@ -23,6 +24,7 @@ export {
   reportApi,
   emergencyApi,
   regionApi,
+  walletApi,
 };
 
 // 默认导出所有 API
@@ -37,4 +39,5 @@ export default {
   report: reportApi,
   emergency: emergencyApi,
   region: regionApi,
+  wallet: walletApi,
 };

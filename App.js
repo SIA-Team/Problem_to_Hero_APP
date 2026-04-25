@@ -14,6 +14,7 @@ import i18n from './src/i18n';
 import superLikeCreditService from './src/services/SuperLikeCreditService';
 import DeviceInfo from './src/utils/deviceInfo';
 import authApi from './src/services/api/authApi';
+import deviceRiskService from './src/services/deviceRiskService';
 import DebugToken from './src/utils/debugToken';
 import UserCacheService from './src/services/UserCacheService';
 import ToastContainer from './src/components/ToastContainer';
@@ -1275,6 +1276,12 @@ function AppContent() {
             if (tokenLoginResponse.code === 200) {
               appDebugLog('✅ Token 自动登录成功');
               tokenLoginTrace.success({ code: tokenLoginResponse.code });
+              deviceRiskService.recordLoginSuccess({
+                loginMethod: 'token',
+                user: tokenLoginResponse.data?.userBaseInfo,
+              }).catch(error => {
+                console.warn('Failed to capture token login risk context:', error);
+              });
               await markBootstrapCompleted();
               
               // 立即设置登录状态，让用户进入应用
@@ -1333,6 +1340,12 @@ function AppContent() {
 
             if (recoveredSession.success) {
               appDebugLog('鉁?閫氳繃璁惧鎸囩汗鎭㈠鐧诲綍鎴愬姛');
+              deviceRiskService.recordLoginSuccess({
+                loginMethod: 'fingerprint_recovery',
+                user: recoveredSession.data?.userBaseInfo,
+              }).catch(error => {
+                console.warn('Failed to capture recovered fingerprint login risk context:', error);
+              });
               await AsyncStorage.removeItem(MANUAL_LOGOUT_STORAGE_KEY);
               await markBootstrapCompleted();
               enterAuthenticatedApp();
@@ -1346,6 +1359,12 @@ function AppContent() {
             const result = await autoRegisterWithRetry(savedFingerprint, { maxRetries: 1 });
             
             if (result.success) {
+              deviceRiskService.recordLoginSuccess({
+                loginMethod: 'fingerprint_recovery',
+                user: result.data?.userBaseInfo,
+              }).catch(error => {
+                console.warn('Failed to capture refreshed fingerprint login risk context:', error);
+              });
               await AsyncStorage.removeItem(MANUAL_LOGOUT_STORAGE_KEY);
               appDebugLog('✅ 自动重新注册成功！');
               await markBootstrapCompleted();
@@ -1382,6 +1401,12 @@ function AppContent() {
 
             if (recoveredSession.success) {
               appDebugLog('鉁?閫氳繃璁惧鎸囩汗鎭㈠鐧诲綍鎴愬姛');
+              deviceRiskService.recordLoginSuccess({
+                loginMethod: 'fingerprint_recovery',
+                user: recoveredSession.data?.userBaseInfo,
+              }).catch(error => {
+                console.warn('Failed to capture startup fingerprint recovery risk context:', error);
+              });
               await markBootstrapCompleted();
               enterAuthenticatedApp();
               setIsInitializing(false);
@@ -1413,6 +1438,12 @@ function AppContent() {
               if (result.success && result.data) {
                 await AsyncStorage.removeItem(MANUAL_LOGOUT_STORAGE_KEY);
                 appDebugLog('\n✅ 自动注册成功！');
+                deviceRiskService.recordLoginSuccess({
+                  loginMethod: 'fingerprint_auto_register',
+                  user: result.data.userBaseInfo,
+                }).catch(error => {
+                  console.warn('Failed to capture auto-register login risk context:', error);
+                });
                 await markBootstrapCompleted();
                 appDebugLog('═══════════════════════════════════════════════════════════════');
                 appDebugLog('👤 用户信息:');

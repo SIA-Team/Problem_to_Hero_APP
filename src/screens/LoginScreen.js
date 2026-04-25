@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import KeyboardDismissView from '../components/KeyboardDismissView';
 import authApi from '../services/api/authApi';
+import deviceRiskService from '../services/deviceRiskService';
 import DeviceInfo from '../utils/deviceInfo';
 import { showToast } from '../utils/toast';
 import { showAppAlert } from '../utils/appAlert';
@@ -133,6 +134,13 @@ export default function LoginScreen({ navigation, onLogin }) {
 
         showToast(t('screens.login.toasts.loginSuccess'), 'success');
 
+        deviceRiskService.recordLoginSuccess({
+          loginMethod: 'password',
+          user: response.data.userBaseInfo,
+        }).catch(error => {
+          console.warn('Failed to capture password login risk context:', error);
+        });
+
         if (onLogin) {
           onLogin();
         }
@@ -218,6 +226,13 @@ export default function LoginScreen({ navigation, onLogin }) {
           ),
           'success'
         );
+
+        deviceRiskService.recordLoginSuccess({
+          loginMethod: 'fingerprint',
+          user: result.data.userBaseInfo,
+        }).catch(error => {
+          console.warn('Failed to capture fingerprint login risk context:', error);
+        });
 
         if (onLogin) {
           onLogin();

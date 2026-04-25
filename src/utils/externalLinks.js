@@ -1,6 +1,7 @@
 import { Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import deviceRiskService from '../services/deviceRiskService';
 
 const DEFAULT_RECHARGE_URL = 'https://problemvshero.com/recharge';
 const URL_PLACEHOLDER_PATTERN = /\{([a-zA-Z0-9_]+)\}/g;
@@ -43,7 +44,17 @@ export const buildOfficialRechargeUrl = async ({ userId, username } = {}) => {
   });
 };
 
-export const openOfficialRechargePage = async ({ userId, username } = {}) => {
+export const openOfficialRechargePage = async ({ userId, username, entryPoint } = {}) => {
+  try {
+    await deviceRiskService.recordRechargeEntry({
+      entryPoint: entryPoint || 'official_recharge_page',
+      userId,
+      username,
+    });
+  } catch (error) {
+    console.warn('Failed to capture recharge risk context:', error);
+  }
+
   const url = await buildOfficialRechargeUrl({ userId, username });
 
   if (!url) {

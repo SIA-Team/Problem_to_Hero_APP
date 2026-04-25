@@ -169,6 +169,7 @@ export default function AddRewardScreen({ navigation, route }) {
     const result = await openOfficialRechargePage({
       userId: routeUserId || userProfile.userId,
       username: routeUsername || userProfile.username,
+      entryPoint: 'add_reward_insufficient_balance',
     });
 
     if (result.ok) {

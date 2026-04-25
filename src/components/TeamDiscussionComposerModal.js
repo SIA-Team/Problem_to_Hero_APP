@@ -2,7 +2,6 @@ import React from 'react';
 import {
   ActivityIndicator,
   Alert,
-  InteractionManager,
   Keyboard,
   Platform,
   StyleSheet,
@@ -28,8 +27,6 @@ import {
   isComposerImageLimitReached,
   removeComposerImageAt,
 } from '../utils/composerImages';
-import { DEFAULT_MENTION_PANEL_BASE_OFFSET } from '../utils/mentionComposer';
-import { resolveComposerKeyboardMetrics } from '../utils/composerLayout';
 import { scaleFont } from '../utils/responsive';
 import { showToast } from '../utils/toast';
 
@@ -46,23 +43,13 @@ export default function TeamDiscussionComposerModal({
 }) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  const estimatedAndroidKeyboardOffset = React.useMemo(() => {
-    if (Platform.OS !== 'android') {
-      return 0;
-    }
-
-    return Math.round(Math.min(Math.max(windowHeight * 0.38, 260), 360));
-  }, [windowHeight]);
   const inputRef = React.useRef(null);
-  const androidFocusAnimationFrameRef = React.useRef(null);
-  const androidFocusTimeoutRef = React.useRef(null);
   const imageSourceAlertTimeoutRef = React.useRef(null);
   const visibleRef = React.useRef(visible);
   const imagePickerBusyRef = React.useRef(false);
   const [text, setText] = React.useState('');
   const [selectedImages, setSelectedImages] = React.useState([]);
   const [showImagePicker, setShowImagePicker] = React.useState(false);
-  const [androidKeyboardOffset, setAndroidKeyboardOffset] = React.useState(0);
   const { recommendedMentionUsers, resetRecommendedMentionUsers } = useRecommendedMentionUsers({
     visible,
     scene: 'team-discussion',
@@ -90,23 +77,11 @@ export default function TeamDiscussionComposerModal({
     windowHeight,
     bottomInset: Math.max(insets.bottom, 12),
     recommendedUsers: recommendedMentionUsers,
-    baseBottomOffset: DEFAULT_MENTION_PANEL_BASE_OFFSET,
+    baseBottomOffset: 0,
     onInvalidMention: () => showToast('该用户缺少可用名称', 'warning'),
   });
 
   const canPublish = Boolean(text.trim() || selectedImages.length > 0);
-
-  const clearAndroidOpenSequence = React.useCallback(() => {
-    if (androidFocusAnimationFrameRef.current !== null) {
-      cancelAnimationFrame(androidFocusAnimationFrameRef.current);
-      androidFocusAnimationFrameRef.current = null;
-    }
-
-    if (androidFocusTimeoutRef.current !== null) {
-      clearTimeout(androidFocusTimeoutRef.current);
-      androidFocusTimeoutRef.current = null;
-    }
-  }, []);
 
   const clearImageSourceAlertTimeout = React.useCallback(() => {
     if (imageSourceAlertTimeoutRef.current !== null) {
@@ -121,23 +96,15 @@ export default function TeamDiscussionComposerModal({
 
   React.useEffect(() => {
     if (!visible) {
-      clearAndroidOpenSequence();
       clearImageSourceAlertTimeout();
       setText('');
       setSelectedImages([]);
       setShowImagePicker(false);
-      setAndroidKeyboardOffset(0);
       imagePickerBusyRef.current = false;
       Keyboard.dismiss();
       inputRef.current?.blur();
       resetRecommendedMentionUsers();
       return undefined;
-    }
-
-    if (Platform.OS === 'android') {
-      return () => {
-        clearAndroidOpenSequence();
-      };
     }
 
     const timer = setTimeout(() => {
@@ -146,82 +113,10 @@ export default function TeamDiscussionComposerModal({
 
     return () => {
       clearTimeout(timer);
-      clearAndroidOpenSequence();
       clearImageSourceAlertTimeout();
       imagePickerBusyRef.current = false;
     };
-  }, [clearAndroidOpenSequence, clearImageSourceAlertTimeout, resetRecommendedMentionUsers, visible]);
-
-  const handleModalShow = React.useCallback(() => {
-    if (Platform.OS !== 'android' || !visible) {
-      return;
-    }
-
-    clearAndroidOpenSequence();
-    setAndroidKeyboardOffset(estimatedAndroidKeyboardOffset);
-
-    const focusInput = () => {
-      inputRef.current?.focus();
-    };
-
-    InteractionManager.runAfterInteractions(() => {
-      focusInput();
-    });
-
-    androidFocusAnimationFrameRef.current = requestAnimationFrame(() => {
-      focusInput();
-      androidFocusAnimationFrameRef.current = null;
-    });
-
-    androidFocusTimeoutRef.current = setTimeout(() => {
-      focusInput();
-      androidFocusTimeoutRef.current = null;
-    }, 48);
-  }, [clearAndroidOpenSequence, estimatedAndroidKeyboardOffset, visible]);
-
-  React.useEffect(() => {
-    if (!visible) {
-      setAndroidKeyboardOffset(0);
-      return undefined;
-    }
-
-    const syncKeyboardOffset = event => {
-      if (Platform.OS !== 'android') {
-        return;
-      }
-
-      const keyboardMetrics = resolveComposerKeyboardMetrics({
-        platform: Platform.OS,
-        windowHeight,
-        keyboardHeight: event?.endCoordinates?.height || 0,
-        keyboardScreenY: event?.endCoordinates?.screenY ?? windowHeight,
-        footerBottomInset: Math.max(insets.bottom, 12),
-        androidFooterClearance: 0,
-      });
-
-      setAndroidKeyboardOffset(previousOffset =>
-        Math.max(previousOffset, Math.max(keyboardMetrics.overlayOffset, 0))
-      );
-    };
-
-    const resetKeyboardOffset = () => {
-      setAndroidKeyboardOffset(0);
-    };
-
-    const showSubscription = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      syncKeyboardOffset
-    );
-    const hideSubscription = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      resetKeyboardOffset
-    );
-
-    return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
-    };
-  }, [insets.bottom, visible, windowHeight]);
+  }, [clearImageSourceAlertTimeout, resetRecommendedMentionUsers, visible]);
 
   const handleClose = React.useCallback(() => {
     clearImageSourceAlertTimeout();
@@ -415,13 +310,19 @@ export default function TeamDiscussionComposerModal({
           <TouchableOpacity
             testID="team-discussion-composer-image-button"
             style={styles.toolButton}
-            onPress={handleOpenImagePicker}
+            onPress={event => {
+              event?.stopPropagation?.();
+              handleOpenImagePicker();
+            }}
           >
             <Ionicons name="image-outline" size={22} color="#6b7280" />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.toolButton}
-            onPress={() => handleMentionPress({ focusInput: true })}
+            onPress={event => {
+              event?.stopPropagation?.();
+              handleMentionPress({ focusInput: true });
+            }}
           >
             <Ionicons name="at-outline" size={22} color="#6b7280" />
           </TouchableOpacity>
@@ -436,7 +337,10 @@ export default function TeamDiscussionComposerModal({
               styles.sendButton,
               (!canPublish || submitting) && styles.sendButtonDisabled,
             ]}
-            onPress={handlePublishPress}
+            onPress={event => {
+              event?.stopPropagation?.();
+              handlePublishPress();
+            }}
             disabled={!canPublish || submitting}
           >
             {submitting ? (
@@ -446,6 +350,27 @@ export default function TeamDiscussionComposerModal({
             )}
           </TouchableOpacity>
         </View>
+      }
+      floatingOverlay={
+        renderMentionPanel ? (
+          <MentionSuggestionsPanel
+            activeKeyword={activeMention?.keyword ?? ''}
+            animatedStyle={panelAnimatedStyle}
+            bottomInset={mentionBottomInset}
+            bottomOffset={panelBottomOffset}
+            listMaxHeight={listMaxHeight}
+            loading={mentionLoading}
+            onBackdropPress={focusInput}
+            onSelect={handleMentionSelect}
+            panelMaxHeight={panelMaxHeight}
+            showHeader={false}
+            users={candidateUsers}
+            variant="keyboard-inline"
+            keyboardInlineContentPadding={5}
+            keyboardInlineTransparentItem
+            keyboardInlineSeamless
+          />
+        ) : null
       }
     >
       <View style={styles.sheet} testID="team-discussion-composer-toolbar">
@@ -492,29 +417,6 @@ export default function TeamDiscussionComposerModal({
             textAlignVertical="top"
           />
         </View>
-
-        {renderMentionPanel ? (
-          <View style={styles.mentionSection}>
-            <MentionSuggestionsPanel
-              activeKeyword={activeMention?.keyword ?? ''}
-              animatedStyle={panelAnimatedStyle}
-              bottomInset={mentionBottomInset}
-              bottomOffset={panelBottomOffset}
-              listMaxHeight={listMaxHeight}
-              loading={mentionLoading}
-              onBackdropPress={focusInput}
-              onSelect={handleMentionSelect}
-            panelMaxHeight={panelMaxHeight}
-            placement="embedded"
-            showHeader={false}
-            users={candidateUsers}
-            variant="keyboard-inline"
-            keyboardInlineContentPadding={5}
-            keyboardInlineTransparentItem
-          />
-        </View>
-      ) : null}
-
         {selectedImages.length > 0 ? (
           <View style={styles.attachmentsSection}>
             <ComposerImageGrid
@@ -624,10 +526,6 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(16),
     lineHeight: 24,
     color: '#111827',
-  },
-  mentionSection: {
-    marginTop: 6,
-    marginBottom: 2,
   },
   attachmentsSection: {
     marginTop: 10,
