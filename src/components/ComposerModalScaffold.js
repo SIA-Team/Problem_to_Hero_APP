@@ -43,6 +43,7 @@ export default function ComposerModalScaffold({
   containerStyle = null,
   overlayContent = null,
   floatingOverlay = null,
+  manageKeyboardOffset = true,
 }) {
   const insets = useSafeAreaInsets();
   const [keyboardOffset, setKeyboardOffset] = React.useState(0);
@@ -56,7 +57,7 @@ export default function ComposerModalScaffold({
   });
 
   React.useEffect(() => {
-    if (!visible) {
+    if (!visible || !manageKeyboardOffset) {
       setKeyboardOffset(0);
       setFloatingOverlayOffset(0);
       return undefined;
@@ -86,15 +87,10 @@ export default function ComposerModalScaffold({
     const subscriptions = [];
     const showEvents =
       Platform.OS === 'ios'
-        ? [
-            'keyboardWillShow',
-            'keyboardDidShow',
-            'keyboardWillChangeFrame',
-            'keyboardDidChangeFrame',
-          ]
+        ? ['keyboardWillShow', 'keyboardWillChangeFrame']
         : ['keyboardDidShow'];
     const hideEvents =
-      Platform.OS === 'ios' ? ['keyboardWillHide', 'keyboardDidHide'] : ['keyboardDidHide'];
+      Platform.OS === 'ios' ? ['keyboardWillHide'] : ['keyboardDidHide'];
 
     showEvents.forEach(eventName => {
       subscriptions.push(Keyboard.addListener(eventName, syncKeyboardOffset));
@@ -106,7 +102,7 @@ export default function ComposerModalScaffold({
     return () => {
       subscriptions.forEach(subscription => subscription.remove());
     };
-  }, [footerBottomInset, visible]);
+  }, [footerBottomInset, manageKeyboardOffset, visible]);
 
   const renderSubmitButton = extraStyle => (
     <TouchableOpacity

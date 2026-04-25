@@ -2006,7 +2006,7 @@ const styles = StyleSheet.create({
   },
   avatar: { width: 16, height: 16, borderRadius: 8 },
   authorName: { 
-    fontSize: scaleFont(14), 
+    fontSize: scaleFont(13), 
     fontWeight: '400', 
     color: '#999999', 
     marginLeft: 4, 

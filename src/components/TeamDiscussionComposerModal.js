@@ -334,6 +334,7 @@ export default function TeamDiscussionComposerModal({
       onClose={handleClose}
       title={title}
       submitPlacement="none"
+      manageKeyboardOffset={Platform.OS !== 'android'}
       overlayContent={
         Platform.OS === 'android' && showImagePicker ? (
           <ImagePickerSheet

@@ -7528,11 +7528,6 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     {questionAdoptRate}%
                   </Text>
                 </View>
-                <View style={styles.rewardStatBarTrack}>
-                  <View style={[styles.rewardStatBarFill, {
-                    width: `${Math.max(0, Math.min(questionAdoptRate, 100))}%`
-                  }]} />
-                </View>
               </View>
 
               {/* 追加人数 */}
@@ -10397,8 +10392,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#fee2e2',
     flex: 1,
-    minWidth: 0,
-    gap: 7
+    minWidth: 0
   },
   rewardStatHeader: {
     flexDirection: 'row',
@@ -10417,17 +10411,6 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontWeight: '800',
     marginLeft: 'auto'
-  },
-  rewardStatBarTrack: {
-    height: 4,
-    borderRadius: 999,
-    backgroundColor: '#fee2e2',
-    overflow: 'hidden'
-  },
-  rewardStatBarFill: {
-    height: '100%',
-    borderRadius: 999,
-    backgroundColor: '#f65b51'
   },
   rewardContributorsRow: {
     paddingHorizontal: 10,

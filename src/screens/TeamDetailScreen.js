@@ -517,7 +517,6 @@ export default function TeamDetailScreen({
   const [discussionCommentText, setDiscussionCommentText] = useState('');
   const [discussionCommentIdentity, setDiscussionCommentIdentity] = useState('personal');
   const [discussionCommentSelectedTeams, setDiscussionCommentSelectedTeams] = useState([]);
-  const [discussionComposerKey, setDiscussionComposerKey] = useState(0);
   const [discussionComposerMode, setDiscussionComposerMode] = useState('comment');
   const [showReplyModal, setShowReplyModal] = useState(false);
   const [replyTarget, setReplyTarget] = useState(null);
@@ -815,7 +814,6 @@ export default function TeamDetailScreen({
     setDiscussionCommentText('');
     setDiscussionCommentIdentity('personal');
     setDiscussionCommentSelectedTeams([]);
-    setDiscussionComposerKey(prev => prev + 1);
     setShowDiscussionComposerModal(true);
   };
   const restoreDiscussionComposerContext = (target = discussionCommentTarget, mode = discussionComposerMode) => {
@@ -1904,7 +1902,6 @@ export default function TeamDetailScreen({
       </Modal>
 
       <TeamDiscussionComposerModal
-        key={`discussion-composer-${discussionComposerKey}-${discussionComposerMode}`}
         visible={showDiscussionComposerModal}
         onClose={closeDiscussionComposer}
         onPublish={handleSubmitDiscussionComment}
