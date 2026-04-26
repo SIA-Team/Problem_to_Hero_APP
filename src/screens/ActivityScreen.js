@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Dimensions,
   ActivityIndicator,
   RefreshControl,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,120 +18,111 @@ import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
 import { showAppAlert } from '../utils/appAlert';
 import { scaleFont } from '../utils/responsive';
+import activityApi from '../services/api/activityApi';
+import {
+  getActivityImages,
+  getJoinedActivityState,
+  getQuitActivityState,
+  normalizeActivityList,
+} from '../utils/activityUtils';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-// 假数据
-const MOCK_ACTIVITIES = [
-  {
-    id: 1,
-    title: '技术分享会：React Native 最佳实践',
-    desc: '分享React Native开发中的最佳实践和常见问题解决方案',
-    image: 'https://picsum.photos/400/300?random=1',
-    images: ['https://picsum.photos/400/300?random=1', 'https://picsum.photos/400/300?random=2'],
-    type: 'online',
-    typeName: '线上',
-    organizer: '技术团队',
-    organizerType: 'team',
-    participants: 128,
-    startTime: '2026-04-01',
-    endTime: '2026-04-01',
-    status: 'ongoing',
-    tags: ['热门'],
-    joined: false,
-  },
-  {
-    id: 2,
-    title: '周末户外徒步活动',
-    desc: '一起去爬山，享受大自然的美好',
-    image: 'https://picsum.photos/400/300?random=3',
-    images: ['https://picsum.photos/400/300?random=3'],
-    type: 'offline',
-    typeName: '线下',
-    address: '北京市海淀区香山公园',
-    organizer: '户外爱好者',
-    organizerType: 'personal',
-    participants: 45,
-    startTime: '2026-04-05',
-    endTime: '2026-04-05',
-    status: 'ongoing',
-    tags: ['最新'],
-    joined: false,
-  },
-  {
-    id: 3,
-    title: '编程马拉松大赛',
-    desc: '48小时编程挑战，展示你的编程技能',
-    image: 'https://picsum.photos/400/300?random=4',
-    images: ['https://picsum.photos/400/300?random=4', 'https://picsum.photos/400/300?random=5', 'https://picsum.photos/400/300?random=6'],
-    type: 'online',
-    typeName: '线上',
-    organizer: '平台官方',
-    organizerType: 'platform',
-    participants: 256,
-    startTime: '2026-04-10',
-    endTime: '2026-04-12',
-    status: 'ongoing',
-    tags: ['热门'],
-    joined: true,
-    progress: '已完成 30%',
-  },
-  {
-    id: 4,
-    title: '产品设计工作坊',
-    desc: '学习产品设计的核心理念和实践方法',
-    image: 'https://picsum.photos/400/300?random=7',
-    images: ['https://picsum.photos/400/300?random=7'],
-    type: 'offline',
-    typeName: '线下',
-    address: '上海市浦东新区张江高科技园区',
-    organizer: '设计团队',
-    organizerType: 'team',
-    participants: 30,
-    startTime: '2026-03-20',
-    endTime: '2026-03-20',
-    status: 'ended',
-    statusName: '已结束',
-    tags: [],
-    joined: false,
-  },
-];
+const ACTIVITY_INTERNAL_ERROR_PATTERN =
+  /SQLSyntaxErrorException|Error querying database|bad SQL grammar|doesn't exist|app_active/i;
+const DEFAULT_ACTIVITY_TAB = 'all';
+const ACTIVITY_CACHE_TTL = 60 * 1000;
+const ACTIVITY_TABS = ['all', 'hot', 'new', 'ended', 'my', 'history'];
 
-const getActivitiesByTab = (activities, tabKey) => {
-  switch (tabKey) {
-    case 'hot':
-      return activities.filter(a => a.tags?.includes('热门'));
-    case 'new':
-      return activities.filter(a => a.tags?.includes('最新'));
-    case 'ended':
-      return activities.filter(a => a.status === 'ended');
-    case 'mine':
-      return activities.filter(a => a.joined);
-    case 'all':
-    default:
-      return activities;
+const normalizeKeyword = value => (typeof value === 'string' ? value.trim() : '');
+
+const normalizeActivityTab = value => {
+  const normalizedValue = String(value || '').trim();
+  return ACTIVITY_TABS.includes(normalizedValue) ? normalizedValue : DEFAULT_ACTIVITY_TAB;
+};
+
+const normalizeActivityQueryParams = params => {
+  const normalizedParams = {
+    tab: normalizeActivityTab(params?.tab),
+  };
+
+  const parsedType = Number(params?.type);
+  if (parsedType === 1 || parsedType === 2) {
+    normalizedParams.type = parsedType;
   }
+
+  const keyword = normalizeKeyword(params?.keyword);
+  if (keyword) {
+    normalizedParams.keyword = keyword;
+  }
+
+  return normalizedParams;
 };
 
-const getActivityImages = activity => {
-  return activity.images || (activity.image ? [activity.image] : []);
+const buildActivityCacheKey = params =>
+  [
+    normalizeActivityTab(params?.tab),
+    params?.type ?? '',
+    encodeURIComponent(params?.keyword || ''),
+  ].join('|');
+
+const getTabFromActivityCacheKey = cacheKey => String(cacheKey || '').split('|')[0] || DEFAULT_ACTIVITY_TAB;
+
+const buildActivityFamilyKey = params =>
+  `${params?.type ?? ''}|${encodeURIComponent(params?.keyword || '')}`;
+
+const extractActivityRowsFromResponse = response => {
+  if (Array.isArray(response?.rows)) {
+    return response.rows;
+  }
+
+  if (Array.isArray(response)) {
+    return response;
+  }
+
+  const candidates = [
+    response?.data,
+    response?.result,
+    response?.page?.records,
+    response?.page?.list,
+    response?.page?.items,
+  ];
+
+  return candidates.find(Array.isArray) || [];
 };
 
-const getJoinedActivityState = activity => {
+const createActivityCacheEntry = response => {
+  const rows = normalizeActivityList(extractActivityRowsFromResponse(response));
+  const total = Number(response?.total);
+
   return {
-    ...activity,
-    joined: true,
-    participants: activity.participants + 1,
+    rows,
+    total: Number.isFinite(total) ? total : rows.length,
+    fetchedAt: Date.now(),
   };
 };
 
-const getQuitActivityState = activity => {
-  return {
-    ...activity,
-    joined: false,
-    participants: Math.max(0, activity.participants - 1),
-    progress: undefined,
-  };
+const isActivityCacheFresh = cacheEntry =>
+  Boolean(cacheEntry) && Date.now() - cacheEntry.fetchedAt < ACTIVITY_CACHE_TTL;
+
+const getRequestErrorMessage = (error, fallbackMessage) => {
+  const candidates = [
+    error?.message,
+    error?.msg,
+    error?.data?.msg,
+    error?.data?.message,
+    error?.response?.data?.msg,
+    error?.response?.data?.message,
+  ];
+
+  const resolvedMessage =
+    candidates.find(candidate => typeof candidate === 'string' && candidate.trim()) || fallbackMessage;
+
+  if (ACTIVITY_INTERNAL_ERROR_PATTERN.test(resolvedMessage)) {
+    return '活动数据服务暂时不可用，请稍后重试';
+  }
+
+  return resolvedMessage;
 };
 
 const getOrganizerIcon = organizerType => {
@@ -163,9 +155,15 @@ export default function ActivityScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const viewerScrollRef = useRef(null);
+  const activityCacheRef = useRef(new Map());
+  const activityRequestRef = useRef(new Map());
+  const prefetchedActivityFamiliesRef = useRef(new Set());
+  const activeQueryKeyRef = useRef('');
   const isFromProfile = Boolean(route?.params?.fromProfile);
+  const parsedRouteType = Number(route?.params?.type);
+  const selectedType = parsedRouteType === 1 || parsedRouteType === 2 ? parsedRouteType : null;
 
-  const [activeTabKey, setActiveTabKey] = useState('all');
+  const [activeTabKey, setActiveTabKey] = useState(DEFAULT_ACTIVITY_TAB);
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -173,6 +171,20 @@ export default function ActivityScreen({ navigation, route }) {
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [viewerImages, setViewerImages] = useState([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [searchInputValue, setSearchInputValue] = useState('');
+  const [searchKeyword, setSearchKeyword] = useState('');
+
+  const currentTabKey = isFromProfile ? 'my' : activeTabKey;
+  const historyTabLabel = t('screens.activity.tabs.history');
+  const resolvedHistoryTabLabel =
+    historyTabLabel && historyTabLabel !== 'screens.activity.tabs.history'
+      ? historyTabLabel
+      : '历史';
+  const activitySearchPlaceholder = t('screens.activity.searchPlaceholder');
+  const resolvedActivitySearchPlaceholder =
+    activitySearchPlaceholder && activitySearchPlaceholder !== 'screens.activity.searchPlaceholder'
+      ? activitySearchPlaceholder
+      : '搜索活动';
 
   const tabs = useMemo(
     () => [
@@ -180,14 +192,141 @@ export default function ActivityScreen({ navigation, route }) {
       { key: 'hot', label: t('screens.activity.tabs.hot') },
       { key: 'new', label: t('screens.activity.tabs.new') },
       { key: 'ended', label: t('screens.activity.tabs.ended') },
-      { key: 'mine', label: t('screens.activity.tabs.mine') },
+      { key: 'my', label: t('screens.activity.tabs.mine') },
+      { key: 'history', label: resolvedHistoryTabLabel },
     ],
-    [t]
+    [resolvedHistoryTabLabel, t]
   );
 
+  const buildCurrentActivityParams = useCallback(
+    (overrides = {}) =>
+      normalizeActivityQueryParams({
+        tab: overrides.tab ?? currentTabKey,
+        type: overrides.type ?? selectedType,
+        keyword: overrides.keyword ?? searchKeyword,
+      }),
+    [currentTabKey, searchKeyword, selectedType]
+  );
+
+  const requestActivityQuery = useCallback(async (params, options = {}) => {
+    const normalizedParams = normalizeActivityQueryParams(params);
+    const cacheKey = buildActivityCacheKey(normalizedParams);
+    const cachedEntry = activityCacheRef.current.get(cacheKey);
+
+    if (!options.force && cachedEntry) {
+      return cachedEntry;
+    }
+
+    if (activityRequestRef.current.has(cacheKey)) {
+      return activityRequestRef.current.get(cacheKey);
+    }
+
+    const requestPromise = (async () => {
+      const response = await activityApi.getActivityCenterList(normalizedParams);
+
+      if (response?.code !== undefined && response.code !== 200) {
+        throw new Error(response?.msg || t('common.serverError'));
+      }
+
+      const nextCacheEntry = createActivityCacheEntry(response);
+      activityCacheRef.current.set(cacheKey, nextCacheEntry);
+      return nextCacheEntry;
+    })();
+
+    activityRequestRef.current.set(cacheKey, requestPromise);
+
+    try {
+      return await requestPromise;
+    } finally {
+      if (activityRequestRef.current.get(cacheKey) === requestPromise) {
+        activityRequestRef.current.delete(cacheKey);
+      }
+    }
+  }, [t]);
+
+  const prefetchActivityTabs = useCallback((params) => {
+    if (isFromProfile) {
+      return;
+    }
+
+    const normalizedParams = normalizeActivityQueryParams(params);
+    const familyKey = buildActivityFamilyKey(normalizedParams);
+
+    if (prefetchedActivityFamiliesRef.current.has(familyKey)) {
+      return;
+    }
+
+    prefetchedActivityFamiliesRef.current.add(familyKey);
+
+    ACTIVITY_TABS
+      .filter(tabKey => tabKey !== normalizedParams.tab)
+      .forEach(tabKey => {
+        const nextParams = normalizeActivityQueryParams({
+          ...normalizedParams,
+          tab: tabKey,
+        });
+        const nextCacheKey = buildActivityCacheKey(nextParams);
+
+        if (isActivityCacheFresh(activityCacheRef.current.get(nextCacheKey))) {
+          return;
+        }
+
+        void requestActivityQuery(nextParams).catch(() => {});
+      });
+  }, [isFromProfile, requestActivityQuery]);
+
+  const loadActivities = useCallback(async ({ force = false, silent = false } = {}) => {
+    const params = buildCurrentActivityParams();
+    const cacheKey = buildActivityCacheKey(params);
+    const cachedEntry = activityCacheRef.current.get(cacheKey);
+
+    activeQueryKeyRef.current = cacheKey;
+
+    if (cachedEntry) {
+      setActivities(cachedEntry.rows);
+      setErrorMessage('');
+      setLoading(false);
+
+      if (!force && isActivityCacheFresh(cachedEntry)) {
+        setRefreshing(false);
+        prefetchActivityTabs(params);
+        return;
+      }
+    }
+
+    if (silent) {
+      setRefreshing(true);
+    } else if (!cachedEntry) {
+      setActivities([]);
+      setLoading(true);
+    }
+
+    try {
+      const nextCacheEntry = await requestActivityQuery(params, {
+        force: true,
+      });
+
+      if (activeQueryKeyRef.current === cacheKey) {
+        setActivities(nextCacheEntry.rows);
+        setErrorMessage('');
+      }
+
+      prefetchActivityTabs(params);
+    } catch (error) {
+      if ((!cachedEntry || force) && activeQueryKeyRef.current === cacheKey) {
+        setErrorMessage(getRequestErrorMessage(error, t('common.serverError')));
+      }
+    } finally {
+      if (activeQueryKeyRef.current === cacheKey) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
+  }, [buildCurrentActivityParams, prefetchActivityTabs, requestActivityQuery, t]);
+
   useEffect(() => {
-    loadActivities();
-  }, []);
+    void loadActivities();
+  }, [loadActivities]);
 
   useEffect(() => {
     if (!showImageViewer) {
@@ -204,46 +343,56 @@ export default function ActivityScreen({ navigation, route }) {
     return () => clearTimeout(timer);
   }, [showImageViewer, currentImageIndex]);
 
-  const loadActivities = async ({ silent = false } = {}) => {
-    try {
-      if (silent) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
+  const mutateActivityCaches = useCallback((mutator) => {
+    setActivities(currentActivities => mutator(currentActivities, currentTabKey));
+
+    const nextCache = new Map();
+    activityCacheRef.current.forEach((cacheEntry, cacheKey) => {
+      nextCache.set(cacheKey, {
+        ...cacheEntry,
+        rows: mutator(cacheEntry.rows, getTabFromActivityCacheKey(cacheKey)),
+      });
+    });
+
+    activityCacheRef.current = nextCache;
+  }, [currentTabKey]);
+
+  const invalidateActivityTabs = useCallback((tabKeys) => {
+    const targetTabs = new Set((Array.isArray(tabKeys) ? tabKeys : []).map(normalizeActivityTab));
+    const nextCache = new Map();
+
+    activityCacheRef.current.forEach((cacheEntry, cacheKey) => {
+      if (!targetTabs.has(getTabFromActivityCacheKey(cacheKey))) {
+        nextCache.set(cacheKey, cacheEntry);
       }
+    });
 
-      setErrorMessage('');
-      
-      // 模拟网络延迟
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // 使用假数据
-      setActivities(MOCK_ACTIVITIES);
-    } catch (error) {
-      const nextErrorMessage = error?.message || t('common.noData');
-      setErrorMessage(nextErrorMessage);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+    activityCacheRef.current = nextCache;
+  }, []);
 
-  const filteredActivities = useMemo(
-    () => getActivitiesByTab(activities, activeTabKey),
-    [activities, activeTabKey]
-  );
-
-  const handleActivityChange = updatedActivity => {
+  const handleActivityChange = useCallback((updatedActivity) => {
     if (!updatedActivity?.id) {
       return;
     }
 
-    setActivities(currentActivities =>
-      currentActivities.map(activity =>
-        activity.id === updatedActivity.id ? updatedActivity : activity
-      )
+    mutateActivityCaches((activityList, tabKey) =>
+      activityList.reduce((result, activity) => {
+        if (activity.id !== updatedActivity.id) {
+          result.push(activity);
+          return result;
+        }
+
+        if (tabKey === 'my' && !updatedActivity.joined) {
+          return result;
+        }
+
+        result.push(updatedActivity);
+        return result;
+      }, [])
     );
-  };
+
+    invalidateActivityTabs(['my']);
+  }, [invalidateActivityTabs, mutateActivityCaches]);
 
   const openImageViewer = (images, initialIndex = 0) => {
     if (!Array.isArray(images) || images.length === 0) {
@@ -266,39 +415,79 @@ export default function ActivityScreen({ navigation, route }) {
     });
   };
 
-  const handleJoinActivity = id => {
-    setActivities(currentActivities =>
-      currentActivities.map(activity => {
-        if (activity.id !== id) {
-          return activity;
+  const handleJoinMutation = useCallback((activityId, transformer) => {
+    mutateActivityCaches((activityList, tabKey) =>
+      activityList.reduce((result, activity) => {
+        if (activity.id !== activityId) {
+          result.push(activity);
+          return result;
         }
 
-        if (activity.joined) {
-          showAppAlert(t('common.ok'), t('screens.activity.actions.quitConfirm'), [
-            {
-              text: t('common.cancel'),
-              style: 'cancel',
-            },
-            {
-              text: t('common.confirm'),
-              onPress: () => {
-                setActivities(previousActivities =>
-                  previousActivities.map(previousActivity =>
-                    previousActivity.id === id
-                      ? getQuitActivityState(previousActivity)
-                      : previousActivity
-                  )
-                );
-              },
-            },
-          ]);
-
-          return activity;
+        const nextActivity = transformer(activity);
+        if (!nextActivity) {
+          return result;
         }
 
-        return getJoinedActivityState(activity);
-      })
+        if (tabKey === 'my' && !nextActivity.joined) {
+          return result;
+        }
+
+        result.push(nextActivity);
+        return result;
+      }, [])
     );
+
+    invalidateActivityTabs(['my']);
+  }, [invalidateActivityTabs, mutateActivityCaches]);
+
+  const handleJoinActivity = id => {
+    const targetActivity = activities.find(activity => activity.id === id);
+    if (!targetActivity) {
+      return;
+    }
+
+    if (targetActivity.joined) {
+      showAppAlert(t('common.ok'), t('screens.activity.actions.quitConfirm'), [
+        {
+          text: t('common.cancel'),
+          style: 'cancel',
+        },
+        {
+          text: t('common.confirm'),
+          onPress: () => {
+            handleJoinMutation(id, activity => getQuitActivityState(activity));
+          },
+        },
+      ]);
+      return;
+    }
+
+    handleJoinMutation(id, activity => getJoinedActivityState(activity));
+  };
+
+  const handleSubmitSearch = () => {
+    const normalizedKeyword = normalizeKeyword(searchInputValue);
+
+    if (normalizedKeyword === searchKeyword) {
+      void loadActivities({ force: true });
+      return;
+    }
+
+    setSearchKeyword(normalizedKeyword);
+  };
+
+  const handleClearSearch = () => {
+    if (!searchInputValue && !searchKeyword) {
+      return;
+    }
+
+    setSearchInputValue('');
+
+    if (searchKeyword) {
+      setSearchKeyword('');
+    } else {
+      void loadActivities({ force: true });
+    }
   };
 
   const renderEmptyState = () => {
@@ -320,7 +509,7 @@ export default function ActivityScreen({ navigation, route }) {
         {errorMessage ? (
           <TouchableOpacity
             style={styles.retryBtn}
-            onPress={() => loadActivities()}
+            onPress={() => loadActivities({ force: true })}
             activeOpacity={0.85}
           >
             <Text style={styles.retryBtnText}>{t('common.retry')}</Text>
@@ -362,21 +551,56 @@ export default function ActivityScreen({ navigation, route }) {
       </View>
 
       {!isFromProfile ? (
-        <View style={styles.tabBar}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScroll}>
-            {tabs.map(tab => (
+        <>
+          <View style={styles.searchSection}>
+            <View style={styles.searchBar}>
+              <Ionicons name="search-outline" size={18} color="#9ca3af" />
+              <TextInput
+                value={searchInputValue}
+                onChangeText={setSearchInputValue}
+                onSubmitEditing={handleSubmitSearch}
+                placeholder={resolvedActivitySearchPlaceholder}
+                placeholderTextColor="#9ca3af"
+                style={styles.searchInput}
+                returnKeyType="search"
+                autoCorrect={false}
+                autoCapitalize="none"
+              />
+              {searchInputValue ? (
+                <TouchableOpacity
+                  style={styles.searchIconButton}
+                  onPress={handleClearSearch}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name="close-circle" size={18} color="#9ca3af" />
+                </TouchableOpacity>
+              ) : null}
               <TouchableOpacity
-                key={tab.key}
-                style={[styles.tabItem, activeTabKey === tab.key && styles.tabItemActive]}
-                onPress={() => setActiveTabKey(tab.key)}
+                style={styles.searchIconButton}
+                onPress={handleSubmitSearch}
+                activeOpacity={0.75}
               >
-                <Text style={[styles.tabText, activeTabKey === tab.key && styles.tabTextActive]}>
-                  {tab.label}
-                </Text>
+                <Ionicons name="arrow-forward-circle" size={20} color="#ef4444" />
               </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+            </View>
+          </View>
+
+          <View style={styles.tabBar}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScroll}>
+              {tabs.map(tab => (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[styles.tabItem, activeTabKey === tab.key && styles.tabItemActive]}
+                  onPress={() => setActiveTabKey(tab.key)}
+                >
+                  <Text style={[styles.tabText, activeTabKey === tab.key && styles.tabTextActive]}>
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </>
       ) : null}
 
       <ScrollView
@@ -386,14 +610,14 @@ export default function ActivityScreen({ navigation, route }) {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => loadActivities({ silent: true })}
+            onRefresh={() => loadActivities({ force: true, silent: true })}
             colors={['#ef4444']}
             tintColor="#ef4444"
           />
         }
       >
-        {filteredActivities.length > 0
-          ? filteredActivities.map(item => {
+        {activities.length > 0
+          ? activities.map(item => {
               const itemImages = getActivityImages(item);
               const tagLabel =
                 item.tags?.[0] ||
@@ -660,6 +884,33 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: scaleFont(14),
     fontWeight: '600',
+  },
+  searchSection: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    minHeight: 40,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: scaleFont(14),
+    color: '#1f2937',
+    paddingVertical: 0,
+  },
+  searchIconButton: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabBar: {
     backgroundColor: '#fff',

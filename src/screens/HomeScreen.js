@@ -32,7 +32,7 @@ import { navigateToPublicProfile, resolvePublicUserId } from '../utils/publicPro
 import questionApi from '../services/api/questionApi';
 import userApi from '../services/api/userApi';
 import { getBlockedUserIds, subscribeBlockedUsers } from '../services/blacklistState';
-import { loadComboChannels } from '../services/channelSubscriptionService';
+import { fetchHomeChannels } from '../services/channelHomeService';
 import {
   applyQuestionInteractionSnapshot,
   buildQuestionInteractionSnapshot,
@@ -139,6 +139,54 @@ const doesQuestionMatchHotTab = (item, tabNode) => {
   return true;
 };
 
+const doesQuestionMatchSelectedRegion = (item, selectedRegion = {}) => {
+  const normalizedSelectedCountry = normalizeHotFilterText(selectedRegion.country);
+  const normalizedSelectedCity = normalizeHotFilterText(selectedRegion.city);
+  const normalizedSelectedState = normalizeHotFilterText(selectedRegion.state);
+  const normalizedSelectedDistrict = normalizeHotFilterText(selectedRegion.district);
+
+  if (
+    !normalizedSelectedCountry &&
+    !normalizedSelectedCity &&
+    !normalizedSelectedState &&
+    !normalizedSelectedDistrict
+  ) {
+    return true;
+  }
+
+  const normalizedCountry = normalizeHotFilterText(item?.country);
+  const normalizedCity = normalizeHotFilterText(item?.city);
+  const normalizedState = normalizeHotFilterText(item?.state);
+  const normalizedDistrict = normalizeHotFilterText(item?.district);
+  const normalizedLocation = normalizeHotFilterText(item?.location);
+
+  if (normalizedSelectedDistrict) {
+    return (
+      normalizedDistrict === normalizedSelectedDistrict ||
+      normalizedLocation.includes(normalizedSelectedDistrict)
+    );
+  }
+
+  if (normalizedSelectedState) {
+    return (
+      normalizedState === normalizedSelectedState ||
+      normalizedLocation.includes(normalizedSelectedState)
+    );
+  }
+
+  if (normalizedSelectedCity) {
+    return (
+      normalizedCity === normalizedSelectedCity ||
+      normalizedLocation.includes(normalizedSelectedCity)
+    );
+  }
+
+  return (
+    normalizedCountry === normalizedSelectedCountry ||
+    normalizedLocation.includes(normalizedSelectedCountry)
+  );
+};
+
 // tabs array will be moved inside component to use translation
 
 // 话题数据
@@ -204,13 +252,18 @@ export default function HomeScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('');
 
   const syncComboTabs = React.useCallback(async () => {
-    const savedComboTabs = await loadComboChannels();
-    setComboTabs(prevTabs => {
-      if (JSON.stringify(prevTabs) === JSON.stringify(savedComboTabs)) {
-        return prevTabs;
-      }
-      return savedComboTabs;
-    });
+    try {
+      const homeChannelTabs = await fetchHomeChannels();
+      setComboTabs(prevTabs => {
+        if (JSON.stringify(prevTabs) === JSON.stringify(homeChannelTabs)) {
+          return prevTabs;
+        }
+        return homeChannelTabs;
+      });
+    } catch (error) {
+      console.error('Failed to load home channel tabs:', error);
+      setComboTabs(prevTabs => (prevTabs.length === 0 ? prevTabs : []));
+    }
   }, []);
   
   // Initialize activeTab with translated value
@@ -319,6 +372,29 @@ export default function HomeScreen({ navigation }) {
   const [heroRankTab, setHeroRankTab] = useState('adopted');
   const hasFocusedHomeOnceRef = useRef(false);
   const canTriggerLoadMoreRef = useRef(false);
+  const selectedRegionId = useMemo(() => {
+    const regionIds = [
+      selectedRegion.districtId,
+      selectedRegion.stateId,
+      selectedRegion.cityId,
+      selectedRegion.countryId,
+    ];
+    const matchedRegionId = regionIds.find(regionId => {
+      if (regionId === undefined || regionId === null) {
+        return false;
+      }
+
+      return String(regionId).trim() !== '';
+    });
+
+    const parsedRegionId = Number(matchedRegionId);
+    return Number.isFinite(parsedRegionId) ? parsedRegionId : 0;
+  }, [
+    selectedRegion.countryId,
+    selectedRegion.cityId,
+    selectedRegion.stateId,
+    selectedRegion.districtId,
+  ]);
   
   // 话题关注状态
   const [topicFollowState, setTopicFollowState] = useState({});
@@ -338,7 +414,10 @@ export default function HomeScreen({ navigation }) {
     onRefresh,
     onLoadMore,
     setQuestionList,
-  } = useOptimizedQuestions(activeTab, questionFeedTabs);
+  } = useOptimizedQuestions(activeTab, questionFeedTabs, null, {
+    sceneKey: 'home',
+    regionId: selectedRegionId,
+  });
   const safeQuestionList = useMemo(
     () => (Array.isArray(questionList) ? questionList.filter(item => item && typeof item === 'object' && !Array.isArray(item)) : []),
     [questionList]
@@ -367,54 +446,14 @@ export default function HomeScreen({ navigation }) {
     [hotRankSubTab, visibleHotSubTabs]
   );
   const displayQuestionList = useMemo(() => {
-    if (activeTab !== t('home.hotList')) {
-      return safeQuestionList;
-    }
-
-    const normalizedSelectedCountry = normalizeHotFilterText(selectedRegion.country);
-    const normalizedSelectedCity = normalizeHotFilterText(selectedRegion.city);
-    const normalizedSelectedState = normalizeHotFilterText(selectedRegion.state);
-    const normalizedSelectedDistrict = normalizeHotFilterText(selectedRegion.district);
     const selectedHotTabNode = activeHotRankSubTabConfig || activeHotRankTabConfig;
 
     return safeQuestionList.filter(item => {
-      const normalizedCountry = normalizeHotFilterText(item?.country);
-      const normalizedCity = normalizeHotFilterText(item?.city);
-      const normalizedState = normalizeHotFilterText(item?.state);
-      const normalizedDistrict = normalizeHotFilterText(item?.district);
-      const normalizedLocation = normalizeHotFilterText(item?.location);
-
-      if (normalizedSelectedDistrict) {
-        const matchesDistrict =
-          normalizedDistrict === normalizedSelectedDistrict ||
-          normalizedLocation.includes(normalizedSelectedDistrict);
-        if (!matchesDistrict) {
-          return false;
-        }
-      } else if (normalizedSelectedState) {
-        const matchesState =
-          normalizedState === normalizedSelectedState ||
-          normalizedLocation.includes(normalizedSelectedState);
-        if (!matchesState) {
-          return false;
-        }
-      } else if (normalizedSelectedCity) {
-        const matchesCity =
-          normalizedCity === normalizedSelectedCity ||
-          normalizedLocation.includes(normalizedSelectedCity);
-        if (!matchesCity) {
-          return false;
-        }
-      } else if (normalizedSelectedCountry) {
-        const matchesCountry =
-          normalizedCountry === normalizedSelectedCountry ||
-          normalizedLocation.includes(normalizedSelectedCountry);
-        if (!matchesCountry) {
-          return false;
-        }
+      if (!doesQuestionMatchSelectedRegion(item, selectedRegion)) {
+        return false;
       }
 
-      if (!doesQuestionMatchHotTab(item, selectedHotTabNode)) {
+      if (activeTab === t('home.hotList') && !doesQuestionMatchHotTab(item, selectedHotTabNode)) {
         return false;
       }
 
@@ -425,10 +464,7 @@ export default function HomeScreen({ navigation }) {
     activeHotRankSubTabConfig,
     activeTab,
     safeQuestionList,
-    selectedRegion.city,
-    selectedRegion.country,
-    selectedRegion.district,
-    selectedRegion.state,
+    selectedRegion,
     t,
   ]);
 
@@ -1609,22 +1645,7 @@ export default function HomeScreen({ navigation }) {
   ]);
 
   const getSelectedRegionId = () => {
-    const regionIds = [
-      selectedRegion.districtId,
-      selectedRegion.stateId,
-      selectedRegion.cityId,
-      selectedRegion.countryId,
-    ];
-    const matchedRegionId = regionIds.find(regionId => {
-      if (regionId === undefined || regionId === null) {
-        return false;
-      }
-
-      return String(regionId).trim() !== '';
-    });
-
-    const parsedRegionId = Number(matchedRegionId);
-    return Number.isFinite(parsedRegionId) ? parsedRegionId : 0;
+    return selectedRegionId;
   };
 
   return (

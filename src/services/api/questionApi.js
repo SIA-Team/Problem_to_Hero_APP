@@ -46,9 +46,10 @@ const buildQuestionRankingAllCacheKey = params => {
 
 const buildQuestionRankListCacheKey = params => {
   const rankType = String(params?.rankType || '').trim() || 'recommend';
-  const pageNum = Number(params?.pageNum) || 1;
-  const pageSize = Number(params?.pageSize) || 20;
-  return `question-rank-list:${rankType}:${pageNum}:${pageSize}`;
+  const sceneKey = String(params?.sceneKey || 'home').trim() || 'home';
+  const parsedRegionId = Number(params?.regionId);
+  const regionId = Number.isFinite(parsedRegionId) ? parsedRegionId : 0;
+  return `question-rank-list:${rankType}:${sceneKey}:${regionId}`;
 };
 
 const shouldFallbackQuestionRequest = result => {
@@ -532,9 +533,10 @@ const questionApi = {
 
   getRankList: (params = {}, options = {}) => {
     const rankType = String(params.rankType || '').trim();
-    const pageNum = Number(params.pageNum) || 1;
-    const pageSize = Number(params.pageSize) || 20;
-    const cacheKey = buildQuestionRankListCacheKey({ rankType, pageNum, pageSize });
+    const sceneKey = String(params.sceneKey || 'home').trim() || 'home';
+    const parsedRegionId = Number(params.regionId);
+    const regionId = Number.isFinite(parsedRegionId) ? parsedRegionId : 0;
+    const cacheKey = buildQuestionRankListCacheKey({ rankType, sceneKey, regionId });
     const forceRefresh = options.forceRefresh === true;
 
     if (!rankType) {
@@ -560,8 +562,8 @@ const questionApi = {
     const request = contentApiClient.get(API_ENDPOINTS.QUESTION.RANK_LIST, {
       params: {
         rankType,
-        pageNum,
-        pageSize,
+        sceneKey,
+        regionId,
       },
     })
       .then(response => {
@@ -598,44 +600,25 @@ const questionApi = {
     return apiClient.get(API_ENDPOINTS.QUESTION.SEARCH, { params });
   },
 
-  /**
-   * 获取推荐列表（用于首页优化）
-   * @param {Object} params - 查询参数
-   * @param {number} params.pageNum - 页码
-   * @param {number} params.pageSize - 每页数量
-   * @returns {Promise<Object>}
-   */
-  getRecommendList: (params) => {
-    const { pageNum = 1, pageSize = 20 } = params;
-    
-    // 推荐列表：获取所有已发布的问题，按创建时间排序
-    return questionApi.getQuestions({
-      pageNum,
-      pageSize,
-      question: {
-        status: 1, // 只获取已发布的问题
-      },
+  // 首页推荐榜：/app/content/rank/list?rankType=recommend&sceneKey=home&regionId=0
+  getRecommendList: (params = {}) => {
+    const { sceneKey = 'home', regionId = 0 } = params;
+
+    return questionApi.getRankList({
+      rankType: 'recommend',
+      sceneKey,
+      regionId,
     });
   },
 
-  /**
-   * 获取热榜列表（用于首页优化）
-   * @param {Object} params - 查询参数
-   * @param {number} params.pageNum - 页码
-   * @param {number} params.pageSize - 每页数量
-   * @returns {Promise<Object>}
-   */
-  getHotList: (params) => {
-    const { pageNum = 1, pageSize = 20 } = params;
-    
-    // 热榜列表：可以根据浏览量、点赞数等排序
-    // 这里先使用基础接口，后续可以优化
-    return questionApi.getQuestions({
-      pageNum,
-      pageSize,
-      question: {
-        status: 1,
-      },
+  // 首页热榜：/app/content/rank/list?rankType=hot&sceneKey=home&regionId=0
+  getHotList: (params = {}) => {
+    const { sceneKey = 'home', regionId = 0 } = params;
+
+    return questionApi.getRankList({
+      rankType: 'hot',
+      sceneKey,
+      regionId,
     });
   },
 
@@ -646,7 +629,7 @@ const questionApi = {
    * @param {number} params.pageSize - 每页数量
    * @returns {Promise<Object>}
    */
-  getFollowList: (params) => {
+  getFollowList: (params = {}) => {
     const { pageNum = 1, pageSize = 20 } = params;
     
     // 关注列表：获取关注用户的问题
@@ -660,33 +643,14 @@ const questionApi = {
     });
   },
 
-  getRecommendList: (params) => {
-    const { pageNum = 1, pageSize = 20 } = params || {};
-
-    return questionApi.getRankList({
-      rankType: 'recommend',
-      pageNum,
-      pageSize,
-    });
-  },
-
-  getHotList: (params) => {
-    const { pageNum = 1, pageSize = 20 } = params || {};
-
-    return questionApi.getRankList({
-      rankType: 'hot',
-      pageNum,
-      pageSize,
-    });
-  },
-
-  getHeroList: (params) => {
-    const { pageNum = 1, pageSize = 20 } = params || {};
+  // 首页英雄榜：/app/content/rank/list?rankType=hero&sceneKey=home&regionId=0
+  getHeroList: (params = {}) => {
+    const { sceneKey = 'home', regionId = 0 } = params;
 
     return questionApi.getRankList({
       rankType: 'hero',
-      pageNum,
-      pageSize,
+      sceneKey,
+      regionId,
     });
   },
 };

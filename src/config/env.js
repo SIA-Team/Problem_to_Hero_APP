@@ -9,6 +9,7 @@ const CUSTOM_SERVER_URL_KEY = '@app_custom_server_url';
 const SERVICES = {
   CONTENT: 'qa-hero-content',
   USER: 'qa-hero-app-user',
+  ACTIVITY: 'qa-hero-activity',
 };
 
 // 构建带服务前缀的路径
@@ -153,6 +154,14 @@ const API_SERVER_CONFIG = {
   
   // 分类相关接口
   [buildServicePath(SERVICES.CONTENT, '/app/content/category/list')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/channel/catalog/query')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/channel/combined/create')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/channel/combined/my-created/query')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/channel/home/query')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/channel/my/order/save')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/channel/subscribe')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/channel/my/subscribed/remove')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/channel/my/subscribed/query')]: getCurrentServerSync,
   
   // 问题相关接口
   [buildServicePath(SERVICES.CONTENT, '/app/content/question/list')]: getCurrentServerSync,
@@ -183,6 +192,7 @@ const API_SERVER_CONFIG = {
   [buildServicePath(SERVICES.CONTENT, '/app/content/answer/*/collect')]: getCurrentServerSync,
   [buildServicePath(SERVICES.CONTENT, '/app/content/answer/*/uncollect')]: getCurrentServerSync,
   [buildServicePath(SERVICES.CONTENT, '/app/content/answer/question/*/accept/*')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.CONTENT, '/app/content/answer/my')]: getCurrentServerSync,
   
   // 补充相关接口
   [buildServicePath(SERVICES.CONTENT, '/app/content/supplement/question/*/list')]: getCurrentServerSync,
@@ -201,9 +211,10 @@ const API_SERVER_CONFIG = {
   // 上传相关接口
   [buildServicePath(SERVICES.CONTENT, '/app/content/image/upload')]: getCurrentServerSync,
 
-  // 活动相关接口（不使用微服务前缀）
-  '/app/activity/list': getCurrentServerSync,
-  '/app/activity/*': getCurrentServerSync,
+  // 活动相关接口
+  [buildServicePath(SERVICES.ACTIVITY, '/app/activity/list')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.ACTIVITY, '/app/activity/center/list')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.ACTIVITY, '/app/activity/*')]: getCurrentServerSync,
   
   // 评论相关接口
   [buildServicePath(SERVICES.CONTENT, '/app/content/comment')]: getCurrentServerSync,

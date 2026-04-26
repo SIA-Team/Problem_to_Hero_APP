@@ -10,9 +10,9 @@ export const useTranslation = () => {
     });
   }, []);
 
-  const t = (key, params) => {
+  const t = React.useCallback((key, params) => {
     return i18n.t(key, params);
-  };
+  }, []);
   
   return { t, i18n };
 };

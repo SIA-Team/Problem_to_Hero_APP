@@ -40,6 +40,20 @@ const answerApi = {
     return contentApiClient.get(url, { params: requestParams });
   },
 
+  getMyAnswers: (params = {}) => {
+    const {
+      pageNum = 1,
+      pageSize = 10
+    } = params;
+
+    return contentApiClient.get(API_ENDPOINTS.ANSWER.MY, {
+      params: {
+        pageNum,
+        pageSize
+      }
+    });
+  },
+
   /**
    * 获取回答的补充回答列表
    * @param {string|number} answerId - 回答 ID

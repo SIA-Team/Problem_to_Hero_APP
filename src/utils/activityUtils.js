@@ -132,6 +132,16 @@ const inferActivityType = activity => {
 };
 
 const inferActivityStatus = activity => {
+  const rawStatus = toFiniteNumber(activity?.status ?? activity?.activityStatus);
+
+  if (rawStatus === 5 || rawStatus === 6) {
+    return 'ended';
+  }
+
+  if (rawStatus === 2 || rawStatus === 4) {
+    return 'active';
+  }
+
   if (activity?.status === 'ended') {
     return 'ended';
   }
@@ -186,6 +196,7 @@ export const normalizeActivityItem = (activity, index = 0) => {
   const organizer = activity?.sponsor?.name || activity?.organizer || activity?.organizerName || '';
   const type = inferActivityType(activity);
   const status = inferActivityStatus(activity);
+  const rawStatusCode = Number(activity?.status ?? activity?.activityStatus);
 
   return {
     ...activity,
@@ -205,6 +216,7 @@ export const normalizeActivityItem = (activity, index = 0) => {
     type,
     typeName: activity.typeName || '',
     status,
+    statusCode: Number.isFinite(rawStatusCode) ? rawStatusCode : null,
     statusKey: status,
     statusName: activity.statusName || '',
     joined: Boolean(activity.isJoined ?? activity.joined),

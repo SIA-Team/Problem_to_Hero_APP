@@ -29,17 +29,11 @@ const HomeTabContent = ({
       switch (tabType) {
         case 'recommend':
           // 推荐列表
-          response = await questionApi.getRecommendList({
-            pageNum: page,
-            pageSize
-          });
+          response = await questionApi.getRecommendList();
           break;
         case 'hot':
           // 热榜列表
-          response = await questionApi.getHotList({
-            pageNum: page,
-            pageSize
-          });
+          response = await questionApi.getHotList();
           break;
         case 'follow':
           // 关注列表
@@ -50,10 +44,7 @@ const HomeTabContent = ({
           break;
         default:
           // 默认获取推荐列表
-          response = await questionApi.getRecommendList({
-            pageNum: page,
-            pageSize
-          });
+          response = await questionApi.getRecommendList();
       }
       if (response.code === 200 && response.data) {
         return response.data.rows || response.data;

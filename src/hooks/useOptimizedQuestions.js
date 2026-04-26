@@ -5,6 +5,7 @@ import {
   prefetchAdjacentTabs,
   prefetchNextPage,
   checkForNewContent,
+  isRankTabType,
 } from '../utils/dataLoader';
 
 const TAB_TYPE_MAP = {
@@ -19,7 +20,7 @@ const TAB_TYPE_MAP = {
   Follow: 'follow',
 };
 
-export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = null) => {
+export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = null, queryOptions = {}) => {
   const [questionList, setQuestionList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -33,7 +34,19 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
   const isInitialLoad = useRef(true);
   const hasStartedInitialLoad = useRef(false);
   const previousActiveTabRef = useRef(null);
+  const previousQuerySignatureRef = useRef('');
   const tabStateCacheRef = useRef(new Map());
+  const normalizedQueryOptions = useMemo(
+    () => ({
+      sceneKey: queryOptions.sceneKey || 'home',
+      regionId: Number(queryOptions.regionId) || 0,
+    }),
+    [queryOptions.sceneKey, queryOptions.regionId]
+  );
+  const querySignature = useMemo(
+    () => JSON.stringify(normalizedQueryOptions),
+    [normalizedQueryOptions]
+  );
 
   const getTabType = useCallback(
     (tab) => {
@@ -78,21 +91,26 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
     setLoadingMore(false);
   }, []);
 
+  const getTabCacheKey = useCallback(
+    (tabType) => `${tabType}:${querySignature}`,
+    [querySignature]
+  );
+
   const cacheTabState = useCallback((tabType, nextState) => {
     if (!tabType) {
       return;
     }
 
-    tabStateCacheRef.current.set(tabType, {
+    tabStateCacheRef.current.set(getTabCacheKey(tabType), {
       questionList: Array.isArray(nextState.questionList) ? nextState.questionList : [],
       page: Number(nextState.page) || 1,
       hasMore: Boolean(nextState.hasMore),
       hasNewContent: Boolean(nextState.hasNewContent),
     });
-  }, []);
+  }, [getTabCacheKey]);
 
   const restoreCachedTabState = useCallback((tabType) => {
-    const cachedState = tabStateCacheRef.current.get(tabType);
+    const cachedState = tabStateCacheRef.current.get(getTabCacheKey(tabType));
     if (!cachedState) {
       return false;
     }
@@ -103,7 +121,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
     setHasMore(cachedState.hasMore);
     setHasNewContent(cachedState.hasNewContent);
     return true;
-  }, [resetTransientLoadingState]);
+  }, [getTabCacheKey, resetTransientLoadingState]);
 
   const loadData = useCallback(
     async (tabType, pageNum, forceRefresh = false) => {
@@ -112,14 +130,14 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
       }
 
       try {
-        const { data } = await loadQuestions(tabType, pageNum, forceRefresh, onDebugUpdate);
+        const { data } = await loadQuestions(tabType, pageNum, forceRefresh, onDebugUpdate, normalizedQueryOptions);
         return data || [];
       } catch (error) {
         console.warn(`Failed to load questions for ${tabType} page ${pageNum}:`, error);
         return [];
       }
     },
-    [onDebugUpdate]
+    [onDebugUpdate, normalizedQueryOptions]
   );
 
   const prefetchTabs = useCallback(
@@ -128,9 +146,9 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
         return;
       }
 
-      prefetchAdjacentTabs(tabType, prefetchTabTypes);
+      prefetchAdjacentTabs(tabType, prefetchTabTypes, normalizedQueryOptions);
     },
-    [prefetchTabTypes]
+    [normalizedQueryOptions, prefetchTabTypes]
   );
 
   const initialLoad = useCallback(async () => {
@@ -154,7 +172,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
 
     try {
       const data = await loadData(tabType, 1, false);
-      const nextHasMore = data.length >= 20;
+      const nextHasMore = !isRankTabType(tabType) && data.length >= 20;
       setQuestionList(data);
       setPage(1);
       setHasMore(nextHasMore);
@@ -187,7 +205,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
 
     try {
       const freshData = await loadData(tabType, 1, true);
-      const nextHasMore = freshData.length >= 20;
+      const nextHasMore = !isRankTabType(tabType) && freshData.length >= 20;
       setQuestionList(freshData);
       setPage(1);
       setHasMore(nextHasMore);
@@ -219,6 +237,11 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
       return;
     }
 
+    if (isRankTabType(tabType)) {
+      setHasMore(false);
+      return;
+    }
+
     setLoadingMore(true);
     const nextPage = page + 1;
 
@@ -226,7 +249,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
       const data = await loadData(tabType, nextPage, false);
 
       if (data.length > 0) {
-        const nextHasMore = data.length >= 20;
+        const nextHasMore = !isRankTabType(tabType) && data.length >= 20;
         setQuestionList((prev) => {
           const nextList = [...prev, ...data];
           cacheTabState(tabType, {
@@ -241,7 +264,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
         setHasMore(nextHasMore);
 
         if (nextHasMore) {
-          prefetchNextPage(tabType, nextPage);
+          prefetchNextPage(tabType, nextPage, normalizedQueryOptions);
         }
       } else {
         setHasMore(false);
@@ -280,7 +303,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
 
       try {
         const data = await loadData(tabType, 1, false);
-        const nextHasMore = data.length >= 20;
+        const nextHasMore = !isRankTabType(tabType) && data.length >= 20;
         setQuestionList(data);
         setPage(1);
         setHasMore(nextHasMore);
@@ -308,7 +331,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
       return;
     }
 
-    const nextHasNewContent = await checkForNewContent(tabType, questionList);
+    const nextHasNewContent = await checkForNewContent(tabType, questionList, normalizedQueryOptions);
     if (nextHasNewContent) {
       setHasNewContent(true);
       cacheTabState(tabType, {
@@ -318,7 +341,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
         hasNewContent: true,
       });
     }
-  }, [activeTab, cacheTabState, getTabType, hasMore, page, questionList]);
+  }, [activeTab, cacheTabState, getTabType, hasMore, normalizedQueryOptions, page, questionList]);
 
   useEffect(() => {
     const handleAppStateChange = (nextAppState) => {
@@ -347,6 +370,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
   useEffect(() => {
     if (!activeTab) {
       previousActiveTabRef.current = activeTab;
+      previousQuerySignatureRef.current = querySignature;
       return;
     }
 
@@ -357,17 +381,22 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
 
       hasStartedInitialLoad.current = true;
       previousActiveTabRef.current = activeTab;
+      previousQuerySignatureRef.current = querySignature;
       initialLoad();
       return;
     }
 
-    if (previousActiveTabRef.current === activeTab) {
+    if (
+      previousActiveTabRef.current === activeTab &&
+      previousQuerySignatureRef.current === querySignature
+    ) {
       return;
     }
 
     previousActiveTabRef.current = activeTab;
+    previousQuerySignatureRef.current = querySignature;
     onTabChange(activeTab);
-  }, [activeTab, initialLoad, onTabChange]);
+  }, [activeTab, initialLoad, onTabChange, querySignature]);
 
   return {
     questionList,

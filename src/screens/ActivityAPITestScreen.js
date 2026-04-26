@@ -38,13 +38,13 @@ export default function ActivityAPITestScreen({ navigation }) {
     });
 
     try {
-      const result = await activityApi.getActivityList(params);
+      const result = await activityApi.getActivityCenterList(params);
       const endTime = Date.now();
       
       setResponse({
-        data: result.data,
-        status: result.status,
-        headers: result.headers,
+        data: result?.rows || result?.data || [],
+        raw: result,
+        status: result?.code,
         duration: endTime - startTime,
       });
     } catch (err) {
@@ -208,7 +208,7 @@ export default function ActivityAPITestScreen({ navigation }) {
       <ScrollView style={styles.content}>
         {/* API 信息 */}
         <View style={styles.apiInfo}>
-          <Text style={styles.apiEndpoint}>GET /app/activity/list</Text>
+          <Text style={styles.apiEndpoint}>GET /app/activity/center/list</Text>
           <Text style={styles.apiDescription}>
             获取活动列表，支持按类型和状态筛选
           </Text>

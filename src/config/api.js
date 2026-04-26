@@ -4,6 +4,7 @@ import ENV, { getApiServerUrl } from './env';
 export const SERVICES = {
   CONTENT: 'qa-hero-content',  // 内容服务
   USER: 'qa-hero-app-user',    // 用户服务
+  ACTIVITY: 'qa-hero-activity', // 活动服务
   // 可以继续添加其他服务
 };
 
@@ -131,6 +132,17 @@ export const API_ENDPOINTS = {
     LIST: buildApiPath(SERVICES.CONTENT, '/app/content/category/list'),
   },
 
+  CHANNEL: {
+    CATALOG: buildApiPath(SERVICES.CONTENT, '/app/content/channel/catalog/query'),
+    COMBINED_CREATE: buildApiPath(SERVICES.CONTENT, '/app/content/channel/combined/create'),
+    COMBINED_MY_CREATED: buildApiPath(SERVICES.CONTENT, '/app/content/channel/combined/my-created/query'),
+    HOME: buildApiPath(SERVICES.CONTENT, '/app/content/channel/home/query'),
+    MY_ORDER_SAVE: buildApiPath(SERVICES.CONTENT, '/app/content/channel/my/order/save'),
+    SUBSCRIBE: buildApiPath(SERVICES.CONTENT, '/app/content/channel/subscribe'),
+    MY_SUBSCRIBED_REMOVE: buildApiPath(SERVICES.CONTENT, '/app/content/channel/my/subscribed/remove'),
+    MY_SUBSCRIBED: buildApiPath(SERVICES.CONTENT, '/app/content/channel/my/subscribed/query'),
+  },
+
   REGION: {
     CHILDREN: buildApiPath(SERVICES.USER, '/app/region/children'),
   },
@@ -138,6 +150,7 @@ export const API_ENDPOINTS = {
   // 回答相关
   ANSWER: {
     LIST: buildApiPath(SERVICES.CONTENT, '/app/content/answer/question/:questionId/list'),
+    MY: buildApiPath(SERVICES.CONTENT, '/app/content/answer/my'),
     DETAIL: buildApiPath(SERVICES.CONTENT, '/app/content/answer/:id'),  // 回答详情
     SUPPLEMENT_LIST: buildApiPath(SERVICES.CONTENT, '/app/content/answer-supplement/answer/:answerId/list'),  // 补充回答列表
     SUPPLEMENT_PUBLISH: buildApiPath(SERVICES.CONTENT, '/app/content/answer-supplement/answer/:answerId'),  // 发布补充回答
@@ -153,7 +166,8 @@ export const API_ENDPOINTS = {
   
   // 活动相关
   ACTIVITY: {
-    LIST: '/app/activity/list',  // 活动列表接口（不使用微服务前缀）
+    LIST: buildApiPath(SERVICES.ACTIVITY, '/app/activity/list'),
+    CENTER_LIST: buildApiPath(SERVICES.ACTIVITY, '/app/activity/center/list'),
     DETAIL: '/activities/:id',
     CREATE: '/activities',
     JOIN: '/activities/:id/join',

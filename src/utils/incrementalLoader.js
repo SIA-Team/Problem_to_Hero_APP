@@ -42,10 +42,10 @@ export const loadIncrementalData = async (tabType, currentList = []) => {
     
     switch (tabType) {
       case 'recommend':
-        response = await questionApi.getRecommendList(params);
+        response = await questionApi.getRecommendList();
         break;
       case 'hot':
-        response = await questionApi.getHotList(params);
+        response = await questionApi.getHotList();
         break;
       case 'follow':
         response = await questionApi.getFollowList(params);
@@ -158,10 +158,10 @@ export const prefetchNextBatch = async (tabType, currentPage) => {
     
     switch (tabType) {
       case 'recommend':
-        response = await questionApi.getRecommendList(params);
+        response = await questionApi.getRecommendList();
         break;
       case 'hot':
-        response = await questionApi.getHotList(params);
+        response = await questionApi.getHotList();
         break;
       case 'follow':
         response = await questionApi.getFollowList(params);

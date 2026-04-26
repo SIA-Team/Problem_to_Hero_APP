@@ -17,6 +17,7 @@ import authApi from '../services/api/authApi';
 import teamApi from '../services/api/teamApi';
 import userApi from '../services/api/userApi';
 import walletApi from '../services/api/walletApi';
+import answerApi from '../services/api/answerApi';
 import questionApi from '../services/api/questionApi';
 import deviceRiskService from '../services/deviceRiskService';
 import { showAppAlert } from '../utils/appAlert';
@@ -31,6 +32,7 @@ import ServerSwitcher from '../components/ServerSwitcher';
 
 import { scaleFont } from '../utils/responsive';
 const HISTORY_PAGE_SIZE = 10;
+const ANSWERS_PAGE_SIZE = 10;
 const MOCK_RECHARGE_RETURN_AMOUNT = 100;
 
 const getFirstNonEmptyValue = (...values) => values.find(value => value !== undefined && value !== null && value !== '');
@@ -78,6 +80,26 @@ const extractDraftRowsAndTotal = response => {
   };
 };
 
+const extractMyAnswerRows = response => {
+  const rawData = response?.data;
+  const payload = rawData?.data && typeof rawData?.data === 'object' ? rawData.data : rawData;
+
+  if (Array.isArray(payload)) {
+    return {
+      rows: payload,
+      total: payload.length
+    };
+  }
+
+  const rows = payload?.rows || payload?.list || payload?.records || payload?.items || [];
+  const total = Number(payload?.total ?? payload?.count ?? payload?.totalCount ?? rows.length) || rows.length;
+
+  return {
+    rows: Array.isArray(rows) ? rows : [],
+    total
+  };
+};
+
 const formatBrowseHistoryTime = rawTime => {
   if (!rawTime) return '';
 
@@ -102,6 +124,34 @@ const normalizeBrowseHistoryItem = item => {
     targetId,
     title: String(title || ''),
     author: String(author || ''),
+    time: formatBrowseHistoryTime(rawTime)
+  };
+};
+
+const normalizeMyAnswerItem = item => {
+  const id = getFirstNonEmptyValue(item?.answerId, item?.id, item?.contentId, item?.targetId);
+  const questionId = getFirstNonEmptyValue(item?.questionId, item?.problemId, item?.targetQuestionId);
+  const questionTitle = getFirstNonEmptyValue(item?.questionTitle, item?.title, item?.problemTitle, item?.targetTitle, '');
+  const content = getFirstNonEmptyValue(item?.content, item?.answerContent, item?.summary, item?.description, '');
+  const rawTime = getFirstNonEmptyValue(item?.answerTime, item?.createTime, item?.createdAt, item?.updateTime, item?.updatedAt, item?.publishTime);
+
+  return {
+    ...item,
+    id,
+    questionId,
+    questionTitle: String(questionTitle || ''),
+    content: String(content || ''),
+    likes: normalizeProfileCount(item?.likeCount, item?.likesCount, item?.likeNum, item?.likes),
+    comments: normalizeProfileCount(item?.commentCount, item?.commentsCount, item?.commentNum, item?.replyCount, item?.comments),
+    shares: normalizeProfileCount(item?.shareCount, item?.sharesCount, item?.shareNum, item?.shares, item?.forwardCount),
+    collects: normalizeProfileCount(item?.collectCount, item?.collects, item?.bookmarkCount, item?.bookmarks, item?.favoriteCount),
+    dislikes: normalizeProfileCount(item?.dislikeCount, item?.dislikesCount, item?.dislikeNum, item?.dislikes),
+    adopted: Boolean(
+      item?.adopted ??
+      item?.isAdopted ??
+      item?.accepted ??
+      item?.isAccepted
+    ),
     time: formatBrowseHistoryTime(rawTime)
   };
 };
@@ -636,6 +686,7 @@ export default function ProfileScreen({
   // 退出登录确认弹窗状态
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [showAnswersModal, setShowAnswersModal] = useState(false);
   const [showFavoritesModal, setShowFavoritesModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showDraftsModal, setShowDraftsModal] = useState(false);
@@ -653,6 +704,12 @@ export default function ProfileScreen({
   const [draftsLoading, setDraftsLoading] = useState(false);
   const [draftsPageNum, setDraftsPageNum] = useState(1);
   const [draftsHasMore, setDraftsHasMore] = useState(true);
+  const [answersList, setAnswersList] = useState([]);
+  const [answersLoading, setAnswersLoading] = useState(false);
+  const [answersPageNum, setAnswersPageNum] = useState(1);
+  const [answersHasMore, setAnswersHasMore] = useState(true);
+  const [answersLoaded, setAnswersLoaded] = useState(false);
+  const [answersError, setAnswersError] = useState('');
   const [historyList, setHistoryList] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyPageNum, setHistoryPageNum] = useState(1);
@@ -660,6 +717,52 @@ export default function ProfileScreen({
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [favoritesTab, setFavoritesTab] = useState('questions');
   const [likesTab, setLikesTab] = useState('questions');
+  const previewAnswersList = React.useMemo(() => answersList.slice(0, 3), [answersList]);
+  const previewHistoryList = React.useMemo(() => historyList.slice(0, 3), [historyList]);
+
+  const loadMyAnswersList = React.useCallback(async (isLoadMore = false) => {
+    if (answersLoading || (isLoadMore && !answersHasMore)) return;
+
+    try {
+      setAnswersLoading(true);
+      setAnswersError('');
+      const pageNum = isLoadMore ? answersPageNum + 1 : 1;
+      const response = await answerApi.getMyAnswers({
+        pageNum,
+        pageSize: ANSWERS_PAGE_SIZE
+      });
+
+      if (response.code === 200 || response.code === 0) {
+        const {
+          rows = [],
+          total = 0
+        } = extractMyAnswerRows(response);
+        const normalizedRows = rows.map(normalizeMyAnswerItem).filter(item => item?.id);
+
+        if (isLoadMore) {
+          const nextList = [...answersList, ...normalizedRows];
+          setAnswersList(nextList);
+          setAnswersPageNum(pageNum);
+          setAnswersHasMore(nextList.length < total);
+        } else {
+          setAnswersList(normalizedRows);
+          setAnswersPageNum(1);
+          setAnswersHasMore(normalizedRows.length < total);
+        }
+
+        setAnswersLoaded(true);
+        return;
+      }
+
+      throw new Error(response?.msg || '获取我的回答失败');
+    } catch (error) {
+      console.error('获取我的回答列表失败:', error);
+      setAnswersError(error?.message || '获取我的回答失败');
+      setAnswersLoaded(true);
+    } finally {
+      setAnswersLoading(false);
+    }
+  }, [answersHasMore, answersList, answersLoading, answersPageNum]);
 
   const loadBrowseHistoryList = React.useCallback(async (isLoadMore = false) => {
     if (historyLoading || (isLoadMore && !historyHasMore)) return;
@@ -698,6 +801,12 @@ export default function ProfileScreen({
       setHistoryLoading(false);
     }
   }, [historyHasMore, historyList, historyLoading, historyPageNum]);
+
+  React.useEffect(() => {
+    if (activeTab === t('profile.contentTabs.answers') && !answersLoaded && !answersLoading) {
+      loadMyAnswersList();
+    }
+  }, [activeTab, answersLoaded, answersLoading, loadMyAnswersList, t]);
 
   React.useEffect(() => {
     if (activeTab === t('profile.contentTabs.history') && !historyLoaded && !historyLoading) {
@@ -1664,7 +1773,18 @@ export default function ProfileScreen({
           <View style={{
           display: activeTab === t('profile.contentTabs.answers') ? 'flex' : 'none'
         }}>
-            {myAnswers.map(a => <TouchableOpacity key={a.id} style={styles.answerItem} onPress={() => navigation.navigate('AnswerDetail', {
+            {answersLoading && answersList.length === 0 ? <View style={styles.emptyContainer}>
+                <ActivityIndicator size="small" color="#ef4444" />
+                <Text style={styles.loadingText}>{t('common.loading')}</Text>
+              </View> : answersError && answersList.length === 0 ? <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>{answersError}</Text>
+                <TouchableOpacity style={styles.viewAllBtn} onPress={() => loadMyAnswersList(false)}>
+                  <Text style={styles.viewAllText}>{t('common.retry')}</Text>
+                </TouchableOpacity>
+              </View> : answersList.length === 0 ? <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>{t('common.noData')}</Text>
+              </View> : previewAnswersList.map(a => <TouchableOpacity key={a.id} style={styles.answerItem} onPress={() => navigation.navigate('AnswerDetail', {
+            answerId: a.id,
             answer: a,
             defaultTab: 'supplements'
           })}>
@@ -1917,7 +2037,7 @@ export default function ProfileScreen({
           <View style={{
           display: activeTab === t('profile.contentTabs.history') ? 'flex' : 'none'
         }}>
-            {historyList.map(item => <TouchableOpacity key={item.id} style={styles.historyItem} onPress={() => handleHistoryPress(item)}>
+            {previewHistoryList.map(item => <TouchableOpacity key={item.id} style={styles.historyItem} onPress={() => handleHistoryPress(item)}>
                 <View style={styles.historyItemContent}>
                   <Text style={styles.historyItemTitle}>{item.title}</Text>
                   <View style={styles.historyItemMeta}>
@@ -1929,7 +2049,7 @@ export default function ProfileScreen({
               </TouchableOpacity>)}
           </View>
           
-          <TouchableOpacity style={styles.viewAllBtn} onPress={() => showAppAlert(t('profile.viewAll'), `${t('profile.viewAll')}${activeTab}`)}><Text style={styles.viewAllText}>{t('profile.viewAll')}</Text><Ionicons name="chevron-forward" size={16} color="#ef4444" /></TouchableOpacity>
+          {activeTab === t('profile.contentTabs.answers') ? answersList.length > 3 ? <TouchableOpacity style={styles.viewAllBtn} onPress={() => setShowAnswersModal(true)}><Text style={styles.viewAllText}>{t('profile.viewAll')}</Text><Ionicons name="chevron-forward" size={16} color="#ef4444" /></TouchableOpacity> : null : activeTab === t('profile.contentTabs.history') ? historyList.length > 3 ? <TouchableOpacity style={styles.viewAllBtn} onPress={() => setShowHistoryModal(true)}><Text style={styles.viewAllText}>{t('profile.viewAll')}</Text><Ionicons name="chevron-forward" size={16} color="#ef4444" /></TouchableOpacity> : null : <TouchableOpacity style={styles.viewAllBtn} onPress={() => showAppAlert(t('profile.viewAll'), `${t('profile.viewAll')}${activeTab}`)}><Text style={styles.viewAllText}>{t('profile.viewAll')}</Text><Ionicons name="chevron-forward" size={16} color="#ef4444" /></TouchableOpacity>}
         </View>
 
         {/* 退出登录 */}
@@ -1943,6 +2063,103 @@ export default function ProfileScreen({
       </ScrollView>
 
       {/* 我的收藏弹窗 */}
+      <Modal visible={showAnswersModal} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={() => setShowAnswersModal(false)}>
+        <View style={styles.listModal}>
+          <View style={[styles.listModalHeader, {
+            paddingTop: profileModalTopSafeInset + 8
+          }]}>
+            <TouchableOpacity onPress={() => setShowAnswersModal(false)}>
+              <Ionicons name="arrow-back" size={24} color="#1f2937" />
+            </TouchableOpacity>
+            <Text style={styles.listModalTitle}>{t('profile.contentTabs.answers')}</Text>
+            <View style={{
+            width: 24
+          }} />
+          </View>
+          <ScrollView style={styles.listModalContent} contentContainerStyle={[styles.listModalContentContainer, {
+          paddingBottom: bottomSafeInset
+        }]}>
+            {answersLoading && answersList.length === 0 ? <View style={styles.emptyContainer}>
+                <ActivityIndicator size="large" color="#ef4444" />
+                <Text style={styles.loadingText}>{t('common.loading')}</Text>
+              </View> : answersError && answersList.length === 0 ? <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>{answersError}</Text>
+                <TouchableOpacity style={styles.viewAllBtn} onPress={() => loadMyAnswersList(false)}>
+                  <Text style={styles.viewAllText}>{t('common.retry')}</Text>
+                </TouchableOpacity>
+              </View> : answersList.length === 0 ? <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>{t('common.noData')}</Text>
+              </View> : <>
+                {answersList.map(a => <TouchableOpacity key={a.id} style={styles.answerItem} onPress={() => {
+              setShowAnswersModal(false);
+              navigation.navigate('AnswerDetail', {
+                answerId: a.id,
+                answer: a,
+                defaultTab: 'supplements'
+              });
+            }}>
+                    <View style={styles.answerHeader}>
+                      <Text style={styles.answerTime}>{formatTime(a.time)}</Text>
+                    </View>
+                    <Text style={styles.answerQuestion} numberOfLines={1}>
+                      {a.adopted && <Text style={styles.adoptedTagInline}>
+                          <Text style={styles.adoptedTagInlineText}>{t('profile.adopted')}</Text>
+                        </Text>}
+                      {' '}{a.questionTitle}
+                    </Text>
+                    <Text style={styles.answerContent} numberOfLines={2}>{a.content}</Text>
+                    <View style={styles.answerStats}>
+                      <View style={styles.questionStatItem}>
+                        <Ionicons name="thumbs-up-outline" size={12} color="#9ca3af" />
+                        <Text style={styles.questionStatText}>{formatNumber(a.likes)}</Text>
+                      </View>
+                      <View style={styles.questionStatItem}>
+                        <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
+                        <Text style={styles.questionStatText}>{formatNumber(a.comments)}</Text>
+                      </View>
+                      <TouchableOpacity style={styles.questionStatItem} onPress={e => {
+                    e.stopPropagation();
+                    showAppAlert(t('profile.shareFeatureTitle'), t('profile.shareFeatureMessage'));
+                  }}>
+                        <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
+                        <Text style={styles.questionStatText}>{formatNumber(a.shares)}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.questionStatItem} onPress={e => {
+                    e.stopPropagation();
+                    showAppAlert(t('profile.bookmarkFeatureTitle'), t('profile.bookmarkFeatureMessage'));
+                  }}>
+                        <Ionicons name="star-outline" size={12} color="#9ca3af" />
+                        <Text style={styles.questionStatText}>{formatNumber(a.collects)}</Text>
+                      </TouchableOpacity>
+                      <View style={{flex: 1}} />
+                      <TouchableOpacity style={styles.questionStatItem} onPress={e => {
+                    e.stopPropagation();
+                    showAppAlert(t('profile.dislikeFeatureTitle'), t('profile.dislikeFeatureMessage'));
+                  }}>
+                        <Ionicons name="thumbs-down-outline" size={12} color="#9ca3af" />
+                        <Text style={styles.questionStatText}>{formatNumber(a.dislikes)}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.questionStatItem} onPress={e => {
+                    e.stopPropagation();
+                    navigation.navigate('Report', {
+                      type: 'answer',
+                      targetType: 2,
+                      targetId: a.id
+                    });
+                  }}>
+                        <Ionicons name="flag-outline" size={12} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                  </TouchableOpacity>)}
+                {answersLoading || answersHasMore ? <TouchableOpacity style={styles.viewAllBtn} disabled={answersLoading || !answersHasMore} onPress={() => loadMyAnswersList(true)}>
+                    <Text style={styles.viewAllText}>{answersLoading ? t('common.loading') : t('profile.viewAll')}</Text>
+                    {answersHasMore && !answersLoading ? <Ionicons name="chevron-forward" size={16} color="#ef4444" /> : null}
+                  </TouchableOpacity> : null}
+              </>}
+          </ScrollView>
+        </View>
+      </Modal>
+
       <Modal visible={showFavoritesModal} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={() => setShowFavoritesModal(false)}>
         <View style={styles.listModal}>
           <View style={[styles.listModalHeader, {
@@ -2018,6 +2235,10 @@ export default function ProfileScreen({
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
               </TouchableOpacity>)}
+            {historyLoading || historyHasMore ? <TouchableOpacity style={styles.viewAllBtn} disabled={historyLoading || !historyHasMore} onPress={() => loadBrowseHistoryList(true)}>
+                <Text style={styles.viewAllText}>{historyLoading ? t('common.loading') : t('profile.viewAll')}</Text>
+                {historyHasMore && !historyLoading ? <Ionicons name="chevron-forward" size={16} color="#ef4444" /> : null}
+              </TouchableOpacity> : null}
           </ScrollView>
         </View>
       </Modal>

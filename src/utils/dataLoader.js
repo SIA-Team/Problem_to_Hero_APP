@@ -510,6 +510,16 @@ const formatApiTime = (timeStr) => {
 // 正在进行的请求（用于去重）
 const pendingRequests = new Map();
 const backgroundRefreshTimers = new Map();
+const RANK_TAB_TYPES = new Set(['recommend', 'hot', 'hero']);
+
+const buildQuestionCacheParams = (tabType, page, queryOptions = {}) => ({
+  tabType,
+  page,
+  sceneKey: queryOptions.sceneKey || 'home',
+  regionId: Number(queryOptions.regionId) || 0,
+});
+
+export const isRankTabType = (tabType) => RANK_TAB_TYPES.has(tabType);
 
 // 预加载队列
 const prefetchQueue = [];
@@ -635,8 +645,9 @@ const fetchSupplementsByQuestion = async (questionId, sortBy, page) => {
  * @param {Function} onDebugUpdate - 调试信息回调
  * @returns {Promise<{data: Array, fromCache: boolean}>}
  */
-export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onDebugUpdate = null) => {
-  const cacheKey = `questions_${tabType}_${page}`;
+export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onDebugUpdate = null, queryOptions = {}) => {
+  const cacheParams = buildQuestionCacheParams(tabType, page, queryOptions);
+  const cacheKey = `questions_${cacheParams.tabType}_${cacheParams.page}_${cacheParams.sceneKey}_${cacheParams.regionId}`;
   
   // 检查是否有正在进行的相同请求
   if (pendingRequests.has(cacheKey)) {
@@ -648,22 +659,22 @@ export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onD
     try {
       // 优化：如果是强制刷新，直接从网络加载，不检查缓存
       if (forceRefresh) {
-        const response = await fetchQuestionsByTab(tabType, page, onDebugUpdate);
+        const response = await fetchQuestionsByTab(tabType, page, onDebugUpdate, queryOptions);
         const decoratedResponse = await applyPaidQuestionAccessState(response);
         
         // 保存到缓存
         if (response && response.length > 0) {
-          await setCache('questions', { tabType, page }, response);
+          await setCache('questions', cacheParams, response);
         }
         
         return { data: decoratedResponse, fromCache: false };
       }
       
       // 1. 如果不是强制刷新，先尝试从缓存获取
-      const cached = await getCache('questions', { tabType, page });
+      const cached = await getCache('questions', cacheParams);
       if (cached) {
         // 返回缓存数据，同时在后台更新
-        scheduleBackgroundUpdate(tabType, page, onDebugUpdate);
+        scheduleBackgroundUpdate(tabType, page, onDebugUpdate, queryOptions);
         return {
           data: await applyPersistedQuestionInteractionSnapshots(
             await applyPaidQuestionAccessState(cached)
@@ -673,12 +684,12 @@ export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onD
       }
       
       // 2. 从网络加载数据
-      const response = await fetchQuestionsByTab(tabType, page, onDebugUpdate);
+      const response = await fetchQuestionsByTab(tabType, page, onDebugUpdate, queryOptions);
       const decoratedResponse = await applyPaidQuestionAccessState(response);
       
       // 3. 保存到缓存
       if (response && response.length > 0) {
-        await setCache('questions', { tabType, page }, response);
+        await setCache('questions', cacheParams, response);
       }
       
       return {
@@ -687,7 +698,7 @@ export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onD
       };
     } catch (error) {
       // 如果网络请求失败，尝试返回缓存数据
-      const cached = await getCache('questions', { tabType, page });
+      const cached = await getCache('questions', cacheParams);
       if (cached) {
         return {
           data: await applyPersistedQuestionInteractionSnapshots(
@@ -713,12 +724,12 @@ export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onD
 /**
  * 后台更新数据（不阻塞 UI）
  */
-const backgroundUpdate = async (tabType, page) => {
+const backgroundUpdate = async (tabType, page, queryOptions = {}) => {
   try {
-    const response = await fetchQuestionsByTab(tabType, page);
+    const response = await fetchQuestionsByTab(tabType, page, null, queryOptions);
     
     if (response && response.length > 0) {
-      await setCache('questions', { tabType, page }, response);
+      await setCache('questions', buildQuestionCacheParams(tabType, page, queryOptions), response);
     }
   } catch (error) {
     console.warn(`问题列表后台更新失败: ${tabType} - 第${page}页`, error);
@@ -728,8 +739,9 @@ const backgroundUpdate = async (tabType, page) => {
 /**
  * 根据 Tab 类型获取数据
  */
-const scheduleBackgroundUpdate = (tabType, page, onDebugUpdate = null) => {
-  const cacheKey = `questions_${tabType}_${page}`;
+const scheduleBackgroundUpdate = (tabType, page, onDebugUpdate = null, queryOptions = {}) => {
+  const cacheParams = buildQuestionCacheParams(tabType, page, queryOptions);
+  const cacheKey = `questions_${cacheParams.tabType}_${cacheParams.page}_${cacheParams.sceneKey}_${cacheParams.regionId}`;
 
   if (backgroundRefreshTimers.has(cacheKey)) {
     return;
@@ -737,14 +749,18 @@ const scheduleBackgroundUpdate = (tabType, page, onDebugUpdate = null) => {
 
   const timer = setTimeout(() => {
     backgroundRefreshTimers.delete(cacheKey);
-    loadQuestions(tabType, page, true, onDebugUpdate).catch(() => {});
+    loadQuestions(tabType, page, true, onDebugUpdate, queryOptions).catch(() => {});
   }, 1200);
 
   backgroundRefreshTimers.set(cacheKey, timer);
 };
 
-const fetchQuestionsByTab = async (tabType, page, onDebugUpdate) => {
+const fetchQuestionsByTab = async (tabType, page, onDebugUpdate, queryOptions = {}) => {
   const pageSize = 20;
+  const rankParams = {
+    sceneKey: queryOptions.sceneKey || 'home',
+    regionId: Number(queryOptions.regionId) || 0,
+  };
   
   try {
     const apiCall = `${tabType} - 第${page}页`;
@@ -763,13 +779,13 @@ const fetchQuestionsByTab = async (tabType, page, onDebugUpdate) => {
     
     switch (tabType) {
       case 'recommend':
-        response = await questionApi.getRecommendList({ pageNum: page, pageSize });
+        response = await questionApi.getRecommendList(rankParams);
         break;
       case 'hot':
-        response = await questionApi.getHotList({ pageNum: page, pageSize });
+        response = await questionApi.getHotList(rankParams);
         break;
       case 'hero':
-        response = await questionApi.getHeroList({ pageNum: page, pageSize });
+        response = await questionApi.getHeroList(rankParams);
         break;
       case 'follow':
         response = await questionApi.getFollowList({ pageNum: page, pageSize });
@@ -828,7 +844,7 @@ const fetchQuestionsByTab = async (tabType, page, onDebugUpdate) => {
  * @param {string} currentTab - 当前 Tab
  * @param {Array<string>} allTabs - 所有 Tab 列表
  */
-export const prefetchAdjacentTabs = (currentTab, allTabs) => {
+export const prefetchAdjacentTabs = (currentTab, allTabs, queryOptions = {}) => {
   const currentIndex = allTabs.indexOf(currentTab);
   if (currentIndex === -1) return;
   
@@ -846,8 +862,10 @@ export const prefetchAdjacentTabs = (currentTab, allTabs) => {
   
   // 添加到预加载队列
   tabsToPrefetch.forEach(tab => {
-    if (!prefetchQueue.includes(tab)) {
-      prefetchQueue.push(tab);
+    const cacheParams = buildQuestionCacheParams(tab, 1, queryOptions);
+    const queueKey = `${cacheParams.tabType}_${cacheParams.sceneKey}_${cacheParams.regionId}`;
+    if (!prefetchQueue.some(item => item.queueKey === queueKey)) {
+      prefetchQueue.push({ tabType: tab, queryOptions, queueKey });
     }
   });
   
@@ -864,10 +882,10 @@ const processPrefetchQueue = async () => {
   isPrefetching = true;
   
   while (prefetchQueue.length > 0) {
-    const tabType = prefetchQueue.shift();
+    const { tabType, queryOptions } = prefetchQueue.shift();
     
     try {
-      await loadQuestions(tabType, 1, false);
+      await loadQuestions(tabType, 1, false, null, queryOptions);
     } catch (error) {
       console.warn(`问题列表预加载失败: ${tabType}`, error);
     }
@@ -885,11 +903,11 @@ const processPrefetchQueue = async () => {
  * @param {string} tabType - Tab 类型
  * @param {number} currentPage - 当前页码
  */
-export const prefetchNextPage = async (tabType, currentPage) => {
+export const prefetchNextPage = async (tabType, currentPage, queryOptions = {}) => {
   const nextPage = currentPage + 1;
   
   try {
-    await loadQuestions(tabType, nextPage, false);
+    await loadQuestions(tabType, nextPage, false, null, queryOptions);
   } catch (error) {
     console.warn(`问题列表预加载下一页失败: ${tabType} - 第${nextPage}页`, error);
   }
@@ -928,9 +946,9 @@ export const batchLoadTabs = async (tabs) => {
  * @param {Array} currentData - 当前显示的数据
  * @returns {Promise<boolean>} 是否有新内容
  */
-export const checkForNewContent = async (tabType, currentData) => {
+export const checkForNewContent = async (tabType, currentData, queryOptions = {}) => {
   try {
-    const { data } = await loadQuestions(tabType, 1, true);
+    const { data } = await loadQuestions(tabType, 1, true, null, queryOptions);
     
     if (!data || data.length === 0) return false;
     if (!currentData || currentData.length === 0) return true;

@@ -10537,7 +10537,7 @@ const styles = StyleSheet.create({
     rowGap: 6
   },
   smallAuthorName: {
-    fontSize: scaleFont(14),
+    fontSize: scaleFont(13),
     fontWeight: 'bold',
     color: '#1f2937',
     flexShrink: 1,
@@ -10563,7 +10563,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6'
   },
   followBtnSmallText: {
-    fontSize: scaleFont(12),
+    fontSize: scaleFont(11),
     color: '#ef4444',
     fontWeight: '500',
     flexShrink: 0
@@ -10572,7 +10572,7 @@ const styles = StyleSheet.create({
     color: '#6b7280'
   },
   followCountText: {
-    fontSize: scaleFont(12),
+    fontSize: scaleFont(11),
     color: '#ef4444',
     fontWeight: '500',
     marginLeft: 1,
@@ -10582,7 +10582,7 @@ const styles = StyleSheet.create({
     color: '#6b7280'
   },
   smallPostTime: {
-    fontSize: scaleFont(14),
+    fontSize: scaleFont(13),
     fontWeight: '400',
     color: '#9ca3af',
     marginTop: 2,
@@ -11379,12 +11379,12 @@ const styles = StyleSheet.create({
     gap: 8
   },
   suppAuthor: {
-    fontSize: scaleFont(12),
+    fontSize: scaleFont(11),
     fontWeight: '500',
     color: '#1f2937'
   },
   suppTime: {
-    fontSize: scaleFont(12),
+    fontSize: scaleFont(11),
     color: '#9ca3af'
   },
   suppLocationRow: {
@@ -11393,7 +11393,7 @@ const styles = StyleSheet.create({
     gap: 2
   },
   suppLocation: {
-    fontSize: scaleFont(12),
+    fontSize: scaleFont(11),
     color: '#9ca3af'
   },
   suppAnswerBtnTop: {

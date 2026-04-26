@@ -3,30 +3,80 @@ import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
-import { getRegionData } from '../data/regionData';
-import { loadComboChannels, mergeUniqueChannels, saveComboChannels } from '../services/channelSubscriptionService';
+import { emptyChannelGroups, fetchChannelCatalog, hasChannelCatalogData } from '../services/channelCatalogService';
+import { createCombinedChannel } from '../services/channelCombinedCreateService';
+import { fetchMyCreatedCombinedChannels } from '../services/channelCombinedService';
+import {
+  fetchMySubscribedChannelItems,
+  removeMySubscribedChannel,
+  saveMySubscribedChannelOrder,
+  subscribeChannel,
+} from '../services/channelSubscribedService';
+import { getRegionChildren } from '../services/regionService';
 import { showAppAlert } from '../utils/appAlert';
 
 import { scaleFont } from '../utils/responsive';
-// 地区数据（使用多语言数据）
-// 已移除硬编码数据，改用 getRegionData()
+// 鍦板尯鏁版嵁锛堜娇鐢ㄥ璇█鏁版嵁锛?
+// 宸茬Щ闄ょ‖缂栫爜鏁版嵁锛屾敼鐢?getRegionData()
 
-// 抖动动画组件
-const ShakingChannelTag = ({ channel, index, onPress, isEditMode }) => {
+// 鎶栧姩鍔ㄧ敾缁勪欢
+const moveArrayItem = (list, fromIndex, toIndex) => {
+  if (
+    !Array.isArray(list) ||
+    fromIndex === toIndex ||
+    fromIndex < 0 ||
+    toIndex < 0 ||
+    fromIndex >= list.length ||
+    toIndex >= list.length
+  ) {
+    return list;
+  }
+
+  const next = [...list];
+  const [movedItem] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, movedItem);
+  return next;
+};
+
+const MyChannelTagContent = ({ channel, isEditMode, onDelete, isDeleteDisabled = false }) => (
+  <View style={[styles.myChannelTag, isEditMode ? styles.myChannelTagEditMode : styles.myChannelTagViewMode]}>
+    <Text style={styles.myChannelText}>{channel}</Text>
+    {isEditMode && (
+      <TouchableOpacity
+        disabled={isDeleteDisabled}
+        onPress={onDelete}
+        hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
+        style={styles.deleteIconContainer}
+      >
+        <Ionicons name="close" size={14} color="#374151" />
+      </TouchableOpacity>
+    )}
+  </View>
+);
+
+const ShakingChannelTag = ({
+  channel,
+  channelKey,
+  onDelete,
+  onLongPress,
+  isDragging,
+  isEditMode,
+  setTagRef,
+}) => {
   const shakeAnim = useRef(new Animated.Value(0)).current;
+  const shakeAnimationRef = useRef(null);
   
   useEffect(() => {
     if (isEditMode) {
-      // 为每个标签添加不同的延迟，让抖动效果更自然
-      const delay = index * 50;
-      
+      // 涓烘瘡涓爣绛炬坊鍔犱笉鍚岀殑寤惰繜锛岃鎶栧姩鏁堟灉鏇磋嚜鐒?
+      shakeAnimationRef.current?.stop?.();
+
       const shakeAnimation = Animated.loop(
         Animated.sequence([
           Animated.timing(shakeAnim, {
             toValue: 1,
             duration: 100,
-            useNativeDriver: true,
-            delay: delay
+            useNativeDriver: true
           }),
           Animated.timing(shakeAnim, {
             toValue: -1,
@@ -46,47 +96,204 @@ const ShakingChannelTag = ({ channel, index, onPress, isEditMode }) => {
         ])
       );
       
+      shakeAnimationRef.current = shakeAnimation;
       shakeAnimation.start();
-      
-      return () => shakeAnimation.stop();
-    } else {
-      shakeAnim.setValue(0);
     }
-  }, [isEditMode, index]);
+
+    if (!isEditMode) {
+      shakeAnimationRef.current?.stop?.();
+      shakeAnimationRef.current = null;
+      shakeAnim.stopAnimation(() => {
+        shakeAnim.setValue(0);
+      });
+    }
+
+    return () => {
+      shakeAnimationRef.current?.stop?.();
+      shakeAnimationRef.current = null;
+      shakeAnim.stopAnimation(() => {
+        shakeAnim.setValue(0);
+      });
+    };
+  }, [isEditMode]);
   
   const rotate = shakeAnim.interpolate({
     inputRange: [-1, 1],
     outputRange: ['-2deg', '2deg']
   });
+  const wrapperStyle = isDragging ? styles.myChannelTagDraggingPlaceholder : null;
+  const animatedTransform = isEditMode ? [{
+    rotate
+  }] : [];
   
   return (
-    <Animated.View style={{ transform: [{ rotate }] }}>
-      <View style={styles.myChannelTagWrapper}>
-        <View style={styles.myChannelTag}>
-          <Text style={styles.myChannelText}>{channel}</Text>
-          {isEditMode && (
-            <TouchableOpacity 
-              onPress={onPress}
-              hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
-              style={styles.deleteIconContainer}
-            >
-              <Ionicons name="close" size={14} color="#374151" />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
+    <Animated.View
+      ref={node => setTagRef(channelKey, node)}
+      collapsable={false}
+      style={{
+        transform: animatedTransform,
+        opacity: isDragging ? 0 : 1,
+      }}
+    >
+      <TouchableOpacity
+        activeOpacity={1}
+        delayLongPress={180}
+        disabled={!isEditMode}
+        onLongPress={onLongPress}
+        style={[styles.myChannelTagWrapper, wrapperStyle]}
+      >
+        <MyChannelTagContent channel={channel} isEditMode={isEditMode} onDelete={onDelete} />
+      </TouchableOpacity>
     </Animated.View>
   );
 };
 
-// 频道数据 - 使用翻译键
-const getChannelData = t => ({
-  country: [t('channelManage.countryCategories.policy'), t('channelManage.countryCategories.society'), t('channelManage.countryCategories.economy'), t('channelManage.countryCategories.environment'), t('channelManage.countryCategories.infrastructure')],
-  industry: [t('channelManage.industryCategories.internet'), t('channelManage.industryCategories.finance'), t('channelManage.industryCategories.healthcare'), t('channelManage.industryCategories.education'), t('channelManage.industryCategories.realestate'), t('channelManage.industryCategories.manufacturing')],
-  enterprise: [t('channelManage.enterpriseCategories.management'), t('channelManage.enterpriseCategories.hr'), t('channelManage.enterpriseCategories.marketing'), t('channelManage.enterpriseCategories.finance'), t('channelManage.enterpriseCategories.operations'), t('channelManage.enterpriseCategories.legal')],
-  personal: [t('channelManage.personalCategories.workplace'), t('channelManage.personalCategories.tech'), t('channelManage.personalCategories.health'), t('channelManage.personalCategories.education'), t('channelManage.personalCategories.food'), t('channelManage.personalCategories.emotion'), t('channelManage.personalCategories.travel'), t('channelManage.personalCategories.entertainment')]
-});
-const getDefaultMyChannels = t => [t('channelManage.countryCategories.policy'), t('channelManage.industryCategories.internet'), t('channelManage.personalCategories.workplace'), t('channelManage.personalCategories.tech')];
+const DraggingChannelOverlay = ({ channel, isEditMode, dragPosition, dragScale, width }) => {
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const shakeAnimationRef = useRef(null);
+
+  useEffect(() => {
+    if (isEditMode) {
+      shakeAnimationRef.current?.stop?.();
+
+      const shakeAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(shakeAnim, {
+            toValue: 1,
+            duration: 100,
+            useNativeDriver: true
+          }),
+          Animated.timing(shakeAnim, {
+            toValue: -1,
+            duration: 100,
+            useNativeDriver: true
+          }),
+          Animated.timing(shakeAnim, {
+            toValue: 1,
+            duration: 100,
+            useNativeDriver: true
+          }),
+          Animated.timing(shakeAnim, {
+            toValue: 0,
+            duration: 100,
+            useNativeDriver: true
+          })
+        ])
+      );
+
+      shakeAnimationRef.current = shakeAnimation;
+      shakeAnimation.start();
+    }
+
+    if (!isEditMode) {
+      shakeAnimationRef.current?.stop?.();
+      shakeAnimationRef.current = null;
+      shakeAnim.stopAnimation(() => {
+        shakeAnim.setValue(0);
+      });
+    }
+
+    return () => {
+      shakeAnimationRef.current?.stop?.();
+      shakeAnimationRef.current = null;
+      shakeAnim.stopAnimation(() => {
+        shakeAnim.setValue(0);
+      });
+    };
+  }, [isEditMode, shakeAnim]);
+
+  const rotate = shakeAnim.interpolate({
+    inputRange: [-1, 1],
+    outputRange: ['-2deg', '2deg']
+  });
+
+  return <Animated.View
+    pointerEvents="none"
+    style={[styles.draggingTagOverlay, {
+    width,
+    transform: [{
+      translateX: dragPosition.x
+    }, {
+      translateY: dragPosition.y
+    }, {
+      scale: dragScale
+    }, ...(isEditMode ? [{
+      rotate
+    }] : [])]
+  }]}
+  >
+      <View style={styles.myChannelTagWrapper}>
+        <View style={styles.draggingTagShadow}>
+          <MyChannelTagContent channel={channel} isEditMode={isEditMode} isDeleteDisabled />
+        </View>
+      </View>
+    </Animated.View>;
+};
+
+const getChannelDisplayName = channel => {
+  if (typeof channel === 'string') {
+    return channel.trim();
+  }
+
+  return String(channel?.name ?? '').trim();
+};
+
+const getChannelIdentityKey = channel => {
+  const targetType = String(channel?.targetType ?? '').trim();
+  const targetKey = String(channel?.targetKey ?? '').trim();
+
+  if (!targetType || !targetKey) {
+    return '';
+  }
+
+  return `${targetType}::${targetKey}`;
+};
+
+const isLocalOnlyChannel = channel =>
+  !channel || typeof channel === 'string' || !getChannelIdentityKey(channel);
+
+const getRenderableChannelKey = (channel, index) =>
+  getChannelIdentityKey(channel) || getChannelDisplayName(channel) || String(index);
+
+const applyDraftChannelChanges = (baseChannels, persistedChannels, draftChannels) => {
+  const persistedKeySet = new Set(
+    persistedChannels.map(channel => getChannelIdentityKey(channel)).filter(Boolean)
+  );
+  const draftKeySet = new Set(
+    draftChannels.map(channel => getChannelIdentityKey(channel)).filter(Boolean)
+  );
+  const pendingRemovedKeySet = new Set(
+    persistedChannels
+      .map(channel => getChannelIdentityKey(channel))
+      .filter(identityKey => identityKey && !draftKeySet.has(identityKey))
+  );
+  const pendingAddedChannels = draftChannels.filter(channel => {
+    const identityKey = getChannelIdentityKey(channel);
+    return identityKey && !persistedKeySet.has(identityKey);
+  });
+  const nextChannels = baseChannels.filter(channel => {
+    const identityKey = getChannelIdentityKey(channel);
+    return !identityKey || !pendingRemovedKeySet.has(identityKey);
+  });
+  const nextChannelKeySet = new Set(
+    nextChannels.map(channel => getChannelIdentityKey(channel)).filter(Boolean)
+  );
+
+  pendingAddedChannels.forEach(channel => {
+    const identityKey = getChannelIdentityKey(channel);
+
+    if (!identityKey || nextChannelKeySet.has(identityKey)) {
+      return;
+    }
+
+    nextChannels.push(channel);
+    nextChannelKeySet.add(identityKey);
+  });
+
+  return nextChannels;
+};
+
+// 棰戦亾鏁版嵁 - 浣跨敤缈昏瘧閿?
 export default function ChannelManageScreen({
   navigation
 }) {
@@ -96,31 +303,68 @@ export default function ChannelManageScreen({
   } = useTranslation();
   const locale = i18n?.locale || 'en';
 
-  // 获取多语言区域数据和频道数据
-  const regionData = getRegionData();
-  const channelData = getChannelData(t);
+  const [remoteChannelCatalog, setRemoteChannelCatalog] = useState(null);
+  const [catalogStatus, setCatalogStatus] = useState('loading');
+  const [isCreatingCombo, setIsCreatingCombo] = useState(false);
+  const [isSavingChannels, setIsSavingChannels] = useState(false);
+  const [regionOptions, setRegionOptions] = useState([]);
+  const [regionStatus, setRegionStatus] = useState('idle');
+  const [regionErrorMessage, setRegionErrorMessage] = useState('');
+  const channelOptionsByType = React.useMemo(() => {
+    if (!remoteChannelCatalog?.groupsByType) {
+      return emptyChannelGroups;
+    }
 
-  // 添加调试信息
-  React.useEffect(() => {
-    console.log('='.repeat(50));
-    console.log('🔍 ChannelManageScreen mounted - Language Detection Debug');
-    console.log('='.repeat(50));
-    console.log('📱 regionData.countries:', regionData.countries?.slice(0, 3));
-    console.log('🌐 First country:', regionData.countries?.[0]);
-    console.log('='.repeat(50));
-  }, []);
-  // 我的频道 - 使用翻译后的默认值
-  const defaultMyChannels = React.useMemo(() => getDefaultMyChannels(t), [locale]);
-  const [myChannels, setMyChannels] = useState(defaultMyChannels);
+    return {
+      country: remoteChannelCatalog.groupsByType.country || [],
+      industry: remoteChannelCatalog.groupsByType.industry || [],
+      enterprise: remoteChannelCatalog.groupsByType.enterprise || [],
+      personal: remoteChannelCatalog.groupsByType.personal || []
+    };
+  }, [remoteChannelCatalog]);
+  const isCatalogLoading = catalogStatus === 'loading';
+  const isCatalogError = catalogStatus === 'error';
+
+  // 鎴戠殑棰戦亾 - 浣跨敤缈昏瘧鍚庣殑榛樿鍊?
+  const [persistedMyChannels, setPersistedMyChannels] = useState([]);
+  const [myChannels, setMyChannels] = useState([]);
+  const myChannelNames = React.useMemo(
+    () => myChannels.map(channel => getChannelDisplayName(channel)).filter(Boolean),
+    [myChannels]
+  );
+  const availableChannelOptionsByType = React.useMemo(() => ({
+    country: channelOptionsByType.country.filter(channel => !myChannelNames.includes(getChannelDisplayName(channel))),
+    industry: channelOptionsByType.industry.filter(channel => !myChannelNames.includes(getChannelDisplayName(channel))),
+    enterprise: channelOptionsByType.enterprise.filter(channel => !myChannelNames.includes(getChannelDisplayName(channel))),
+    personal: channelOptionsByType.personal.filter(channel => !myChannelNames.includes(getChannelDisplayName(channel))),
+  }), [channelOptionsByType, myChannelNames]);
   const [comboChannels, setComboChannels] = useState([]);
   
-  // 编辑模式状态
+  // 缂栬緫妯″紡鐘舵€?
   const [isEditMode, setIsEditMode] = useState(false);
+  const [draggingChannelKey, setDraggingChannelKey] = useState('');
+  const [draggingChannelSnapshot, setDraggingChannelSnapshot] = useState(null);
+  const myChannelTagRefs = useRef(new Map());
+  const myChannelTagLayoutsRef = useRef(new Map());
+  const scrollViewRef = useRef(null);
+  const draggingChannelKeyRef = useRef('');
+  const handleDragChannelMoveRef = useRef(null);
+  const isFinishingDragRef = useRef(false);
+  const dragRefreshFrameRef = useRef(null);
+  const autoScrollFrameRef = useRef(null);
+  const dragPosition = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const dragScale = useRef(new Animated.Value(1)).current;
+  const scrollMetricsRef = useRef({
+    offsetY: 0,
+    viewportHeight: 0,
+    contentHeight: 0,
+    pageY: 0,
+  });
 
-  // 组合频道创建
+  // 缁勫悎棰戦亾鍒涘缓
   const [showComboCreator, setShowComboCreator] = useState(true);
-  const [comboStep, setComboStep] = useState('region'); // 'region' 或 'category'
-  const [regionStep, setRegionStep] = useState(0); // 0:国家 1:省份 2:城市 3:区域
+  const [comboStep, setComboStep] = useState('region'); // 'region' 鎴?'category'
+  const [regionStep, setRegionStep] = useState(0); // 0:鍥藉 1:鐪佷唤 2:鍩庡競 3:鍖哄煙
   const [comboSelection, setComboSelection] = useState({
     country: null,
     province: null,
@@ -132,99 +376,600 @@ export default function ChannelManageScreen({
   });
   const [myComboChannels, setMyComboChannels] = useState([]);
 
-  // 区域搜索
+  // 鍖哄煙鎼滅储
   const [regionSearchText, setRegionSearchText] = useState('');
+
+  const hasPendingChannelChanges = React.useMemo(() => {
+    const persistedKeys = persistedMyChannels
+      .map(channel => getChannelIdentityKey(channel))
+      .filter(Boolean);
+    const draftKeys = myChannels
+      .map(channel => getChannelIdentityKey(channel))
+      .filter(Boolean);
+
+    if (persistedKeys.length !== draftKeys.length) {
+      return true;
+    }
+
+    return persistedKeys.some((identityKey, index) => identityKey !== draftKeys[index]);
+  }, [myChannels, persistedMyChannels]);
+
+  const loadChannelCatalog = React.useCallback(async () => {
+    setCatalogStatus('loading');
+
+    try {
+      const catalog = await fetchChannelCatalog();
+
+      if (hasChannelCatalogData(catalog)) {
+        setRemoteChannelCatalog(catalog);
+        setCatalogStatus('success');
+        return;
+      }
+
+      setRemoteChannelCatalog(null);
+      setCatalogStatus('empty');
+    } catch (error) {
+      console.error('Failed to load channel catalog:', error);
+      setRemoteChannelCatalog(null);
+      setCatalogStatus('error');
+    }
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
 
-    const syncComboChannels = async () => {
-      const savedComboChannels = await loadComboChannels();
+    const syncChannelCatalog = async () => {
+      await loadChannelCatalog();
 
       if (!isMounted) {
         return;
       }
-
-      setComboChannels(prevChannels => {
-        if (JSON.stringify(prevChannels) === JSON.stringify(savedComboChannels)) {
-          return prevChannels;
-        }
-        return savedComboChannels;
-      });
-      setMyChannels(mergeUniqueChannels(defaultMyChannels, savedComboChannels));
     };
 
-    syncComboChannels();
+    syncChannelCatalog();
 
     return () => {
       isMounted = false;
     };
-  }, [defaultMyChannels, locale]);
+  }, [loadChannelCatalog]);
 
-  // 切换频道订阅
-  const toggleChannel = channel => {
-    if (myChannels.includes(channel)) {
-      // 只有在编辑模式下才能删除
-      if (isEditMode) {
-        const updatedChannels = myChannels.filter(c => c !== channel);
-        const updatedComboChannels = comboChannels.filter(c => c !== channel);
-        setMyChannels(updatedChannels);
-        if (updatedComboChannels.length !== comboChannels.length) {
-          setComboChannels(updatedComboChannels);
-          saveComboChannels(updatedComboChannels);
+  useEffect(() => {
+    let isMounted = true;
+
+    const syncMyChannels = async () => {
+      try {
+        const subscribedChannels = await reloadMyChannels();
+
+        if (!isMounted) {
+          return;
         }
-      }
-    } else {
-      setMyChannels([...myChannels, channel]);
-    }
-  };
 
-  // 组合频道选择逻辑
-  const getRegionOptions = () => {
-    let options = [];
+        setPersistedMyChannels(subscribedChannels);
+        setMyChannels(subscribedChannels);
+      } catch (error) {
+        console.error('Failed to load my subscribed channels:', error);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setPersistedMyChannels([]);
+        setMyChannels([]);
+      }
+    };
+
+    syncMyChannels();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [locale, reloadMyChannels]);
+
+  const getRegionParentIdByStep = React.useCallback(() => {
     switch (regionStep) {
       case 0:
-        // 国家列表
-        options = regionData.countries.map(name => ({
-          name
-        }));
-        break;
+        return '0';
       case 1:
-        // 省份/州列表
-        if (comboSelection.country) {
-          const cities = regionData.cities[comboSelection.country.name] || [];
-          options = cities.map(name => ({
-            name
-          }));
-        }
-        break;
+        return comboSelection.country?.id || null;
       case 2:
-        // 城市列表
-        if (comboSelection.province) {
-          const states = regionData.states[comboSelection.province.name] || [];
-          options = states.map(name => ({
-            name
-          }));
-        }
-        break;
+        return comboSelection.province?.id || null;
       case 3:
-        // 区域列表
-        if (comboSelection.city) {
-          const districts = regionData.districts[comboSelection.city.name] || [];
-          options = districts.map(name => ({
-            name
-          }));
-        }
-        break;
+        return comboSelection.city?.id || null;
       default:
-        options = [];
+        return null;
+    }
+  }, [comboSelection.city?.id, comboSelection.country?.id, comboSelection.province?.id, regionStep]);
+
+  const loadRegionOptions = React.useCallback(async () => {
+    const parentId = getRegionParentIdByStep();
+
+    if (parentId === null) {
+      setRegionOptions([]);
+      setRegionStatus('empty');
+      setRegionErrorMessage('');
+      return [];
     }
 
-    // 根据搜索文本过滤
-    if (regionSearchText.trim()) {
-      options = options.filter(option => option.name.toLowerCase().includes(regionSearchText.toLowerCase()));
+    setRegionStatus('loading');
+    setRegionErrorMessage('');
+
+    try {
+      const children = await getRegionChildren(parentId);
+      setRegionOptions(children);
+      setRegionStatus(children.length > 0 ? 'success' : 'empty');
+      return children;
+    } catch (error) {
+      console.error('Failed to load region options:', error);
+      setRegionOptions([]);
+      setRegionStatus('error');
+      setRegionErrorMessage(error?.message || '');
+      return [];
     }
-    return options;
+  }, [getRegionParentIdByStep]);
+
+  useEffect(() => {
+    if (comboStep !== 'region') {
+      return;
+    }
+
+    loadRegionOptions();
+  }, [comboStep, loadRegionOptions]);
+
+  const filteredRegionOptions = React.useMemo(() => {
+    if (!regionSearchText.trim()) {
+      return regionOptions;
+    }
+
+    const keyword = regionSearchText.trim().toLowerCase();
+    return regionOptions.filter(option =>
+      option.name.toLowerCase().includes(keyword)
+    );
+  }, [regionOptions, regionSearchText]);
+
+  const reloadMyChannels = React.useCallback(async () => {
+    return fetchMySubscribedChannelItems();
+  }, []);
+
+  const setMyChannelTagRef = React.useCallback((channelKey, node) => {
+    if (!channelKey) {
+      return;
+    }
+
+    if (node) {
+      myChannelTagRefs.current.set(channelKey, node);
+      return;
+    }
+
+    myChannelTagRefs.current.delete(channelKey);
+    myChannelTagLayoutsRef.current.delete(channelKey);
+  }, []);
+
+  const refreshMyChannelLayouts = React.useCallback(() => {
+    if (dragRefreshFrameRef.current) {
+      cancelAnimationFrame(dragRefreshFrameRef.current);
+    }
+
+    dragRefreshFrameRef.current = requestAnimationFrame(() => {
+      myChannels.forEach((channel, index) => {
+        const channelKey = getRenderableChannelKey(channel, index);
+        const tagRef = myChannelTagRefs.current.get(channelKey);
+
+        if (!tagRef?.measureInWindow) {
+          return;
+        }
+
+        tagRef.measureInWindow((x, y, width, height) => {
+          myChannelTagLayoutsRef.current.set(channelKey, {
+            x,
+            y,
+            width,
+            height,
+          });
+        });
+      });
+
+      if (scrollViewRef.current?.measureInWindow) {
+        scrollViewRef.current.measureInWindow((x, y, width, height) => {
+          scrollMetricsRef.current = {
+            ...scrollMetricsRef.current,
+            pageY: y,
+            viewportHeight: height,
+          };
+        });
+      }
+    });
+  }, [myChannels]);
+
+  const stopAutoScroll = React.useCallback(() => {
+    if (autoScrollFrameRef.current) {
+      cancelAnimationFrame(autoScrollFrameRef.current);
+      autoScrollFrameRef.current = null;
+    }
+  }, []);
+
+  const resetDraggingChannels = React.useCallback(() => {
+    draggingChannelKeyRef.current = '';
+    isFinishingDragRef.current = false;
+    setDraggingChannelKey('');
+    setDraggingChannelSnapshot(null);
+    dragScale.setValue(1);
+  }, [dragScale]);
+
+  const finishDraggingChannels = React.useCallback(() => {
+    const activeChannelKey = draggingChannelKeyRef.current;
+
+    stopAutoScroll();
+
+    if (!activeChannelKey || !draggingChannelSnapshot || isFinishingDragRef.current) {
+      resetDraggingChannels();
+      return;
+    }
+
+    isFinishingDragRef.current = true;
+    refreshMyChannelLayouts();
+
+    requestAnimationFrame(() => {
+      const finalLayout = myChannelTagLayoutsRef.current.get(activeChannelKey);
+
+      if (!finalLayout) {
+        resetDraggingChannels();
+        return;
+      }
+
+      Animated.parallel([
+        Animated.spring(dragPosition, {
+          toValue: {
+            x: finalLayout.x,
+            y: finalLayout.y,
+          },
+          useNativeDriver: true,
+          friction: 8,
+          tension: 120,
+        }),
+        Animated.spring(dragScale, {
+          toValue: 1,
+          useNativeDriver: true,
+          friction: 8,
+          tension: 120,
+        }),
+      ]).start(() => {
+        resetDraggingChannels();
+      });
+    });
+  }, [
+    dragPosition,
+    dragScale,
+    draggingChannelSnapshot,
+    refreshMyChannelLayouts,
+    resetDraggingChannels,
+    stopAutoScroll,
+  ]);
+
+  const reloadMyCreatedCombinedChannels = React.useCallback(async () => {
+    return fetchMyCreatedCombinedChannels();
+  }, []);
+
+  const syncPersistedMyChannels = React.useCallback((nextPersistedChannels, options = {}) => {
+    const { preserveDraftChanges = false } = options;
+
+    setPersistedMyChannels(nextPersistedChannels);
+    setMyChannels(currentChannels =>
+      preserveDraftChanges
+        ? applyDraftChannelChanges(nextPersistedChannels, persistedMyChannels, currentChannels)
+        : nextPersistedChannels
+    );
+  }, [persistedMyChannels]);
+
+  useEffect(() => {
+    refreshMyChannelLayouts();
+  }, [isEditMode, myChannels, refreshMyChannelLayouts]);
+
+  useEffect(() => {
+    if (isEditMode) {
+      return undefined;
+    }
+
+    finishDraggingChannels();
+    return undefined;
+  }, [finishDraggingChannels, isEditMode]);
+
+  useEffect(() => () => {
+    if (dragRefreshFrameRef.current) {
+      cancelAnimationFrame(dragRefreshFrameRef.current);
+    }
+    if (autoScrollFrameRef.current) {
+      cancelAnimationFrame(autoScrollFrameRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const syncMyCreatedCombinedChannels = async () => {
+      try {
+        const createdCombinedChannels = await reloadMyCreatedCombinedChannels();
+
+        if (!isMounted) {
+          return;
+        }
+
+        setComboChannels(createdCombinedChannels);
+      } catch (error) {
+        console.error('Failed to load my created combined channels:', error);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setComboChannels([]);
+      }
+    };
+
+    syncMyCreatedCombinedChannels();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [locale, reloadMyCreatedCombinedChannels]);
+
+  // 鍒囨崲棰戦亾璁㈤槄
+  const toggleChannel = channel => {
+    const channelName = getChannelDisplayName(channel);
+
+    if (!channelName) {
+      return;
+    }
+
+    const existingChannel = myChannels.find(item => getChannelDisplayName(item) === channelName);
+
+    if (existingChannel) {
+      if (!isEditMode) {
+        return;
+      }
+
+      const nextRealChannelCount = myChannels.filter(item => {
+        if (getChannelDisplayName(item) === channelName) {
+          return false;
+        }
+
+        return !isLocalOnlyChannel(item);
+      }).length;
+
+      const subscribedChannelCount = nextRealChannelCount;
+
+      if (subscribedChannelCount <= 0) {
+        showAppAlert(t('common.ok'), '请至少保留一个已订阅频道');
+        return;
+      }
+
+      setMyChannels(currentChannels =>
+        currentChannels.filter(item => getChannelDisplayName(item) !== channelName)
+      );
+
+      return;
+    }
+
+    if (!channel || typeof channel === 'string') {
+      showAppAlert(t('common.ok'), t('common.noData'));
+      return;
+    }
+
+    const targetType = String(channel.targetType || '').trim() || 'CATEGORY';
+    const targetKey = String(channel.targetKey || channel.id || '').trim();
+    const identityKey = getChannelIdentityKey({
+      targetType,
+      targetKey,
+    });
+
+    if (!targetKey || !identityKey) {
+      showAppAlert(t('common.ok'), t('common.noData'));
+      return;
+    }
+
+    const persistedChannel = persistedMyChannels.find(
+      item => getChannelIdentityKey(item) === identityKey
+    );
+
+    setMyChannels(currentChannels => {
+      if (currentChannels.some(item => getChannelIdentityKey(item) === identityKey)) {
+        return currentChannels;
+      }
+
+      return [
+        ...currentChannels,
+        persistedChannel || {
+          ...channel,
+          name: channelName,
+          targetType,
+          targetKey,
+          raw: channel.raw || channel,
+        },
+      ];
+    });
+  };
+
+  // 缁勫悎棰戦亾閫夋嫨閫昏緫
+  const runAutoScroll = React.useCallback((direction, pageX, pageY) => {
+    if (!draggingChannelKeyRef.current || isFinishingDragRef.current) {
+      stopAutoScroll();
+      return;
+    }
+
+    const maxOffsetY = Math.max(
+      0,
+      scrollMetricsRef.current.contentHeight - scrollMetricsRef.current.viewportHeight
+    );
+    const nextOffsetY = Math.min(
+      maxOffsetY,
+      Math.max(0, scrollMetricsRef.current.offsetY + direction * 14)
+    );
+
+    if (nextOffsetY === scrollMetricsRef.current.offsetY) {
+      stopAutoScroll();
+      return;
+    }
+
+    scrollMetricsRef.current = {
+      ...scrollMetricsRef.current,
+      offsetY: nextOffsetY,
+    };
+
+    scrollViewRef.current?.scrollTo({
+      y: nextOffsetY,
+      animated: false,
+    });
+    refreshMyChannelLayouts();
+    handleDragChannelMoveRef.current?.(pageX, pageY);
+
+    autoScrollFrameRef.current = requestAnimationFrame(() => {
+      runAutoScroll(direction, pageX, pageY);
+    });
+  }, [refreshMyChannelLayouts, stopAutoScroll]);
+
+  const maybeAutoScrollWhileDragging = React.useCallback((pageX, pageY) => {
+    const { pageY: scrollPageY, viewportHeight } = scrollMetricsRef.current;
+
+    if (!viewportHeight) {
+      stopAutoScroll();
+      return;
+    }
+
+    const threshold = 72;
+    const topEdge = scrollPageY + threshold;
+    const bottomEdge = scrollPageY + viewportHeight - threshold;
+
+    let direction = 0;
+
+    if (pageY < topEdge) {
+      direction = -1;
+    } else if (pageY > bottomEdge) {
+      direction = 1;
+    }
+
+    if (!direction) {
+      stopAutoScroll();
+      return;
+    }
+
+    if (autoScrollFrameRef.current) {
+      return;
+    }
+
+    runAutoScroll(direction, pageX, pageY);
+  }, [runAutoScroll, stopAutoScroll]);
+
+  const handleDragChannelStart = React.useCallback((channelKey, channelLabel, event) => {
+    if (!isEditMode || !channelKey) {
+      return;
+    }
+
+    stopAutoScroll();
+    isFinishingDragRef.current = false;
+    refreshMyChannelLayouts();
+    const tagRef = myChannelTagRefs.current.get(channelKey);
+
+    if (!tagRef?.measureInWindow) {
+      return;
+    }
+
+    tagRef.measureInWindow((x, y, width, height) => {
+      const pageX = event?.nativeEvent?.pageX ?? x + width / 2;
+      const pageY = event?.nativeEvent?.pageY ?? y + height / 2;
+      const offsetX = pageX - x;
+      const offsetY = pageY - y;
+
+      draggingChannelKeyRef.current = channelKey;
+      setDraggingChannelKey(channelKey);
+      setDraggingChannelSnapshot({
+        channel: channelLabel,
+        width,
+        height,
+        offsetX,
+        offsetY,
+      });
+      dragPosition.setValue({
+        x,
+        y,
+      });
+      dragScale.setValue(1);
+      Animated.spring(dragScale, {
+        toValue: 1.06,
+        useNativeDriver: true,
+        friction: 7,
+        tension: 120,
+      }).start();
+    });
+  }, [dragPosition, dragScale, isEditMode, refreshMyChannelLayouts, stopAutoScroll]);
+
+  const handleDragChannelMove = React.useCallback((pageX, pageY) => {
+    const activeChannelKey = draggingChannelKeyRef.current;
+
+    if (!activeChannelKey || !draggingChannelSnapshot) {
+      return;
+    }
+
+    dragPosition.setValue({
+      x: pageX - draggingChannelSnapshot.offsetX,
+      y: pageY - draggingChannelSnapshot.offsetY,
+    });
+
+    let closestChannelKey = '';
+    let closestDistance = Number.POSITIVE_INFINITY;
+
+    myChannels.forEach((channel, index) => {
+      const channelKey = getRenderableChannelKey(channel, index);
+      const layout = myChannelTagLayoutsRef.current.get(channelKey);
+
+      if (!layout) {
+        return;
+      }
+
+      const centerX = layout.x + layout.width / 2;
+      const centerY = layout.y + layout.height / 2;
+      const distance = Math.hypot(pageX - centerX, pageY - centerY);
+
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestChannelKey = channelKey;
+      }
+    });
+
+    if (!closestChannelKey || closestChannelKey === activeChannelKey) {
+      return;
+    }
+
+    setMyChannels(currentChannels => {
+      const fromIndex = currentChannels.findIndex((channel, index) =>
+        getRenderableChannelKey(channel, index) === activeChannelKey
+      );
+      const toIndex = currentChannels.findIndex((channel, index) =>
+        getRenderableChannelKey(channel, index) === closestChannelKey
+      );
+
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+        return currentChannels;
+      }
+
+      return moveArrayItem(currentChannels, fromIndex, toIndex);
+    });
+  }, [dragPosition, draggingChannelSnapshot, myChannels]);
+
+  handleDragChannelMoveRef.current = handleDragChannelMove;
+
+  const channelDragResponder = React.useMemo(() => ({
+    onStartShouldSetResponderCapture: () => Boolean(draggingChannelKeyRef.current),
+    onMoveShouldSetResponderCapture: () => Boolean(draggingChannelKeyRef.current),
+    onResponderMove: event => {
+      const { pageX, pageY } = event.nativeEvent;
+      handleDragChannelMove(pageX, pageY);
+      maybeAutoScrollWhileDragging(pageX, pageY);
+    },
+    onResponderRelease: finishDraggingChannels,
+    onResponderTerminate: finishDraggingChannels,
+  }), [finishDraggingChannels, handleDragChannelMove, maybeAutoScrollWhileDragging]);
+
+  const getRegionOptions = () => {
+    return filteredRegionOptions;
   };
   const getCategoryOptions = () => {
     if (!comboSelection.categoryType) {
@@ -251,19 +996,11 @@ export default function ChannelManageScreen({
       }];
     }
 
-    // 返回对应类型的频道列表
-    if (comboSelection.categoryType === 'country') return channelData.country.map(name => ({
-      name
-    }));
-    if (comboSelection.categoryType === 'industry') return channelData.industry.map(name => ({
-      name
-    }));
-    if (comboSelection.categoryType === 'enterprise') return channelData.enterprise.map(name => ({
-      name
-    }));
-    if (comboSelection.categoryType === 'personal') return channelData.personal.map(name => ({
-      name
-    }));
+    // 杩斿洖瀵瑰簲绫诲瀷鐨勯閬撳垪琛?
+    if (comboSelection.categoryType === 'country') return channelOptionsByType.country;
+    if (comboSelection.categoryType === 'industry') return channelOptionsByType.industry;
+    if (comboSelection.categoryType === 'enterprise') return channelOptionsByType.enterprise;
+    if (comboSelection.categoryType === 'personal') return channelOptionsByType.personal;
     return [];
   };
   const selectRegionOption = option => {
@@ -272,60 +1009,51 @@ export default function ChannelManageScreen({
     };
     switch (regionStep) {
       case 0:
-        // 选择国家
+        // 閫夋嫨鍥藉
         newSelection.country = option;
         newSelection.province = null;
         newSelection.city = null;
         newSelection.district = null;
-        // 检查是否有下一层数据
-        if (regionData.cities[option.name] && regionData.cities[option.name].length > 0) {
-          setRegionStep(1);
-        }
+        setRegionStep(1);
         break;
       case 1:
-        // 选择省份/州
+        // 閫夋嫨鐪佷唤/宸?
         newSelection.province = option;
         newSelection.city = null;
         newSelection.district = null;
-        // 检查是否有下一层数据
-        if (regionData.states[option.name] && regionData.states[option.name].length > 0) {
-          setRegionStep(2);
-        }
+        setRegionStep(2);
         break;
       case 2:
-        // 选择城市
+        // 閫夋嫨鍩庡競
         newSelection.city = option;
         newSelection.district = null;
-        // 检查是否有下一层数据
-        if (regionData.districts[option.name] && regionData.districts[option.name].length > 0) {
-          setRegionStep(3);
-        }
+        setRegionStep(3);
         break;
       case 3:
-        // 选择区域
-        newSelection.district = option.name;
+        // 閫夋嫨鍖哄煙
+        newSelection.district = option;
         break;
     }
     setComboSelection(newSelection);
-    setRegionSearchText(''); // 清空搜索框
+    setRegionSearchText(''); // 娓呯┖鎼滅储妗?
   };
   const selectCategoryOption = option => {
-    console.log('🎯 selectCategoryOption called with:', option);
-    console.log('📊 Current categoryType:', comboSelection.categoryType);
+    console.log('馃幆 selectCategoryOption called with:', option);
+    console.log('馃搳 Current categoryType:', comboSelection.categoryType);
     const newSelection = {
       ...comboSelection
     };
     if (!comboSelection.categoryType) {
-      // 选择分类类型
-      console.log('✅ Selecting category type:', option.id);
+      // 閫夋嫨鍒嗙被绫诲瀷
+      console.log('鉁?Selecting category type:', option.id);
       newSelection.categoryType = option.id;
       newSelection.category = null;
     } else {
-      // 选择具体分类
-      console.log('✅ Selecting specific category:', option.name);
+      // 閫夋嫨鍏蜂綋鍒嗙被
+      console.log('鉁?Selecting specific category:', option.name);
       newSelection.category = option;
     }
-    console.log('📦 New selection:', newSelection);
+    console.log('馃摝 New selection:', newSelection);
     setComboSelection(newSelection);
   };
   const goToCategory = () => {
@@ -339,7 +1067,36 @@ export default function ChannelManageScreen({
       category: null
     });
   };
-  const createComboChannel = () => {
+  const resolveSelectedRegionId = () => {
+    const selectedRegionNode =
+      comboSelection.district ||
+      comboSelection.city ||
+      comboSelection.province ||
+      comboSelection.country;
+    const normalizedRegionLevel = Number(selectedRegionNode?.regionLevel ?? 0);
+    const numericRegionId = Number(
+      selectedRegionNode?.regionId ??
+      selectedRegionNode?.id ??
+      selectedRegionNode?.value
+    );
+
+    if (normalizedRegionLevel > 0 && normalizedRegionLevel < 4) {
+      return 0;
+    }
+
+    return Number.isInteger(numericRegionId) && numericRegionId >= 0 ? numericRegionId : 0;
+  };
+  const resolveSelectedLocationText = () => {
+    const parts = [
+      comboSelection.country?.name,
+      comboSelection.province?.name,
+      comboSelection.city?.name,
+      comboSelection.district?.name ?? comboSelection.district
+    ].filter(Boolean);
+
+    return parts.join('-');
+  };
+  const createComboChannel = async () => {
     const {
       categoryType,
       category
@@ -348,40 +1105,68 @@ export default function ChannelManageScreen({
       showAppAlert(t('common.ok'), t('channelManage.selectCategoryPrompt'));
       return;
     }
-    const {
-      country,
-      province,
-      city,
-      district
-    } = comboSelection;
+    const locationText = resolveSelectedLocationText();
+    const autoGeneratedName = `${locationText.replace(/-/g, '')}${category.name || ''}`.trim() || category.name || '';
+    const parentCategoryId = Number(category.parentId);
+    const subCategoryId = Number(category.id);
 
-    // 添加区域路径（如果有选择）
+    if (!autoGeneratedName) {
+      showAppAlert(t('common.ok'), t('channelManage.selectCategoryPrompt'));
+      return;
+    }
 
-    // 添加分类路径
+    if (!Number.isInteger(parentCategoryId) || parentCategoryId <= 0 || !Number.isInteger(subCategoryId) || subCategoryId <= 0) {
+      showAppAlert(t('common.ok'), t('common.noData'));
+      return;
+    }
 
-    // 自动生成频道名称：使用最后一级区域 + 分类名称
-    const regionName = district || city?.name || province?.name || country?.name || '';
-    const categoryName = category.name || '';
-    const autoGeneratedName = `${regionName}${categoryName}`.trim();
-    const updatedMyChannels = mergeUniqueChannels(myChannels, [autoGeneratedName]);
-    const updatedComboChannels = mergeUniqueChannels(comboChannels, [autoGeneratedName]);
-    setMyChannels(updatedMyChannels);
-    setComboChannels(updatedComboChannels);
-    saveComboChannels(updatedComboChannels);
+    if (isCreatingCombo) {
+      return;
+    }
 
-    // 重置
-    setComboStep('region');
-    setRegionStep(0);
-    setComboSelection({
-      country: null,
-      province: null,
-      city: null,
-      district: null,
-      categoryType: null,
-      category: null
-    });
-    setShowComboCreator(false);
-    showAppAlert(t('common.ok'), t('channelManage.createSuccess'));
+    setIsCreatingCombo(true);
+
+    try {
+      await createCombinedChannel({
+        name: autoGeneratedName,
+        regionId: resolveSelectedRegionId(),
+        locationText,
+        parentCategoryId,
+        subCategoryId
+      });
+
+      const [subscribedResult, combinedResult] = await Promise.allSettled([
+        reloadMyChannels(),
+        reloadMyCreatedCombinedChannels()
+      ]);
+
+      if (subscribedResult.status === 'fulfilled') {
+        syncPersistedMyChannels(subscribedResult.value, {
+          preserveDraftChanges: true
+        });
+      }
+
+      if (combinedResult.status === 'fulfilled') {
+        setComboChannels(combinedResult.value);
+      }
+
+      setComboStep('region');
+      setRegionStep(0);
+      setComboSelection({
+        country: null,
+        province: null,
+        city: null,
+        district: null,
+        categoryType: null,
+        category: null
+      });
+      setShowComboCreator(false);
+      showAppAlert(t('common.ok'), t('channelManage.createSuccess'));
+    } catch (error) {
+      showAppAlert(t('common.ok'), error?.message || t('common.retry'));
+    } finally {
+      setIsCreatingCombo(false);
+    }
   };
   const getSelectedPath = () => {
     const {
@@ -396,11 +1181,12 @@ export default function ChannelManageScreen({
     if (country) parts.push(country.name);
     if (province) parts.push(province.name);
     if (city) parts.push(city.name);
-    if (district) parts.push(district);
+    if (district) parts.push(district.name || district);
     if (categoryType) {
       const typeNames = {
         country: t('channelManage.categoryTypes.country'),
         industry: t('channelManage.categoryTypes.industry'),
+        enterprise: t('channelManage.categoryTypes.enterprise'),
         personal: t('channelManage.categoryTypes.personal')
       };
       parts.push(typeNames[categoryType]);
@@ -408,8 +1194,131 @@ export default function ChannelManageScreen({
     if (category) parts.push(category.name);
     return parts.length > 0 ? parts.join(' > ') : t('channelManage.notSelected');
   };
+  const handleDonePress = async () => {
+    if (isSavingChannels) {
+      return;
+    }
+
+    if (!hasPendingChannelChanges) {
+      navigation.goBack();
+      return;
+    }
+
+    const persistedChannelKeySet = new Set(
+      persistedMyChannels.map(channel => getChannelIdentityKey(channel)).filter(Boolean)
+    );
+    const draftChannelKeySet = new Set(
+      myChannels.map(channel => getChannelIdentityKey(channel)).filter(Boolean)
+    );
+    const channelsToSubscribe = myChannels.filter(channel => {
+      const identityKey = getChannelIdentityKey(channel);
+      return identityKey && !persistedChannelKeySet.has(identityKey);
+    });
+    const channelsToRemove = persistedMyChannels.filter(channel => {
+      const identityKey = getChannelIdentityKey(channel);
+      return identityKey && !draftChannelKeySet.has(identityKey);
+    });
+    const finalSubscribedCount = myChannels.filter(channel => !isLocalOnlyChannel(channel)).length;
+
+    if (finalSubscribedCount <= 0) {
+      showAppAlert(t('common.ok'), '请至少保留一个已订阅频道');
+      return;
+    }
+
+    setIsSavingChannels(true);
+
+    try {
+      for (const channel of channelsToSubscribe) {
+        await subscribeChannel({
+          targetType: channel.targetType,
+          targetKey: channel.targetKey,
+        });
+      }
+
+      for (const channel of channelsToRemove) {
+        await removeMySubscribedChannel({
+          targetType: channel.targetType,
+          targetKey: channel.targetKey,
+        });
+      }
+
+      await saveMySubscribedChannelOrder({
+        items: myChannels
+          .filter(channel => !isLocalOnlyChannel(channel))
+          .map((channel, index) => ({
+            targetType: channel.targetType,
+            targetKey: channel.targetKey,
+            sortOrder: index,
+          })),
+      });
+
+      const subscribedChannels = await reloadMyChannels();
+      syncPersistedMyChannels(subscribedChannels);
+
+      showAppAlert(
+        t('common.ok'),
+        t('channelManage.saveSuccess'),
+        [{
+          text: t('common.ok'),
+          onPress: () => navigation.goBack()
+        }],
+        {
+          cancelable: false
+        }
+      );
+    } catch (error) {
+      try {
+        const subscribedChannels = await reloadMyChannels();
+        syncPersistedMyChannels(subscribedChannels);
+      } catch (reloadError) {
+        console.error('Failed to reload subscribed channels after save failure:', reloadError);
+      }
+
+      showAppAlert(t('common.ok'), error?.message || t('common.retry'));
+    } finally {
+      setIsSavingChannels(false);
+    }
+  };
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', event => {
+      if (isSavingChannels) {
+        event.preventDefault();
+        return;
+      }
+
+      if (!hasPendingChannelChanges) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const isChineseLocale = String(locale || '').toLowerCase().startsWith('zh');
+
+      showAppAlert(
+        isChineseLocale ? '未保存更改' : 'Unsaved Changes',
+        isChineseLocale
+          ? '你有未保存的频道变更，确定要放弃并离开当前页面吗？'
+          : 'You have unsaved channel changes. Discard them and leave this page?',
+        [
+          {
+            text: t('common.cancel'),
+            style: 'cancel'
+          },
+          {
+            text: t('common.confirm'),
+            onPress: () => navigation.dispatch(event.data.action)
+          }
+        ],
+        {
+          cancelable: true
+        }
+      );
+    });
+
+    return unsubscribe;
+  }, [hasPendingChannelChanges, isSavingChannels, locale, navigation, t]);
   return <SafeAreaView style={styles.container}>
-      {/* 头部 */}
+      {/* 澶撮儴 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{
         top: 15,
@@ -420,10 +1329,7 @@ export default function ChannelManageScreen({
           <Ionicons name="arrow-back" size={24} color="#374151" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('channelManage.title')}</Text>
-        <TouchableOpacity onPress={() => {
-        showAppAlert(t('common.ok'), t('channelManage.saveSuccess'));
-        navigation.goBack();
-      }} hitSlop={{
+        <TouchableOpacity onPress={handleDonePress} hitSlop={{
         top: 15,
         bottom: 15,
         left: 15,
@@ -433,8 +1339,31 @@ export default function ChannelManageScreen({
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* 我的频道 */}
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={!draggingChannelSnapshot}
+        scrollEventThrottle={16}
+        onLayout={() => {
+        refreshMyChannelLayouts();
+      }}
+        onContentSizeChange={(width, height) => {
+        scrollMetricsRef.current = {
+          ...scrollMetricsRef.current,
+          contentHeight: height
+        };
+      }}
+        onScroll={event => {
+        scrollMetricsRef.current = {
+          ...scrollMetricsRef.current,
+          offsetY: event.nativeEvent.contentOffset.y,
+          viewportHeight: event.nativeEvent.layoutMeasurement.height,
+          contentHeight: event.nativeEvent.contentSize.height
+        };
+      }}
+      >
+        {/* 鎴戠殑棰戦亾 */}
         <View style={styles.section}>
           <View style={styles.sectionTitleRow}>
             <View style={styles.sectionTitleLeft}>
@@ -450,92 +1379,105 @@ export default function ChannelManageScreen({
               </Text>
             </TouchableOpacity>
           </View>
-          <View style={styles.myChannelsContainer}>
-            {myChannels.map((channel, index) => (
+          <View style={styles.myChannelsContainer} {...channelDragResponder}>
+            {myChannels.length > 0 ? myChannels.map((channel, index) => (
               <ShakingChannelTag
-                key={index}
-                channel={channel}
+                key={getRenderableChannelKey(channel, index)}
+                channelKey={getRenderableChannelKey(channel, index)}
+                channel={getChannelDisplayName(channel)}
                 index={index}
+                isDragging={draggingChannelKey === getRenderableChannelKey(channel, index)}
                 isEditMode={isEditMode}
-                onPress={() => toggleChannel(channel)}
+                onDelete={() => toggleChannel(channel)}
+                onLongPress={event => handleDragChannelStart(
+                  getRenderableChannelKey(channel, index),
+                  getChannelDisplayName(channel),
+                  event
+                )}
+                setTagRef={setMyChannelTagRef}
               />
-            ))}
+            )) : <Text style={styles.inlineEmptyText}>{t('common.noData')}</Text>}
           </View>
         </View>
 
-        {/* 国家问题 */}
+        {/* 鍥藉闂 */}
         <View style={styles.section}>
-          <View style={styles.sectionTitleLeft}>
+          <View style={[styles.sectionTitleLeft, styles.channelSectionTitleRow]}>
             <Ionicons name="flag" size={18} color="#3b82f6" />
             <Text style={styles.sectionTitle}>{t('channelManage.countryIssues')}</Text>
           </View>
           <View style={styles.channelsGrid}>
-            {channelData.country.filter(channel => !myChannels.includes(channel)).map((channel, idx) => <TouchableOpacity key={idx} style={styles.channelTagWrapper} onPress={() => toggleChannel(channel)}>
+            {isCatalogLoading ? <Text style={styles.inlineHintText}>{t('common.loading')}</Text> : availableChannelOptionsByType.country.length > 0 ? availableChannelOptionsByType.country.map((channel, idx) => <TouchableOpacity key={channel.targetKey || channel.id || idx} style={styles.channelTagWrapper} onPress={() => toggleChannel(channel)}>
                 <View style={styles.channelTag}>
-                  <Text style={styles.channelText}>{channel}</Text>
+                  <Text style={styles.channelText}>{getChannelDisplayName(channel)}</Text>
                   <View style={styles.plusIconContainer}>
                     <Text style={styles.channelPlusIcon}>+</Text>
                   </View>
                 </View>
-              </TouchableOpacity>)}
+              </TouchableOpacity>) : <View style={styles.inlineStateRow}>
+                <Text style={styles.inlineEmptyText}>{t('common.noData')}</Text>
+                {isCatalogError ? <TouchableOpacity onPress={loadChannelCatalog}>
+                    <Text style={styles.inlineRetryText}>{t('common.retry')}</Text>
+                  </TouchableOpacity> : null}
+              </View>}
           </View>
         </View>
 
-        {/* 行业问题 */}
+        {/* 琛屼笟闂 */}
         <View style={styles.section}>
-          <View style={styles.sectionTitleLeft}>
+          <View style={[styles.sectionTitleLeft, styles.channelSectionTitleRow]}>
             <Ionicons name="briefcase" size={18} color="#22c55e" />
             <Text style={styles.sectionTitle}>{t('channelManage.industryIssues')}</Text>
           </View>
           <View style={styles.channelsGrid}>
-            {channelData.industry.filter(channel => !myChannels.includes(channel)).map((channel, idx) => <TouchableOpacity key={idx} style={styles.channelTagWrapper} onPress={() => toggleChannel(channel)}>
+            {isCatalogLoading ? <Text style={styles.inlineHintText}>{t('common.loading')}</Text> : availableChannelOptionsByType.industry.length > 0 ? availableChannelOptionsByType.industry.map((channel, idx) => <TouchableOpacity key={channel.targetKey || channel.id || idx} style={styles.channelTagWrapper} onPress={() => toggleChannel(channel)}>
                 <View style={styles.channelTag}>
-                  <Text style={styles.channelText}>{channel}</Text>
+                  <Text style={styles.channelText}>{getChannelDisplayName(channel)}</Text>
                   <View style={styles.plusIconContainer}>
                     <Text style={styles.channelPlusIcon}>+</Text>
                   </View>
                 </View>
-              </TouchableOpacity>)}
+              </TouchableOpacity>) : <Text style={styles.inlineEmptyText}>{t('common.noData')}</Text>}
           </View>
         </View>
 
-        {/* 企业问题 */}
+        {/* 浼佷笟闂 */}
         <View style={styles.section}>
-          <View style={styles.sectionTitleLeft}>
+          <View style={[styles.sectionTitleLeft, styles.channelSectionTitleRow]}>
             <Ionicons name="business" size={18} color="#f59e0b" />
             <Text style={styles.sectionTitle}>{t('channelManage.enterpriseIssues')}</Text>
           </View>
           <View style={styles.channelsGrid}>
-            {channelData.enterprise.filter(channel => !myChannels.includes(channel)).map((channel, idx) => <TouchableOpacity key={idx} style={styles.channelTagWrapper} onPress={() => toggleChannel(channel)}>
+            {isCatalogLoading ? <Text style={styles.inlineHintText}>{t('common.loading')}</Text> : availableChannelOptionsByType.enterprise.length > 0 ? availableChannelOptionsByType.enterprise.map((channel, idx) => <TouchableOpacity key={channel.targetKey || channel.id || idx} style={styles.channelTagWrapper} onPress={() => toggleChannel(channel)}>
                 <View style={styles.channelTag}>
-                  <Text style={styles.channelText}>{channel}</Text>
+                  <Text style={styles.channelText}>{getChannelDisplayName(channel)}</Text>
                   <View style={styles.plusIconContainer}>
                     <Text style={styles.channelPlusIcon}>+</Text>
                   </View>
                 </View>
-              </TouchableOpacity>)}
+              </TouchableOpacity>) : <Text style={styles.inlineEmptyText}>{t('common.noData')}</Text>}
           </View>
         </View>
 
-        {/* 个人问题 */}
+        {/* 涓汉闂 */}
         <View style={styles.section}>
-          <View style={styles.sectionTitleLeft}>
+          <View style={[styles.sectionTitleLeft, styles.channelSectionTitleRow]}>
             <Ionicons name="person" size={18} color="#8b5cf6" />
             <Text style={styles.sectionTitle}>{t('channelManage.personalIssues')}</Text>
           </View>
           <View style={styles.channelsGrid}>
-            {channelData.personal.filter(channel => !myChannels.includes(channel)).map((channel, idx) => <TouchableOpacity key={idx} style={styles.channelTagWrapper} onPress={() => toggleChannel(channel)}>
+            {isCatalogLoading ? <Text style={styles.inlineHintText}>{t('common.loading')}</Text> : availableChannelOptionsByType.personal.length > 0 ? availableChannelOptionsByType.personal.map((channel, idx) => <TouchableOpacity key={channel.targetKey || channel.id || idx} style={styles.channelTagWrapper} onPress={() => toggleChannel(channel)}>
                 <View style={styles.channelTag}>
-                  <Text style={styles.channelText}>{channel}</Text>
+                  <Text style={styles.channelText}>{getChannelDisplayName(channel)}</Text>
                   <View style={styles.plusIconContainer}>
                     <Text style={styles.channelPlusIcon}>+</Text>
                   </View>
                 </View>
-              </TouchableOpacity>)}
+              </TouchableOpacity>) : <Text style={styles.inlineEmptyText}>{t('common.noData')}</Text>}
           </View>
         </View>
 
-        {/* 组合频道 */}
+        {/* 缁勫悎棰戦亾 */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>
@@ -550,7 +1492,7 @@ export default function ChannelManageScreen({
             {t('channelManage.comboDescription')}
           </Text>
 
-          {/* 创建组合频道表单 */}
+          {/* 鍒涘缓缁勫悎棰戦亾琛ㄥ崟 */}
           {Boolean(showComboCreator) && <View style={styles.comboCreator}>
               <View style={styles.comboSteps}>
                 <View style={styles.comboStepHeader}>
@@ -560,10 +1502,10 @@ export default function ChannelManageScreen({
                 </View>
                 <Text style={styles.comboPath}>{t('channelManage.selected')} {getSelectedPath()}</Text>
                 
-                {/* 区域搜索框 - 只在区域选择步骤显示 */}
+                {/* 鍖哄煙鎼滅储妗?- 鍙湪鍖哄煙閫夋嫨姝ラ鏄剧ず */}
                 {comboStep === 'region' && <View style={styles.regionSearchContainer}>
                     <Ionicons name="search" size={16} color="#9ca3af" style={styles.searchIcon} />
-                    <TextInput style={styles.regionSearchInput} placeholder={t('channelManage.searchRegion') || '搜索地区...'} placeholderTextColor="#9ca3af" value={regionSearchText} onChangeText={setRegionSearchText} />
+                    <TextInput style={styles.regionSearchInput} placeholder={t('channelManage.searchRegion') || '鎼滅储鍦板尯...'} placeholderTextColor="#9ca3af" value={regionSearchText} onChangeText={setRegionSearchText} />
                     {regionSearchText.length > 0 && <TouchableOpacity onPress={() => setRegionSearchText('')} hitSlop={{
                 top: 10,
                 bottom: 10,
@@ -576,24 +1518,29 @@ export default function ChannelManageScreen({
                 
                 <ScrollView style={styles.comboOptions} nestedScrollEnabled>
                   {comboStep === 'region' ?
-              // 区域选择
-              getRegionOptions().map((option, index) => <TouchableOpacity key={index} style={styles.comboOption} onPress={() => selectRegionOption(option)}>
+              // 鍖哄煙閫夋嫨
+              regionStatus === 'loading' ? <Text style={styles.inlineHintText}>{t('common.loading')}</Text> : getRegionOptions().length > 0 ? getRegionOptions().map((option, index) => <TouchableOpacity key={index} style={styles.comboOption} onPress={() => selectRegionOption(option)}>
                         <Text style={styles.comboOptionText}>
                           {typeof option === 'string' ? option : option.name}
                         </Text>
                         <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
-                      </TouchableOpacity>) :
-              // 分类选择
-              getCategoryOptions().map((option, index) => <TouchableOpacity key={index} style={[styles.comboOption, option.icon && styles.comboOptionWithIcon]} onPress={() => selectCategoryOption(option)}>
+                      </TouchableOpacity>) : regionStatus === 'error' ? <View style={styles.inlineStateRow}>
+                        <Text style={styles.inlineEmptyText}>{regionErrorMessage || t('common.noData')}</Text>
+                        <TouchableOpacity onPress={loadRegionOptions}>
+                          <Text style={styles.inlineRetryText}>{t('common.retry')}</Text>
+                        </TouchableOpacity>
+                      </View> : <Text style={styles.inlineEmptyText}>{t('common.noData')}</Text> :
+              // 鍒嗙被閫夋嫨
+              getCategoryOptions().length > 0 ? getCategoryOptions().map((option, index) => <TouchableOpacity key={index} style={[styles.comboOption, option.icon && styles.comboOptionWithIcon]} onPress={() => selectCategoryOption(option)}>
                         {Boolean(option.icon) && <View style={[styles.categoryIcon, {
                   backgroundColor: option.color + '20'
                 }]}>
                             <Ionicons name={option.icon} size={18} color={option.color} />
                           </View>}
                         <Text style={styles.comboOptionText}>{option.name}</Text>
-                        {/* 只有在选择分类类型时才显示箭头，选择具体分类时不显示 */}
+                        {/* 鍙湁鍦ㄩ€夋嫨鍒嗙被绫诲瀷鏃舵墠鏄剧ず绠ご锛岄€夋嫨鍏蜂綋鍒嗙被鏃朵笉鏄剧ず */}
                         {!comboSelection.categoryType && <Ionicons name="chevron-forward" size={16} color="#9ca3af" />}
-                      </TouchableOpacity>)}
+                      </TouchableOpacity>) : <Text style={styles.inlineEmptyText}>{t('common.noData')}</Text>}
                 </ScrollView>
 
                 <View style={styles.comboActions}>
@@ -603,10 +1550,23 @@ export default function ChannelManageScreen({
                   const newSelection = {
                     ...comboSelection
                   };
-                  if (regionStep === 1) newSelection.country = null;
-                  if (regionStep === 2) newSelection.province = null;
-                  if (regionStep === 3) newSelection.city = null;
+                  if (regionStep === 1) {
+                    newSelection.country = null;
+                    newSelection.province = null;
+                    newSelection.city = null;
+                    newSelection.district = null;
+                  }
+                  if (regionStep === 2) {
+                    newSelection.province = null;
+                    newSelection.city = null;
+                    newSelection.district = null;
+                  }
+                  if (regionStep === 3) {
+                    newSelection.city = null;
+                    newSelection.district = null;
+                  }
                   setComboSelection(newSelection);
+                  setRegionSearchText('');
                 }}>
                           <Ionicons name="arrow-back" size={16} color="#6b7280" />
                           <Text style={styles.comboBackText}>{t('channelManage.previousStep')}</Text>
@@ -618,27 +1578,27 @@ export default function ChannelManageScreen({
                     </> : <>
                       <TouchableOpacity style={styles.comboBackBtn} onPress={() => {
                   if (comboSelection.categoryType) {
-                    // 返回到分类类型选择
+                    // 杩斿洖鍒板垎绫荤被鍨嬮€夋嫨
                     setComboSelection({
                       ...comboSelection,
                       categoryType: null,
                       category: null
                     });
                   } else {
-                    // 返回到区域选择
+                    // 杩斿洖鍒板尯鍩熼€夋嫨
                     backToRegion();
-                    setRegionSearchText(''); // 清空搜索框
+                    setRegionSearchText(''); // 娓呯┖鎼滅储妗?
                   }
                 }}>
                         <Ionicons name="arrow-back" size={16} color="#6b7280" />
                         <Text style={styles.comboBackText}>{t('channelManage.previousStep')}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={[styles.comboCreateBtn, !comboSelection.category && styles.comboCreateBtnDisabled]} onPress={() => {
-                  console.log('🔍 Create button pressed');
-                  console.log('📂 comboSelection.category:', comboSelection.category);
-                  console.log('✅ Can create:', comboSelection.category);
+                  console.log('馃攳 Create button pressed');
+                  console.log('馃搨 comboSelection.category:', comboSelection.category);
+                  console.log('鉁?Can create:', comboSelection.category);
                   createComboChannel();
-                }} disabled={!comboSelection.category}>
+                }} disabled={!comboSelection.category || isCreatingCombo}>
                         <Text style={styles.comboCreateText}>
                           {t('channelManage.createChannel')}
                           {!comboSelection.category && ' (Disabled)'}
@@ -649,7 +1609,7 @@ export default function ChannelManageScreen({
               </View>
             </View>}
 
-          {/* 已创建的组合频道 */}
+          {/* 宸插垱寤虹殑缁勫悎棰戦亾 */}
           <View style={styles.comboList}>
             {false && myComboChannels.map(combo => <View key={combo.id} style={styles.comboItem}>
                 <View style={styles.comboItemContent}>
@@ -669,6 +1629,7 @@ export default function ChannelManageScreen({
         height: 30
       }} />
       </ScrollView>
+      {draggingChannelSnapshot ? <DraggingChannelOverlay channel={draggingChannelSnapshot.channel} isEditMode={isEditMode} dragPosition={dragPosition} dragScale={dragScale} width={draggingChannelSnapshot.width} /> : null}
     </SafeAreaView>;
 }
 const styles = StyleSheet.create({
@@ -719,6 +1680,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6
   },
+  channelSectionTitleRow: {
+    marginBottom: 10
+  },
   sectionTitle: {
     fontSize: scaleFont(16),
     fontWeight: '600',
@@ -729,7 +1693,31 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontWeight: '500'
   },
-  // 我的频道样式
+  inlineStateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+    paddingVertical: 6
+  },
+  inlineHintText: {
+    fontSize: scaleFont(13),
+    color: '#9ca3af',
+    width: '100%',
+    paddingVertical: 6
+  },
+  inlineEmptyText: {
+    fontSize: scaleFont(13),
+    color: '#9ca3af',
+    width: '100%',
+    paddingVertical: 6
+  },
+  inlineRetryText: {
+    fontSize: scaleFont(13),
+    color: '#ef4444',
+    fontWeight: '500'
+  },
+  // 鎴戠殑棰戦亾鏍峰紡
   myChannelsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -740,12 +1728,38 @@ const styles = StyleSheet.create({
     marginRight: 4,
     marginBottom: 4
   },
+  myChannelTagDraggingPlaceholder: {
+    borderRadius: 6,
+    backgroundColor: 'rgba(156, 163, 175, 0.12)'
+  },
+  draggingTagOverlay: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    zIndex: 999
+  },
+  draggingTagShadow: {
+    shadowColor: '#111827',
+    shadowOffset: {
+      width: 0,
+      height: 6
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 8
+  },
   myChannelTag: {
     position: 'relative',
-    paddingHorizontal: 18,
     paddingVertical: 6,
     backgroundColor: '#e5e7eb',
     borderRadius: 6
+  },
+  myChannelTagViewMode: {
+    paddingHorizontal: 14
+  },
+  myChannelTagEditMode: {
+    paddingLeft: 14,
+    paddingRight: 22
   },
   myChannelText: {
     fontSize: scaleFont(15),
@@ -758,16 +1772,16 @@ const styles = StyleSheet.create({
     right: 0,
     padding: 2
   },
-  // 频道网格样式
+  // 棰戦亾缃戞牸鏍峰紡
   channelsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginRight: -4,
-    marginBottom: -4
+    marginRight: -8,
+    marginBottom: -8
   },
   channelTagWrapper: {
-    marginRight: 4,
-    marginBottom: 4
+    marginRight: 8,
+    marginBottom: 8
   },
   channelTag: {
     position: 'relative',

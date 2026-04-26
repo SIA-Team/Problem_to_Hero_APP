@@ -60,7 +60,10 @@ const handleTokenExpired = async () => {
 // 鍐呭鏈嶅姟鐨?baseURL
 const CONTENT_BASE_URL = ENV.contentApiUrl || ENV.apiUrl;
 
-const SKIP_AUTO_LOGOUT_URLS = [API_ENDPOINTS.EMERGENCY.QUOTA];
+const SKIP_AUTO_LOGOUT_URLS = [
+  API_ENDPOINTS.EMERGENCY.QUOTA,
+  API_ENDPOINTS.CHANNEL.CATALOG,
+];
 
 // 鍒涘缓鍐呭鏈嶅姟鐨?axios 瀹炰緥
 const contentApiClient = axios.create({
