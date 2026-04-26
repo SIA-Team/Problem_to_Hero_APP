@@ -145,7 +145,8 @@
     "published": "Emergency help published!",
     "rescuersNeeded": "Rescuers needed:",
     "nearbyNotified": "Nearby users will be notified!",
-    "enterTitle": "Please enter help title"
+    "enterTitle": "Please enter help title",
+    "confirm": "Confirm"
   },
   "publish": {
     "title": "Publish Question",
@@ -478,6 +479,7 @@
     "contentTabs": {
       "questions": "Questions",
       "answers": "Answers",
+      "likes": "Likes",
       "favorites": "Favorites",
       "history": "History"
     },
@@ -1217,11 +1219,14 @@
         "featured": "Featured",
         "latest": "Latest"
       },
-      "reward": {
-        "add": "Add Reward",
-        "contributors": "contributors",
-        "paidDetails": "View paid details",
-        "paidUsers": "{count} users paid",
+    "reward": {
+      "add": "Add Reward",
+      "badge": "Reward",
+      "adoptionProgress": "Adoption Progress",
+      "contributorsLabel": "Contributors",
+      "contributors": "contributors",
+      "paidDetails": "View paid details",
+      "paidUsers": "{count} users paid",
         "totalSupplements": "{count} supplements",
         "totalAnswers": "{count} answers",
         "totalComments": "{count} comments",
@@ -1258,13 +1263,14 @@
       "comment": {
         "replies": "replies"
       },
-      "invite": {
-        "local": "Local",
-        "twitter": "Twitter",
-        "searchUser": "Search users",
-        "searchTwitterUser": "Search Twitter users",
-        "localEmptySearch": "No matching users found",
-        "localEmptyAvailable": "No local users available to invite right now",
+    "invite": {
+      "local": "Local",
+      "twitter": "Twitter",
+      "searchUser": "Search users",
+      "searchTwitterUser": "Search Twitter users",
+      "searching": "Searching...",
+      "localEmptySearch": "No matching users found",
+      "localEmptyAvailable": "No local users available to invite right now",
         "localInvitedTitle": "Invited",
         "localInviteEmptySearch": "No matching invite records",
         "localInviteEmptyDesc": "Sent direct messages will appear here",
@@ -1301,20 +1307,33 @@
         "writeSupplementTitle": "Supplement Question",
         "writeSupplementContent": "Still have questions about this issue? Add your supplement..."
       },
-      "modals": {
-        "replyTitle": "Write a reply{mention}",
-        "unitPrice": "Unit price",
-        "unitPriceValue": "$2 / item",
-        "purchaseQuantity": "Quantity",
-        "quantityValue": "{count} items",
-        "superLikeTips": "After purchasing Super Likes, your answer will receive higher ranking weight and more exposure.",
-        "buySuperLikeNow": "Buy {count} Super Likes now"
-      },
-      "alerts": {
-        "hint": "Hint",
-        "noAdoptPermission": "This account cannot adopt answers. Only the question author or users who added reward can adopt an answer.",
-        "insufficientSuperLikeTitle": "Not enough Super Likes",
-        "insufficientSuperLikeMessage": "You do not have enough Super Likes. Buy more now?",
+    "modals": {
+      "replyTitle": "Write a reply{mention}",
+      "writeCommentTitle": "Write a comment",
+      "unitPrice": "Unit price",
+      "unitPriceValue": "$2 / item",
+      "purchaseQuantity": "Quantity",
+      "quantityValue": "{count} items",
+      "superLikeTips": "After purchasing Super Likes, your answer will receive higher ranking weight and more exposure.",
+      "buySuperLikeNow": "Buy {count} Super Likes now",
+      "selectImageTitle": "Choose image",
+      "selectImageMessage": "Please choose an image source",
+      "insertEmojiTitle": "Insert emoji",
+      "acknowledge": "Got it",
+      "supplementSuccessTitle": "Supplement answer submitted",
+      "supplementSuccessDescription": "Your supplement answer has been published successfully"
+    },
+    "alerts": {
+      "hint": "Hint",
+      "loadFailedTitle": "Load failed",
+      "fetchSupplementsFailed": "Failed to fetch supplements. Please try again later.",
+      "fetchAnswersFailed": "Failed to fetch answers. Please try again later.",
+      "cameraPermissionRequired": "Camera permission is required to take photos.",
+      "commentReportTitle": "Report",
+      "commentReportMessage": "Are you sure you want to report this comment?",
+      "noAdoptPermission": "This account cannot adopt answers. Only the question author or users who added reward can adopt an answer.",
+      "insufficientSuperLikeTitle": "Not enough Super Likes",
+      "insufficientSuperLikeMessage": "You do not have enough Super Likes. Buy more now?",
         "goPurchase": "Buy now",
         "reportSubmitted": "Report submitted: {reason}"
       },
@@ -1326,9 +1345,9 @@
         "misinformation": "False information",
         "other": "Other"
       },
-      "arbitrationStatus": {
-        "overturned": "Overturned by arbitration",
-        "upheld": "Arbitration upheld",
+    "arbitrationStatus": {
+      "overturned": "Overturned by arbitration",
+      "upheld": "Arbitration upheld",
         "voting": "Voting in progress",
         "votingDetailsTitle": "Arbitration vote details",
         "agreeOverturn": "Agree to overturn: {count} votes",
@@ -1346,11 +1365,100 @@
         "rejectedShortDescription": "The agreement rate did not reach 50%, so the original answer remains.",
         "expertVotesTitle": "Expert vote details",
         "voteReason": "Reason:",
-        "resultTitle": "Arbitration result"
+      "resultTitle": "Arbitration result"
+    },
+    "media": {
+      "camera": "Take photo",
+      "photoLibrary": "Choose from library"
+    },
+    "recommendedItems": {
+      "first": {
+        "title": "How can I optimize long list performance in React Native? When should I choose FlatList over ScrollView?",
+        "content": "I'm building a news app with thousands of list items, and ScrollView becomes very laggy. I heard FlatList performs better, but I'm not sure how to optimize it in practice. Could experienced developers share some best practices?",
+        "author": "Frontend Rookie",
+        "time": "3 hours ago",
+        "tags": {
+          "performance": "Performance",
+          "mobile": "Mobile Dev"
+        }
       },
-      "states": {
-        "retry": "Retry",
-        "allComments": "All Comments",
+      "second": {
+        "title": "How should I learn JavaScript systematically? What core topics matter from beginner to advanced?",
+        "content": "I want to switch into frontend development, and JavaScript is essential. There is too much material online and it feels messy, so I do not know where to begin. I hope experienced developers can share a structured roadmap.",
+        "author": "Career Switcher",
+        "time": "5 hours ago",
+        "tags": {
+          "frontend": "Frontend",
+          "learningPath": "Learning Path"
+        }
+      }
+    },
+    "samples": {
+      "rewardContributors": {
+        "first": {
+          "name": "Zhang Sanfeng",
+          "time": "2 hours ago"
+        },
+        "second": {
+          "name": "Python Veteran",
+          "time": "1 hour ago"
+        },
+        "third": {
+          "name": "Data Analyst Xiao Wang",
+          "time": "30 minutes ago"
+        }
+      },
+      "experts": {
+        "first": {
+          "name": "Li Ming",
+          "title": "Python Architect",
+          "expertise": "Python Development"
+        },
+        "second": {
+          "name": "Wang Fang",
+          "title": "Data Scientist",
+          "expertise": "Data Analysis"
+        },
+        "third": {
+          "name": "Zhao Qiang",
+          "title": "Technical Director",
+          "expertise": "Technical Management"
+        },
+        "fourth": {
+          "name": "Liu Yang",
+          "title": "AI Engineer",
+          "expertise": "Machine Learning"
+        },
+        "fifth": {
+          "name": "Chen Jing",
+          "title": "Full-stack Developer",
+          "expertise": "Web Development"
+        }
+      },
+      "expertVotes": {
+        "first": {
+          "name": "Li Ming",
+          "title": "Python Architect",
+          "reason": "The original answer underestimates the learning time. For a complete beginner, three months is too optimistic and should be reassessed.",
+          "time": "2 hours ago"
+        },
+        "second": {
+          "name": "Wang Fang",
+          "title": "Data Scientist",
+          "reason": "I agree with overturning it. The answer lacks real-world data analysis context and the roadmap is too theoretical.",
+          "time": "1 hour ago"
+        },
+        "third": {
+          "name": "Zhao Qiang",
+          "title": "Technical Director",
+          "reason": "It should include more concrete project practice and a clearer growth path before being reassessed.",
+          "time": "30 minutes ago"
+        }
+      }
+    },
+    "states": {
+      "retry": "Retry",
+      "allComments": "All Comments",
         "allReplies": "All Replies",
         "loadingSupplements": "Loading supplements...",
         "emptySupplementsTitle": "No supplements yet",
@@ -1444,8 +1552,10 @@
         "hot": "Hot",
         "new": "New",
         "ended": "Ended",
-        "mine": "Mine"
+        "mine": "Mine",
+        "history": "History"
       },
+      "searchPlaceholder": "Search activities",
       "tag": {
         "hot": "Hot",
         "new": "New",
@@ -1790,6 +1900,154 @@
         "createSuccess": "Activity created successfully!"
       }
     },
+    "wisdomIndex": {
+      "title": "Wisdom Index",
+      "currentIndexLabel": "Current Wisdom Index",
+      "exceedsUsers": "Higher than {percent}% of users",
+      "indicators": {
+        "title": "Key Metrics",
+        "answerCount": "Answers",
+        "adoptedCount": "Accepted",
+        "fansCount": "Followers",
+        "questionCount": "Questions"
+      },
+      "avgScore": {
+        "title": "Average Exam Score",
+        "unit": "pts"
+      },
+      "actions": {
+        "dailyImprovement": "Daily Improvement",
+        "examDetail": "Exam Details",
+        "questionBank": "Question Bank"
+      },
+      "recentExams": {
+        "title": "Recent Exam Records",
+        "viewAll": "View All",
+        "platform": "Platform",
+        "scoreUnit": "pts",
+        "rank": {
+          "excellent": "Excellent",
+          "good": "Good"
+        }
+      }
+    },
+    "examHistory": {
+      "title": "Exam Details",
+      "stats": {
+        "totalExams": "Total Exams",
+        "passed": "Passed",
+        "avgScore": "Average Score"
+      },
+      "rank": {
+        "excellent": "Excellent",
+        "good": "Good",
+        "pass": "Pass",
+        "fail": "Fail"
+      },
+      "scoreUnit": "pts",
+      "correctCount": "{correct}/{total} correct",
+      "duration": "Time spent {time}",
+      "viewDetail": "View Details"
+    },
+    "examDetail": {
+      "title": "Exam Details",
+      "scoreUnit": "pts",
+      "scoreLabel": "Exam Score",
+      "stats": {
+        "correct": "Correct",
+        "wrong": "Wrong",
+        "duration": "Time Spent"
+      },
+      "examTime": "Exam Time: ",
+      "questionsTitle": "Answer Details",
+      "questionNumber": "Question {number}",
+      "status": {
+        "correct": "Correct",
+        "wrong": "Wrong"
+      },
+      "answerNote": {
+        "yourAnswer": "Your answer: ",
+        "correctAnswer": " Correct answer: "
+      },
+      "rank": {
+        "excellent": "Excellent",
+        "good": "Good",
+        "pass": "Pass",
+        "fail": "Fail"
+      }
+    },
+    "wisdomExam": {
+      "title": "Wisdom Exam",
+      "start": {
+        "title": "Wisdom Exam",
+        "description": "Improve your wisdom index through the exam",
+        "rulesTitle": "Exam Rules",
+        "rule1": "10 questions total, 10 points each",
+        "rule2": "Complete within 10 minutes",
+        "rule3": "60 points to pass, 90+ is excellent",
+        "rule4": "The result will affect your wisdom index",
+        "startButton": "Start Exam"
+      },
+      "exam": {
+        "questionNumber": "Question {number}",
+        "questionCount": "{current}/{total}",
+        "answerSheet": "Answer Sheet",
+        "previous": "Previous",
+        "next": "Next",
+        "submit": "Submit"
+      },
+      "result": {
+        "title": "Exam Result",
+        "passed": "Congratulations, you passed!",
+        "failed": "You did not pass the exam",
+        "totalQuestions": "Total Questions",
+        "correct": "Correct",
+        "wrong": "Wrong",
+        "backButton": "Back",
+        "retryButton": "Try Again",
+        "rank": {
+          "excellent": "Excellent",
+          "good": "Good",
+          "pass": "Pass",
+          "fail": "Fail"
+        }
+      },
+      "explanation": {
+        "title": "Exam Summary",
+        "completed": "Exam completed!",
+        "description": "Here is an overview of your exam",
+        "overviewTitle": "Exam Overview",
+        "examTime": "Time Spent",
+        "answeredCount": "Answered",
+        "correctCount": "Correct",
+        "estimatedScore": "Estimated Score",
+        "wisdomNoticeTitle": "Wisdom Index Notice",
+        "wisdomNoticeText": "This exam result will affect your wisdom index. Excellent performance can significantly improve it.",
+        "tipsTitle": "Tips",
+        "tip1": "- Results are for reference; the goal is learning and improvement.",
+        "tip2": "- You can take the exam multiple times; the highest score counts.",
+        "tip3": "- Taking the exam regularly helps you stay sharp.",
+        "viewResultButton": "View Result"
+      },
+      "confirmModal": {
+        "title": "Confirm submission?",
+        "description": "You will not be able to change your answers after submission. Are you sure you want to submit the exam?",
+        "answeredLabel": "Answered",
+        "timeLeftLabel": "Time Left",
+        "cancelButton": "Continue Answering",
+        "confirmButton": "Confirm Submit"
+      }
+    },
+    "questionBank": {
+      "title": "Question Bank",
+      "upload": "Upload",
+      "tabs": {
+        "platform": "Platform Question Bank",
+        "user": "User Question Bank"
+      },
+      "questionCount": "questions",
+      "startExam": "Start Exam"
+    },
     "settings": {
       "title": "Settings",
       "profile": {
@@ -1801,6 +2059,7 @@
         "birthday": "Birthday",
         "location": "Location",
         "occupation": "Occupation",
+        "expertise": "Expertise",
         "userId": "User ID",
         "notSet": "Not Set"
       },

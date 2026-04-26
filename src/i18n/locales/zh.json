@@ -1292,11 +1292,14 @@
         "featured": "精选",
         "latest": "最新"
       },
-      "reward": {
-        "add": "追加",
-        "contributors": "人追加",
-        "paidDetails": "查看付费明细",
-        "paidUsers": "{count}人已付费",
+    "reward": {
+      "add": "追加",
+      "badge": "悬赏",
+      "adoptionProgress": "采纳进度",
+      "contributorsLabel": "参与追加",
+      "contributors": "人追加",
+      "paidDetails": "查看付费明细",
+      "paidUsers": "{count}人已付费",
         "totalSupplements": "共 {count} 条补充",
         "totalAnswers": "共 {count} 条回答",
         "totalComments": "共 {count} 条评论",
@@ -1333,13 +1336,14 @@
       "comment": {
         "replies": "回复"
       },
-      "invite": {
-        "local": "本站",
-        "twitter": "推特",
-        "searchUser": "搜索用户",
-        "searchTwitterUser": "搜索推特用户",
-        "localEmptySearch": "没有找到匹配的用户",
-        "localEmptyAvailable": "暂无可邀请的本站用户",
+    "invite": {
+      "local": "本站",
+      "twitter": "推特",
+      "searchUser": "搜索用户",
+      "searchTwitterUser": "搜索推特用户",
+      "searching": "搜索中...",
+      "localEmptySearch": "没有找到匹配的用户",
+      "localEmptyAvailable": "暂无可邀请的本站用户",
         "localInvitedTitle": "已邀请",
         "localInviteEmptySearch": "没有匹配的邀请记录",
         "localInviteEmptyDesc": "私信发送成功后，会显示在这里",
@@ -1376,20 +1380,33 @@
         "writeSupplementTitle": "补充问题",
         "writeSupplementContent": "对这个问题还有疑问？写下你的补充问题..."
       },
-      "modals": {
-        "replyTitle": "写回复{mention}",
-        "unitPrice": "单价",
-        "unitPriceValue": "$2 / 个",
-        "purchaseQuantity": "购买数量",
-        "quantityValue": "{count} 个",
-        "superLikeTips": "购买超级赞后，您的回答将获得更高的排名权重，增加曝光机会",
-        "buySuperLikeNow": "立即购买 {count} 个超级赞"
-      },
-      "alerts": {
-        "hint": "提示",
-        "noAdoptPermission": "当前账号没有采纳权限，只有提问者或追加悬赏用户可以采纳回答。",
-        "insufficientSuperLikeTitle": "超级赞次数不足",
-        "insufficientSuperLikeMessage": "您的超级赞次数不足，是否购买？",
+    "modals": {
+      "replyTitle": "写回复{mention}",
+      "writeCommentTitle": "写评论",
+      "unitPrice": "单价",
+      "unitPriceValue": "$2 / 个",
+      "purchaseQuantity": "购买数量",
+      "quantityValue": "{count} 个",
+      "superLikeTips": "购买超级赞后，您的回答将获得更高的排名权重，增加曝光机会",
+      "buySuperLikeNow": "立即购买 {count} 个超级赞",
+      "selectImageTitle": "选择图片",
+      "selectImageMessage": "请选择图片来源",
+      "insertEmojiTitle": "插入表情",
+      "acknowledge": "我知道了",
+      "supplementSuccessTitle": "补充回答提交成功",
+      "supplementSuccessDescription": "你的补充回答已成功发布"
+    },
+    "alerts": {
+      "hint": "提示",
+      "loadFailedTitle": "加载失败",
+      "fetchSupplementsFailed": "获取补充列表失败，请稍后重试",
+      "fetchAnswersFailed": "获取回答列表失败，请稍后重试",
+      "cameraPermissionRequired": "需要相机权限才能拍照",
+      "commentReportTitle": "举报",
+      "commentReportMessage": "确定要举报这条评论吗？",
+      "noAdoptPermission": "当前账号没有采纳权限，只有提问者或追加悬赏用户可以采纳回答。",
+      "insufficientSuperLikeTitle": "超级赞次数不足",
+      "insufficientSuperLikeMessage": "您的超级赞次数不足，是否购买？",
         "goPurchase": "去购买",
         "reportSubmitted": "已提交举报：{reason}"
       },
@@ -1401,9 +1418,9 @@
         "misinformation": "不实信息",
         "other": "其他"
       },
-      "arbitrationStatus": {
-        "overturned": "仲裁推翻",
-        "upheld": "仲裁维持",
+    "arbitrationStatus": {
+      "overturned": "仲裁推翻",
+      "upheld": "仲裁维持",
         "voting": "投票中",
         "votingDetailsTitle": "仲裁投票详情",
         "agreeOverturn": "同意推翻：{count} 票",
@@ -1421,11 +1438,100 @@
         "rejectedShortDescription": "未达到50%同意率，维持原答案",
         "expertVotesTitle": "专家投票详情",
         "voteReason": "投票理由：",
-        "resultTitle": "仲裁结果"
+      "resultTitle": "仲裁结果"
+    },
+    "media": {
+      "camera": "拍照",
+      "photoLibrary": "从相册选择"
+    },
+    "recommendedItems": {
+      "first": {
+        "title": "React Native开发中如何优化长列表性能？FlatList和ScrollView该如何选择？",
+        "content": "我在开发一个新闻类APP，列表有上千条数据，使用ScrollView会很卡顿。听说FlatList性能更好，但不知道具体该怎么优化。请问有经验的开发者能分享一下最佳实践吗？",
+        "author": "前端小白",
+        "time": "3小时前",
+        "tags": {
+          "performance": "性能优化",
+          "mobile": "移动开发"
+        }
       },
-      "states": {
-        "retry": "重试",
-        "allComments": "全部评论",
+      "second": {
+        "title": "如何系统学习JavaScript？从入门到精通需要掌握哪些核心知识点？",
+        "content": "想转行做前端开发，JavaScript是必备技能。但是网上资料太多太杂，不知道该从哪里开始学。希望有经验的前辈能给一个系统的学习路线图。",
+        "author": "转行者",
+        "time": "5小时前",
+        "tags": {
+          "frontend": "前端开发",
+          "learningPath": "学习路线"
+        }
+      }
+    },
+    "samples": {
+      "rewardContributors": {
+        "first": {
+          "name": "张三丰",
+          "time": "2小时前"
+        },
+        "second": {
+          "name": "Python老司机",
+          "time": "1小时前"
+        },
+        "third": {
+          "name": "数据分析师小王",
+          "time": "30分钟前"
+        }
+      },
+      "experts": {
+        "first": {
+          "name": "李明",
+          "title": "Python架构师",
+          "expertise": "Python开发"
+        },
+        "second": {
+          "name": "王芳",
+          "title": "数据科学家",
+          "expertise": "数据分析"
+        },
+        "third": {
+          "name": "赵强",
+          "title": "技术总监",
+          "expertise": "技术管理"
+        },
+        "fourth": {
+          "name": "刘洋",
+          "title": "AI工程师",
+          "expertise": "机器学习"
+        },
+        "fifth": {
+          "name": "陈静",
+          "title": "全栈开发",
+          "expertise": "Web开发"
+        }
+      },
+      "expertVotes": {
+        "first": {
+          "name": "李明",
+          "title": "Python架构师",
+          "reason": "原答案中关于学习时间的估计不够准确，对于零基础学习者来说，3个月时间过于乐观。建议重新评估。",
+          "time": "2小时前"
+        },
+        "second": {
+          "name": "王芳",
+          "title": "数据科学家",
+          "reason": "同意推翻。答案缺少对数据分析实际工作场景的介绍，学习路线过于理论化。",
+          "time": "1小时前"
+        },
+        "third": {
+          "name": "赵强",
+          "title": "技术总监",
+          "reason": "建议补充更具体的项目实践和岗位成长路径，再重新评估这条回答。",
+          "time": "30分钟前"
+        }
+      }
+    },
+    "states": {
+      "retry": "重试",
+      "allComments": "全部评论",
         "allReplies": "全部回复",
         "loadingSupplements": "加载补充中...",
         "emptySupplementsTitle": "暂无补充问题",
@@ -1469,6 +1575,12 @@
         "favorites": "收藏",
         "views": "浏览",
         "likes": "点赞"
+      },
+      "empty": {
+        "defaultTitle": "暂无上榜内容",
+        "defaultDescription": "当前榜单暂无可展示的数据，下拉刷新后稍后再来看看。",
+        "likesTitle": "点赞榜正在路上",
+        "likesDescription": "这个子榜单后端还在准备中，你可以先查看其他榜单。"
       },
       "allContentShown": "已显示全部内容"
     },
@@ -1701,15 +1813,17 @@
       "participants": "人参与",
       "progress": "进度",
       "tabs": {
-        "all": "全部",
-        "hot": "热门",
-        "new": "最新",
-        "ended": "已结束",
-        "mine": "我的"
-      },
-      "tag": {
-        "hot": "热门",
-        "new": "最新",
+      "all": "全部",
+      "hot": "热门",
+      "new": "最新",
+      "ended": "已结束",
+      "mine": "我的",
+      "history": "历史"
+    },
+    "searchPlaceholder": "搜索活动",
+    "tag": {
+      "hot": "热门",
+      "new": "最新",
         "ended": "已结束"
       },
       "type": {

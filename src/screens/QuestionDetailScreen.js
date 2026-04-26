@@ -92,6 +92,8 @@ import {
 } from '../utils/privateShareService';
 
 const SEND_BUTTON_COLOR = '#f472b6';
+const INVITE_TAB_LOCAL = 'local';
+const INVITE_TAB_TWITTER = 'twitter';
 
 const answers = [{
   id: 1,
@@ -434,6 +436,120 @@ export default function QuestionDetailScreen({
   const {
     t
   } = useTranslation();
+  const recommendedQuestionItems = React.useMemo(() => [{
+    id: 2,
+    reward: 30,
+    title: t('screens.questionDetail.recommendedItems.first.title'),
+    content: t('screens.questionDetail.recommendedItems.first.content'),
+    author: t('screens.questionDetail.recommendedItems.first.author'),
+    time: t('screens.questionDetail.recommendedItems.first.time'),
+    stats: {
+      comments: '89',
+      views: '2.3k'
+    },
+    tags: ['ReactNative', t('screens.questionDetail.recommendedItems.first.tags.performance'), t('screens.questionDetail.recommendedItems.first.tags.mobile')],
+    avatarSeed: 'user2',
+    showHot: true
+  }, {
+    id: 3,
+    reward: 20,
+    title: t('screens.questionDetail.recommendedItems.second.title'),
+    content: t('screens.questionDetail.recommendedItems.second.content'),
+    author: t('screens.questionDetail.recommendedItems.second.author'),
+    time: t('screens.questionDetail.recommendedItems.second.time'),
+    stats: {
+      comments: '156',
+      views: '4.5k'
+    },
+    tags: ['JavaScript', t('screens.questionDetail.recommendedItems.second.tags.frontend'), t('screens.questionDetail.recommendedItems.second.tags.learningPath')],
+    avatarSeed: 'user3',
+    showHot: false
+  }], [t]);
+  const rewardContributorsList = React.useMemo(() => [{
+    id: 1,
+    name: t('screens.questionDetail.samples.rewardContributors.first.name'),
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user1',
+    amount: 20,
+    time: t('screens.questionDetail.samples.rewardContributors.first.time')
+  }, {
+    id: 2,
+    name: t('screens.questionDetail.samples.rewardContributors.second.name'),
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=answer1',
+    amount: 15,
+    time: t('screens.questionDetail.samples.rewardContributors.second.time')
+  }, {
+    id: 3,
+    name: t('screens.questionDetail.samples.rewardContributors.third.name'),
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=answer2',
+    amount: 15,
+    time: t('screens.questionDetail.samples.rewardContributors.third.time')
+  }], [t]);
+  const expertsList = React.useMemo(() => [{
+    id: 1,
+    name: t('screens.questionDetail.samples.experts.first.name'),
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert1',
+    title: t('screens.questionDetail.samples.experts.first.title'),
+    verified: true,
+    expertise: t('screens.questionDetail.samples.experts.first.expertise'),
+    votes: 0
+  }, {
+    id: 2,
+    name: t('screens.questionDetail.samples.experts.second.name'),
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert2',
+    title: t('screens.questionDetail.samples.experts.second.title'),
+    verified: true,
+    expertise: t('screens.questionDetail.samples.experts.second.expertise'),
+    votes: 0
+  }, {
+    id: 3,
+    name: t('screens.questionDetail.samples.experts.third.name'),
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert3',
+    title: t('screens.questionDetail.samples.experts.third.title'),
+    verified: true,
+    expertise: t('screens.questionDetail.samples.experts.third.expertise'),
+    votes: 0
+  }, {
+    id: 4,
+    name: t('screens.questionDetail.samples.experts.fourth.name'),
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert4',
+    title: t('screens.questionDetail.samples.experts.fourth.title'),
+    verified: true,
+    expertise: t('screens.questionDetail.samples.experts.fourth.expertise'),
+    votes: 0
+  }, {
+    id: 5,
+    name: t('screens.questionDetail.samples.experts.fifth.name'),
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert5',
+    title: t('screens.questionDetail.samples.experts.fifth.title'),
+    verified: true,
+    expertise: t('screens.questionDetail.samples.experts.fifth.expertise'),
+    votes: 0
+  }], [t]);
+  const expertVoteDetails = React.useMemo(() => [{
+    id: 1,
+    name: t('screens.questionDetail.samples.expertVotes.first.name'),
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert1',
+    title: t('screens.questionDetail.samples.expertVotes.first.title'),
+    vote: 'agree',
+    reason: t('screens.questionDetail.samples.expertVotes.first.reason'),
+    time: t('screens.questionDetail.samples.expertVotes.first.time')
+  }, {
+    id: 2,
+    name: t('screens.questionDetail.samples.expertVotes.second.name'),
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert2',
+    title: t('screens.questionDetail.samples.expertVotes.second.title'),
+    vote: 'agree',
+    reason: t('screens.questionDetail.samples.expertVotes.second.reason'),
+    time: t('screens.questionDetail.samples.expertVotes.second.time')
+  }, {
+    id: 3,
+    name: t('screens.questionDetail.samples.expertVotes.third.name'),
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert3',
+    title: t('screens.questionDetail.samples.expertVotes.third.title'),
+    vote: 'disagree',
+    reason: t('screens.questionDetail.samples.expertVotes.third.reason'),
+    time: t('screens.questionDetail.samples.expertVotes.third.time')
+  }], [t]);
   const windowWidth = Dimensions.get('window').width;
   const isCompactAuthorActionRow = windowWidth <= 360;
 
@@ -676,7 +792,7 @@ export default function QuestionDetailScreen({
   const [answersPage, setAnswersPage] = useState(1);
 
   // 邀请标签页状态
-  const [inviteTab, setInviteTab] = useState('本站'); // '本站' or '推特'
+  const [inviteTab, setInviteTab] = useState(INVITE_TAB_LOCAL);
   const [searchLocalUser, setSearchLocalUser] = useState(''); // 本站用户搜索
   const [searchTwitterUser, setSearchTwitterUser] = useState(''); // 推特用户搜索
 
@@ -1336,27 +1452,6 @@ export default function QuestionDetailScreen({
   const [supplementSuperLikes, setSupplementSuperLikes] = useState({}); // 记录每个补充的超级赞数量
   const [commentSuperLikes, setCommentSuperLikes] = useState({}); // 记录每个评论的超级赞数量
 
-  // 追加悬赏人员名单数据
-  const rewardContributorsList = [{
-    id: 1,
-    name: '张三丰',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user1',
-    amount: 20,
-    time: '2小时前'
-  }, {
-    id: 2,
-    name: 'Python老司机',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=answer1',
-    amount: 15,
-    time: '1小时前'
-  }, {
-    id: 3,
-    name: '数据分析师小王',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=answer2',
-    amount: 15,
-    time: '30分钟前'
-  }];
-
   // 仲裁相关状态
   const [showArbitrationModal, setShowArbitrationModal] = useState(false);
   const [showArbitrationStatusModal, setShowArbitrationStatusModal] = useState(false);
@@ -1375,76 +1470,6 @@ export default function QuestionDetailScreen({
     total: 0
   });
   const [expertSearchText, setExpertSearchText] = useState(''); // 专家搜索文本
-
-  // 可邀请的专家列表
-  const expertsList = [{
-    id: 1,
-    name: '李明',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert1',
-    title: 'Python架构师',
-    verified: true,
-    expertise: 'Python开发',
-    votes: 0
-  }, {
-    id: 2,
-    name: '王芳',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert2',
-    title: '数据科学家',
-    verified: true,
-    expertise: '数据分析',
-    votes: 0
-  }, {
-    id: 3,
-    name: '赵强',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert3',
-    title: '技术总监',
-    verified: true,
-    expertise: '技术管理',
-    votes: 0
-  }, {
-    id: 4,
-    name: '刘洋',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert4',
-    title: 'AI工程师',
-    verified: true,
-    expertise: '机器学习',
-    votes: 0
-  }, {
-    id: 5,
-    name: '陈静',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert5',
-    title: '全栈开发',
-    verified: true,
-    expertise: 'Web开发',
-    votes: 0
-  }];
-
-  // 专家投票详情数据（模拟已完成投票的情况）
-  const [expertVoteDetails, setExpertVoteDetails] = useState([{
-    id: 1,
-    name: '李明',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert1',
-    title: 'Python架构师',
-    vote: 'agree',
-    reason: '原答案中关于学习时间的估计不够准确，对于零基础学习者来说，3个月时间过于乐观。建议重新评估。',
-    time: '2小时前'
-  }, {
-    id: 2,
-    name: '王芳',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert2',
-    title: '数据科学家',
-    vote: 'agree',
-    reason: '同意推翻。答案缺少对数据分析实际工作场景的介绍，学习路线过于理论化。',
-    time: '1小时前'
-  }, {
-    id: 3,
-    name: '赵强',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=expert3',
-    title: '技术总监',
-    vote: 'disagree',
-    reason: '我认为原答案基本合理，学习路线清晰，资源推荐也很实用。建议维持原判。',
-    time: '30分钟前'
-  }]);
 
   // 格式化数量显示，超过 1000 显示简写（如 1K, 1.2K, 10K, 1M）
   const formatCount = (count) => {
@@ -2530,7 +2555,10 @@ export default function QuestionDetailScreen({
     } catch (error) {
       console.warn('加载补充列表失败:', error);
       if (isRefresh && cacheData.list.length === 0) {
-        Alert.alert('加载失败', '获取补充列表失败，请稍后重试');
+        Alert.alert(
+          t('screens.questionDetail.alerts.loadFailedTitle'),
+          t('screens.questionDetail.alerts.fetchSupplementsFailed')
+        );
       }
     } finally {
       setSupplementsLoading(false);
@@ -3697,7 +3725,12 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           ...prev,
           [reply.id]: !isExpanded
         }))}>
-              <Text style={styles.replyChildrenToggleText}>{isExpanded ? `收起回复 (${descendantReplies.length})` : `展开回复 (${descendantReplies.length})`}</Text>
+              <Text style={styles.replyChildrenToggleText}>
+                {t(
+                  `screens.questionDetail.states.${isExpanded ? 'collapseReplies' : 'expandReplies'}`,
+                  { count: descendantReplies.length }
+                )}
+              </Text>
             </TouchableOpacity>
             {isExpanded ? descendantReplies.map(childReply => renderCommentReplyCard(childReply, config, {
           ...options,
@@ -4168,7 +4201,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     } catch (error) {
       console.warn('加载回答列表失败:', error);
       if (isRefresh && cacheData.list.length === 0) {
-        Alert.alert('加载失败', '获取回答列表失败，请稍后重试');
+        Alert.alert(
+          t('screens.questionDetail.alerts.loadFailedTitle'),
+          t('screens.questionDetail.alerts.fetchAnswersFailed')
+        );
       }
     } finally {
       setAnswersLoading(false);
@@ -6181,14 +6217,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
     }
 
     if (Platform.OS === 'ios') {
-      Alert.alert('选择图片', '请选择图片来源', [
+      Alert.alert(t('screens.questionDetail.modals.selectImageTitle'), t('screens.questionDetail.modals.selectImageMessage'), [
         {
-          text: '拍照',
+          text: t('screens.questionDetail.media.camera'),
           onPress: async () => {
             try {
               const permissionStatus = await ImagePicker.requestCameraPermissionsAsync();
               if (permissionStatus?.status !== 'granted') {
-                showToast('需要相机权限才能拍照', 'error');
+                showToast(t('screens.questionDetail.alerts.cameraPermissionRequired'), 'error');
                 return;
               }
 
@@ -6208,7 +6244,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           },
         },
         {
-          text: '从相册选择',
+          text: t('screens.questionDetail.media.photoLibrary'),
           onPress: async () => {
             try {
               const permissionStatus = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -7375,7 +7411,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             setDetailReloadVersion(prev => prev + 1);
           }
         }}>
-              <Text style={styles.retryBtnText}>重试</Text>
+              <Text style={styles.retryBtnText}>{t('screens.questionDetail.states.retry')}</Text>
             </TouchableOpacity>
           </View>}
 
@@ -7404,11 +7440,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             userId: questionData.publicUserId ?? questionData.authorId ?? questionData.userId,
             allowAnonymous: false
           })}>
-              <Avatar uri={questionData.userAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${questionData.publicUserId ?? questionData.userId}`} name={questionData.userName || questionData.userNickname || '匿名用户'} size={32} />
+              <Avatar uri={questionData.userAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=user${questionData.publicUserId ?? questionData.userId}`} name={questionData.userName || questionData.userNickname || t('screens.questionDetail.states.anonymousUser')} size={32} />
               <View style={styles.authorMetaInfo}>
                 <View style={styles.authorNameRow}>
                   <Text style={styles.smallAuthorName} numberOfLines={1}>
-                    {questionData.isAnonymous === 1 ? '匿名用户' : questionData.userName || questionData.userNickname || '匿名用户'}
+                    {questionData.isAnonymous === 1 ? t('screens.questionDetail.states.anonymousUser') : questionData.userName || questionData.userNickname || t('screens.questionDetail.states.anonymousUser')}
                   </Text>
                   {canFollowAuthor && <TouchableOpacity
                     style={[
@@ -7426,7 +7462,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       <>
                         {!questionAuthorIsFollowing && <Ionicons name="add" size={12} color="#ef4444" />}
                         <Text style={[styles.followBtnSmallText, questionAuthorIsFollowing && styles.followBtnSmallTextActive]}>
-                          {questionAuthorIsFollowing ? '已关注' : t('common.follow')}
+                          {questionAuthorIsFollowing ? t('screens.questionDetail.actions.following') : t('common.follow')}
                         </Text>
                         <Text style={[styles.followCountText, questionAuthorIsFollowing && styles.followCountTextActive]}>
                           ({displayFollowCount})
@@ -7436,7 +7472,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   </TouchableOpacity>}
                 </View>
                 <Text style={styles.smallPostTime} numberOfLines={1}>
-                  {formatTime(questionData.createTime || questionData.createdAt)} · {questionData.location || '未知'}
+                  {formatTime(questionData.createTime || questionData.createdAt)} · {questionData.location || t('screens.questionDetail.states.unknownLocation')}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -7496,7 +7532,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 <View style={styles.rewardAmountValueRow}>
                   <View style={styles.rewardInfoBadge}>
                     <Ionicons name="sparkles-outline" size={12} color="#f59e0b" />
-                    <Text style={styles.rewardInfoBadgeText}>悬赏</Text>
+                    <Text style={styles.rewardInfoBadgeText}>{t('screens.questionDetail.reward.badge')}</Text>
                   </View>
                   <Text style={styles.rewardAmountText} numberOfLines={1}>
                     {rewardAmountDisplayText}
@@ -7523,7 +7559,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <View style={styles.adoptionProgressContainer}>
                 <View style={styles.rewardStatHeader}>
                   <Ionicons name="pulse-outline" size={14} color="#f65b51" />
-                  <Text style={styles.rewardStatLabel}>采纳进度</Text>
+                  <Text style={styles.rewardStatLabel}>{t('screens.questionDetail.reward.adoptionProgress')}</Text>
                   <Text style={styles.rewardStatValue}>
                     {questionAdoptRate}%
                   </Text>
@@ -7537,7 +7573,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               })}>
                 <View style={styles.rewardStatHeader}>
                   <Ionicons name="people-outline" size={14} color="#2563eb" />
-                  <Text style={styles.rewardStatLabel}>参与追加</Text>
+                  <Text style={styles.rewardStatLabel}>{t('screens.questionDetail.reward.contributorsLabel')}</Text>
                   <Text style={styles.rewardStatValue}>{rewardContributorCount}</Text>
                   <Ionicons name="chevron-forward" size={16} color="#64748b" />
                 </View>
@@ -7562,10 +7598,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             >
               <View style={styles.paidDetailsLeft}>
                 <Ionicons name="wallet-outline" size={20} color="#22c55e" />
-                <Text style={styles.paidDetailsTitle}>查看付费明细</Text>
+                <Text style={styles.paidDetailsTitle}>{t('screens.questionDetail.reward.paidDetails')}</Text>
               </View>
               <View style={styles.paidDetailsRight}>
-                <Text style={styles.paidDetailsCount}>3人已付费</Text>
+                <Text style={styles.paidDetailsCount}>{t('screens.questionDetail.reward.paidUsers', { count: 3 })}</Text>
                 <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
               </View>
             </TouchableOpacity>
@@ -7603,7 +7639,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             // 点击后显示进度条样式
             <View style={styles.pkProgressRow}>
                 <View style={[styles.progressSolvedLabel, isSolvedChoiceSelected && styles.progressSolvedLabelActive]}>
-                  <Text style={[styles.progressLabelText, isSolvedChoiceSelected && styles.progressSolvedLabelTextActive]}>已解决</Text>
+                  <Text style={[styles.progressLabelText, isSolvedChoiceSelected && styles.progressSolvedLabelTextActive]}>{t('screens.questionDetail.pk.solved')}</Text>
                 </View>
                 <View style={styles.progressBarWrapper}>
                   <View style={styles.progressBar}>
@@ -7621,7 +7657,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   </View>
                 </View>
                 <View style={[styles.progressUnsolvedLabel, isUnsolvedChoiceSelected && styles.progressUnsolvedLabelActive]}>
-                  <Text style={[styles.progressLabelText, isUnsolvedChoiceSelected && styles.progressUnsolvedLabelTextActive]}>未解决</Text>
+                  <Text style={[styles.progressLabelText, isUnsolvedChoiceSelected && styles.progressUnsolvedLabelTextActive]}>{t('screens.questionDetail.pk.unsolved')}</Text>
                 </View>
               </View>}
           </View>
@@ -7634,7 +7670,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             {answerTabs.map(tab => <TouchableOpacity key={tab.key} style={styles.answerTabItem} onPress={() => {
             if (tab.key !== activeTab) {
               setActiveTab(tab.key);
-              setSortFilter('精选');
+              setSortFilter('featured');
             }
           }}>
                 <Text style={[styles.answerTabText, activeTab === tab.key && styles.answerTabTextActive]}>{tab.label}</Text>
@@ -7652,11 +7688,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             <>
                   <TouchableOpacity style={[styles.sortFilterBtn, supplementsSortBy === 'featured' && styles.sortFilterBtnActive]} onPress={() => handleSupplementsSortChange('featured')}>
                     <Ionicons name="star" size={14} color={supplementsSortBy === 'featured' ? '#ef4444' : '#9ca3af'} />
-                    <Text style={[styles.sortFilterText, supplementsSortBy === 'featured' && styles.sortFilterTextActive]}>精选</Text>
+                    <Text style={[styles.sortFilterText, supplementsSortBy === 'featured' && styles.sortFilterTextActive]}>{t('screens.questionDetail.filter.featured')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.sortFilterBtn, supplementsSortBy === 'newest' && styles.sortFilterBtnActive]} onPress={() => handleSupplementsSortChange('newest')}>
                     <Ionicons name="time" size={14} color={supplementsSortBy === 'newest' ? '#ef4444' : '#9ca3af'} />
-                    <Text style={[styles.sortFilterText, supplementsSortBy === 'newest' && styles.sortFilterTextActive]}>最新</Text>
+                    <Text style={[styles.sortFilterText, supplementsSortBy === 'newest' && styles.sortFilterTextActive]}>{t('screens.questionDetail.filter.latest')}</Text>
                   </TouchableOpacity>
                 </>
           ) : activeTabType === 'answers' ? (
@@ -7664,11 +7700,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             <>
                   <TouchableOpacity style={[styles.sortFilterBtn, answersSortBy === 'featured' && styles.sortFilterBtnActive]} onPress={() => handleAnswersSortChange('featured')}>
                     <Ionicons name="star" size={14} color={answersSortBy === 'featured' ? '#ef4444' : '#9ca3af'} />
-                    <Text style={[styles.sortFilterText, answersSortBy === 'featured' && styles.sortFilterTextActive]}>精选</Text>
+                    <Text style={[styles.sortFilterText, answersSortBy === 'featured' && styles.sortFilterTextActive]}>{t('screens.questionDetail.filter.featured')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.sortFilterBtn, answersSortBy === 'newest' && styles.sortFilterBtnActive]} onPress={() => handleAnswersSortChange('newest')}>
                     <Ionicons name="time" size={14} color={answersSortBy === 'newest' ? '#ef4444' : '#9ca3af'} />
-                    <Text style={[styles.sortFilterText, answersSortBy === 'newest' && styles.sortFilterTextActive]}>最新</Text>
+                    <Text style={[styles.sortFilterText, answersSortBy === 'newest' && styles.sortFilterTextActive]}>{t('screens.questionDetail.filter.latest')}</Text>
                   </TouchableOpacity>
                 </>
           ) : (
@@ -7676,17 +7712,21 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             <>
                   <TouchableOpacity style={[styles.sortFilterBtn, commentsSortBy === 'likes' && styles.sortFilterBtnActive]} onPress={() => handleCommentsSortChange('likes')}>
                     <Ionicons name="star" size={14} color={commentsSortBy === 'likes' ? '#ef4444' : '#9ca3af'} />
-                    <Text style={[styles.sortFilterText, commentsSortBy === 'likes' && styles.sortFilterTextActive]}>精选</Text>
+                    <Text style={[styles.sortFilterText, commentsSortBy === 'likes' && styles.sortFilterTextActive]}>{t('screens.questionDetail.filter.featured')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.sortFilterBtn, commentsSortBy === 'newest' && styles.sortFilterBtnActive]} onPress={() => handleCommentsSortChange('newest')}>
                     <Ionicons name="time" size={14} color={commentsSortBy === 'newest' ? '#ef4444' : '#9ca3af'} />
-                    <Text style={[styles.sortFilterText, commentsSortBy === 'newest' && styles.sortFilterTextActive]}>最新</Text>
+                    <Text style={[styles.sortFilterText, commentsSortBy === 'newest' && styles.sortFilterTextActive]}>{t('screens.questionDetail.filter.latest')}</Text>
                   </TouchableOpacity>
                 </>
           )}
             </View>
             <Text style={styles.sortFilterCount}>
-              {activeTabType === 'supplements' ? `共 ${supplementsList.length} 条补充` : activeTabType === 'answers' ? `共 ${answersTotal} 条回答` : `共 ${commentsTabTotal} 条评论`}
+              {activeTabType === 'supplements'
+                ? t('screens.questionDetail.reward.totalSupplements', { count: supplementsList.length })
+                : activeTabType === 'answers'
+                  ? t('screens.questionDetail.reward.totalAnswers', { count: answersTotal })
+                  : t('screens.questionDetail.reward.totalComments', { count: commentsTabTotal })}
             </Text>
           </View>
 
@@ -7694,7 +7734,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           {Boolean(activeTabType && ['supplements', 'answers', 'comments'].includes(activeTabType)) && <TouchableOpacity style={styles.superLikePurchaseBanner} onPress={() => navigation.navigate('SuperLikePurchase')} activeOpacity={0.8}>
               <View style={styles.superLikePurchaseBannerLeft}>
                 <Ionicons name="star" size={18} color="#f59e0b" />
-                <Text style={styles.superLikePurchaseBannerText}>购买超级赞提升排名</Text>
+                <Text style={styles.superLikePurchaseBannerText}>{t('screens.questionDetail.states.buySuperLikeBanner')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color="#f59e0b" />
             </TouchableOpacity>}
@@ -7719,13 +7759,13 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           // 初次加载状态
           <View style={styles.supplementsLoadingContainer}>
                   <ActivityIndicator size="large" color="#ef4444" />
-                  <Text style={styles.supplementsLoadingText}>加载补充中...</Text>
+                <Text style={styles.supplementsLoadingText}>{t('screens.questionDetail.states.loadingSupplements')}</Text>
                 </View> : supplementsList.length === 0 ?
           // 空状态
           <View style={styles.supplementsEmptyContainer}>
                   <Ionicons name="chatbubble-outline" size={48} color="#d1d5db" />
-                  <Text style={styles.supplementsEmptyText}>暂无补充问题</Text>
-                  <Text style={styles.supplementsEmptyDesc}>成为第一个提出补充问题的人</Text>
+                <Text style={styles.supplementsEmptyText}>{t('screens.questionDetail.states.emptySupplementsTitle')}</Text>
+                <Text style={styles.supplementsEmptyDesc}>{t('screens.questionDetail.states.emptySupplementsDescription')}</Text>
                 </View> :
           // 补充列表
           <>
@@ -7774,11 +7814,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       // 检查余额
                       const balance = await superLikeCreditService.getBalance();
                       if (balance <= 0) {
-                        Alert.alert('超级赞次数不足', '您的超级赞次数不足，是否购买？', [{
-                          text: '取消',
+                        Alert.alert(t('screens.questionDetail.alerts.insufficientSuperLikeTitle'), t('screens.questionDetail.alerts.insufficientSuperLikeMessage'), [{
+                          text: t('common.cancel'),
                           style: 'cancel'
                         }, {
-                          text: '去购买',
+                          text: t('screens.questionDetail.alerts.goPurchase'),
                           onPress: () => navigation.navigate('SuperLikePurchase')
                         }]);
                         return;
@@ -7809,7 +7849,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   setShowAnswerModal(true);
                 }}>
                       <Ionicons name="create-outline" size={14} color="#fff" />
-                      <Text style={styles.suppAnswerTextTop}>回答 ({Number(item.answerCount ?? 0)})</Text>
+            <Text style={styles.suppAnswerTextTop}>{t('screens.questionDetail.answer.replyCount', { count: Number(item.answerCount ?? 0) })}</Text>
                     </TouchableOpacity>
                   </View>
                   <View style={styles.suppContentContainer}>
@@ -7886,17 +7926,17 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   {/* 加载更多指示器 */}
                   {Boolean(supplementsLoadingMore) && <View style={styles.supplementsLoadingMore}>
                       <ActivityIndicator size="small" color="#ef4444" />
-                      <Text style={styles.supplementsLoadingMoreText}>加载更多...</Text>
+                <Text style={styles.supplementsLoadingMoreText}>{t('screens.questionDetail.states.loadMore')}</Text>
                     </View>}
                   
                   {Boolean(supplementsHasMore && !supplementsLoadingMore && supplementsList.length > 0) && <TouchableOpacity style={styles.loadMoreBtn} onPress={onSupplementsLoadMore}>
-                      <Text style={styles.loadMoreText}>加载更多补充</Text>
+                <Text style={styles.loadMoreText}>{t('screens.questionDetail.states.loadMoreSupplementItems')}</Text>
                       <Ionicons name="chevron-down" size={16} color="#ef4444" />
                     </TouchableOpacity>}
                   
                   {/* 没有更多数据提示 */}
                   {!supplementsHasMore && supplementsList.length > 0 && <View style={styles.supplementsNoMore}>
-                      <Text style={styles.supplementsNoMoreText}>没有更多补充了</Text>
+                <Text style={styles.supplementsNoMoreText}>{t('screens.questionDetail.states.noMoreSupplements')}</Text>
                     </View>}
                 </>}
             </ScrollView>
@@ -7905,11 +7945,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         <>
               {loadingComments && commentsList.length === 0 ? <View style={styles.supplementsLoadingContainer}>
                   <ActivityIndicator size="large" color="#ef4444" />
-                  <Text style={styles.supplementsLoadingText}>加载评论中...</Text>
+                <Text style={styles.supplementsLoadingText}>{t('screens.questionDetail.states.loadingComments')}</Text>
                 </View> : commentsList.length === 0 ? <View style={styles.supplementsEmptyContainer}>
                   <Ionicons name="chatbubble-outline" size={48} color="#d1d5db" />
-                  <Text style={styles.supplementsEmptyText}>暂无评论</Text>
-                  <Text style={styles.supplementsEmptyDesc}>成为第一个评论的人</Text>
+                <Text style={styles.supplementsEmptyText}>{t('screens.questionDetail.states.emptyCommentsTitle')}</Text>
+                <Text style={styles.supplementsEmptyDesc}>{t('screens.questionDetail.states.emptyCommentsDescription')}</Text>
                 </View> : <>
               {commentsList.map(comment => {
               const isCommentLiked = commentLiked[comment.id] !== undefined ? commentLiked[comment.id] : !!comment.liked;
@@ -7931,11 +7971,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     // 检查余额
                     const balance = await superLikeCreditService.getBalance();
                     if (balance <= 0) {
-                      Alert.alert('超级赞次数不足', '您的超级赞次数不足，是否购买？', [{
-                        text: '取消',
+                      Alert.alert(t('screens.questionDetail.alerts.insufficientSuperLikeTitle'), t('screens.questionDetail.alerts.insufficientSuperLikeMessage'), [{
+                        text: t('common.cancel'),
                         style: 'cancel'
                       }, {
-                        text: '去购买',
+                        text: t('screens.questionDetail.alerts.goPurchase'),
                         onPress: () => navigation.navigate('SuperLikePurchase')
                       }]);
                       return;
@@ -8020,7 +8060,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   <Ionicons name="chevron-down" size={16} color="#ef4444" />
                 </TouchableOpacity>}
               {!commentsHasMore && commentsList.length > 0 && <View style={styles.supplementsNoMore}>
-                  <Text style={styles.supplementsNoMoreText}>没有更多评论了</Text>
+                <Text style={styles.supplementsNoMoreText}>{t('screens.questionDetail.states.noMoreComments')}</Text>
                 </View>}
                 </>}
             </>
@@ -8029,12 +8069,12 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         <View style={styles.inviteContainer}>
               {/* 二级tab标签 */}
               <View style={styles.inviteSubTabs}>
-                <TouchableOpacity style={[styles.inviteSubTabItem, inviteTab === '本站' && styles.inviteSubTabItemActive]} onPress={() => setInviteTab('本站')}>
-                  <Text style={[styles.inviteSubTabText, inviteTab === '本站' && styles.inviteSubTabTextActive]}>{t('screens.questionDetail.invite.local')}</Text>
+                <TouchableOpacity style={[styles.inviteSubTabItem, inviteTab === INVITE_TAB_LOCAL && styles.inviteSubTabItemActive]} onPress={() => setInviteTab(INVITE_TAB_LOCAL)}>
+                  <Text style={[styles.inviteSubTabText, inviteTab === INVITE_TAB_LOCAL && styles.inviteSubTabTextActive]}>{t('screens.questionDetail.invite.local')}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.inviteSubTabItem, inviteTab === '推特' && styles.inviteSubTabItemActive]} onPress={() => setInviteTab('推特')}>
-                  <Ionicons name="logo-twitter" size={14} color={inviteTab === '推特' ? '#1DA1F2' : '#9ca3af'} />
-                  <Text style={[styles.inviteSubTabText, inviteTab === '推特' && styles.inviteSubTabTextActive]}>{t('screens.questionDetail.invite.twitter')}</Text>
+                <TouchableOpacity style={[styles.inviteSubTabItem, inviteTab === INVITE_TAB_TWITTER && styles.inviteSubTabItemActive]} onPress={() => setInviteTab(INVITE_TAB_TWITTER)}>
+                  <Ionicons name="logo-twitter" size={14} color={inviteTab === INVITE_TAB_TWITTER ? '#1DA1F2' : '#9ca3af'} />
+                  <Text style={[styles.inviteSubTabText, inviteTab === INVITE_TAB_TWITTER && styles.inviteSubTabTextActive]}>{t('screens.questionDetail.invite.twitter')}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -8042,14 +8082,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <View style={styles.inviteSearchContainer}>
                 <View style={styles.inviteSearchBox}>
                   <Ionicons name="search" size={14} color="#9ca3af" />
-                  <TextInput style={styles.inviteSearchInput} placeholder={inviteTab === '本站' ? t('screens.questionDetail.invite.searchUser') : t('screens.questionDetail.invite.searchTwitterUser')} placeholderTextColor="#9ca3af" value={inviteTab === '本站' ? searchLocalUser : searchTwitterUser} onChangeText={text => {
-                if (inviteTab === '本站') setSearchLocalUser(text);else setSearchTwitterUser(text);
+                  <TextInput style={styles.inviteSearchInput} placeholder={inviteTab === INVITE_TAB_LOCAL ? t('screens.questionDetail.invite.searchUser') : t('screens.questionDetail.invite.searchTwitterUser')} placeholderTextColor="#9ca3af" value={inviteTab === INVITE_TAB_LOCAL ? searchLocalUser : searchTwitterUser} onChangeText={text => {
+                if (inviteTab === INVITE_TAB_LOCAL) setSearchLocalUser(text);else setSearchTwitterUser(text);
               }} />
                 </View>
               </View>
 
               {/* 本站用户内容 */}
-              {inviteTab === '本站' && <View style={styles.inviteTabContent}>
+              {inviteTab === INVITE_TAB_LOCAL && <View style={styles.inviteTabContent}>
                   {/* 推荐邀请用户 - 横向滚动 */}
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recommendScroll}>
                     {displayedLocalUsers.slice(0, 8).map(user => {
@@ -8093,17 +8133,17 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       </View>;
                   })}
                     {displayedLocalUsers.length === 0 && !loadingLocalSearch && <View style={styles.invitedEmptyState}>
-                        <Text style={styles.invitedEmptyText}>{searchLocalUser.trim() ? '没有找到匹配的用户' : '暂无可邀请的本站用户'}</Text>
+                        <Text style={styles.invitedEmptyText}>{searchLocalUser.trim() ? t('screens.questionDetail.invite.localEmptySearch') : t('screens.questionDetail.invite.localEmptyAvailable')}</Text>
                       </View>}
                     {loadingLocalSearch && <View style={styles.loadingIndicator}>
-                        <Text style={styles.loadingText}>搜索中...</Text>
+                        <Text style={styles.loadingText}>{t('screens.questionDetail.invite.searching')}</Text>
                       </View>}
                   </ScrollView>
 
                   {/* 已邀请用户列表 */}
-                  <Text style={styles.invitedListTitle}>已邀请</Text>
+                  <Text style={styles.invitedListTitle}>{t('screens.questionDetail.invite.localInvitedTitle')}</Text>
                   {visibleInvitedLocalUsers.length === 0 && !loadingLocalInviteUsers && <View style={styles.invitedEmptyState}>
-                      <Text style={styles.invitedEmptyText}>{searchLocalUser.trim() ? '没有匹配的邀请记录' : '私信发送成功后，会显示在这里'}</Text>
+                      <Text style={styles.invitedEmptyText}>{searchLocalUser.trim() ? t('screens.questionDetail.invite.localInviteEmptySearch') : t('screens.questionDetail.invite.localInviteEmptyDesc')}</Text>
                     </View>}
                   {visibleInvitedLocalUsers.slice(0, showAllInvited ? visibleInvitedLocalUsers.length : 3).map(user => <View key={`invited-local-${user.id}`} style={styles.inviteUserCard}>
                       <Avatar uri={user.avatar} name={buildLocalInviteDisplayName(user)} size={40} />
@@ -8113,11 +8153,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       </View>
                       <View style={styles.invitedTag}>
                         <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
-                        <Text style={styles.invitedTagText}>{user.statusText || '已邀请'}</Text>
+                        <Text style={styles.invitedTagText}>{user.statusText || t('screens.questionDetail.invite.invited')}</Text>
                       </View>
                     </View>)}
                   {Boolean(loadingLocalInviteUsers) && <View style={styles.loadingIndicator}>
-                      <Text style={styles.loadingText}>加载中...</Text>
+                      <Text style={styles.loadingText}>{t('screens.questionDetail.invite.loading')}</Text>
                     </View>}
                   {!showAllInvited && visibleInvitedLocalUsers.length > 3 && <TouchableOpacity style={styles.loadMoreInvitedBtn} onPress={() => setShowAllInvited(true)}>
                       <Text style={styles.loadMoreInvitedText}>{t('screens.questionDetail.loadMoreInvites')} ({visibleInvitedLocalUsers.length - 3})</Text>
@@ -8127,19 +8167,19 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               setShowAllInvited(false);
               setInvitedPage(1);
             }}>
-                      <Text style={styles.collapseBtnText}>收起</Text>
+                      <Text style={styles.collapseBtnText}>{t('screens.questionDetail.invite.collapse')}</Text>
                       <Ionicons name="chevron-up" size={16} color="#ef4444" />
                     </TouchableOpacity>}
                 </View>}
 
               {/* 推特用户内容 */}
-              {inviteTab === '推特' && <View style={styles.inviteTabContent}>
+              {inviteTab === INVITE_TAB_TWITTER && <View style={styles.inviteTabContent}>
                   {/* 推荐邀请用户 - 横向滚动 */}
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recommendScroll}>
                     {recommendedTwitterUsers.map(user => {
                     const invitedRecord = invitedTwitterUsersMap[user.id];
                     const inviteCompleted = Boolean(invitedRecord);
-                    const inviteStatusText = invitedRecord?.statusText || '已发起';
+                    const inviteStatusText = invitedRecord?.statusText || t('screens.questionDetail.invite.twitterInvited');
                     return <View key={`rec-twitter-${user.id}`} style={styles.recommendUserCard}>
                         <Image source={{
                   uri: user.avatar
@@ -8155,7 +8195,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                           ]}
                           onPress={() => {
                             if (inviteCompleted) {
-                              showToast(invitedRecord?.statusText || '已发起邀请', 'info');
+                              showToast(invitedRecord?.statusText || t('screens.questionDetail.invite.twitterInvitedTitle'), 'info');
                               return;
                             }
                             openTwitterInviteEditor(user);
@@ -8173,14 +8213,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       </View>;
                   })}
                     {recommendedTwitterUsers.length === 0 && <View style={styles.invitedEmptyState}>
-                        <Text style={styles.invitedEmptyText}>没有匹配的推特用户</Text>
+                        <Text style={styles.invitedEmptyText}>{t('screens.questionDetail.invite.twitterEmptySearch')}</Text>
                       </View>}
                   </ScrollView>
 
                   {/* 已邀请用户列表 */}
-                  <Text style={styles.invitedListTitle}>已发起邀请</Text>
+                  <Text style={styles.invitedListTitle}>{t('screens.questionDetail.invite.twitterInvitedTitle')}</Text>
                   {invitedTwitterUsers.length === 0 && !loadingTwitterInvites && <View style={styles.invitedEmptyState}>
-                      <Text style={styles.invitedEmptyText}>{normalizedTwitterSearch ? '没有匹配的邀请记录' : '保存文案并跳转到推特后，会展示在这里'}</Text>
+                      <Text style={styles.invitedEmptyText}>{normalizedTwitterSearch ? t('screens.questionDetail.invite.twitterInviteEmptySearch') : t('screens.questionDetail.invite.twitterInviteEmptyDesc')}</Text>
                     </View>}
                   {invitedTwitterUsers.slice(0, showAllInvited ? invitedTwitterUsers.length : 3).map(user => <View key={`invited-twitter-${user.id}`} style={styles.inviteUserCard}>
                       <Avatar uri={user.avatar} name={user.name} size={40} />
@@ -8190,21 +8230,21 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       </View>
                       <View style={styles.invitedTag}>
                         <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
-                        <Text style={styles.invitedTagText}>{user.statusText || '已发起邀请'}</Text>
+                        <Text style={styles.invitedTagText}>{user.statusText || t('screens.questionDetail.invite.twitterInvited')}</Text>
                       </View>
                     </View>)}
                   {Boolean(loadingTwitterInvites) && <View style={styles.loadingIndicator}>
-                      <Text style={styles.loadingText}>加载中...</Text>
+                      <Text style={styles.loadingText}>{t('screens.questionDetail.invite.loading')}</Text>
                     </View>}
                   {!showAllInvited && invitedTwitterUsers.length > 3 && <TouchableOpacity style={styles.loadMoreInvitedBtn} onPress={() => setShowAllInvited(true)}>
-                      <Text style={styles.loadMoreInvitedText}>查看更多邀请 ({invitedTwitterUsers.length - 3})</Text>
+                      <Text style={styles.loadMoreInvitedText}>{t('screens.questionDetail.invite.viewMoreInvites', { count: invitedTwitterUsers.length - 3 })}</Text>
                       <Ionicons name="chevron-down" size={16} color="#ef4444" />
                     </TouchableOpacity>}
                   {Boolean(showAllInvited) && invitedTwitterUsers.length > 3 && <TouchableOpacity style={styles.collapseBtn} onPress={() => {
               setShowAllInvited(false);
               setInvitedPage(1);
             }}>
-                      <Text style={styles.collapseBtnText}>收起</Text>
+                      <Text style={styles.collapseBtnText}>{t('screens.questionDetail.invite.collapse')}</Text>
                       <Ionicons name="chevron-up" size={16} color="#ef4444" />
                     </TouchableOpacity>}
                 </View>}
@@ -8216,13 +8256,13 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           // 初次加载状态
           <View style={styles.supplementsLoadingContainer}>
                   <ActivityIndicator size="large" color="#ef4444" />
-                  <Text style={styles.supplementsLoadingText}>加载回答中...</Text>
+                  <Text style={styles.supplementsLoadingText}>{t('screens.questionDetail.answer.loading')}</Text>
                 </View> : answersList.length === 0 ?
           // 空状态
           <View style={styles.supplementsEmptyContainer}>
                   <Ionicons name="chatbubble-outline" size={48} color="#d1d5db" />
-                  <Text style={styles.supplementsEmptyText}>暂无回答，快来抢沙发吧~</Text>
-                  <Text style={styles.supplementsEmptyDesc}>成为第一个回答问题的人</Text>
+                  <Text style={styles.supplementsEmptyText}>{t('screens.questionDetail.answer.emptyTitle')}</Text>
+                  <Text style={styles.supplementsEmptyDesc}>{t('screens.questionDetail.answer.emptyDescription')}</Text>
                 </View> : <>
                   {answersList.map(answer => {
               const answerStateKey = getAnswerIdentityKey(answer) || String(answer.id);
@@ -8247,10 +8287,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   e.stopPropagation();
                   openPublicProfile(answer);
                 }}>
-                <Avatar uri={answer.userAvatar || answer.avatar} name={answer.userName || answer.userNickname || answer.author || '匿名用户'} size={24} />
+                <Avatar uri={answer.userAvatar || answer.avatar} name={answer.userName || answer.userNickname || answer.author || t('screens.questionDetail.states.anonymousUser')} size={24} />
                 <View style={styles.answerAuthorInfo}>
                   <View style={styles.answerAuthorRow}>
-                    <Text style={styles.answerAuthor}>{answer.userName || answer.userNickname || answer.author || '匿名用户'}</Text>
+                    <Text style={styles.answerAuthor}>{answer.userName || answer.userNickname || answer.author || t('screens.questionDetail.states.anonymousUser')}</Text>
                     {Boolean(answer.verified) && <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />}
                     
                     {Boolean((canCurrentUserAdoptQuestion && canAdopt) || isAdopted) && <TouchableOpacity style={[styles.adoptAnswerBtn, isAdopted && styles.adoptAnswerBtnActive, isAdoptLoading && styles.adoptAnswerBtnLoading]} onPress={e => {
@@ -8286,11 +8326,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     // 检查余额
                     const balance = await superLikeCreditService.getBalance();
                     if (balance <= 0) {
-                      Alert.alert('超级赞次数不足', '您的超级赞次数不足，是否购买？', [{
-                        text: '取消',
+                      Alert.alert(t('screens.questionDetail.alerts.insufficientSuperLikeTitle'), t('screens.questionDetail.alerts.insufficientSuperLikeMessage'), [{
+                        text: t('common.cancel'),
                         style: 'cancel'
                       }, {
-                        text: '去购买',
+                        text: t('screens.questionDetail.alerts.goPurchase'),
                         onPress: () => navigation.navigate('SuperLikePurchase')
                       }]);
                       return;
@@ -8334,19 +8374,19 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 {Boolean(false && answer.hasArbitration && answer.arbitrationResult === 'completed') && <View style={[styles.arbitrationResultBadge, answer.arbitrationData.status === 'approved' ? styles.arbitrationResultApproved : styles.arbitrationResultRejected]}>
                     <Ionicons name={answer.arbitrationData.status === 'approved' ? "close-circle" : "shield-checkmark"} size={12} color={answer.arbitrationData.status === 'approved' ? "#ef4444" : "#22c55e"} />
                     <Text style={[styles.arbitrationResultText, answer.arbitrationData.status === 'approved' ? styles.arbitrationResultTextApproved : styles.arbitrationResultTextRejected]}>
-                      {answer.arbitrationData.status === 'approved' ? '仲裁推翻' : '仲裁维持'}
+                      {answer.arbitrationData.status === 'approved' ? t('screens.questionDetail.arbitrationStatus.overturned') : t('screens.questionDetail.arbitrationStatus.upheld')}
                     </Text>
                   </View>}
 
                 {/* 仲裁状态标签 - 暂时隐藏 */}
                 {Boolean(false && answer.adopted && arbitrationStatus === 'pending') && <View style={styles.arbitrationPendingBadgeCompact}>
                     <Ionicons name="time-outline" size={12} color="#f59e0b" />
-                    <Text style={styles.arbitrationPendingTextCompact}>投票中</Text>
+                    <Text style={styles.arbitrationPendingTextCompact}>{t('screens.questionDetail.arbitrationStatus.voting')}</Text>
                   </View>}
                 
                 {Boolean(false && answer.adopted && arbitrationStatus === 'approved') && <View style={styles.arbitrationApprovedBadgeCompact}>
                     <Ionicons name="close-circle" size={12} color="#ef4444" />
-                    <Text style={styles.arbitrationApprovedTextCompact}>已推翻</Text>
+                    <Text style={styles.arbitrationApprovedTextCompact}>{t('screens.questionDetail.arbitrationStatus.overturned')}</Text>
                   </View>}
 
                 {/* 右侧操作按钮 */}
@@ -8358,7 +8398,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       setShowArbitrationResultModal(true);
                     }}>
                       <Ionicons name="document-text-outline" size={12} color="#6b7280" />
-                      <Text style={styles.viewArbitrationResultBtnText}>查看仲裁</Text>
+                      <Text style={styles.viewArbitrationResultBtnText}>{t('screens.questionDetail.actions.viewArbitration')}</Text>
                     </TouchableOpacity>}
                   
                   {/* 申请仲裁按钮 - 暂时隐藏 */}
@@ -8367,7 +8407,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       setShowArbitrationModal(true);
                     }}>
                       <Ionicons name="shield-checkmark-outline" size={12} color="#6b7280" />
-                      <Text style={styles.arbitrationBtnTextCompact}>仲裁</Text>
+                      <Text style={styles.arbitrationBtnTextCompact}>{t('screens.answerDetail.actions.arbitration')}</Text>
                     </TouchableOpacity>}
                   
                   {/* 查看仲裁详情按钮 - 暂时隐藏 */}
@@ -8375,7 +8415,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       e.stopPropagation();
                       setShowArbitrationStatusModal(true);
                     }}>
-                      <Text style={styles.viewArbitrationBtnTextCompact}>详情</Text>
+                      <Text style={styles.viewArbitrationBtnTextCompact}>{t('screens.questionDetail.actions.details')}</Text>
                       <Ionicons name="chevron-forward" size={12} color="#6b7280" />
                     </TouchableOpacity>}
                 </View>
@@ -8499,17 +8539,17 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   {/* 加载更多指示器 */}
                   {Boolean(answersLoadingMore) && <View style={styles.supplementsLoadingMore}>
                       <ActivityIndicator size="small" color="#ef4444" />
-                      <Text style={styles.supplementsLoadingMoreText}>加载更多...</Text>
+                <Text style={styles.supplementsLoadingMoreText}>{t('screens.questionDetail.states.loadMore')}</Text>
                     </View>}
                   
                   {Boolean(answersHasMore && !answersLoadingMore && answersList.length > 0) && <TouchableOpacity style={styles.loadMoreBtn} onPress={onAnswersLoadMore}>
-                      <Text style={styles.loadMoreText}>加载更多回答</Text>
+                <Text style={styles.loadMoreText}>{t('screens.questionDetail.answer.loadMore')}</Text>
                       <Ionicons name="chevron-down" size={16} color="#ef4444" />
                     </TouchableOpacity>}
                   
                   {/* 没有更多数据提示 */}
                   {!answersHasMore && answersList.length > 0 && <View style={styles.supplementsNoMore}>
-                      <Text style={styles.supplementsNoMoreText}>没有更多回答了</Text>
+                <Text style={styles.supplementsNoMoreText}>{t('screens.questionDetail.answer.noMore')}</Text>
                     </View>}
                 </>}
             </>
@@ -8527,85 +8567,55 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             <Text style={styles.recommendedSubtitle}>{t('screens.questionDetail.recommended.subtitle')}</Text>
           </View>
 
-          {/* 推荐问题卡片 */}
-          <TouchableOpacity style={styles.recommendedQuestionCard} onPress={() => navigation.push('QuestionDetail', {
-          id: 2
-        })} activeOpacity={0.95}>
-            <Text style={styles.recommendedQuestionTitle}>
-              <Text style={styles.rewardTagInline}>$30 </Text>
-              <View style={styles.recommendedHotTagInline}>
-                <Ionicons name="flame" size={10} color="#ef4444" />
-                <Text style={styles.recommendedHotTextInline}>{t('screens.questionDetail.recommended.hot')}</Text>
-              </View>
-              {' '}React Native开发中如何优化长列表性能？FlatList和ScrollView该如何选择？
-            </Text>
-            
-            <Text style={styles.recommendedQuestionContent} numberOfLines={3}>
-              我在开发一个新闻类APP，列表有上千条数据，使用ScrollView会很卡顿。听说FlatList性能更好，但不知道具体该怎么优化。请问有经验的开发者能分享一下最佳实践吗？
-            </Text>
+          {recommendedQuestionItems.map(item => (
+            <TouchableOpacity
+              key={item.id}
+              style={styles.recommendedQuestionCard}
+              onPress={() => navigation.push('QuestionDetail', { id: item.id })}
+              activeOpacity={0.95}
+            >
+              <Text style={styles.recommendedQuestionTitle}>
+                <Text style={styles.rewardTagInline}>${item.reward} </Text>
+                {item.showHot ? (
+                  <>
+                    <View style={styles.recommendedHotTagInline}>
+                      <Ionicons name="flame" size={10} color="#ef4444" />
+                      <Text style={styles.recommendedHotTextInline}>{t('screens.questionDetail.recommended.hot')}</Text>
+                    </View>{' '}
+                  </>
+                ) : null}
+                {item.title}
+              </Text>
 
-            <View style={styles.recommendedQuestionMeta}>
-              <View style={styles.recommendedAuthorInfo}>
-                <Avatar uri="https://api.dicebear.com/7.x/avataaars/svg?seed=user2" name="前端小白" size={24} />
-                <Text style={styles.recommendedAuthorName}>前端小白</Text>
-                <Text style={styles.recommendedQuestionTime}>· 3小时前</Text>
-              </View>
-              <View style={styles.recommendedQuestionStats}>
-                <View style={styles.recommendedStatItem}>
-                  <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
-                  <Text style={styles.recommendedStatText}>89</Text>
+              <Text style={styles.recommendedQuestionContent} numberOfLines={3}>
+                {item.content}
+              </Text>
+
+              <View style={styles.recommendedQuestionMeta}>
+                <View style={styles.recommendedAuthorInfo}>
+                  <Avatar uri={`https://api.dicebear.com/7.x/avataaars/svg?seed=${item.avatarSeed}`} name={item.author} size={24} />
+                  <Text style={styles.recommendedAuthorName}>{item.author}</Text>
+                  <Text style={styles.recommendedQuestionTime}>· {item.time}</Text>
                 </View>
-                <View style={styles.recommendedStatItem}>
-                  <Ionicons name="eye-outline" size={14} color="#9ca3af" />
-                  <Text style={styles.recommendedStatText}>2.3k</Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.recommendedTopicTags}>
-              <Text style={styles.recommendedTopicTag}>#ReactNative</Text>
-              <Text style={styles.recommendedTopicTag}>#性能优化</Text>
-              <Text style={styles.recommendedTopicTag}>#移动开发</Text>
-            </View>
-          </TouchableOpacity>
-
-          {/* 第二个推荐问题 */}
-          <TouchableOpacity style={styles.recommendedQuestionCard} onPress={() => navigation.push('QuestionDetail', {
-          id: 3
-        })} activeOpacity={0.95}>
-            <Text style={styles.recommendedQuestionTitle}>
-              <Text style={styles.rewardTagInline}>$20 </Text>
-              如何系统学习JavaScript？从入门到精通需要掌握哪些核心知识点？
-            </Text>
-            
-            <Text style={styles.recommendedQuestionContent} numberOfLines={3}>
-              想转行做前端开发，JavaScript是必备技能。但是网上资料太多太杂，不知道该从哪里开始学。希望有经验的前辈能给一个系统的学习路线图。
-            </Text>
-
-            <View style={styles.recommendedQuestionMeta}>
-              <View style={styles.recommendedAuthorInfo}>
-                <Avatar uri="https://api.dicebear.com/7.x/avataaars/svg?seed=user3" name="转行者" size={24} />
-                <Text style={styles.recommendedAuthorName}>转行者</Text>
-                <Text style={styles.recommendedQuestionTime}>· 5小时前</Text>
-              </View>
-              <View style={styles.recommendedQuestionStats}>
-                <View style={styles.recommendedStatItem}>
-                  <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
-                  <Text style={styles.recommendedStatText}>156</Text>
-                </View>
-                <View style={styles.recommendedStatItem}>
-                  <Ionicons name="eye-outline" size={14} color="#9ca3af" />
-                  <Text style={styles.recommendedStatText}>4.5k</Text>
+                <View style={styles.recommendedQuestionStats}>
+                  <View style={styles.recommendedStatItem}>
+                    <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
+                    <Text style={styles.recommendedStatText}>{item.stats.comments}</Text>
+                  </View>
+                  <View style={styles.recommendedStatItem}>
+                    <Ionicons name="eye-outline" size={14} color="#9ca3af" />
+                    <Text style={styles.recommendedStatText}>{item.stats.views}</Text>
+                  </View>
                 </View>
               </View>
-            </View>
 
-            <View style={styles.recommendedTopicTags}>
-              <Text style={styles.recommendedTopicTag}>#JavaScript</Text>
-              <Text style={styles.recommendedTopicTag}>#前端开发</Text>
-              <Text style={styles.recommendedTopicTag}>#学习路线</Text>
-            </View>
-          </TouchableOpacity>
+              <View style={styles.recommendedTopicTags}>
+                {item.tags.map(tag => (
+                  <Text key={tag} style={styles.recommendedTopicTag}>#{tag}</Text>
+                ))}
+              </View>
+            </TouchableOpacity>
+          ))}
         </View>}
       </ScrollView>
 
@@ -8656,13 +8666,13 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           <Text style={styles.bottomInputPlaceholder}>
             {(() => {
               if (activeTabType === 'supplements') {
-                return '补充问题';
+                return t('screens.questionDetail.placeholders.writeSupplementTitle');
               } else if (activeTabType === 'answers') {
-                return '写回答';
+                return t('screens.questionDetail.placeholders.writeAnswerTitle');
               } else if (activeTabType === 'comments') {
-                return '写评论';
+                return t('screens.questionDetail.modals.writeCommentTitle');
               }
-              return '写评论';
+              return t('screens.questionDetail.modals.writeCommentTitle');
             })()}
           </Text>
           <Ionicons name="create-outline" size={18} color="#9ca3af" />
@@ -8682,7 +8692,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             <View style={styles.actionListSection}>
               <TouchableOpacity style={styles.moreActionItem}>
                 <Ionicons name="thumbs-down-outline" size={22} color="#6b7280" />
-                <Text style={styles.moreActionItemText}>踩一下 ({formatNumber(questionData?.dislikeCount || 0)})</Text>
+                <Text style={styles.moreActionItemText}>{t('screens.questionDetail.actions.dislike')} ({formatNumber(questionData?.dislikeCount || 0)})</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.moreActionItem} onPress={() => {
               setShowActionModal(false);
@@ -8695,12 +8705,12 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 <Ionicons name="flag-outline" size={22} color="#ef4444" />
                 <Text style={[styles.moreActionItemText, {
                 color: '#ef4444'
-              }]}>举报</Text>
+              }]}>{t('common.report')}</Text>
               </TouchableOpacity>
             </View>
 
             <TouchableOpacity style={styles.moreActionCancelBtn} onPress={() => setShowActionModal(false)}>
-              <Text style={styles.moreActionCancelText}>取消</Text>
+              <Text style={styles.moreActionCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -8714,45 +8724,45 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           paddingBottom: Math.max(insets.bottom, 30)
         }]}>
             <View style={styles.reportModalHandle} />
-            <Text style={styles.reportModalTitle}>举报问题</Text>
+            <Text style={styles.reportModalTitle}>{t('screens.questionDetail.actions.reportQuestion')}</Text>
             <TouchableOpacity style={styles.reportItem} onPress={() => {
             setShowReportModal(false);
-            alert('已提交举报：垃圾广告');
+            alert(t('screens.questionDetail.alerts.reportSubmitted', { reason: t('screens.questionDetail.report.spam') }));
           }}>
-              <Text style={styles.reportItemText}>垃圾广告</Text>
+              <Text style={styles.reportItemText}>{t('screens.questionDetail.report.spam')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.reportItem} onPress={() => {
             setShowReportModal(false);
-            alert('已提交举报：违法违规');
+            alert(t('screens.questionDetail.alerts.reportSubmitted', { reason: t('screens.questionDetail.report.illegal') }));
           }}>
-              <Text style={styles.reportItemText}>违法违规</Text>
+              <Text style={styles.reportItemText}>{t('screens.questionDetail.report.illegal')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.reportItem} onPress={() => {
             setShowReportModal(false);
-            alert('已提交举报：低俗色情');
+            alert(t('screens.questionDetail.alerts.reportSubmitted', { reason: t('screens.questionDetail.report.explicit') }));
           }}>
-              <Text style={styles.reportItemText}>低俗色情</Text>
+              <Text style={styles.reportItemText}>{t('screens.questionDetail.report.explicit')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.reportItem} onPress={() => {
             setShowReportModal(false);
-            alert('已提交举报：侵权');
+            alert(t('screens.questionDetail.alerts.reportSubmitted', { reason: t('screens.questionDetail.report.infringement') }));
           }}>
-              <Text style={styles.reportItemText}>侵权</Text>
+              <Text style={styles.reportItemText}>{t('screens.questionDetail.report.infringement')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.reportItem} onPress={() => {
             setShowReportModal(false);
-            alert('已提交举报：不实信息');
+            alert(t('screens.questionDetail.alerts.reportSubmitted', { reason: t('screens.questionDetail.report.misinformation') }));
           }}>
-              <Text style={styles.reportItemText}>不实信息</Text>
+              <Text style={styles.reportItemText}>{t('screens.questionDetail.report.misinformation')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.reportItem} onPress={() => {
             setShowReportModal(false);
-            alert('已提交举报：其他');
+            alert(t('screens.questionDetail.alerts.reportSubmitted', { reason: t('screens.questionDetail.report.other') }));
           }}>
-              <Text style={styles.reportItemText}>其他</Text>
+              <Text style={styles.reportItemText}>{t('screens.questionDetail.report.other')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.reportCancelBtn} onPress={() => setShowReportModal(false)}>
-              <Text style={styles.reportCancelText}>取消</Text>
+              <Text style={styles.reportCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -8762,7 +8772,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       <CommentBottomSheet
         visible={activeCommentSheet === 'supp-list'}
         onClose={() => setShowSuppCommentListModal(false)}
-        title="全部评论"
+        title={t('screens.questionDetail.states.allComments')}
         styles={styles}
         headerRight={
           <CommentBottomSheetIconButton
@@ -8773,7 +8783,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }
         footer={
           <CommentBottomSheetWriteBar
-            label="写评论..."
+            label={t('screens.questionDetail.placeholders.writeCommentContent')}
             onPress={() => {
               setShowSuppCommentListModal(false);
               openCommentModal({
@@ -8792,15 +8802,15 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           loading={suppCommentListState.loading || suppCommentListState.refreshing}
           loaded={suppCommentListState.loaded}
           items={suppCommentsList}
-          loadingText="加载评论中..."
-          emptyTitle="暂无评论"
-          emptyDescription="成为第一个评论的人"
+          loadingText={t('screens.questionDetail.states.loadingComments')}
+          emptyTitle={t('screens.questionDetail.states.emptyCommentsTitle')}
+          emptyDescription={t('screens.questionDetail.states.emptyCommentsDescription')}
           loadingMore={suppCommentListState.loadingMore}
-          loadingMoreText="加载更多评论中..."
+          loadingMoreText={t('screens.questionDetail.states.loadMore')}
           hasMore={suppCommentsHasMore}
           onLoadMore={handleSupplementCommentsLoadMore}
-          loadMoreText="加载更多评论"
-          noMoreText="没有更多评论了"
+          loadMoreText={t('screens.questionDetail.loadMoreComments')}
+          noMoreText={t('screens.questionDetail.states.noMoreComments')}
           renderItem={comment => {
             const isCommentLiked = commentLiked[comment.id] !== undefined ? commentLiked[comment.id] : !!comment.liked;
             const isCommentCollected = commentCollected[comment.id] !== undefined ? commentCollected[comment.id] : !!comment.collected;
@@ -8845,10 +8855,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 {/* 回复列表 */}
                 {Boolean(expandedSuppCommentReplies[comment.id]) && <View style={styles.repliesContainer}>
                     {Boolean(suppCommentRepliesMap[comment.id]?.loading) && <View style={styles.loadingIndicator}>
-                        <Text style={styles.loadingText}>加载回复中...</Text>
+                        <Text style={styles.loadingText}>{t('screens.questionDetail.states.loadingReplies')}</Text>
                       </View>}
                     {!suppCommentRepliesMap[comment.id]?.loading && Boolean(suppCommentRepliesMap[comment.id]?.loaded && (!suppCommentRepliesMap[comment.id]?.list || suppCommentRepliesMap[comment.id]?.list.length === 0)) && <View style={styles.loadingIndicator}>
-                        <Text style={styles.loadingText}>暂无回复</Text>
+                        <Text style={styles.loadingText}>{t('screens.questionDetail.states.emptyReplies')}</Text>
                       </View>}
                     {suppCommentRepliesMap[comment.id]?.list?.length ? renderSupplementReplyTreeNodes(buildCommentReplyTree(suppCommentRepliesMap[comment.id].list, comment.id), 0, {
                   rootCommentId: comment.id,
@@ -8873,14 +8883,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             <View style={styles.suppMoreActionList}>
               <TouchableOpacity style={styles.suppMoreActionItem}>
                 <Ionicons name="logo-twitter" size={22} color="#1DA1F2" />
-                <Text style={styles.suppMoreActionText}>@推特用户</Text>
+                <Text style={styles.suppMoreActionText}>{t('screens.questionDetail.actions.inviteTwitterUser')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.suppMoreActionItem, isDislikeInteractionDisabled(getSupplementLikedState(currentSuppId), getSupplementDislikedState(currentSuppId)) && styles.interactionBtnDisabled]} onPress={() => handleSupplementDislike(currentSuppId)} disabled={isDislikeInteractionDisabled(getSupplementLikedState(currentSuppId), getSupplementDislikedState(currentSuppId))}>
                 <Ionicons name={getSupplementDislikedState(currentSuppId) ? "thumbs-down" : "thumbs-down-outline"} size={22} color={getSupplementDislikedState(currentSuppId) ? "#ef4444" : isDislikeInteractionDisabled(getSupplementLikedState(currentSuppId), getSupplementDislikedState(currentSuppId)) ? "#d1d5db" : "#6b7280"} />
                 <Text style={[styles.suppMoreActionText, getSupplementDislikedState(currentSuppId) && {
                 color: '#ef4444'
               }, isDislikeInteractionDisabled(getSupplementLikedState(currentSuppId), getSupplementDislikedState(currentSuppId)) && styles.interactionTextDisabled]}>
-                  {getSupplementDislikedState(currentSuppId) ? '取消踩' : '踩一下'}
+                  {getSupplementDislikedState(currentSuppId) ? t('screens.questionDetail.actions.removeDislike') : t('screens.questionDetail.actions.dislike')}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.suppMoreActionItem} onPress={() => {
@@ -8894,12 +8904,12 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 <Ionicons name="flag-outline" size={22} color="#ef4444" />
                 <Text style={[styles.suppMoreActionText, {
                 color: '#ef4444'
-              }]}>举报</Text>
+              }]}>{t('common.report')}</Text>
               </TouchableOpacity>
             </View>
 
             <TouchableOpacity style={styles.suppMoreCancelBtn} onPress={() => setShowSuppMoreModal(false)}>
-              <Text style={styles.suppMoreCancelText}>取消</Text>
+              <Text style={styles.suppMoreCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -8912,15 +8922,15 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         originalComment={currentComposerOriginalComment}
         publishInFooter
         closeOnRight
-        title={commentTarget.parentId ? `写回复${commentTarget.replyToUserName ? ` @${commentTarget.replyToUserName}` : ''}` : '写评论'}
-        placeholder={commentTarget.parentId ? '写下你的回复...' : '写下你的评论...'}
+        title={commentTarget.parentId ? t('screens.questionDetail.modals.replyTitle', { mention: commentTarget.replyToUserName ? ` @${commentTarget.replyToUserName}` : '' }) : t('screens.questionDetail.modals.writeCommentTitle')}
+        placeholder={commentTarget.parentId ? t('screens.questionDetail.placeholders.writeReplyContent') : t('screens.questionDetail.placeholders.writeCommentContent')}
       />
 
       {/* 评论回复列表弹窗 - 今日头条风格 */}
       <CommentBottomSheetReplyPanel
         visible={activeCommentSheet === 'question-reply'}
         onClose={() => setShowCommentReplyModal(false)}
-        title={`${Number(currentReplyComment?.replyCount ?? currentReplyComment?.replies ?? questionCommentRepliesMap[currentCommentId]?.total ?? questionCommentRepliesMap[currentCommentId]?.list?.length ?? 0)}条回复`}
+        title={t('screens.questionDetail.states.replyCount', { count: Number(currentReplyComment?.replyCount ?? currentReplyComment?.replies ?? questionCommentRepliesMap[currentCommentId]?.total ?? questionCommentRepliesMap[currentCommentId]?.list?.length ?? 0) })}
         styles={styles}
         headerLeft={
           <CommentBottomSheetIconButton
@@ -8932,7 +8942,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         headerRight={<View style={styles.commentListHeaderRight} />}
         footer={
           <CommentBottomSheetWriteBar
-            label="写回复..."
+            label={t('screens.questionDetail.placeholders.writeReplyContent')}
             onPress={() => {
               setShowCommentReplyModal(false);
               openCommentModal(buildCommentReplyTarget(currentReplyComment, {
@@ -8947,9 +8957,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         originalComment={currentReplyComment}
         onPressAuthor={openPublicProfile}
         loading={!!(currentCommentId && questionCommentRepliesMap[currentCommentId]?.loading && !questionCommentRepliesMap[currentCommentId]?.loaded)}
-        loadingText="加载回复中..."
+        loadingText={t('screens.questionDetail.states.loadingReplies')}
         emptyState={currentCommentId && questionCommentRepliesMap[currentCommentId]?.loaded && (!questionCommentRepliesMap[currentCommentId]?.list || questionCommentRepliesMap[currentCommentId].list.length === 0) ? <View style={styles.loadingIndicator}>
-              <Text style={styles.loadingText}>暂无回复</Text>
+              <Text style={styles.loadingText}>{t('screens.questionDetail.states.emptyReplies')}</Text>
             </View> : null}
       >
         {currentCommentId && questionCommentRepliesMap[currentCommentId]?.list ? renderQuestionReplyTreeNodes(buildCommentReplyTree(questionCommentRepliesMap[currentCommentId].list, currentCommentId), 0, {
@@ -8963,7 +8973,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       <CommentBottomSheetReplyPanel
         visible={activeCommentSheet === 'answer-reply'}
         onClose={returnToAnswerCommentList}
-        title={`${Number(currentAnswerReplyComment?.replyCount ?? currentAnswerReplyComment?.replies ?? answerCommentRepliesMap[currentAnswerCommentId]?.total ?? answerCommentRepliesMap[currentAnswerCommentId]?.list?.length ?? 0)}条回复`}
+        title={t('screens.questionDetail.states.replyCount', { count: Number(currentAnswerReplyComment?.replyCount ?? currentAnswerReplyComment?.replies ?? answerCommentRepliesMap[currentAnswerCommentId]?.total ?? answerCommentRepliesMap[currentAnswerCommentId]?.list?.length ?? 0) })}
         styles={styles}
         headerLeft={
           <CommentBottomSheetIconButton
@@ -8976,7 +8986,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         headerRight={<View style={styles.commentListHeaderRight} />}
         footer={
           <CommentBottomSheetWriteBar
-            label="写回复..."
+            label={t('screens.questionDetail.placeholders.writeReplyContent')}
             onPress={() => {
               const currentComment = answerCommentsList.find(c => String(c.id) === String(currentAnswerCommentId));
               setShowAnswerCommentReplyModal(false);
@@ -8992,9 +9002,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         originalComment={currentAnswerReplyComment}
         onPressAuthor={openPublicProfile}
         loading={!!(currentAnswerCommentId && answerCommentRepliesMap[currentAnswerCommentId]?.loading && !answerCommentRepliesMap[currentAnswerCommentId]?.loaded)}
-        loadingText="加载回复中..."
+        loadingText={t('screens.questionDetail.states.loadingReplies')}
         emptyState={currentAnswerCommentId && answerCommentRepliesMap[currentAnswerCommentId]?.loaded && (!answerCommentRepliesMap[currentAnswerCommentId]?.list || answerCommentRepliesMap[currentAnswerCommentId].list.length === 0) ? <View style={styles.loadingIndicator}>
-              <Text style={styles.loadingText}>暂无回复</Text>
+              <Text style={styles.loadingText}>{t('screens.questionDetail.states.emptyReplies')}</Text>
             </View> : null}
       >
         {currentAnswerCommentId && answerCommentRepliesMap[currentAnswerCommentId]?.list ? renderAnswerReplyTreeNodes(buildCommentReplyTree(answerCommentRepliesMap[currentAnswerCommentId].list, currentAnswerCommentId), 0, {
@@ -9008,7 +9018,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       <CommentBottomSheetReplyPanel
         visible={activeCommentSheet === 'supp-reply'}
         onClose={returnToSupplementCommentList}
-        title={`${Number(currentSuppReplyComment?.replyCount ?? currentSuppReplyComment?.replies ?? suppCommentRepliesMap[currentSuppCommentId]?.total ?? suppCommentRepliesMap[currentSuppCommentId]?.list?.length ?? 0)}条回复`}
+        title={t('screens.questionDetail.states.replyCount', { count: Number(currentSuppReplyComment?.replyCount ?? currentSuppReplyComment?.replies ?? suppCommentRepliesMap[currentSuppCommentId]?.total ?? suppCommentRepliesMap[currentSuppCommentId]?.list?.length ?? 0) })}
         styles={styles}
         headerLeft={
           <CommentBottomSheetIconButton
@@ -9021,7 +9031,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         headerRight={<View style={styles.commentListHeaderRight} />}
         footer={
           <CommentBottomSheetWriteBar
-            label="写回复..."
+            label={t('screens.questionDetail.placeholders.writeReplyContent')}
             onPress={() => {
               const currentComment = suppCommentsList.find(c => String(c.id) === String(currentSuppCommentId));
               setShowSuppCommentReplyModal(false);
@@ -9037,9 +9047,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         originalComment={currentSuppReplyComment}
         onPressAuthor={openPublicProfile}
         loading={!!(currentSuppCommentId && suppCommentRepliesMap[currentSuppCommentId]?.loading && !suppCommentRepliesMap[currentSuppCommentId]?.loaded)}
-        loadingText="加载回复中..."
+        loadingText={t('screens.questionDetail.states.loadingReplies')}
         emptyState={currentSuppCommentId && suppCommentRepliesMap[currentSuppCommentId]?.loaded && (!suppCommentRepliesMap[currentSuppCommentId]?.list || suppCommentRepliesMap[currentSuppCommentId].list.length === 0) ? <View style={styles.loadingIndicator}>
-              <Text style={styles.loadingText}>暂无回复</Text>
+              <Text style={styles.loadingText}>{t('screens.questionDetail.states.emptyReplies')}</Text>
             </View> : null}
       >
         {currentSuppCommentId && suppCommentRepliesMap[currentSuppCommentId]?.list ? renderSupplementReplyTreeNodes(buildCommentReplyTree(suppCommentRepliesMap[currentSuppCommentId].list, currentSuppCommentId), 0, {
@@ -9056,13 +9066,13 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           setCurrentSupplement(null);
         }}
         onSubmit={handleSubmitAnswer}
-        title="写回答"
-        publishText="发布"
+        title={t('screens.questionDetail.placeholders.writeAnswerTitle')}
+        publishText={t('screens.questionActivityList.publish')}
         questionTitle={currentQuestion.title}
         supplementText={currentSupplement?.content || ''}
         text={answerText}
         onChangeText={setAnswerText}
-        placeholder="写下你的回答，帮助有需要的人..."
+        placeholder={t('screens.questionDetail.placeholders.writeAnswerContent')}
         selectedIdentity={answerIdentity}
         selectedTeams={answerSelectedTeams}
         onIdentityChange={setAnswerIdentity}
@@ -9076,9 +9086,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       <ComposerModalScaffold
         visible={showSupplementModal}
         onClose={() => setShowSupplementModal(false)}
-        title="补充问题"
+        title={t('screens.questionDetail.placeholders.writeSupplementTitle')}
         onSubmit={handleSubmitSupplement}
-        submitText="发布"
+        submitText={t('screens.questionActivityList.publish')}
         submitDisabled={!supplementText.trim() || Boolean(supplementPublishBlockedReason)}
         submitPlacement="none"
         footerPaddingBottom={bottomSafeInset + 8}
@@ -9095,7 +9105,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     setSupplementImages(prevImages => [...prevImages, imageUri]);
                     setShowSupplementImagePicker(false);
                   }}
-                  title="选择图片"
+                  title={t('screens.questionDetail.modals.selectImageTitle')}
                   renderInPlace
                 />
               ) : null}
@@ -9104,7 +9114,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   visible={showSupplementEmojiPicker}
                   onClose={() => setShowSupplementEmojiPicker(false)}
                   onEmojiSelected={handleSupplementEmojiSelected}
-                  title="插入表情"
+                  title={t('screens.questionDetail.modals.insertEmojiTitle')}
                   renderInPlace
                 />
               ) : null}
@@ -9128,7 +9138,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       onPress={closeSupplementComposerAlert}
                       activeOpacity={0.85}
                     >
-                      <Text style={styles.supplementComposerAlertButtonText}>我知道了</Text>
+                      <Text style={styles.supplementComposerAlertButtonText}>{t('screens.questionDetail.modals.acknowledge')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -9243,7 +9253,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             <TextInput
               ref={supplementInputRef}
               style={styles.answerTextInput}
-              placeholder="对这个问题还有疑问？写下你的补充问题..."
+              placeholder={t('screens.questionDetail.placeholders.writeSupplementContent')}
               placeholderTextColor="#bbb"
               value={supplementText}
               onChangeText={handleChangeSupplementText}
@@ -9297,7 +9307,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       <CommentBottomSheet
         visible={activeCommentSheet === 'answer-list'}
         onClose={() => setShowAnswerCommentListModal(false)}
-        title="全部评论"
+        title={t('screens.questionDetail.states.allComments')}
         styles={styles}
         headerRight={
           <CommentBottomSheetIconButton
@@ -9308,7 +9318,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }
         footer={
           <CommentBottomSheetWriteBar
-            label="写评论..."
+            label={t('screens.questionDetail.placeholders.writeCommentContent')}
             onPress={() => {
               setShowAnswerCommentListModal(false);
               openCommentModal({
@@ -9327,15 +9337,15 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           loading={answerCommentListState.loading || answerCommentListState.refreshing}
           loaded={answerCommentListState.loaded}
           items={answerCommentsList}
-          loadingText="加载评论中..."
-          emptyTitle="暂无评论"
-          emptyDescription="成为第一个评论的人"
+          loadingText={t('screens.questionDetail.states.loadingComments')}
+          emptyTitle={t('screens.questionDetail.states.emptyCommentsTitle')}
+          emptyDescription={t('screens.questionDetail.states.emptyCommentsDescription')}
           loadingMore={answerCommentListState.loadingMore}
-          loadingMoreText="加载更多评论中..."
+          loadingMoreText={t('screens.questionDetail.states.loadMore')}
           hasMore={answerCommentsHasMore}
           onLoadMore={handleAnswerCommentsLoadMore}
-          loadMoreText="加载更多评论"
-          noMoreText="没有更多评论了"
+          loadMoreText={t('screens.questionDetail.loadMoreComments')}
+          noMoreText={t('screens.questionDetail.states.noMoreComments')}
           renderItem={comment => {
             const isCommentLiked = commentLiked[comment.id] !== undefined ? commentLiked[comment.id] : !!comment.liked;
             const isCommentCollected = commentCollected[comment.id] !== undefined ? commentCollected[comment.id] : !!comment.collected;
@@ -9365,11 +9375,11 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   onCollect={() => handleCommentCollect(comment.id)}
                   onDislike={() => handleCommentDislike(comment.id)}
                   onReport={() => {
-                    Alert.alert('举报', '确定要举报这条评论吗？', [{
-                      text: '取消',
+                    Alert.alert(t('screens.questionDetail.alerts.commentReportTitle'), t('screens.questionDetail.alerts.commentReportMessage'), [{
+                      text: t('common.cancel'),
                       style: 'cancel'
                     }, {
-                      text: '确定',
+                      text: t('common.confirm'),
                       onPress: () => {
                         setShowAnswerCommentListModal(false);
                         navigation.navigate('Report', {
@@ -9402,10 +9412,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <Ionicons name="close" size={26} color="#333" />
             </TouchableOpacity>
             <View style={styles.activityHeaderCenter}>
-              <Text style={styles.activityModalTitle}>发起活动</Text>
+              <Text style={styles.activityModalTitle}>{t('screens.questionActivityList.modal.createTitle')}</Text>
             </View>
             <TouchableOpacity style={[styles.activityPublishBtn, !activityForm.title.trim() && styles.activityPublishBtnDisabled]} onPress={handleCreateActivity} disabled={!activityForm.title.trim()}>
-              <Text style={[styles.activityPublishText, !activityForm.title.trim() && styles.activityPublishTextDisabled]}>发布</Text>
+              <Text style={[styles.activityPublishText, !activityForm.title.trim() && styles.activityPublishTextDisabled]}>{t('screens.questionActivityList.modal.publish')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -9416,64 +9426,64 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             <View style={styles.boundQuestionCard}>
               <View style={styles.boundQuestionHeader}>
                 <Ionicons name="link" size={16} color="#22c55e" />
-                <Text style={styles.boundQuestionLabel}>绑定问题</Text>
+                <Text style={styles.boundQuestionLabel}>{t('screens.questionActivityList.modal.boundQuestion')}</Text>
               </View>
               <Text style={styles.boundQuestionText} numberOfLines={2}>{currentQuestion.title}</Text>
             </View>
 
             {/* 发起身份选择 */}
             <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>发起身份 <Text style={styles.required}>*</Text></Text>
+              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.organizerType.label')} <Text style={styles.required}>{t('screens.questionActivityList.modal.organizerType.required')}</Text></Text>
               <View style={styles.organizerSelector}>
                 <TouchableOpacity style={[styles.organizerOption, activityForm.organizerType === 'personal' && styles.organizerOptionActive]} onPress={() => setActivityForm({
                 ...activityForm,
                 organizerType: 'personal'
               })}>
                   <Ionicons name="person" size={20} color={activityForm.organizerType === 'personal' ? '#fff' : '#666'} />
-                  <Text style={[styles.organizerOptionText, activityForm.organizerType === 'personal' && styles.organizerOptionTextActive]}>个人发起</Text>
+                  <Text style={[styles.organizerOptionText, activityForm.organizerType === 'personal' && styles.organizerOptionTextActive]}>{t('screens.questionActivityList.modal.organizerType.personal')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.organizerOption, activityForm.organizerType === 'team' && styles.organizerOptionActive]} onPress={() => setActivityForm({
                 ...activityForm,
                 organizerType: 'team'
               })}>
                   <Ionicons name="people" size={20} color={activityForm.organizerType === 'team' ? '#fff' : '#666'} />
-                  <Text style={[styles.organizerOptionText, activityForm.organizerType === 'team' && styles.organizerOptionTextActive]}>团队发起</Text>
+                  <Text style={[styles.organizerOptionText, activityForm.organizerType === 'team' && styles.organizerOptionTextActive]}>{t('screens.questionActivityList.modal.organizerType.team')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             {/* 活动类型选择 */}
             <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>活动类型</Text>
+              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.activityType.label')}</Text>
               <View style={styles.activityTypeSelector}>
                 <TouchableOpacity style={[styles.activityTypeSelectorBtn, activityForm.activityType === 'online' && styles.activityTypeSelectorBtnActive]} onPress={() => setActivityForm({
                 ...activityForm,
                 activityType: 'online'
               })}>
                   <Ionicons name="globe-outline" size={20} color={activityForm.activityType === 'online' ? '#fff' : '#666'} />
-                  <Text style={[styles.activityTypeSelectorText, activityForm.activityType === 'online' && styles.activityTypeSelectorTextActive]}>线上活动</Text>
+                  <Text style={[styles.activityTypeSelectorText, activityForm.activityType === 'online' && styles.activityTypeSelectorTextActive]}>{t('screens.questionActivityList.modal.activityType.online')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.activityTypeSelectorBtn, activityForm.activityType === 'offline' && styles.activityTypeSelectorBtnActive]} onPress={() => setActivityForm({
                 ...activityForm,
                 activityType: 'offline'
               })}>
                   <Ionicons name="location-outline" size={20} color={activityForm.activityType === 'offline' ? '#fff' : '#666'} />
-                  <Text style={[styles.activityTypeSelectorText, activityForm.activityType === 'offline' && styles.activityTypeSelectorTextActive]}>线下活动</Text>
+                  <Text style={[styles.activityTypeSelectorText, activityForm.activityType === 'offline' && styles.activityTypeSelectorTextActive]}>{t('screens.questionActivityList.modal.activityType.offline')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>活动标题 <Text style={styles.required}>*</Text></Text>
-              <TextInput style={styles.formInput} placeholder="请输入活动标题" placeholderTextColor="#bbb" value={activityForm.title} onChangeText={text => setActivityForm({
+              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.title.label')} <Text style={styles.required}>{t('screens.questionActivityList.modal.title.required')}</Text></Text>
+              <TextInput style={styles.formInput} placeholder={t('screens.questionActivityList.modal.title.placeholder')} placeholderTextColor="#bbb" value={activityForm.title} onChangeText={text => setActivityForm({
               ...activityForm,
               title: text
             })} maxLength={50} />
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>活动内容 <Text style={styles.required}>*</Text></Text>
-              <TextInput style={[styles.formInput, styles.formTextarea]} placeholder="请输入活动详细内容" placeholderTextColor="#bbb" value={activityForm.description} onChangeText={text => setActivityForm({
+              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.description.label')} <Text style={styles.required}>{t('screens.questionActivityList.modal.title.required')}</Text></Text>
+              <TextInput style={[styles.formInput, styles.formTextarea]} placeholder={t('screens.questionActivityList.modal.description.placeholder')} placeholderTextColor="#bbb" value={activityForm.description} onChangeText={text => setActivityForm({
               ...activityForm,
               description: text
             })} multiline textAlignVertical="top" maxLength={500} />
@@ -9481,21 +9491,21 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
 
             {/* 活动时间 */}
             <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>活动时间 <Text style={styles.required}>*</Text></Text>
+              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.time.label')} <Text style={styles.required}>{t('screens.questionActivityList.modal.title.required')}</Text></Text>
               <View style={styles.timeContainer}>
                 <View style={styles.timeInputWrapper}>
-                  <Text style={styles.timeInputLabel}>开始日期</Text>
-                  <TextInput style={styles.timeInputField} placeholder="2026-01-20" placeholderTextColor="#9ca3af" value={activityForm.startTime} onChangeText={text => setActivityForm({
+                  <Text style={styles.timeInputLabel}>{t('screens.questionActivityList.modal.time.startDate')}</Text>
+                  <TextInput style={styles.timeInputField} placeholder={t('screens.questionActivityList.modal.time.startPlaceholder')} placeholderTextColor="#9ca3af" value={activityForm.startTime} onChangeText={text => setActivityForm({
                   ...activityForm,
                   startTime: text
                 })} />
                 </View>
                 <View style={styles.timeSeparatorWrapper}>
-                  <Text style={styles.timeSeparator}>至</Text>
+                  <Text style={styles.timeSeparator}>{t('screens.questionActivityList.modal.time.to')}</Text>
                 </View>
                 <View style={styles.timeInputWrapper}>
-                  <Text style={styles.timeInputLabel}>结束日期</Text>
-                  <TextInput style={styles.timeInputField} placeholder="2026-01-25" placeholderTextColor="#9ca3af" value={activityForm.endTime} onChangeText={text => setActivityForm({
+                  <Text style={styles.timeInputLabel}>{t('screens.questionActivityList.modal.time.endDate')}</Text>
+                  <TextInput style={styles.timeInputField} placeholder={t('screens.questionActivityList.modal.time.endPlaceholder')} placeholderTextColor="#9ca3af" value={activityForm.endTime} onChangeText={text => setActivityForm({
                   ...activityForm,
                   endTime: text
                 })} />
@@ -9506,9 +9516,9 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             {/* 活动地址 - 仅线下活动显示 */}
             {activityForm.activityType === 'offline' && <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>
-                  活动地址 <Text style={styles.required}>*</Text>
+                  {t('screens.questionActivityList.modal.location.label')} <Text style={styles.required}>{t('screens.questionActivityList.modal.location.required')}</Text>
                 </Text>
-                <TextInput style={styles.formInput} placeholder="请输入活动地址" placeholderTextColor="#bbb" value={activityForm.location} onChangeText={text => setActivityForm({
+                <TextInput style={styles.formInput} placeholder={t('screens.questionActivityList.modal.location.placeholder')} placeholderTextColor="#bbb" value={activityForm.location} onChangeText={text => setActivityForm({
               ...activityForm,
               location: text
             })} />
@@ -9516,7 +9526,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
 
             {/* 活动图片 */}
             <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>活动图片（最多9张）</Text>
+              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.images.label')}（{t('screens.questionActivityList.modal.images.maxLimit')}）</Text>
               <View style={styles.imageGrid}>
                 {activityForm.images.map((img, idx) => <View key={idx} style={styles.imageItem}>
                     <Image source={{
@@ -9528,15 +9538,15 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   </View>)}
                 {activityForm.images.length < 9 && <TouchableOpacity style={styles.addImageBtn} onPress={addActivityImage}>
                     <Ionicons name="add" size={24} color="#9ca3af" />
-                    <Text style={styles.addImageText}>添加图片</Text>
+                    <Text style={styles.addImageText}>{t('screens.questionActivityList.modal.images.add')}</Text>
                   </TouchableOpacity>}
               </View>
             </View>
 
             {/* 联系方式 */}
             <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>联系方式</Text>
-              <TextInput style={styles.formInput} placeholder="请输入联系方式（手机号/微信/邮箱）" placeholderTextColor="#bbb" value={activityForm.contact} onChangeText={text => setActivityForm({
+              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.contact.label')}</Text>
+              <TextInput style={styles.formInput} placeholder={t('screens.questionActivityList.modal.contact.placeholder')} placeholderTextColor="#bbb" value={activityForm.contact} onChangeText={text => setActivityForm({
               ...activityForm,
               contact: text
             })} />
@@ -9575,12 +9585,12 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <View style={styles.successModalIconWrap}>
                 <Ionicons name="checkmark-circle-outline" size={24} color="#ff4d4f" />
               </View>
-              <Text style={styles.successModalTitle}>补充回答提交成功</Text>
+              <Text style={styles.successModalTitle}>{t('screens.questionDetail.modals.supplementSuccessTitle')}</Text>
             </View>
-            <Text style={styles.successModalDesc}>你的补充回答已成功发布</Text>
+            <Text style={styles.successModalDesc}>{t('screens.questionDetail.modals.supplementSuccessDescription')}</Text>
             <View style={styles.successModalFooter}>
               <TouchableOpacity style={styles.successModalConfirmBtn} onPress={() => setShowSupplementAnswerSuccessModal(false)}>
-                <Text style={styles.successModalConfirmText}>确定</Text>
+                <Text style={styles.successModalConfirmText}>{t('common.confirm')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -9594,22 +9604,22 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           paddingBottom: insets.bottom + 30
         }]}>
             <View style={styles.addRewardModalHandle} />
-            <Text style={styles.addRewardModalTitle}>追加悬赏</Text>
+            <Text style={styles.addRewardModalTitle}>{t('screens.addRewardScreen.title')}</Text>
             
             <View style={styles.addRewardContent}>
               {/* 当前悬赏信息 */}
               <View style={styles.currentRewardInfo}>
                 <View style={styles.currentRewardRow}>
-                  <Text style={styles.currentRewardLabel}>当前悬赏</Text>
+                  <Text style={styles.currentRewardLabel}>{t('screens.addRewardScreen.currentReward.label')}</Text>
                   <Text style={styles.currentRewardAmount}>{formatAmount(currentReward)}</Text>
                 </View>
                 <View style={styles.currentRewardRow}>
-                  <Text style={styles.currentRewardDesc}>已有 {rewardContributors} 人追加悬赏</Text>
+                  <Text style={styles.currentRewardDesc}>{t('screens.addRewardScreen.currentReward.contributors', { count: rewardContributors })}</Text>
                 </View>
               </View>
 
               {/* 快速选择金额 */}
-              <Text style={styles.addRewardSectionTitle}>选择追加金额</Text>
+              <Text style={styles.addRewardSectionTitle}>{t('screens.addRewardScreen.selectAmount.title')}</Text>
               <View style={styles.quickAmountGrid}>
                 {[10, 20, 50, 100, 200, 500].map(amount => <TouchableOpacity key={amount} style={[styles.quickAmountBtn, selectedAddRewardAmount === amount && styles.quickAmountBtnActive]} onPress={() => {
                 setSelectedAddRewardAmount(amount);
@@ -9620,10 +9630,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               </View>
 
               {/* 自定义金额 */}
-              <Text style={styles.addRewardSectionTitle}>或输入自定义金额</Text>
+              <Text style={styles.addRewardSectionTitle}>{t('screens.addRewardScreen.customAmount.title')}</Text>
               <View style={styles.customAmountInput}>
                 <Text style={styles.currencySymbol}>$</Text>
-                <TextInput style={styles.customAmountField} placeholder="最低 $5" placeholderTextColor="#9ca3af" value={addRewardAmount} onChangeText={text => {
+                <TextInput style={styles.customAmountField} placeholder={t('screens.addRewardScreen.customAmount.placeholder')} placeholderTextColor="#9ca3af" value={addRewardAmount} onChangeText={text => {
                 setAddRewardAmount(text);
                 setSelectedAddRewardAmount(null);
               }} keyboardType="numeric" />
@@ -9633,14 +9643,14 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <View style={styles.addRewardTips}>
                 <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
                 <Text style={styles.addRewardTipsText}>
-                  追加的悬赏将与原悬赏合并，吸引更多优质回答
+                  {t('screens.addRewardScreen.tips.text')}
                 </Text>
               </View>
 
               {/* 确认按钮 */}
               <TouchableOpacity style={[styles.confirmAddRewardBtn, !selectedAddRewardAmount && !addRewardAmount && styles.confirmAddRewardBtnDisabled]} onPress={handleAddReward} disabled={!selectedAddRewardAmount && !addRewardAmount}>
                 <Text style={styles.confirmAddRewardBtnText}>
-                  确认追加 {formatAmount(selectedAddRewardAmount ?? addRewardAmount ?? 0)}
+                  {t('screens.addRewardScreen.confirmButton', { amount: selectedAddRewardAmount ?? addRewardAmount ?? 0 })}
                 </Text>
               </TouchableOpacity>
 
@@ -9650,7 +9660,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               setAddRewardAmount('');
               setSelectedAddRewardAmount(null);
             }}>
-                <Text style={styles.cancelAddRewardBtnText}>取消</Text>
+                <Text style={styles.cancelAddRewardBtnText}>{t('screens.addRewardScreen.cancelButton')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -9664,7 +9674,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             <View style={styles.superLikeModalHandle} />
             <View style={styles.superLikeModalHeader}>
               <Ionicons name="star" size={24} color="#f59e0b" />
-              <Text style={styles.superLikeModalTitle}>购买超级赞</Text>
+              <Text style={styles.superLikeModalTitle}>{t('superLike.purchase.title')}</Text>
             </View>
             
             <ScrollView style={styles.superLikeScrollContent} contentContainerStyle={styles.superLikeContentContainer} showsVerticalScrollIndicator={false}>
@@ -9672,7 +9682,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <View style={styles.currentSuperLikeInfo}>
                 <View style={styles.superLikeInfoCard}>
                   <View style={styles.superLikeInfoRow}>
-                    <Text style={styles.superLikeInfoLabel}>当前超级赞</Text>
+                    <Text style={styles.superLikeInfoLabel}>{t('superLike.purchase.currentBalance')}</Text>
                     <View style={styles.superLikeCountBadge}>
                       <Ionicons name="star" size={16} color="#f59e0b" />
                       <Text style={styles.superLikeCountText}>
@@ -9681,13 +9691,13 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     </View>
                   </View>
                   <Text style={styles.superLikeInfoDesc}>
-                    超级赞越多，您的回答排名越靠前，获得更多曝光
+                    {t('superLike.purchase.infoDescription')}
                   </Text>
                 </View>
               </View>
 
               {/* 快速选择数量 */}
-              <Text style={styles.superLikeSectionTitle}>选择购买数量</Text>
+              <Text style={styles.superLikeSectionTitle}>{t('superLike.purchase.selectAmount')}</Text>
               <View style={styles.quickSuperLikeGrid}>
                 {[5, 10, 20, 50, 100].map(amount => <TouchableOpacity key={amount} style={[styles.quickSuperLikeBtn, selectedSuperLikeAmount === amount && styles.quickSuperLikeBtnActive]} onPress={() => {
                 setSelectedSuperLikeAmount(amount);
@@ -9700,10 +9710,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               </View>
 
               {/* 自定义数量 */}
-              <Text style={styles.superLikeSectionTitle}>或输入自定义数量</Text>
+              <Text style={styles.superLikeSectionTitle}>{t('superLike.purchase.customAmount')}</Text>
               <View style={styles.customSuperLikeInput}>
                 <Ionicons name="star-outline" size={20} color="#f59e0b" />
-                <TextInput style={styles.customSuperLikeField} placeholder="最少 1 个" placeholderTextColor="#9ca3af" value={superLikeAmount} onChangeText={text => {
+                <TextInput style={styles.customSuperLikeField} placeholder={t('superLike.purchase.minAmount')} placeholderTextColor="#9ca3af" value={superLikeAmount} onChangeText={text => {
                 setSuperLikeAmount(text);
                 setSelectedSuperLikeAmount(null);
               }} keyboardType="numeric" />
@@ -9715,17 +9725,17 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               {/* 价格说明 */}
               <View style={styles.superLikePriceInfo}>
                 <View style={styles.priceInfoRow}>
-                  <Text style={styles.priceInfoLabel}>单价</Text>
-                  <Text style={styles.priceInfoValue}>$2 / 个</Text>
+                  <Text style={styles.priceInfoLabel}>{t('screens.questionDetail.modals.unitPrice')}</Text>
+                  <Text style={styles.priceInfoValue}>{t('screens.questionDetail.modals.unitPriceValue')}</Text>
                 </View>
                 <View style={styles.priceInfoRow}>
-                  <Text style={styles.priceInfoLabel}>购买数量</Text>
+                  <Text style={styles.priceInfoLabel}>{t('screens.questionDetail.modals.purchaseQuantity')}</Text>
                   <Text style={styles.priceInfoValue}>
-                    {selectedSuperLikeAmount || superLikeAmount || 0} 个
+                    {t('screens.questionDetail.modals.quantityValue', { count: selectedSuperLikeAmount || superLikeAmount || 0 })}
                   </Text>
                 </View>
                 <View style={[styles.priceInfoRow, styles.priceInfoTotal]}>
-                  <Text style={styles.priceInfoTotalLabel}>总计</Text>
+                  <Text style={styles.priceInfoTotalLabel}>{t('screens.questionDetail.states.totalLabel')}</Text>
                   <Text style={styles.priceInfoTotalValue}>
                     ${(selectedSuperLikeAmount || parseInt(superLikeAmount) || 0) * 2}
                   </Text>
@@ -9736,7 +9746,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <View style={styles.superLikeTips}>
                 <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
                 <Text style={styles.superLikeTipsText}>
-                  购买超级赞后，您的回答将获得更高的排名权重，增加曝光机会
+                  {t('screens.questionDetail.modals.superLikeTips')}
                 </Text>
               </View>
             </ScrollView>
@@ -9749,7 +9759,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <TouchableOpacity style={[styles.confirmSuperLikeBtn, !selectedSuperLikeAmount && !superLikeAmount && styles.confirmSuperLikeBtnDisabled]} onPress={handleBuySuperLike} disabled={!selectedSuperLikeAmount && !superLikeAmount}>
                 <Ionicons name="star" size={18} color="#fff" />
                 <Text style={styles.confirmSuperLikeBtnText}>
-                  立即购买 {selectedSuperLikeAmount || superLikeAmount || 0} 个超级赞
+                  {t('screens.questionDetail.modals.buySuperLikeNow', { count: selectedSuperLikeAmount || superLikeAmount || 0 })}
                 </Text>
               </TouchableOpacity>
 
@@ -9760,7 +9770,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               setSelectedSuperLikeAmount(null);
               setCurrentAnswerForSuperLike(null);
             }}>
-                <Text style={styles.cancelSuperLikeBtnText}>取消</Text>
+                <Text style={styles.cancelSuperLikeBtnText}>{t('superLike.purchase.cancelButton')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -9775,7 +9785,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         }]}>
             <View style={styles.contributorsModalHandle} />
             <View style={styles.contributorsModalHeader}>
-              <Text style={styles.contributorsModalTitle}>追加悬赏名单</Text>
+              <Text style={styles.contributorsModalTitle}>{t('screens.contributorsScreen.title')}</Text>
               <TouchableOpacity onPress={() => setShowRewardContributorsModal(false)}>
                 <Ionicons name="close" size={24} color="#6b7280" />
               </TouchableOpacity>
@@ -9783,10 +9793,10 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             
             <View style={styles.contributorsTotalInfo}>
               <View style={styles.contributorsTotalRow}>
-                <Text style={styles.contributorsTotalLabel}>当前总悬赏</Text>
+                <Text style={styles.contributorsTotalLabel}>{t('screens.contributorsScreen.totalLabel')}</Text>
                 <Text style={styles.contributorsTotalAmount}>{formatAmount(currentReward)}</Text>
               </View>
-              <Text style={styles.contributorsTotalDesc}>共 {rewardContributors} 人追加悬赏</Text>
+              <Text style={styles.contributorsTotalDesc}>{t('screens.contributorsScreen.totalDesc', { count: rewardContributors })}</Text>
             </View>
 
             <ScrollView style={styles.contributorsList} showsVerticalScrollIndicator={false}>
@@ -9807,7 +9817,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             </ScrollView>
 
             <TouchableOpacity style={styles.contributorsCloseBtn} onPress={() => setShowRewardContributorsModal(false)}>
-              <Text style={styles.contributorsCloseBtnText}>关闭</Text>
+              <Text style={styles.contributorsCloseBtnText}>{t('screens.contributorsScreen.closeButton')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -9819,7 +9829,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           <View style={styles.arbitrationModal}>
             <View style={styles.arbitrationModalHandle} />
             <View style={styles.arbitrationModalHeader}>
-              <Text style={styles.arbitrationModalTitle}>申请仲裁</Text>
+              <Text style={styles.arbitrationModalTitle}>{t('screens.answerDetail.modals.arbitrationTitle')}</Text>
               <TouchableOpacity onPress={() => setShowArbitrationModal(false)}>
                 <Ionicons name="close" size={24} color="#6b7280" />
               </TouchableOpacity>
@@ -9830,26 +9840,26 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <View style={styles.arbitrationInfo}>
                 <Ionicons name="information-circle" size={20} color="#3b82f6" />
                 <Text style={styles.arbitrationInfoText}>
-                  如果您对已采纳的答案持有不同意见，可以申请仲裁。邀请至少3位专家投票，超过50%同意则推翻采纳。
+                  {t('screens.answerDetail.arbitration.info')}
                 </Text>
               </View>
 
               {/* 仲裁理由 */}
-              <Text style={styles.arbitrationSectionTitle}>仲裁理由</Text>
-              <TextInput style={styles.arbitrationReasonInput} placeholder="请详细说明您申请仲裁的理由..." placeholderTextColor="#9ca3af" value={arbitrationReason} onChangeText={setArbitrationReason} multiline numberOfLines={4} textAlignVertical="top" />
+              <Text style={styles.arbitrationSectionTitle}>{t('screens.answerDetail.arbitration.reasonLabel')}</Text>
+              <TextInput style={styles.arbitrationReasonInput} placeholder={t('screens.answerDetail.placeholders.arbitrationReason')} placeholderTextColor="#9ca3af" value={arbitrationReason} onChangeText={setArbitrationReason} multiline numberOfLines={4} textAlignVertical="top" />
 
               {/* 邀请专家 */}
               <View style={styles.arbitrationExpertsHeader}>
-                <Text style={styles.arbitrationSectionTitle}>邀请专家投票</Text>
+                <Text style={styles.arbitrationSectionTitle}>{t('screens.answerDetail.arbitration.inviteExpertsLabel')}</Text>
                 <Text style={styles.arbitrationExpertsCount}>
-                  已选 {selectedExperts.length}/5 位
+                  {t('screens.answerDetail.arbitration.expertsCount', { count: selectedExperts.length })}
                 </Text>
               </View>
 
               {/* 专家搜索框 */}
               <View style={styles.expertSearchBox}>
                 <Ionicons name="search-outline" size={18} color="#9ca3af" />
-                <TextInput style={styles.expertSearchInput} placeholder="搜索专家姓名、职称或领域..." placeholderTextColor="#9ca3af" value={expertSearchText} onChangeText={setExpertSearchText} />
+                <TextInput style={styles.expertSearchInput} placeholder={t('screens.answerDetail.placeholders.searchExpert')} placeholderTextColor="#9ca3af" value={expertSearchText} onChangeText={setExpertSearchText} />
                 {expertSearchText.length > 0 && <TouchableOpacity onPress={() => setExpertSearchText('')}>
                     <Ionicons name="close-circle" size={18} color="#9ca3af" />
                   </TouchableOpacity>}
@@ -9858,7 +9868,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               {/* 推荐专家标题 */}
               <View style={styles.recommendedExpertsHeader}>
                 <Ionicons name="star" size={16} color="#f59e0b" />
-                <Text style={styles.recommendedExpertsTitle}>推荐专家</Text>
+                <Text style={styles.recommendedExpertsTitle}>{t('screens.answerDetail.arbitration.recommendedExperts')}</Text>
               </View>
 
               {expertsList.filter(expert => {
@@ -9873,7 +9883,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       {Boolean(expert.verified) && <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />}
                     </View>
                     <Text style={styles.expertTitle}>{expert.title}</Text>
-                    <Text style={styles.expertExpertise}>擅长：{expert.expertise}</Text>
+                    <Text style={styles.expertExpertise}>{t('screens.answerDetail.arbitration.expertiseLabel')}{expert.expertise}</Text>
                   </View>
                   <View style={[styles.expertCheckbox, selectedExperts.includes(expert.id) && styles.expertCheckboxSelected]}>
                     {selectedExperts.includes(expert.id) && <Ionicons name="checkmark" size={16} color="#fff" />}
@@ -9886,8 +9896,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               return expert.name.toLowerCase().includes(searchLower) || expert.title.toLowerCase().includes(searchLower) || expert.expertise.toLowerCase().includes(searchLower);
             }).length === 0) && <View style={styles.noExpertsFound}>
                   <Ionicons name="search-outline" size={32} color="#d1d5db" />
-                  <Text style={styles.noExpertsFoundText}>未找到匹配的专家</Text>
-                  <Text style={styles.noExpertsFoundDesc}>试试其他关键词</Text>
+                  <Text style={styles.noExpertsFoundText}>{t('screens.answerDetail.arbitration.noExpertsFound')}</Text>
+                  <Text style={styles.noExpertsFoundDesc}>{t('screens.answerDetail.arbitration.tryOtherKeywords')}</Text>
                 </View>}
 
               <View style={{
@@ -9900,7 +9910,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           }]}>
               <TouchableOpacity style={[styles.submitArbitrationBtn, (!arbitrationReason.trim() || selectedExperts.length < 3) && styles.submitArbitrationBtnDisabled]} onPress={handleSubmitArbitration} disabled={!arbitrationReason.trim() || selectedExperts.length < 3}>
                 <Text style={styles.submitArbitrationBtnText}>
-                  提交仲裁申请
+                  {t('screens.answerDetail.arbitration.submitButton')}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.cancelArbitrationBtn} onPress={() => {
@@ -9908,7 +9918,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               setArbitrationReason('');
               setSelectedExperts([]);
             }}>
-                <Text style={styles.cancelArbitrationBtnText}>取消</Text>
+                <Text style={styles.cancelArbitrationBtnText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -9922,7 +9932,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           paddingBottom: insets.bottom + 30
         }]}>
             <View style={styles.arbitrationModalHandle} />
-            <Text style={styles.arbitrationStatusTitle}>仲裁投票详情</Text>
+            <Text style={styles.arbitrationStatusTitle}>{t('screens.questionDetail.arbitrationStatus.votingDetailsTitle')}</Text>
 
             {/* 投票进度 */}
             <View style={styles.votingProgress}>
@@ -9937,15 +9947,15 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <View style={styles.votingStats}>
                 <View style={styles.votingStatItem}>
                   <View style={styles.votingAgreeIndicator} />
-                  <Text style={styles.votingStatText}>同意推翻：{arbitrationVotes.agree} 票</Text>
+                  <Text style={styles.votingStatText}>{t('screens.questionDetail.arbitrationStatus.agreeOverturn', { count: arbitrationVotes.agree })}</Text>
                 </View>
                 <View style={styles.votingStatItem}>
                   <View style={styles.votingDisagreeIndicator} />
-                  <Text style={styles.votingStatText}>维持原判：{arbitrationVotes.disagree} 票</Text>
+                  <Text style={styles.votingStatText}>{t('screens.questionDetail.arbitrationStatus.upholdOriginal', { count: arbitrationVotes.disagree })}</Text>
                 </View>
               </View>
               <Text style={styles.votingPercentage}>
-                {(arbitrationVotes.agree / arbitrationVotes.total * 100).toFixed(1)}% 同意推翻
+                {t('screens.questionDetail.arbitrationStatus.agreeRate', { rate: (arbitrationVotes.agree / arbitrationVotes.total * 100).toFixed(1) })}
               </Text>
             </View>
 
@@ -9953,32 +9963,32 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             {arbitrationStatus === 'pending' && <View style={styles.arbitrationPendingInfo}>
                 <Ionicons name="time-outline" size={24} color="#f59e0b" />
                 <Text style={styles.arbitrationPendingInfoText}>
-                  等待专家投票中...
+                  {t('screens.questionDetail.arbitrationStatus.waitingVotes')}
                 </Text>
                 <TouchableOpacity style={styles.simulateVoteBtn} onPress={simulateVoting}>
-                  <Text style={styles.simulateVoteBtnText}>模拟投票结果</Text>
+                  <Text style={styles.simulateVoteBtnText}>{t('screens.questionDetail.arbitrationStatus.simulateVotes')}</Text>
                 </TouchableOpacity>
               </View>}
 
             {arbitrationStatus === 'approved' && <View style={styles.arbitrationApprovedInfo}>
                 <Ionicons name="checkmark-circle" size={32} color="#22c55e" />
-                <Text style={styles.arbitrationResultTitle}>仲裁通过</Text>
+                <Text style={styles.arbitrationResultTitle}>{t('screens.questionDetail.arbitrationStatus.approvedTitle')}</Text>
                 <Text style={styles.arbitrationResultDesc}>
-                  超过50%的专家同意推翻原采纳答案，问题状态已回到PK状态
+                  {t('screens.questionDetail.arbitrationStatus.approvedDescription')}
                 </Text>
               </View>}
 
             {arbitrationStatus === 'rejected' && <View style={styles.arbitrationRejectedInfo}>
                 <Ionicons name="close-circle" size={32} color="#ef4444" />
-                <Text style={styles.arbitrationResultTitle}>仲裁未通过</Text>
+                <Text style={styles.arbitrationResultTitle}>{t('screens.questionDetail.arbitrationStatus.rejectedTitle')}</Text>
                 <Text style={styles.arbitrationResultDesc}>
-                  未达到50%同意率，维持原采纳答案
+                  {t('screens.questionDetail.arbitrationStatus.rejectedDescription')}
                 </Text>
               </View>}
 
             {/* 专家投票详情列表 */}
             {Boolean(arbitrationStatus) && <View style={styles.expertVotesSection}>
-                <Text style={styles.expertVotesSectionTitle}>专家投票详情</Text>
+                <Text style={styles.expertVotesSectionTitle}>{t('screens.questionDetail.arbitrationStatus.expertVotesTitle')}</Text>
                 <ScrollView style={styles.expertVotesList} showsVerticalScrollIndicator={false}>
                   {expertVoteDetails.map(expert => <View key={expert.id} style={styles.expertVoteCard}>
                       <View style={styles.expertVoteHeader}>
@@ -9989,7 +9999,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                             <View style={[styles.expertVoteBadge, expert.vote === 'agree' ? styles.expertVoteAgreeBadge : styles.expertVoteDisagreeBadge]}>
                               <Ionicons name={expert.vote === 'agree' ? "checkmark" : "close"} size={12} color="#fff" />
                               <Text style={styles.expertVoteBadgeText}>
-                                {expert.vote === 'agree' ? '同意推翻' : '维持原判'}
+                                {expert.vote === 'agree' ? t('screens.questionDetail.arbitrationStatus.agreeOverturnLabel') : t('screens.questionDetail.arbitrationStatus.upholdOriginalLabel')}
                               </Text>
                             </View>
                           </View>
@@ -9997,7 +10007,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                         </View>
                       </View>
                       <View style={styles.expertVoteReasonBox}>
-                        <Text style={styles.expertVoteReasonLabel}>投票理由：</Text>
+                        <Text style={styles.expertVoteReasonLabel}>{t('screens.questionDetail.arbitrationStatus.voteReason')}</Text>
                         <Text style={styles.expertVoteReasonText}>{expert.reason}</Text>
                       </View>
                       <Text style={styles.expertVoteTime}>{expert.time}</Text>
@@ -10006,7 +10016,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               </View>}
 
             <TouchableOpacity style={styles.closeArbitrationStatusBtn} onPress={() => setShowArbitrationStatusModal(false)}>
-              <Text style={styles.closeArbitrationStatusBtnText}>关闭</Text>
+              <Text style={styles.closeArbitrationStatusBtnText}>{t('common.close')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -10019,7 +10029,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
           paddingBottom: insets.bottom + 30
         }]}>
             <View style={styles.arbitrationModalHandle} />
-            <Text style={styles.arbitrationStatusTitle}>仲裁结果</Text>
+            <Text style={styles.arbitrationStatusTitle}>{t('screens.questionDetail.arbitrationStatus.resultTitle')}</Text>
 
             {Boolean(currentArbitrationResult) && <>
                 {/* 投票进度 */}
@@ -10035,36 +10045,36 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   <View style={styles.votingStats}>
                     <View style={styles.votingStatItem}>
                       <View style={styles.votingAgreeIndicator} />
-                      <Text style={styles.votingStatText}>同意推翻：{currentArbitrationResult.votes.agree} 票</Text>
+                      <Text style={styles.votingStatText}>{t('screens.questionDetail.arbitrationStatus.agreeOverturn', { count: currentArbitrationResult.votes.agree })}</Text>
                     </View>
                     <View style={styles.votingStatItem}>
                       <View style={styles.votingDisagreeIndicator} />
-                      <Text style={styles.votingStatText}>维持原判：{currentArbitrationResult.votes.disagree} 票</Text>
+                      <Text style={styles.votingStatText}>{t('screens.questionDetail.arbitrationStatus.upholdOriginal', { count: currentArbitrationResult.votes.disagree })}</Text>
                     </View>
                   </View>
                   <Text style={styles.votingPercentage}>
-                    {(currentArbitrationResult.votes.agree / currentArbitrationResult.votes.total * 100).toFixed(1)}% 同意推翻
+                    {t('screens.questionDetail.arbitrationStatus.agreeRate', { rate: (currentArbitrationResult.votes.agree / currentArbitrationResult.votes.total * 100).toFixed(1) })}
                   </Text>
                 </View>
 
                 {/* 投票结果 */}
                 {currentArbitrationResult.status === 'approved' ? <View style={styles.arbitrationApprovedInfo}>
                     <Ionicons name="checkmark-circle" size={32} color="#22c55e" />
-                    <Text style={styles.arbitrationResultTitle}>仲裁通过</Text>
+                    <Text style={styles.arbitrationResultTitle}>{t('screens.questionDetail.arbitrationStatus.approvedTitle')}</Text>
                     <Text style={styles.arbitrationResultDesc}>
-                      超过50%的专家同意推翻原采纳答案
+                      {t('screens.questionDetail.arbitrationStatus.approvedShortDescription')}
                     </Text>
                   </View> : <View style={styles.arbitrationRejectedInfo}>
                     <Ionicons name="shield-checkmark" size={32} color="#22c55e" />
-                    <Text style={styles.arbitrationResultTitle}>仲裁未通过</Text>
+                    <Text style={styles.arbitrationResultTitle}>{t('screens.questionDetail.arbitrationStatus.rejectedTitle')}</Text>
                     <Text style={styles.arbitrationResultDesc}>
-                      未达到50%同意率，维持原答案
+                      {t('screens.questionDetail.arbitrationStatus.rejectedShortDescription')}
                     </Text>
                   </View>}
 
                 {/* 专家投票详情列表 */}
                 <View style={styles.expertVotesSection}>
-                  <Text style={styles.expertVotesSectionTitle}>专家投票详情</Text>
+                  <Text style={styles.expertVotesSectionTitle}>{t('screens.questionDetail.arbitrationStatus.expertVotesTitle')}</Text>
                   <ScrollView style={styles.expertVotesList} showsVerticalScrollIndicator={false}>
                     {currentArbitrationResult.experts.map(expert => <View key={expert.id} style={styles.expertVoteCard}>
                         <View style={styles.expertVoteHeader}>
@@ -10075,7 +10085,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                               <View style={[styles.expertVoteBadge, expert.vote === 'agree' ? styles.expertVoteAgreeBadge : styles.expertVoteDisagreeBadge]}>
                                 <Ionicons name={expert.vote === 'agree' ? "checkmark" : "close"} size={12} color="#fff" />
                                 <Text style={styles.expertVoteBadgeText}>
-                                  {expert.vote === 'agree' ? '同意推翻' : '维持原判'}
+                                  {expert.vote === 'agree' ? t('screens.questionDetail.arbitrationStatus.agreeOverturnLabel') : t('screens.questionDetail.arbitrationStatus.upholdOriginalLabel')}
                                 </Text>
                               </View>
                             </View>
@@ -10083,7 +10093,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                           </View>
                         </View>
                         <View style={styles.expertVoteReasonBox}>
-                          <Text style={styles.expertVoteReasonLabel}>投票理由：</Text>
+                          <Text style={styles.expertVoteReasonLabel}>{t('screens.questionDetail.arbitrationStatus.voteReason')}</Text>
                           <Text style={styles.expertVoteReasonText}>{expert.reason}</Text>
                         </View>
                         <Text style={styles.expertVoteTime}>{expert.time}</Text>
@@ -10096,7 +10106,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             setShowArbitrationResultModal(false);
             setCurrentArbitrationResult(null);
           }}>
-              <Text style={styles.closeArbitrationStatusBtnText}>关闭</Text>
+              <Text style={styles.closeArbitrationStatusBtnText}>{t('common.close')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -10112,13 +10122,13 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       <EditTextModal
         visible={showTwitterInviteEditor}
         onClose={closeTwitterInviteEditor}
-        title="编辑推特邀请文案"
+        title={t('screens.questionDetail.invite.twitterEditorTitle')}
         currentValue={twitterInviteDraftText}
         onSave={handleTwitterInviteShare}
-        placeholder={`请输入要分享到推特的文案，可手动添加 ${selectedTwitterInviteUser?.name || '@用户名'}`}
+        placeholder={t('screens.questionDetail.invite.twitterEditorPlaceholder', { name: selectedTwitterInviteUser?.name || '@name' })}
         maxLength={220}
         multiline
-        hint="链接会自动追加到文案后面"
+        hint={t('screens.questionDetail.invite.twitterEditorHint')}
         loading={pendingTwitterInvitePlatform === 'twitter'}
       />
     </SafeAreaView>;

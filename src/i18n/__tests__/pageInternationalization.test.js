@@ -88,6 +88,7 @@ describe('Page Internationalization', () => {
       /const\s+{\s*t\s*}\s*=\s*useTranslation\(\)/,
       /const\s+{\s*t\s*,.*}\s*=\s*useTranslation\(\)/,
       /const\s+{.*,\s*t\s*}\s*=\s*useTranslation\(\)/,
+      /const\s+{[\s\S]*?\bt\s*[\s\S]*?}\s*=\s*useTranslation\(\)/m,
     ];
     return usagePatterns.some(pattern => pattern.test(content));
   }

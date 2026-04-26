@@ -68,9 +68,6 @@ const buildActivityCacheKey = params =>
 
 const getTabFromActivityCacheKey = cacheKey => String(cacheKey || '').split('|')[0] || DEFAULT_ACTIVITY_TAB;
 
-const buildActivityFamilyKey = params =>
-  `${params?.type ?? ''}|${encodeURIComponent(params?.keyword || '')}`;
-
 const extractActivityRowsFromResponse = response => {
   if (Array.isArray(response?.rows)) {
     return response.rows;
@@ -157,7 +154,6 @@ export default function ActivityScreen({ navigation, route }) {
   const viewerScrollRef = useRef(null);
   const activityCacheRef = useRef(new Map());
   const activityRequestRef = useRef(new Map());
-  const prefetchedActivityFamiliesRef = useRef(new Set());
   const activeQueryKeyRef = useRef('');
   const isFromProfile = Boolean(route?.params?.fromProfile);
   const parsedRouteType = Number(route?.params?.type);
@@ -175,16 +171,6 @@ export default function ActivityScreen({ navigation, route }) {
   const [searchKeyword, setSearchKeyword] = useState('');
 
   const currentTabKey = isFromProfile ? 'my' : activeTabKey;
-  const historyTabLabel = t('screens.activity.tabs.history');
-  const resolvedHistoryTabLabel =
-    historyTabLabel && historyTabLabel !== 'screens.activity.tabs.history'
-      ? historyTabLabel
-      : '历史';
-  const activitySearchPlaceholder = t('screens.activity.searchPlaceholder');
-  const resolvedActivitySearchPlaceholder =
-    activitySearchPlaceholder && activitySearchPlaceholder !== 'screens.activity.searchPlaceholder'
-      ? activitySearchPlaceholder
-      : '搜索活动';
 
   const tabs = useMemo(
     () => [
@@ -193,9 +179,9 @@ export default function ActivityScreen({ navigation, route }) {
       { key: 'new', label: t('screens.activity.tabs.new') },
       { key: 'ended', label: t('screens.activity.tabs.ended') },
       { key: 'my', label: t('screens.activity.tabs.mine') },
-      { key: 'history', label: resolvedHistoryTabLabel },
+      { key: 'history', label: t('screens.activity.tabs.history') },
     ],
-    [resolvedHistoryTabLabel, t]
+    [t]
   );
 
   const buildCurrentActivityParams = useCallback(
@@ -244,37 +230,6 @@ export default function ActivityScreen({ navigation, route }) {
     }
   }, [t]);
 
-  const prefetchActivityTabs = useCallback((params) => {
-    if (isFromProfile) {
-      return;
-    }
-
-    const normalizedParams = normalizeActivityQueryParams(params);
-    const familyKey = buildActivityFamilyKey(normalizedParams);
-
-    if (prefetchedActivityFamiliesRef.current.has(familyKey)) {
-      return;
-    }
-
-    prefetchedActivityFamiliesRef.current.add(familyKey);
-
-    ACTIVITY_TABS
-      .filter(tabKey => tabKey !== normalizedParams.tab)
-      .forEach(tabKey => {
-        const nextParams = normalizeActivityQueryParams({
-          ...normalizedParams,
-          tab: tabKey,
-        });
-        const nextCacheKey = buildActivityCacheKey(nextParams);
-
-        if (isActivityCacheFresh(activityCacheRef.current.get(nextCacheKey))) {
-          return;
-        }
-
-        void requestActivityQuery(nextParams).catch(() => {});
-      });
-  }, [isFromProfile, requestActivityQuery]);
-
   const loadActivities = useCallback(async ({ force = false, silent = false } = {}) => {
     const params = buildCurrentActivityParams();
     const cacheKey = buildActivityCacheKey(params);
@@ -289,7 +244,6 @@ export default function ActivityScreen({ navigation, route }) {
 
       if (!force && isActivityCacheFresh(cachedEntry)) {
         setRefreshing(false);
-        prefetchActivityTabs(params);
         return;
       }
     }
@@ -310,8 +264,6 @@ export default function ActivityScreen({ navigation, route }) {
         setActivities(nextCacheEntry.rows);
         setErrorMessage('');
       }
-
-      prefetchActivityTabs(params);
     } catch (error) {
       if ((!cachedEntry || force) && activeQueryKeyRef.current === cacheKey) {
         setErrorMessage(getRequestErrorMessage(error, t('common.serverError')));
@@ -322,7 +274,7 @@ export default function ActivityScreen({ navigation, route }) {
         setRefreshing(false);
       }
     }
-  }, [buildCurrentActivityParams, prefetchActivityTabs, requestActivityQuery, t]);
+  }, [buildCurrentActivityParams, requestActivityQuery, t]);
 
   useEffect(() => {
     void loadActivities();
@@ -559,7 +511,7 @@ export default function ActivityScreen({ navigation, route }) {
                 value={searchInputValue}
                 onChangeText={setSearchInputValue}
                 onSubmitEditing={handleSubmitSearch}
-                placeholder={resolvedActivitySearchPlaceholder}
+                placeholder={t('screens.activity.searchPlaceholder')}
                 placeholderTextColor="#9ca3af"
                 style={styles.searchInput}
                 returnKeyType="search"
