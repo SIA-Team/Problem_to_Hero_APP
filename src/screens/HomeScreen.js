@@ -45,6 +45,99 @@ const { width: screenWidth } = Dimensions.get('window');
 const INITIAL_CREDENTIALS_NOTICE_STORAGE_KEY = '@initial_credentials_notice';
 const MOCK_RECHARGE_RETURN_AMOUNT = 100;
 const HOME_WALLET_REFRESH_DEBOUNCE_MS = 15000;
+const HERO_RANK_TABS = [
+  { key: 'adopted', label: '被采纳' },
+  { key: 'liked', label: '被点赞' },
+  { key: 'questions', label: '发问题' },
+  { key: 'answers', label: '写回答' },
+];
+const normalizeHotFilterText = (value) => String(value || '').replace(/\s+/g, '').trim().toLowerCase();
+const normalizePositiveNumber = (value) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : null;
+};
+const getHotTabKey = (item) => String(item?.tabCode || item?.id || '');
+const normalizeHotTabNode = (item, parentId = 0) => {
+  const key = getHotTabKey(item);
+  if (!key) {
+    return null;
+  }
+
+  return {
+    id: normalizePositiveNumber(item?.id) || key,
+    key,
+    parentId: normalizePositiveNumber(item?.parentId) || parentId,
+    tabName: String(item?.tabName || '').trim(),
+    tabCode: String(item?.tabCode || '').trim(),
+    icon: String(item?.icon || '').trim(),
+    sortOrder: Number(item?.sortOrder) || 0,
+    bindCategoryId: normalizePositiveNumber(item?.bindCategoryId),
+    children: (Array.isArray(item?.children) ? item.children : [])
+      .map(child => normalizeHotTabNode(child, normalizePositiveNumber(item?.id) || parentId))
+      .filter(Boolean)
+      .sort((left, right) => (left.sortOrder - right.sortOrder) || left.tabName.localeCompare(right.tabName)),
+  };
+};
+const normalizeHotTabTree = (rows) => (
+  Array.isArray(rows)
+    ? rows
+      .map(item => normalizeHotTabNode(item))
+      .filter(Boolean)
+      .sort((left, right) => (left.sortOrder - right.sortOrder) || left.tabName.localeCompare(right.tabName))
+    : []
+);
+const doesQuestionMatchHotTab = (item, tabNode) => {
+  if (!tabNode) {
+    return true;
+  }
+
+  const itemCategoryIds = [
+    normalizePositiveNumber(item?.categoryId),
+    normalizePositiveNumber(item?.parentCategoryId),
+  ].filter(Boolean);
+  const itemKeywords = Array.from(new Set([
+    item?.categoryName,
+    item?.parentCategoryName,
+    item?.category,
+    ...(Array.isArray(item?.topicNames) ? item.topicNames : []),
+  ].map(normalizeHotFilterText).filter(Boolean)));
+  const normalizedTabName = normalizeHotFilterText(tabNode.tabName);
+  const normalizedTabCode = normalizeHotFilterText(tabNode.tabCode);
+  const bindCategoryId = normalizePositiveNumber(tabNode.bindCategoryId);
+
+  if (bindCategoryId && itemCategoryIds.includes(bindCategoryId)) {
+    return true;
+  }
+
+  if (normalizedTabName && itemKeywords.includes(normalizedTabName)) {
+    return true;
+  }
+
+  if (normalizedTabCode && itemKeywords.includes(normalizedTabCode)) {
+    return true;
+  }
+
+  if (bindCategoryId && itemCategoryIds.length > 0) {
+    return false;
+  }
+
+  if (normalizedTabName || normalizedTabCode) {
+    const searchableText = normalizeHotFilterText([
+      item?.title,
+      item?.content,
+      item?.categoryName,
+      item?.parentCategoryName,
+      ...(Array.isArray(item?.topicNames) ? item.topicNames : []),
+    ].join(' '));
+
+    return (
+      (normalizedTabName && searchableText.includes(normalizedTabName)) ||
+      (normalizedTabCode && searchableText.includes(normalizedTabCode))
+    );
+  }
+
+  return true;
+};
 
 // tabs array will be moved inside component to use translation
 
@@ -101,10 +194,8 @@ export default function HomeScreen({ navigation }) {
     const excludedTabs = new Set([
       t('home.follow'),
       t('home.topics'),
-      t('home.hotList'),
       t('home.rewardRanking'),
       t('home.questionRanking'),
-      t('home.heroRanking'),
     ]);
 
     return tabs.filter(tab => !excludedTabs.has(tab));
@@ -177,7 +268,11 @@ export default function HomeScreen({ navigation }) {
       setActiveTab(t('home.recommend'));
     }
   }, [activeTab, tabs, locale]);
-  
+
+  useEffect(() => {
+    canTriggerLoadMoreRef.current = false;
+  }, [activeTab, hotRankTab, hotRankSubTab]);
+
   // Tab 切换监听 - 触发优化加载
   
   
@@ -217,7 +312,13 @@ export default function HomeScreen({ navigation }) {
   const [showInitialCredentialsModal, setShowInitialCredentialsModal] = useState(false);
   const [initialCredentials, setInitialCredentials] = useState({ username: '', password: '' });
   const [selectedRegion, setSelectedRegion] = useState({ country: '', city: '', state: '', district: '' });
+  const [hotRankTabs, setHotRankTabs] = useState([]);
+  const [hotRankTabsLoading, setHotRankTabsLoading] = useState(false);
+  const [hotRankSubTab, setHotRankSubTab] = useState('');
+  const [hotRankTab, setHotRankTab] = useState('');
+  const [heroRankTab, setHeroRankTab] = useState('adopted');
   const hasFocusedHomeOnceRef = useRef(false);
+  const canTriggerLoadMoreRef = useRef(false);
   
   // 话题关注状态
   const [topicFollowState, setTopicFollowState] = useState({});
@@ -253,6 +354,139 @@ export default function HomeScreen({ navigation }) {
   // 记录标题的完整行数
   const [titleLineCount, setTitleLineCount] = useState({});
   const measuredTitleIdsRef = useRef(new Set());
+  const activeHotRankTabConfig = useMemo(
+    () => hotRankTabs.find(item => item.key === hotRankTab) || hotRankTabs[0] || null,
+    [hotRankTab, hotRankTabs]
+  );
+  const visibleHotSubTabs = useMemo(
+    () => (Array.isArray(activeHotRankTabConfig?.children) ? activeHotRankTabConfig.children : []),
+    [activeHotRankTabConfig]
+  );
+  const activeHotRankSubTabConfig = useMemo(
+    () => visibleHotSubTabs.find(item => item.key === hotRankSubTab) || null,
+    [hotRankSubTab, visibleHotSubTabs]
+  );
+  const displayQuestionList = useMemo(() => {
+    if (activeTab !== t('home.hotList')) {
+      return safeQuestionList;
+    }
+
+    const normalizedSelectedCountry = normalizeHotFilterText(selectedRegion.country);
+    const normalizedSelectedCity = normalizeHotFilterText(selectedRegion.city);
+    const normalizedSelectedState = normalizeHotFilterText(selectedRegion.state);
+    const normalizedSelectedDistrict = normalizeHotFilterText(selectedRegion.district);
+    const selectedHotTabNode = activeHotRankSubTabConfig || activeHotRankTabConfig;
+
+    return safeQuestionList.filter(item => {
+      const normalizedCountry = normalizeHotFilterText(item?.country);
+      const normalizedCity = normalizeHotFilterText(item?.city);
+      const normalizedState = normalizeHotFilterText(item?.state);
+      const normalizedDistrict = normalizeHotFilterText(item?.district);
+      const normalizedLocation = normalizeHotFilterText(item?.location);
+
+      if (normalizedSelectedDistrict) {
+        const matchesDistrict =
+          normalizedDistrict === normalizedSelectedDistrict ||
+          normalizedLocation.includes(normalizedSelectedDistrict);
+        if (!matchesDistrict) {
+          return false;
+        }
+      } else if (normalizedSelectedState) {
+        const matchesState =
+          normalizedState === normalizedSelectedState ||
+          normalizedLocation.includes(normalizedSelectedState);
+        if (!matchesState) {
+          return false;
+        }
+      } else if (normalizedSelectedCity) {
+        const matchesCity =
+          normalizedCity === normalizedSelectedCity ||
+          normalizedLocation.includes(normalizedSelectedCity);
+        if (!matchesCity) {
+          return false;
+        }
+      } else if (normalizedSelectedCountry) {
+        const matchesCountry =
+          normalizedCountry === normalizedSelectedCountry ||
+          normalizedLocation.includes(normalizedSelectedCountry);
+        if (!matchesCountry) {
+          return false;
+        }
+      }
+
+      if (!doesQuestionMatchHotTab(item, selectedHotTabNode)) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [
+    activeHotRankTabConfig,
+    activeHotRankSubTabConfig,
+    activeTab,
+    safeQuestionList,
+    selectedRegion.city,
+    selectedRegion.country,
+    selectedRegion.district,
+    selectedRegion.state,
+    t,
+  ]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadHotTabs = async () => {
+      setHotRankTabsLoading(true);
+
+      try {
+        const response = await questionApi.getHotTabTree();
+        const nextHotRankTabs = normalizeHotTabTree(response?.data);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setHotRankTabs(nextHotRankTabs);
+        setHotRankTab((previousValue) => {
+          if (nextHotRankTabs.some(item => item.key === previousValue)) {
+            return previousValue;
+          }
+
+          return nextHotRankTabs[0]?.key || '';
+        });
+      } catch (error) {
+        console.error('Failed to load home hot tabs:', error);
+        if (isMounted) {
+          setHotRankTabs([]);
+          setHotRankTab('');
+        }
+      } finally {
+        if (isMounted) {
+          setHotRankTabsLoading(false);
+        }
+      }
+    };
+
+    loadHotTabs();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!activeHotRankTabConfig) {
+      if (hotRankSubTab) {
+        setHotRankSubTab('');
+      }
+      return;
+    }
+
+    if (!visibleHotSubTabs.some(item => item.key === hotRankSubTab)) {
+      setHotRankSubTab('');
+    }
+  }, [activeHotRankTabConfig, hotRankSubTab, visibleHotSubTabs]);
+
   
   // 时间格式化函数 - 使用工具函数
   // 已从 ../utils/timeFormatter 导入
@@ -346,19 +580,13 @@ export default function HomeScreen({ navigation }) {
 
   useFocusEffect(
     React.useCallback(() => {
-      if (
-        hasFocusedHomeOnceRef.current &&
-        activeTab &&
-        activeTab !== t('home.topics') &&
-        !optimizedLoading &&
-        !refreshing &&
-        safeQuestionList.length === 0
-      ) {
-        onRefresh();
-      }
-
       hasFocusedHomeOnceRef.current = true;
-    }, [activeTab, optimizedLoading, onRefresh, safeQuestionList.length, refreshing, locale])
+      canTriggerLoadMoreRef.current = false;
+
+      return () => {
+        canTriggerLoadMoreRef.current = false;
+      };
+    }, [activeTab, locale])
   );
 
 
@@ -409,6 +637,10 @@ export default function HomeScreen({ navigation }) {
 
   // 渲染底部组件
   const renderFooter = () => {
+    if (displayQuestionList.length === 0) {
+      return null;
+    }
+
     if (loadingMore) {
       return (
         <View style={styles.footerLoading}>
@@ -581,6 +813,19 @@ export default function HomeScreen({ navigation }) {
 
     return !!getQuestionById(id)?.disliked;
   };
+
+  const handleListScrollBegin = React.useCallback(() => {
+    canTriggerLoadMoreRef.current = true;
+  }, []);
+
+  const handleLoadMore = React.useCallback(() => {
+    if (!canTriggerLoadMoreRef.current || optimizedLoading || refreshing) {
+      return;
+    }
+
+    canTriggerLoadMoreRef.current = false;
+    onLoadMore();
+  }, [onLoadMore, optimizedLoading, refreshing]);
 
   const getQuestionBookmarkState = (id) => {
     if (bookmarkedItems[id] !== undefined) {
@@ -1178,6 +1423,191 @@ export default function HomeScreen({ navigation }) {
     return parts[parts.length - 1];
   };
 
+  const renderHotRankControls = React.useCallback(() => {
+    const shouldShowHotSubTabs = visibleHotSubTabs.length > 1;
+
+    return (
+    <View style={styles.hotRankControlsContainer}>
+      <View style={styles.hotRankTopRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.hotRankTabScroll}
+          contentContainerStyle={styles.hotRankTabRowContent}
+          nestedScrollEnabled
+          directionalLockEnabled
+          keyboardShouldPersistTaps="handled"
+          overScrollMode="never"
+          scrollEventThrottle={16}
+          decelerationRate="fast"
+        >
+          {hotRankTabs.map(item => (
+            <TouchableOpacity
+              key={item.key}
+              style={styles.hotRankTabItem}
+              onPress={() => {
+                setHotRankTab(item.key);
+                setHotRankSubTab('');
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.hotRankTabText, hotRankTab === item.key && styles.hotRankTabTextActive]}>
+                {item.tabName || item.tabCode}
+              </Text>
+              {hotRankTab === item.key ? <View style={styles.hotRankTabIndicator} /> : null}
+            </TouchableOpacity>
+          ))}
+          {!hotRankTabs.length && (
+            <View style={styles.hotRankStatusPill}>
+              {hotRankTabsLoading ? (
+                <ActivityIndicator size="small" color="#ef4444" />
+              ) : (
+                <Text style={styles.hotRankStatusText}>暂无热榜分类</Text>
+              )}
+            </View>
+          )}
+        </ScrollView>
+      </View>
+
+      {shouldShowHotSubTabs && (
+      <View style={styles.hotRankSubTabRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.hotRankSubTabRowContent}
+          nestedScrollEnabled
+          directionalLockEnabled
+          keyboardShouldPersistTaps="handled"
+          overScrollMode="never"
+          scrollEventThrottle={16}
+          decelerationRate="fast"
+        >
+          <TouchableOpacity
+            style={[styles.hotRankSubTabItem, !hotRankSubTab && styles.hotRankSubTabItemActive]}
+            onPress={() => setHotRankSubTab('')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.hotRankSubTabText, !hotRankSubTab && styles.hotRankSubTabTextActive]}>
+              全部
+            </Text>
+          </TouchableOpacity>
+          {visibleHotSubTabs.map(item => (
+            <TouchableOpacity
+              key={item.key}
+              style={[styles.hotRankSubTabItem, hotRankSubTab === item.key && styles.hotRankSubTabItemActive]}
+              onPress={() => setHotRankSubTab(item.key)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.hotRankSubTabText, hotRankSubTab === item.key && styles.hotRankSubTabTextActive]}>
+                {item.tabName || item.tabCode}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+      )}
+    </View>
+    );
+  }, [
+    hotRankTabs,
+    hotRankTabsLoading,
+    hotRankSubTab,
+    hotRankTab,
+    visibleHotSubTabs,
+  ]);
+
+  const renderHeroRankControls = React.useCallback(() => (
+    <View style={styles.heroRankControlsContainer}>
+      <View style={styles.heroRankTabRow}>
+        {HERO_RANK_TABS.map((item) => (
+          <TouchableOpacity
+            key={item.key}
+            style={styles.heroRankTabItem}
+            onPress={() => setHeroRankTab(item.key)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.heroRankTabText, heroRankTab === item.key && styles.heroRankTabTextActive]}>
+              {item.label}
+            </Text>
+            {heroRankTab === item.key ? <View style={styles.heroRankTabIndicator} /> : null}
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  ), [heroRankTab]);
+
+  const renderHomeListHeader = React.useCallback(() => (
+    <>
+      {hasNewContent && (
+        <TouchableOpacity
+          style={styles.newContentBanner}
+          onPress={onRefresh}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="arrow-up-circle" size={16} color="#ef4444" />
+          <Text style={styles.newContentText}>{t('home.hasNewContent') || '有新内容，点击刷新'}</Text>
+        </TouchableOpacity>
+      )}
+
+      <View style={[styles.localFilterBar, { display: activeTab === t('home.sameCity') ? 'flex' : 'none' }]}>
+        <View style={styles.localFilterRow}>
+          <TouchableOpacity style={styles.localFilterItem} onPress={() => setShowCityModal(true)}>
+            <View style={[styles.localFilterIcon, { backgroundColor: '#e0f2fe' }]}>
+              <Ionicons name="navigate" size={22} color="#0ea5e9" />
+            </View>
+            <Text style={styles.localFilterLabel}>{t('home.switchLocation')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.localFilterItem}
+            onPress={() => setLocalFilter('latest')}
+          >
+            <View style={[styles.localFilterIcon, { backgroundColor: '#fef3c7' }]}>
+              <Ionicons name="time" size={22} color="#f59e0b" />
+            </View>
+            <Text style={[styles.localFilterLabel, localFilter === 'latest' && styles.localFilterLabelActive]}>{t('home.latest')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.localFilterItem}
+            onPress={() => setLocalFilter('hottest')}
+          >
+            <View style={[styles.localFilterIcon, { backgroundColor: '#fef3c7' }]}>
+              <Ionicons name="flame" size={22} color="#f59e0b" />
+            </View>
+            <Text style={[styles.localFilterLabel, localFilter === 'hottest' && styles.localFilterLabelActive]}>{t('home.hottest')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.localFilterItem}
+            onPress={() => { setLocalFilter('nearby'); setShowNearbyModal(true); }}
+          >
+            <View style={[styles.localFilterIcon, { backgroundColor: '#fee2e2' }]}>
+              <Ionicons name="location" size={22} color="#ef4444" />
+            </View>
+            <Text style={[styles.localFilterLabel, localFilter === 'nearby' && styles.localFilterLabelActive]}>{t('home.nearby')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.localFilterItem}
+            onPress={() => navigation.navigate('Emergency')}
+          >
+            <View style={[styles.localFilterIcon, { backgroundColor: '#fee2e2' }]}>
+              <Ionicons name="alert-circle" size={22} color="#ef4444" />
+            </View>
+            <Text style={styles.localFilterLabel}>{t('emergency.title')}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </>
+  ), [
+    activeTab,
+    hasNewContent,
+    heroRankTab,
+    localFilter,
+    navigation,
+    onRefresh,
+    renderHotRankControls,
+    renderHeroRankControls,
+    t,
+  ]);
+
   const getSelectedRegionId = () => {
     const regionIds = [
       selectedRegion.districtId,
@@ -1259,8 +1689,6 @@ export default function HomeScreen({ navigation }) {
               onPress={() => {
                 if (tab === t('home.follow')) {
                   navigation.navigate('Follow');
-                } else if (tab === t('home.hotList')) {
-                  navigation.navigate('HotList');
                 // } else if (tab === t('home.incomeRanking')) {
                 //   navigation.navigate('IncomeRanking'); // 暂时隐藏收入榜
                 } else if (tab === t('home.rewardRanking')) {
@@ -1270,8 +1698,6 @@ export default function HomeScreen({ navigation }) {
                     regionId: getSelectedRegionId(),
                     selectedRegion,
                   });
-                } else if (tab === t('home.heroRanking')) {
-                  navigation.navigate('HeroRanking');
                 } else {
                   setActiveTab(tab);
                 }
@@ -1302,85 +1728,31 @@ export default function HomeScreen({ navigation }) {
       {/* 问题卡片列表 */}
       {activeTab !== t('home.topics') ? (
         <View style={styles.listContainer}>
+          {activeTab === t('home.hotList') && renderHotRankControls()}
+          {activeTab === t('home.heroRanking') && renderHeroRankControls()}
           <FlashList
-            data={safeQuestionList}
+            key={`home-feed-${activeTab}-${activeTab === t('home.hotList') ? `${hotRankTab}-${hotRankSubTab}` : 'default'}`}
+            data={displayQuestionList}
             estimatedItemSize={300}
             keyExtractor={(item, index) => String(item?.id ?? item?.questionId ?? `question-${index}`)}
             showsVerticalScrollIndicator={false}
-            refreshControl={
+            extraData={`${activeTab}:${hotRankTab}:${hotRankSubTab}:${displayQuestionList.length}:${optimizedLoading ? 'loading' : 'idle'}:${refreshing ? 'refreshing' : 'steady'}`}
+            contentContainerStyle={displayQuestionList.length === 0 ? styles.emptyListContentContainer : styles.listContentContainer}
+            removeClippedSubviews={false}
+            refreshControl={(
               <RefreshControl
-                refreshing={refreshing && safeQuestionList.length === 0}
+                refreshing={refreshing}
                 onRefresh={onRefresh}
                 colors={['#ef4444']}
                 tintColor="#ef4444"
               />
-            }
-            ListEmptyComponent={renderEmptyList}
-            onEndReached={onLoadMore}
-            onEndReachedThreshold={0.3}
-            ListHeaderComponent={() => (
-              <>
-                {/* 新内容提示 - 今日头条式优化 */}
-                {hasNewContent && (
-                  <TouchableOpacity
-                    style={styles.newContentBanner}
-                    onPress={onRefresh}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="arrow-up-circle" size={16} color="#ef4444" />
-                    <Text style={styles.newContentText}>{t('home.hasNewContent') || '有新内容，点击刷新'}</Text>
-                  </TouchableOpacity>
-                )}
-                
-                {/* 同城筛选条 */}
-                <View style={[styles.localFilterBar, { display: activeTab === t('home.sameCity') ? 'flex' : 'none' }]}>
-                  <View style={styles.localFilterRow}>
-                    <TouchableOpacity style={styles.localFilterItem} onPress={() => setShowCityModal(true)}>
-                    <View style={[styles.localFilterIcon, { backgroundColor: '#e0f2fe' }]}>
-                      <Ionicons name="navigate" size={22} color="#0ea5e9" />
-                    </View>
-                    <Text style={styles.localFilterLabel}>{t('home.switchLocation')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.localFilterItem}
-                    onPress={() => setLocalFilter('latest')}
-                  >
-                    <View style={[styles.localFilterIcon, { backgroundColor: '#fef3c7' }]}>
-                      <Ionicons name="time" size={22} color="#f59e0b" />
-                    </View>
-                    <Text style={[styles.localFilterLabel, localFilter === 'latest' && styles.localFilterLabelActive]}>{t('home.latest')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.localFilterItem}
-                    onPress={() => setLocalFilter('hottest')}
-                  >
-                    <View style={[styles.localFilterIcon, { backgroundColor: '#fef3c7' }]}>
-                      <Ionicons name="flame" size={22} color="#f59e0b" />
-                    </View>
-                    <Text style={[styles.localFilterLabel, localFilter === 'hottest' && styles.localFilterLabelActive]}>{t('home.hottest')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.localFilterItem}
-                    onPress={() => { setLocalFilter('nearby'); setShowNearbyModal(true); }}
-                  >
-                    <View style={[styles.localFilterIcon, { backgroundColor: '#fee2e2' }]}>
-                      <Ionicons name="location" size={22} color="#ef4444" />
-                    </View>
-                    <Text style={[styles.localFilterLabel, localFilter === 'nearby' && styles.localFilterLabelActive]}>{t('home.nearby')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.localFilterItem}
-                    onPress={() => navigation.navigate('Emergency')}
-                  >
-                    <View style={[styles.localFilterIcon, { backgroundColor: '#fee2e2' }]}>
-                      <Ionicons name="alert-circle" size={22} color="#ef4444" />
-                    </View>
-                    <Text style={styles.localFilterLabel}>{t('emergency.title')}</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              </>
             )}
+            ListEmptyComponent={renderEmptyList}
+            onScrollBeginDrag={handleListScrollBegin}
+            onMomentumScrollBegin={handleListScrollBegin}
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.3}
+            ListHeaderComponent={renderHomeListHeader}
           ListFooterComponent={renderFooter}
           renderItem={({ item, index }) => {
             if (!item || typeof item !== 'object') {
@@ -1391,7 +1763,7 @@ export default function HomeScreen({ navigation }) {
             const isLikeDisabled = !isLiked && isDisliked;
             const requiresPaidView = item.requiresPaidView ?? shouldRequirePaidQuestionAccess(item);
             const isFirstItem = index === 0;
-            const isLastItem = index === safeQuestionList.length - 1;
+            const isLastItem = index === displayQuestionList.length - 1;
             return (
               <TouchableOpacity 
                 style={[styles.questionCard, isFirstItem && styles.firstQuestionCard]} 
@@ -1932,8 +2304,10 @@ const styles = StyleSheet.create({
   socialButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, gap: 6, borderWidth: 1, borderColor: '#e5e7eb' },
   socialButtonText: { fontSize: scaleFont(13), color: '#4b5563', fontWeight: '500' },
   listContainer: { flex: 1, backgroundColor: '#ffffff' },
+  listContentContainer: { paddingBottom: 20 },
+  emptyListContentContainer: { flexGrow: 1, paddingBottom: 20 },
   list: { flex: 1, paddingTop: 0, paddingHorizontal: 0 },
-  skeletonContainer: { paddingTop: 8, paddingBottom: 20 },
+  skeletonContainer: { flexGrow: 1, paddingTop: 8, paddingBottom: 20 },
   skeletonCard: { backgroundColor: '#ffffff', paddingHorizontal: 16, paddingTop: 18, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   skeletonTitleShort: { borderRadius: 6, marginBottom: 16 },
   skeletonBanner: { borderRadius: 14, backgroundColor: '#faf5e8', borderWidth: 1, borderColor: '#f8e7b4', marginBottom: 16 },
@@ -1945,7 +2319,7 @@ const styles = StyleSheet.create({
   skeletonStatGroup: { flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 12 },
   skeletonStatItem: { borderRadius: 6 },
   skeletonMenuDot: { borderRadius: 6 },
-  listStateContainer: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 72, gap: 12 },
+  listStateContainer: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 72, gap: 12 },
   listStateText: { fontSize: scaleFont(14), color: '#9ca3af' },
   listStateTitle: { fontSize: scaleFont(15), color: '#6b7280', fontWeight: '500' },
   listRetryBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 18, backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca' },
@@ -2397,5 +2771,122 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(13),
     color: '#ef4444',
     fontWeight: '500',
+  },
+  hotRankControlsContainer: { backgroundColor: '#fff' },
+  hotRankTopRow: {
+    paddingLeft: 12,
+    paddingRight: 12,
+    paddingTop: 6,
+    paddingBottom: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  hotRankTabScroll: {
+    marginBottom: 0,
+  },
+  hotRankTabRowContent: {
+    paddingRight: 8,
+    alignItems: 'flex-start',
+  },
+  hotRankTabItem: {
+    paddingHorizontal: 14,
+    paddingTop: 6,
+    paddingBottom: 12,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  hotRankStatusPill: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+  },
+  hotRankStatusText: {
+    fontSize: scaleFont(13),
+    color: '#9ca3af',
+  },
+  hotRankTabText: {
+    fontSize: scaleFont(16),
+    lineHeight: scaleFont(19),
+    color: '#6b7280',
+  },
+  hotRankTabTextActive: {
+    color: '#ef4444',
+    fontWeight: '600',
+  },
+  hotRankTabIndicator: {
+    position: 'absolute',
+    left: 14,
+    right: 14,
+    bottom: -1,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: '#ef4444',
+  },
+  hotRankSubTabRow: {
+    minHeight: 58,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+  },
+  hotRankSubTabRowContent: {
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  hotRankSubTabItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginRight: 10,
+    borderRadius: 18,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  hotRankSubTabItemActive: {
+    backgroundColor: '#ef4444',
+    borderColor: '#ef4444',
+  },
+  hotRankSubTabText: {
+    fontSize: scaleFont(13),
+    color: '#666',
+  },
+  hotRankSubTabTextActive: {
+    color: '#fff',
+    fontWeight: '500',
+  },
+  heroRankControlsContainer: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  heroRankTabRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    minHeight: 52,
+  },
+  heroRankTabItem: {
+    flex: 1,
+    minHeight: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  heroRankTabText: {
+    fontSize: scaleFont(16),
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  heroRankTabTextActive: {
+    color: '#ef4444',
+    fontWeight: '600',
+  },
+  heroRankTabIndicator: {
+    position: 'absolute',
+    left: 18,
+    right: 18,
+    bottom: 0,
+    height: 3,
+    borderRadius: 3,
+    backgroundColor: '#ef4444',
   },
 });

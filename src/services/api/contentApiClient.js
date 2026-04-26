@@ -6,6 +6,11 @@ import { showToast } from '../../utils/toast';
 import { createTransformResponsePreservingLongIds } from '../../utils/jsonLongId';
 import { logApiRequest, logApiResponse } from '../../screens/ApiDebugScreen';
 
+const shouldPrintVerboseApiLogs = () => (
+  __DEV__ &&
+  globalThis?.__ENABLE_VERBOSE_API_LOGS__ === true
+);
+
 // 澶勭悊 token 杩囨湡鐨勭粺涓€鍑芥暟
 const handleTokenExpired = async () => {
   return new Promise(async (resolve) => {
@@ -74,7 +79,7 @@ contentApiClient.interceptors.request.use(
       // 浣跨敤澶氭湇鍔″櫒閰嶇疆鑾峰彇姝ｇ‘鐨勬湇鍔″櫒鍦板潃
       const serverUrl = getApiServerUrl(config.url);
       config.baseURL = serverUrl;
-      if (__DEV__) {
+      if (shouldPrintVerboseApiLogs()) {
         console.log(`馃寪 [鍐呭鏈嶅姟] 鎺ュ彛 ${config.url} 浣跨敤鏈嶅姟鍣? ${serverUrl}`);
       }
       

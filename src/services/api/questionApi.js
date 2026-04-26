@@ -6,6 +6,9 @@ const LEGACY_QUESTION_DETAIL_ENDPOINT = '/qa-hero-content/app/content/question/d
 const QUESTION_RANKING_ALL_CACHE_TTL = 2 * 60 * 1000;
 const questionRankingAllCache = new Map();
 const questionRankingAllPendingRequests = new Map();
+const QUESTION_RANK_LIST_CACHE_TTL = 5 * 60 * 1000;
+const questionRankListCache = new Map();
+const questionRankListPendingRequests = new Map();
 
 const extractRequestErrorMessage = error => {
   if (!error) {
@@ -39,6 +42,13 @@ const buildQuestionRankingAllCacheKey = params => {
   const parsedRegionId = Number(params?.regionId);
   const regionId = Number.isFinite(parsedRegionId) ? parsedRegionId : 0;
   return `question-ranking-all:${regionId}`;
+};
+
+const buildQuestionRankListCacheKey = params => {
+  const rankType = String(params?.rankType || '').trim() || 'recommend';
+  const pageNum = Number(params?.pageNum) || 1;
+  const pageSize = Number(params?.pageSize) || 20;
+  return `question-rank-list:${rankType}:${pageNum}:${pageSize}`;
 };
 
 const shouldFallbackQuestionRequest = result => {
@@ -520,6 +530,62 @@ const questionApi = {
     return request;
   },
 
+  getRankList: (params = {}, options = {}) => {
+    const rankType = String(params.rankType || '').trim();
+    const pageNum = Number(params.pageNum) || 1;
+    const pageSize = Number(params.pageSize) || 20;
+    const cacheKey = buildQuestionRankListCacheKey({ rankType, pageNum, pageSize });
+    const forceRefresh = options.forceRefresh === true;
+
+    if (!rankType) {
+      return Promise.reject(new Error('rankType is required'));
+    }
+
+    if (!forceRefresh) {
+      const cachedEntry = questionRankListCache.get(cacheKey);
+      const isCacheValid =
+        cachedEntry &&
+        Date.now() - cachedEntry.timestamp < QUESTION_RANK_LIST_CACHE_TTL &&
+        isQuestionApiSuccessResponse(cachedEntry.response);
+
+      if (isCacheValid) {
+        return Promise.resolve(cachedEntry.response);
+      }
+
+      if (questionRankListPendingRequests.has(cacheKey)) {
+        return questionRankListPendingRequests.get(cacheKey);
+      }
+    }
+
+    const request = contentApiClient.get(API_ENDPOINTS.QUESTION.RANK_LIST, {
+      params: {
+        rankType,
+        pageNum,
+        pageSize,
+      },
+    })
+      .then(response => {
+        if (isQuestionApiSuccessResponse(response)) {
+          questionRankListCache.set(cacheKey, {
+            response,
+            timestamp: Date.now(),
+          });
+        }
+
+        return response;
+      })
+      .finally(() => {
+        questionRankListPendingRequests.delete(cacheKey);
+      });
+
+    questionRankListPendingRequests.set(cacheKey, request);
+    return request;
+  },
+
+  getHotTabTree: () => {
+    return contentApiClient.get(API_ENDPOINTS.QUESTION.HOT_TABS);
+  },
+
   /**
    * 搜索问题
    * @param {Object} params - 搜索参数
@@ -591,6 +657,36 @@ const questionApi = {
       question: {
         status: 1,
       },
+    });
+  },
+
+  getRecommendList: (params) => {
+    const { pageNum = 1, pageSize = 20 } = params || {};
+
+    return questionApi.getRankList({
+      rankType: 'recommend',
+      pageNum,
+      pageSize,
+    });
+  },
+
+  getHotList: (params) => {
+    const { pageNum = 1, pageSize = 20 } = params || {};
+
+    return questionApi.getRankList({
+      rankType: 'hot',
+      pageNum,
+      pageSize,
+    });
+  },
+
+  getHeroList: (params) => {
+    const { pageNum = 1, pageSize = 20 } = params || {};
+
+    return questionApi.getRankList({
+      rankType: 'hero',
+      pageNum,
+      pageSize,
     });
   },
 };

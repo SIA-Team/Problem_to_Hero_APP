@@ -289,6 +289,31 @@ const transformApiDataToHomeFormat = (apiData) => {
     }
 
     const locationParts = resolveLocationParts(item);
+    const normalizedCategoryId = Number(
+      item.categoryId ??
+      item.category_id ??
+      item.subCategoryId ??
+      item.sub_category_id ??
+      item.classifyId ??
+      item.classify_id
+    );
+    const normalizedParentCategoryId = Number(
+      item.parentCategoryId ??
+      item.parent_category_id ??
+      item.parentId ??
+      item.parent_id ??
+      item.level1CategoryId ??
+      item.level1_category_id
+    );
+    const normalizedTopicNames = (
+      Array.isArray(item.topicNames)
+        ? item.topicNames
+        : Array.isArray(item.topics)
+          ? item.topics.map(topic => (typeof topic === 'string' ? topic : topic?.name || topic?.topicName || ''))
+          : [item.topicName]
+    )
+      .map(value => String(value || '').trim())
+      .filter(Boolean);
     
     const normalizedPayViewAmount = getQuestionPayViewAmount(item);
     const normalizedBountyAmount = Number(item.bountyAmount ?? 0) || 0;
@@ -348,6 +373,31 @@ const transformApiDataToHomeFormat = (apiData) => {
       solvedPercent: normalizedAdoptRate,
       payViewAmount: normalizedPayViewAmount,
       bountyAmount: normalizedBountyAmount,
+      categoryId: Number.isFinite(normalizedCategoryId) && normalizedCategoryId > 0 ? normalizedCategoryId : null,
+      categoryName:
+        item.categoryName ||
+        item.category_name ||
+        item.subCategoryName ||
+        item.sub_category_name ||
+        item.classifyName ||
+        item.classify_name ||
+        item.category ||
+        '',
+      parentCategoryId:
+        Number.isFinite(normalizedParentCategoryId) && normalizedParentCategoryId > 0
+          ? normalizedParentCategoryId
+          : null,
+      parentCategoryName:
+        item.parentCategoryName ||
+        item.parent_category_name ||
+        item.parentName ||
+        item.parent_name ||
+        item.level1CategoryName ||
+        item.level1_category_name ||
+        item.primaryCategoryName ||
+        item.primary_category_name ||
+        '',
+      topicNames: normalizedTopicNames,
       rawType: item.type ?? null,
       requiresPaidView,
     };
@@ -718,6 +768,9 @@ const fetchQuestionsByTab = async (tabType, page, onDebugUpdate) => {
       case 'hot':
         response = await questionApi.getHotList({ pageNum: page, pageSize });
         break;
+      case 'hero':
+        response = await questionApi.getHeroList({ pageNum: page, pageSize });
+        break;
       case 'follow':
         response = await questionApi.getFollowList({ pageNum: page, pageSize });
         break;
@@ -741,7 +794,14 @@ const fetchQuestionsByTab = async (tabType, page, onDebugUpdate) => {
     
     // 处理响应数据
     if (response && response.code === 200) {
-      const rawData = response.data?.rows || response.rows || response.data || [];
+      const rawData =
+        response.data?.items ||
+        response.data?.rows ||
+        response.data?.list ||
+        response.rows ||
+        response.list ||
+        response.data ||
+        [];
       const transformedData = transformApiDataToHomeFormat(rawData);
       return applyPersistedQuestionInteractionSnapshots(transformedData);
     } else {

@@ -73,8 +73,13 @@ const shouldLogRawResponse = url => {
     url.includes('/app/content/question/');
 };
 
+const shouldPrintVerboseApiLogs = () => (
+  __DEV__ &&
+  globalThis?.__ENABLE_VERBOSE_API_LOGS__ === true
+);
+
 export const createTransformResponsePreservingLongIds = clientName => function transformResponse(data) {
-  if (__DEV__ && typeof data === 'string' && shouldLogRawResponse(this?.url)) {
+  if (shouldPrintVerboseApiLogs() && typeof data === 'string' && shouldLogRawResponse(this?.url)) {
     console.log(`RAW RESPONSE [${clientName}] ${this?.url}`);
     console.log('==================== RAW START ====================');
     console.log(data);

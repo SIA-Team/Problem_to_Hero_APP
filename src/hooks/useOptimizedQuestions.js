@@ -1,13 +1,3 @@
-/**
- * 优化的问题列表 Hook
- *
- * 能力：
- * 1. 缓存优先加载
- * 2. 邻近 Tab 预取
- * 3. 分页加载
- * 4. 前后台切换时检查新内容
- */
-
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { AppState } from 'react-native';
 import {
@@ -20,9 +10,12 @@ import {
 const TAB_TYPE_MAP = {
   推荐: 'recommend',
   热榜: 'hot',
+  英雄榜: 'hero',
   关注: 'follow',
   Recommend: 'recommend',
   'Hot List': 'hot',
+  Heroes: 'hero',
+  'Hero Ranking': 'hero',
   Follow: 'follow',
 };
 
@@ -40,9 +33,10 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
   const isInitialLoad = useRef(true);
   const hasStartedInitialLoad = useRef(false);
   const previousActiveTabRef = useRef(null);
+  const tabStateCacheRef = useRef(new Map());
 
   const getTabType = useCallback(
-    tab => {
+    (tab) => {
       if (!tab) {
         return null;
       }
@@ -62,18 +56,54 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
 
   const prefetchTabTypes = useMemo(() => {
     const normalizedTabs = allTabs
-      .map(tab => getTabType(tab))
+      .map((tab) => getTabType(tab))
       .filter(Boolean);
 
     return Array.from(new Set(normalizedTabs));
   }, [allTabs, getTabType]);
 
   const resetQuestionState = useCallback(() => {
+    setLoading(false);
+    setRefreshing(false);
+    setLoadingMore(false);
     setQuestionList([]);
     setPage(1);
     setHasMore(false);
     setHasNewContent(false);
   }, []);
+
+  const resetTransientLoadingState = useCallback(() => {
+    setLoading(false);
+    setRefreshing(false);
+    setLoadingMore(false);
+  }, []);
+
+  const cacheTabState = useCallback((tabType, nextState) => {
+    if (!tabType) {
+      return;
+    }
+
+    tabStateCacheRef.current.set(tabType, {
+      questionList: Array.isArray(nextState.questionList) ? nextState.questionList : [],
+      page: Number(nextState.page) || 1,
+      hasMore: Boolean(nextState.hasMore),
+      hasNewContent: Boolean(nextState.hasNewContent),
+    });
+  }, []);
+
+  const restoreCachedTabState = useCallback((tabType) => {
+    const cachedState = tabStateCacheRef.current.get(tabType);
+    if (!cachedState) {
+      return false;
+    }
+
+    resetTransientLoadingState();
+    setQuestionList(cachedState.questionList);
+    setPage(cachedState.page);
+    setHasMore(cachedState.hasMore);
+    setHasNewContent(cachedState.hasNewContent);
+    return true;
+  }, [resetTransientLoadingState]);
 
   const loadData = useCallback(
     async (tabType, pageNum, forceRefresh = false) => {
@@ -85,20 +115,23 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
         const { data } = await loadQuestions(tabType, pageNum, forceRefresh, onDebugUpdate);
         return data || [];
       } catch (error) {
-        console.warn(`加载数据失败: ${tabType} - 第${pageNum}页`, error);
+        console.warn(`Failed to load questions for ${tabType} page ${pageNum}:`, error);
         return [];
       }
     },
     [onDebugUpdate]
   );
 
-  const prefetchTabs = useCallback(tabType => {
-    if (!tabType || prefetchTabTypes.length === 0) {
-      return;
-    }
+  const prefetchTabs = useCallback(
+    (tabType) => {
+      if (!tabType || prefetchTabTypes.length === 0) {
+        return;
+      }
 
-    prefetchAdjacentTabs(tabType, prefetchTabTypes);
-  }, [prefetchTabTypes]);
+      prefetchAdjacentTabs(tabType, prefetchTabTypes);
+    },
+    [prefetchTabTypes]
+  );
 
   const initialLoad = useCallback(async () => {
     if (!activeTab) {
@@ -112,18 +145,31 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
       return;
     }
 
+    if (restoreCachedTabState(tabType)) {
+      isInitialLoad.current = false;
+      return;
+    }
+
     setLoading(true);
 
     try {
       const data = await loadData(tabType, 1, false);
+      const nextHasMore = data.length >= 20;
       setQuestionList(data);
       setPage(1);
-      setHasMore(data.length >= 20);
+      setHasMore(nextHasMore);
+      cacheTabState(tabType, {
+        questionList: data,
+        page: 1,
+        hasMore: nextHasMore,
+        hasNewContent: false,
+      });
+      prefetchTabs(tabType);
     } finally {
       setLoading(false);
       isInitialLoad.current = false;
     }
-  }, [activeTab, getTabType, loadData, resetQuestionState]);
+  }, [activeTab, cacheTabState, getTabType, loadData, prefetchTabs, resetQuestionState, restoreCachedTabState]);
 
   const onRefresh = useCallback(async () => {
     if (!activeTab) {
@@ -140,17 +186,17 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
     setHasNewContent(false);
 
     try {
-      const cachedData = await loadData(tabType, 1, false);
-      if (cachedData.length > 0) {
-        setQuestionList(cachedData);
-        setPage(1);
-        setHasMore(cachedData.length >= 20);
-      }
-
       const freshData = await loadData(tabType, 1, true);
+      const nextHasMore = freshData.length >= 20;
       setQuestionList(freshData);
       setPage(1);
-      setHasMore(freshData.length >= 20);
+      setHasMore(nextHasMore);
+      cacheTabState(tabType, {
+        questionList: freshData,
+        page: 1,
+        hasMore: nextHasMore,
+        hasNewContent: false,
+      });
 
       setTimeout(() => {
         prefetchTabs(tabType);
@@ -160,7 +206,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
         setRefreshing(false);
       }, 300);
     }
-  }, [activeTab, getTabType, loadData, prefetchTabs, resetQuestionState]);
+  }, [activeTab, cacheTabState, getTabType, loadData, prefetchTabs, resetQuestionState]);
 
   const onLoadMore = useCallback(async () => {
     if (loadingMore || !hasMore || !activeTab) {
@@ -180,24 +226,40 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
       const data = await loadData(tabType, nextPage, false);
 
       if (data.length > 0) {
-        setQuestionList(prev => [...prev, ...data]);
+        const nextHasMore = data.length >= 20;
+        setQuestionList((prev) => {
+          const nextList = [...prev, ...data];
+          cacheTabState(tabType, {
+            questionList: nextList,
+            page: nextPage,
+            hasMore: nextHasMore,
+            hasNewContent: false,
+          });
+          return nextList;
+        });
         setPage(nextPage);
-        setHasMore(data.length >= 20);
+        setHasMore(nextHasMore);
 
-        if (data.length >= 20) {
+        if (nextHasMore) {
           prefetchNextPage(tabType, nextPage);
         }
       } else {
         setHasMore(false);
+        cacheTabState(tabType, {
+          questionList,
+          page,
+          hasMore: false,
+          hasNewContent: false,
+        });
       }
     } finally {
       setLoadingMore(false);
     }
-  }, [activeTab, getTabType, hasMore, loadData, loadingMore, page]);
+  }, [activeTab, cacheTabState, getTabType, hasMore, loadData, loadingMore, page, questionList]);
 
   const onTabChange = useCallback(
-    async newTab => {
-      if (!newTab || newTab === activeTab) {
+    async (newTab) => {
+      if (!newTab) {
         return;
       }
 
@@ -207,20 +269,33 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
         return;
       }
 
-      setLoading(true);
+      resetTransientLoadingState();
       setHasNewContent(false);
+
+      if (restoreCachedTabState(tabType)) {
+        return;
+      }
+
+      setLoading(true);
 
       try {
         const data = await loadData(tabType, 1, false);
+        const nextHasMore = data.length >= 20;
         setQuestionList(data);
         setPage(1);
-        setHasMore(data.length >= 20);
+        setHasMore(nextHasMore);
+        cacheTabState(tabType, {
+          questionList: data,
+          page: 1,
+          hasMore: nextHasMore,
+          hasNewContent: false,
+        });
         prefetchTabs(tabType);
       } finally {
         setLoading(false);
       }
     },
-    [activeTab, getTabType, loadData, prefetchTabs, resetQuestionState]
+    [activeTab, cacheTabState, getTabType, loadData, prefetchTabs, resetQuestionState, resetTransientLoadingState, restoreCachedTabState]
   );
 
   const checkNew = useCallback(async () => {
@@ -233,17 +308,22 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
       return;
     }
 
-    const hasNew = await checkForNewContent(tabType, questionList);
-    if (hasNew) {
+    const nextHasNewContent = await checkForNewContent(tabType, questionList);
+    if (nextHasNewContent) {
       setHasNewContent(true);
+      cacheTabState(tabType, {
+        questionList,
+        page,
+        hasMore,
+        hasNewContent: true,
+      });
     }
-  }, [activeTab, getTabType, questionList]);
+  }, [activeTab, cacheTabState, getTabType, hasMore, page, questionList]);
 
   useEffect(() => {
-    const handleAppStateChange = nextAppState => {
+    const handleAppStateChange = (nextAppState) => {
       if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
         checkNew();
-        checkInterval.current = setInterval(checkNew, 5 * 60 * 1000);
       } else if (nextAppState.match(/inactive|background/)) {
         if (checkInterval.current) {
           clearInterval(checkInterval.current);
@@ -255,10 +335,6 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
     };
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
-
-    if (appState.current === 'active') {
-      checkInterval.current = setInterval(checkNew, 5 * 60 * 1000);
-    }
 
     return () => {
       subscription.remove();

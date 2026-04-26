@@ -6,6 +6,11 @@ import { showToast } from '../../utils/toast';
 import { createTransformResponsePreservingLongIds } from '../../utils/jsonLongId';
 import { logApiRequest, logApiResponse } from '../../screens/ApiDebugScreen';
 
+const shouldPrintVerboseApiLogs = () => (
+  __DEV__ &&
+  globalThis?.__ENABLE_VERBOSE_API_LOGS__ === true
+);
+
 // 澶勭悊 token 杩囨湡鐨勭粺涓€鍑芥暟
 const handleTokenExpired = async () => {
   try {
@@ -149,7 +154,7 @@ apiClient.interceptors.response.use(
     }
 
     // 鎵撳嵃鍝嶅簲淇℃伅锛堝紑鍙戠幆澧冿級
-    if (__DEV__) {
+    if (shouldPrintVerboseApiLogs()) {
       console.log('API Response:', {
         url: response.config.url,
         status: response.status,
