@@ -108,11 +108,17 @@ export default function EmergencyScreen({ navigation }) {
   const [emergencySettings, setEmergencySettings] = useState(DEFAULT_EMERGENCY_SETTINGS);
   const [emergencyFeeEstimate, setEmergencyFeeEstimate] = useState(null);
   const [progressMessage, setProgressMessage] = useState('请稍候，正在提交真实数据...');
+  const emergencyPricingApiUnsupportedRef = React.useRef(false);
 
   const toSafeNumber = (value, fallback = 0) => {
     const num = Number(value);
     return Number.isFinite(num) ? num : fallback;
   };
+
+  const isMissingEmergencyPricingApi = React.useCallback((error) => {
+    const message = String(error?.message || error?.msg || error?.data?.msg || '');
+    return message.includes('No static resource') && message.includes('emergency-help');
+  }, []);
 
   const formatAmount = (value) => {
     const num = toSafeNumber(value, 0);
@@ -136,16 +142,35 @@ export default function EmergencyScreen({ navigation }) {
   }, []);
 
   const loadEmergencySettings = React.useCallback(async () => {
+    if (emergencyPricingApiUnsupportedRef.current) {
+      return DEFAULT_EMERGENCY_SETTINGS;
+    }
+
     try {
       const response = await emergencyApi.getPublicSettings();
+      if (!isSuccessResponse(response)) {
+        throw new Error(response?.msg || 'Failed to load emergency public settings');
+      }
       return normalizeEmergencySettings(extractResponsePayload(response) || {});
     } catch (error) {
+      if (isMissingEmergencyPricingApi(error)) {
+        emergencyPricingApiUnsupportedRef.current = true;
+        return DEFAULT_EMERGENCY_SETTINGS;
+      }
       console.error('Failed to load emergency public settings:', error);
       return DEFAULT_EMERGENCY_SETTINGS;
     }
-  }, [normalizeEmergencySettings]);
+  }, [isMissingEmergencyPricingApi, normalizeEmergencySettings]);
 
   const loadEmergencyQuota = React.useCallback(async (fallbackTotal = 0) => {
+    if (emergencyPricingApiUnsupportedRef.current) {
+      setEmergencyQuota((prev) => prev || {
+        total: Math.max(0, Number(fallbackTotal) || 0),
+        remaining: 0,
+      });
+      return;
+    }
+
     try {
       const response = await emergencyApi.getQuota();
       if (!isSuccessResponse(response)) {
@@ -161,13 +186,17 @@ export default function EmergencyScreen({ navigation }) {
         remaining: Number.isFinite(remaining) && remaining >= 0 ? remaining : 0,
       });
     } catch (error) {
-      console.error('Failed to load emergency quota:', error);
+      if (isMissingEmergencyPricingApi(error)) {
+        emergencyPricingApiUnsupportedRef.current = true;
+      } else {
+        console.error('Failed to load emergency quota:', error);
+      }
       setEmergencyQuota((prev) => prev || {
         total: Math.max(0, Number(fallbackTotal) || 0),
         remaining: 0,
       });
     }
-  }, []);
+  }, [isMissingEmergencyPricingApi]);
 
   const buildLocalFeeEstimate = React.useCallback((neededHelperCount) => {
     const requestedHelperCount = Math.max(1, Math.round(toSafeNumber(neededHelperCount, 1)));
@@ -230,6 +259,13 @@ export default function EmergencyScreen({ navigation }) {
 
   const loadEmergencyFeeEstimate = React.useCallback(async (neededHelperCount) => {
     const requestedHelperCount = Math.max(1, Math.round(toSafeNumber(neededHelperCount, 1)));
+
+    if (emergencyPricingApiUnsupportedRef.current) {
+      const fallbackData = buildLocalFeeEstimate(requestedHelperCount);
+      setEmergencyFeeEstimate(fallbackData);
+      return fallbackData;
+    }
+
     try {
       const response = await emergencyApi.getFeeEstimate({ neededHelperCount: requestedHelperCount });
       if (!isSuccessResponse(response)) {
@@ -240,12 +276,17 @@ export default function EmergencyScreen({ navigation }) {
       setEmergencyFeeEstimate(estimateData);
       return estimateData;
     } catch (error) {
-      console.error('Failed to load emergency fee estimate:', error);
+      if (isMissingEmergencyPricingApi(error)) {
+        emergencyPricingApiUnsupportedRef.current = true;
+      } else {
+        console.error('Failed to load emergency fee estimate:', error);
+      }
+
       const fallbackData = buildLocalFeeEstimate(requestedHelperCount);
       setEmergencyFeeEstimate(fallbackData);
       return fallbackData;
     }
-  }, [buildLocalFeeEstimate, normalizeEmergencyFeeEstimate]);
+  }, [buildLocalFeeEstimate, isMissingEmergencyPricingApi, normalizeEmergencyFeeEstimate]);
 
   useFocusEffect(
     React.useCallback(() => {
