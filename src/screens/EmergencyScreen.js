@@ -787,15 +787,24 @@ export default function EmergencyScreen({ navigation }) {
             {freeCountDisplay}
           </Text>
         </View>
-        {quotaLoaded && publishOverageFeeCents > 0 && (
-          <TouchableOpacity 
-            style={styles.monthlyPayButton}
-            onPress={() => showAppAlert('提示', `超出免费次数后，本次发布额外费用为 $${formatAmount(publishOverageFee)}`)}
+        <View style={styles.freeCountActions}>
+          <TouchableOpacity
+            style={styles.myPublishButton}
+            onPress={() => navigation.navigate('EmergencyList', { initialTab: 'mine' })}
           >
-            <Text style={styles.monthlyPayButtonText}>{`${t('emergency.pay')} $${formatAmount(publishOverageFee)}`}</Text>
-            <Ionicons name="arrow-forward" size={14} color="#fff" />
+            <Ionicons name="document-text-outline" size={14} color="#2563eb" />
+            <Text style={styles.myPublishButtonText}>{'\u6211\u7684\u53d1\u5e03'}</Text>
           </TouchableOpacity>
-        )}
+          {quotaLoaded && publishOverageFeeCents > 0 && (
+            <TouchableOpacity 
+              style={styles.monthlyPayButton}
+              onPress={() => showAppAlert('提示', `超出免费次数后，本次发布额外费用为 $${formatAmount(publishOverageFee)}`)}
+            >
+              <Text style={styles.monthlyPayButtonText}>{`${t('emergency.pay')} $${formatAmount(publishOverageFee)}`}</Text>
+              <Ionicons name="arrow-forward" size={14} color="#fff" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
       <ScrollView style={styles.formArea} keyboardShouldPersistTaps="handled">
         {/* Title */}
@@ -1097,8 +1106,21 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb' 
   },
   freeCountLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  freeCountActions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 12 },
   freeCountText: { fontSize: scaleFont(14), color: '#374151' },
   freeCountNumber: { fontSize: scaleFont(16), fontWeight: 'bold', color: '#22c55e' },
+  myPublishButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#eff6ff',
+    borderColor: '#bfdbfe',
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18
+  },
+  myPublishButtonText: { fontSize: scaleFont(12), color: '#2563eb', fontWeight: '600' },
   monthlyPayButton: { 
     flexDirection: 'row', 
     alignItems: 'center', 
