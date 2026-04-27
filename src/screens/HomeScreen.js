@@ -409,6 +409,7 @@ export default function HomeScreen({ navigation }) {
     loading: optimizedLoading,
     refreshing,
     loadingMore,
+    error: questionLoadError,
     hasMore,
     hasNewContent,
     onRefresh,
@@ -467,6 +468,17 @@ export default function HomeScreen({ navigation }) {
     selectedRegion,
     t,
   ]);
+
+  useEffect(() => {
+    if (!__DEV__ || activeTab !== t('home.recommend')) {
+      return;
+    }
+
+    console.log('[HomeRecommendDebug] questionList length:', safeQuestionList.length);
+    console.log('[HomeRecommendDebug] displayQuestionList length:', displayQuestionList.length);
+    console.log('[HomeRecommendDebug] selectedRegion:', selectedRegion);
+    console.log('[HomeRecommendDebug] frontend display list is empty:', displayQuestionList.length === 0);
+  }, [activeTab, displayQuestionList.length, safeQuestionList.length, selectedRegion, t]);
 
   useEffect(() => {
     let isMounted = true;
@@ -726,13 +738,15 @@ export default function HomeScreen({ navigation }) {
     return (
       <View style={styles.listStateContainer}>
         <Ionicons name="document-text-outline" size={30} color="#9ca3af" />
-        <Text style={styles.listStateTitle}>{t('common.noData')}</Text>
+        <Text style={styles.listStateTitle}>
+          {questionLoadError || t('common.noData')}
+        </Text>
         <TouchableOpacity style={styles.listRetryBtn} onPress={onRefresh} activeOpacity={0.8}>
           <Text style={styles.listRetryBtnText}>{t('common.refresh')}</Text>
         </TouchableOpacity>
       </View>
     );
-  }, [onRefresh, optimizedLoading, t]);
+  }, [onRefresh, optimizedLoading, questionLoadError, t]);
 
   // 问题类型和类别数据
   const questionTypes = ['国家问题', '行业问题', '个人问题'];

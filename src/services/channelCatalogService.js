@@ -55,6 +55,79 @@ const pickFirstText = (...values) => {
 
 const asArray = value => (Array.isArray(value) ? value : []);
 
+const normalizeStatusText = value => normalizeText(value).toLowerCase();
+
+const AVAILABLE_STATUS_TEXTS = new Set([
+  '1',
+  'true',
+  'enable',
+  'enabled',
+  'active',
+  'available',
+  'online',
+  'open',
+  'normal',
+  'valid',
+  'published',
+  '启用',
+  '正常',
+  '有效',
+]);
+
+const UNAVAILABLE_STATUS_TEXTS = new Set([
+  '0',
+  'false',
+  'disable',
+  'disabled',
+  'inactive',
+  'offline',
+  'closed',
+  'stop',
+  'stopped',
+  'deleted',
+  'removed',
+  'invalid',
+  'forbidden',
+  '禁用',
+  '停用',
+  '已停用',
+  '关闭',
+  '已关闭',
+  '下线',
+  '删除',
+  '已删除',
+  '无效',
+]);
+
+const logChannelDebug = (label, payload) => {
+  if (!__DEV__) {
+    return;
+  }
+
+  console.log(`[ChannelCatalogDebug] ${label}:`, payload);
+};
+
+const getChannelDebugName = item =>
+  pickFirstText(
+    item?.channelName,
+    item?.name,
+    item?.categoryName,
+    item?.catalogName,
+    item?.title,
+    item?.label
+  );
+
+const buildChannelIdentityKey = channel => {
+  const targetType = normalizeText(channel?.targetType);
+  const targetKey = normalizeText(channel?.targetKey);
+
+  if (!targetType || !targetKey) {
+    return '';
+  }
+
+  return `${targetType}::${targetKey}`;
+};
+
 const normalizeGroupType = candidate => {
   const normalizedCandidate = normalizeText(candidate).toLowerCase();
   if (!normalizedCandidate) {
@@ -150,7 +223,78 @@ const normalizeCatalogChannelTargetKey = (item, fallbackId, fallbackName) =>
     fallbackName
   );
 
-const normalizeChannelItem = (item, groupContext = {}) => {
+const isExplicitlyUnavailable = item => {
+  if (!item || typeof item !== 'object') {
+    return false;
+  }
+
+  const negativeFlags = [
+    item.disabled,
+    item.isDisabled,
+    item.disable,
+    item.deleted,
+    item.isDeleted,
+    item.removed,
+    item.isRemoved,
+    item.offline,
+    item.isOffline,
+    item.stopped,
+    item.isStopped,
+    item.forbidden,
+    item.isForbidden,
+  ];
+
+  if (negativeFlags.some(flag => flag === true || flag === 1 || normalizeStatusText(flag) === 'true')) {
+    return true;
+  }
+
+  const positiveFlags = [
+    item.enabled,
+    item.isEnabled,
+    item.available,
+    item.isAvailable,
+    item.active,
+    item.isActive,
+  ];
+
+  if (positiveFlags.some(flag => flag === false || flag === 0 || normalizeStatusText(flag) === 'false')) {
+    return true;
+  }
+
+  const statusCandidates = [
+    item.status,
+    item.state,
+    item.channelStatus,
+    item.catalogStatus,
+    item.categoryStatus,
+    item.publishStatus,
+    item.enableStatus,
+    item.availableStatus,
+    item.statusDesc,
+    item.statusName,
+    item.stateDesc,
+    item.stateName,
+  ];
+
+  for (const candidate of statusCandidates) {
+    const normalized = normalizeStatusText(candidate);
+    if (!normalized) {
+      continue;
+    }
+
+    if (UNAVAILABLE_STATUS_TEXTS.has(normalized)) {
+      return true;
+    }
+
+    if (AVAILABLE_STATUS_TEXTS.has(normalized)) {
+      return false;
+    }
+  }
+
+  return false;
+};
+
+const buildNormalizedChannelSnapshot = (item, groupContext = {}) => {
   if (typeof item === 'string') {
     const name = normalizeText(item);
     if (!name) {
@@ -165,6 +309,7 @@ const normalizeChannelItem = (item, groupContext = {}) => {
       groupType: groupContext.groupType || '',
       targetType: '',
       targetKey: name,
+      isUnavailable: false,
       raw: item,
     };
   }
@@ -199,8 +344,37 @@ const normalizeChannelItem = (item, groupContext = {}) => {
       normalizeGroupType(item.parentName),
     targetType: normalizeCatalogChannelTargetType(item),
     targetKey: normalizeCatalogChannelTargetKey(item, normalizedId, name),
+    isUnavailable: isExplicitlyUnavailable(item),
     raw: item,
   };
+};
+
+const normalizeChannelItem = (item, groupContext = {}) => {
+  const normalizedSnapshot = buildNormalizedChannelSnapshot(item, groupContext);
+
+  if (!normalizedSnapshot) {
+    return null;
+  }
+
+  if (normalizedSnapshot.isUnavailable) {
+    logChannelDebug('filtered unavailable channel', {
+      name: normalizedSnapshot.name,
+      id: normalizedSnapshot.id,
+      parentName: normalizedSnapshot.parentName,
+      status: normalizedSnapshot.raw?.status,
+      state: normalizedSnapshot.raw?.state,
+      channelStatus: normalizedSnapshot.raw?.channelStatus,
+      catalogStatus: normalizedSnapshot.raw?.catalogStatus,
+      categoryStatus: normalizedSnapshot.raw?.categoryStatus,
+      enabled: normalizedSnapshot.raw?.enabled,
+      isEnabled: normalizedSnapshot.raw?.isEnabled,
+      disabled: normalizedSnapshot.raw?.disabled,
+      isDisabled: normalizedSnapshot.raw?.isDisabled,
+    });
+    return null;
+  }
+
+  return normalizedSnapshot;
 };
 
 const extractGroupChildren = group => {
@@ -211,6 +385,111 @@ const extractGroupChildren = group => {
   }
 
   return [];
+};
+
+const buildCatalogDebugSummary = payload => {
+  const rawGroups = extractRawGroups(payload);
+  const summary = {
+    country: [],
+    industry: [],
+    enterprise: [],
+    personal: [],
+    unknown: [],
+  };
+
+  rawGroups.forEach(group => {
+    const children = extractGroupChildren(group);
+    const rows = children.length > 0 ? children : [group];
+    const groupHint = pickFirstText(group?.parentName, group?.groupName, group?.name);
+
+    rows.forEach(item => {
+      const name = getChannelDebugName(item);
+      if (!name) {
+        return;
+      }
+
+      const groupType = inferGroupType(item, groupHint) || 'unknown';
+      const bucket = summary[groupType] || summary.unknown;
+
+      bucket.push({
+        name,
+        parentName: pickFirstText(item?.parentName, groupHint),
+        status: item?.status,
+        state: item?.state,
+        channelStatus: item?.channelStatus,
+        catalogStatus: item?.catalogStatus,
+        categoryStatus: item?.categoryStatus,
+        enabled: item?.enabled,
+        isEnabled: item?.isEnabled,
+        disabled: item?.disabled,
+        isDisabled: item?.isDisabled,
+      });
+    });
+  });
+
+  return summary;
+};
+
+const extractCatalogStatusEntries = payload => {
+  const rawGroups = extractRawGroups(payload);
+  const groupsToInspect =
+    rawGroups.length > 0 ? rawGroups : normalizeObjectOfArrays(payload);
+  const entries = [];
+
+  groupsToInspect.forEach(group => {
+    const children = extractGroupChildren(group);
+    const rows = children.length > 0 ? children : asArray(group?.channels).length > 0 ? group.channels : [group];
+    const groupType = inferGroupType(group, group?.groupName);
+    const groupName = pickFirstText(group?.parentName, group?.groupName, group?.name);
+    const parentId = normalizeText(group?.parentId ?? group?.id);
+
+    rows.forEach(item => {
+      const normalizedSnapshot = buildNormalizedChannelSnapshot(item, {
+        parentId,
+        parentName: groupName,
+        groupType,
+      });
+
+      if (!normalizedSnapshot) {
+        return;
+      }
+
+      entries.push(normalizedSnapshot);
+    });
+  });
+
+  return entries;
+};
+
+const buildCatalogChannelStateMaps = payload => {
+  const channelStateByIdentity = {};
+  const channelStateByName = {};
+
+  extractCatalogStatusEntries(payload).forEach(channel => {
+    const stateRecord = {
+      name: channel.name,
+      targetType: channel.targetType,
+      targetKey: channel.targetKey,
+      parentName: channel.parentName,
+      groupType: channel.groupType,
+      isUnavailable: Boolean(channel.isUnavailable),
+    };
+    const identityKey = buildChannelIdentityKey(channel);
+    const nameKey = normalizeText(channel.name);
+
+    if (identityKey && !channelStateByIdentity[identityKey]) {
+      channelStateByIdentity[identityKey] = stateRecord;
+    }
+
+    if (nameKey && !channelStateByName[nameKey]) {
+      channelStateByName[nameKey] = stateRecord;
+    }
+  });
+
+  return {
+    channelStateByIdentity,
+    channelStateByName,
+  };
 };
 
 const dedupeChannels = channels => {
@@ -401,10 +680,13 @@ export const normalizeChannelCatalogResponse = response => {
   }
 
   const { groupsByType, sections } = mergeGroupsByType(normalizedGroups);
+  const { channelStateByIdentity, channelStateByName } = buildCatalogChannelStateMaps(payload);
 
   return {
     groupsByType,
     sections,
+    channelStateByIdentity,
+    channelStateByName,
     raw: payload,
   };
 };
@@ -420,7 +702,48 @@ export const fetchChannelCatalog = async () => {
     throw new Error(response?.msg || '获取频道目录失败');
   }
 
-  return normalizeChannelCatalogResponse(response);
+  if (__DEV__) {
+    const payload = response?.data ?? response;
+    const rawGroups = extractRawGroups(payload);
+    const matchedTravelItems = rawGroups.flatMap(group => {
+      const children = extractGroupChildren(group);
+      const rows = children.length > 0 ? children : [group];
+
+      return rows.filter(item => {
+        const name = pickFirstText(
+          item?.channelName,
+          item?.name,
+          item?.categoryName,
+          item?.catalogName,
+          item?.title,
+          item?.label
+        );
+
+        return name.includes('旅游攻略');
+      });
+    });
+
+    logChannelDebug('raw group count', rawGroups.length);
+    logChannelDebug('matched travel items', JSON.stringify(matchedTravelItems, null, 2));
+    logChannelDebug('raw summary', JSON.stringify(buildCatalogDebugSummary(payload), null, 2));
+  }
+
+  const normalizedCatalog = normalizeChannelCatalogResponse(response);
+
+  if (__DEV__) {
+    const normalizedSummary = CHANNEL_GROUP_TYPES.reduce((summary, type) => {
+      summary[type] = asArray(normalizedCatalog?.groupsByType?.[type]).map(channel => ({
+        name: channel?.name ?? '',
+        targetType: channel?.targetType ?? '',
+        targetKey: channel?.targetKey ?? '',
+      }));
+      return summary;
+    }, {});
+
+    logChannelDebug('normalized summary', JSON.stringify(normalizedSummary, null, 2));
+  }
+
+  return normalizedCatalog;
 };
 
 export const emptyChannelGroups = EMPTY_CHANNEL_GROUPS;

@@ -1,5 +1,6 @@
 const { expo: baseConfig } = require('./app.json');
 
+const DEFAULT_OFFICIAL_WEBSITE_URL = 'https://problemvshero.com/';
 const DEFAULT_OFFICIAL_RECHARGE_URL = 'https://problemvshero.com/recharge';
 
 const androidGoogleMapsApiKey =
@@ -16,12 +17,12 @@ const iosGoogleMapsApiKey =
 const officialWebsiteUrl =
   process.env.EXPO_PUBLIC_OFFICIAL_WEBSITE_URL ||
   process.env.OFFICIAL_WEBSITE_URL ||
-  DEFAULT_OFFICIAL_RECHARGE_URL;
+  DEFAULT_OFFICIAL_WEBSITE_URL;
 
 const officialRechargeUrl =
   process.env.EXPO_PUBLIC_RECHARGE_URL ||
   process.env.RECHARGE_URL ||
-  officialWebsiteUrl;
+  `${String(officialWebsiteUrl || DEFAULT_OFFICIAL_WEBSITE_URL).trim().replace(/\/+$/, '')}/recharge`;
 
 const explicitRuntimeVersion = process.env.EXPO_RUNTIME_VERSION?.trim();
 const runtimeVersion = explicitRuntimeVersion || baseConfig.version;

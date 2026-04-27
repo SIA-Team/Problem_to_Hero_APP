@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { modalTokens } from './modalTokens';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
@@ -25,6 +25,17 @@ export default function DatePickerModal({ visible, onClose, currentDate, onSelec
   const [selectedYear, setSelectedYear] = useState(current.year);
   const [selectedMonth, setSelectedMonth] = useState(current.month);
   const [selectedDay, setSelectedDay] = useState(current.day);
+
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+
+    const nextDate = parseDate(currentDate);
+    setSelectedYear(nextDate.year);
+    setSelectedMonth(nextDate.month);
+    setSelectedDay(nextDate.day);
+  }, [currentDate, visible]);
 
   // 生成年份列表（1900 - 当前年份）
   const currentYear = new Date().getFullYear();

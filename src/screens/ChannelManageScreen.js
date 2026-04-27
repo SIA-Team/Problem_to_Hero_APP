@@ -1,11 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert, Animated } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { AppState, View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import CategoryIcon from '../components/CategoryIcon';
 import { useTranslation } from '../i18n/withTranslation';
 import { emptyChannelGroups, fetchChannelCatalog, hasChannelCatalogData } from '../services/channelCatalogService';
 import { createCombinedChannel } from '../services/channelCombinedCreateService';
 import { fetchMyCreatedCombinedChannels } from '../services/channelCombinedService';
+import questionCategoryService from '../services/questionCategoryService';
 import {
   fetchMySubscribedChannelItems,
   removeMySubscribedChannel,
@@ -38,9 +41,67 @@ const moveArrayItem = (list, fromIndex, toIndex) => {
   return next;
 };
 
-const MyChannelTagContent = ({ channel, isEditMode, onDelete, isDeleteDisabled = false }) => (
-  <View style={[styles.myChannelTag, isEditMode ? styles.myChannelTagEditMode : styles.myChannelTagViewMode]}>
-    <Text style={styles.myChannelText}>{channel}</Text>
+const COMBO_CATEGORY_PARENT_NAME_ALIASES = {
+  country: ['国家', '国家问题', 'country', 'national'],
+  industry: ['行业', '行业问题', 'industry'],
+  enterprise: ['企业', '企业问题', 'enterprise', 'company'],
+  personal: ['个人', '个人问题', 'personal', 'individual'],
+};
+
+const normalizeComboCategoryText = value =>
+  String(value || '')
+    .replace(/\s+/g, '')
+    .trim()
+    .toLowerCase();
+
+const matchesComboCategoryType = (category, categoryType) => {
+  const aliases = COMBO_CATEGORY_PARENT_NAME_ALIASES[categoryType] || [];
+  const normalizedName = normalizeComboCategoryText(category?.name);
+
+  if (!normalizedName) {
+    return false;
+  }
+
+  return aliases.some(alias => {
+    const normalizedAlias = normalizeComboCategoryText(alias);
+    return (
+      normalizedName === normalizedAlias ||
+      normalizedName.includes(normalizedAlias) ||
+      normalizedAlias.includes(normalizedName)
+    );
+  });
+};
+
+const MyChannelTagContent = ({
+  channel,
+  isEditMode,
+  onDelete,
+  isDeleteDisabled = false,
+  isUnavailable = false,
+  unavailableLabel = '',
+}) => (
+  <View
+    style={[
+      styles.myChannelTag,
+      isEditMode ? styles.myChannelTagEditMode : styles.myChannelTagViewMode,
+      isUnavailable ? styles.myChannelTagUnavailable : null,
+      isUnavailable && isEditMode ? styles.myChannelTagUnavailableEditMode : null,
+      isUnavailable && !isEditMode ? styles.myChannelTagUnavailableViewMode : null,
+    ]}
+  >
+    <Text style={[styles.myChannelText, isUnavailable ? styles.myChannelTextUnavailable : null]}>
+      {channel}
+    </Text>
+    {isUnavailable ? (
+      <View
+        style={[
+          styles.myChannelStatusBadge,
+          isEditMode ? styles.myChannelStatusBadgeEditMode : null,
+        ]}
+      >
+        <Text style={styles.myChannelStatusBadgeText}>{unavailableLabel}</Text>
+      </View>
+    ) : null}
     {isEditMode && (
       <TouchableOpacity
         disabled={isDeleteDisabled}
@@ -62,6 +123,8 @@ const ShakingChannelTag = ({
   isDragging,
   isEditMode,
   setTagRef,
+  isUnavailable,
+  unavailableLabel,
 }) => {
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const shakeAnimationRef = useRef(null);
@@ -142,13 +205,27 @@ const ShakingChannelTag = ({
         onLongPress={onLongPress}
         style={[styles.myChannelTagWrapper, wrapperStyle]}
       >
-        <MyChannelTagContent channel={channel} isEditMode={isEditMode} onDelete={onDelete} />
+        <MyChannelTagContent
+          channel={channel}
+          isEditMode={isEditMode}
+          onDelete={onDelete}
+          isUnavailable={isUnavailable}
+          unavailableLabel={unavailableLabel}
+        />
       </TouchableOpacity>
     </Animated.View>
   );
 };
 
-const DraggingChannelOverlay = ({ channel, isEditMode, dragPosition, dragScale, width }) => {
+const DraggingChannelOverlay = ({
+  channel,
+  isEditMode,
+  dragPosition,
+  dragScale,
+  width,
+  isUnavailable,
+  unavailableLabel,
+}) => {
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const shakeAnimationRef = useRef(null);
 
@@ -224,7 +301,13 @@ const DraggingChannelOverlay = ({ channel, isEditMode, dragPosition, dragScale, 
   >
       <View style={styles.myChannelTagWrapper}>
         <View style={styles.draggingTagShadow}>
-          <MyChannelTagContent channel={channel} isEditMode={isEditMode} isDeleteDisabled />
+          <MyChannelTagContent
+            channel={channel}
+            isEditMode={isEditMode}
+            isDeleteDisabled
+            isUnavailable={isUnavailable}
+            unavailableLabel={unavailableLabel}
+          />
         </View>
       </View>
     </Animated.View>;
@@ -248,6 +331,51 @@ const getChannelIdentityKey = channel => {
 
   return `${targetType}::${targetKey}`;
 };
+
+const isChannelUnavailable = channel =>
+  Boolean(channel && typeof channel === 'object' && channel.isUnavailable);
+
+const getCatalogChannelState = (catalog, channel) => {
+  if (!catalog || !channel || typeof channel !== 'object') {
+    return null;
+  }
+
+  const identityKey = getChannelIdentityKey(channel);
+  const nameKey = getChannelDisplayName(channel);
+
+  if (identityKey && catalog.channelStateByIdentity?.[identityKey]) {
+    return catalog.channelStateByIdentity[identityKey];
+  }
+
+  if (nameKey && catalog.channelStateByName?.[nameKey]) {
+    return catalog.channelStateByName[nameKey];
+  }
+
+  return null;
+};
+
+const decorateChannelsWithCatalogState = (channels, catalog) =>
+  (Array.isArray(channels) ? channels : []).map(channel => {
+    if (!channel || typeof channel === 'string') {
+      return channel;
+    }
+
+    const catalogState = getCatalogChannelState(catalog, channel);
+    const nextIsUnavailable = Boolean(catalogState?.isUnavailable);
+
+    if (
+      channel.isUnavailable === nextIsUnavailable &&
+      channel.unavailableReason === (nextIsUnavailable ? 'disabled' : '')
+    ) {
+      return channel;
+    }
+
+    return {
+      ...channel,
+      isUnavailable: nextIsUnavailable,
+      unavailableReason: nextIsUnavailable ? 'disabled' : '',
+    };
+  });
 
 const isLocalOnlyChannel = channel =>
   !channel || typeof channel === 'string' || !getChannelIdentityKey(channel);
@@ -305,11 +433,18 @@ export default function ChannelManageScreen({
 
   const [remoteChannelCatalog, setRemoteChannelCatalog] = useState(null);
   const [catalogStatus, setCatalogStatus] = useState('loading');
+  const appStateRef = useRef(AppState.currentState);
+  const catalogLoadPromiseRef = useRef(null);
+  const hasLoadedCatalogOnceRef = useRef(false);
   const [isCreatingCombo, setIsCreatingCombo] = useState(false);
   const [isSavingChannels, setIsSavingChannels] = useState(false);
   const [regionOptions, setRegionOptions] = useState([]);
   const [regionStatus, setRegionStatus] = useState('idle');
   const [regionErrorMessage, setRegionErrorMessage] = useState('');
+  const [comboCategoryOptionsByType, setComboCategoryOptionsByType] = useState(emptyChannelGroups);
+  const [comboCategoryStatus, setComboCategoryStatus] = useState('idle');
+  const [comboCategoryErrorMessage, setComboCategoryErrorMessage] = useState('');
+  const comboCategoryRequestIdRef = useRef(0);
   const channelOptionsByType = React.useMemo(() => {
     if (!remoteChannelCatalog?.groupsByType) {
       return emptyChannelGroups;
@@ -394,25 +529,41 @@ export default function ChannelManageScreen({
     return persistedKeys.some((identityKey, index) => identityKey !== draftKeys[index]);
   }, [myChannels, persistedMyChannels]);
 
-  const loadChannelCatalog = React.useCallback(async () => {
-    setCatalogStatus('loading');
-
-    try {
-      const catalog = await fetchChannelCatalog();
-
-      if (hasChannelCatalogData(catalog)) {
-        setRemoteChannelCatalog(catalog);
-        setCatalogStatus('success');
-        return;
-      }
-
-      setRemoteChannelCatalog(null);
-      setCatalogStatus('empty');
-    } catch (error) {
-      console.error('Failed to load channel catalog:', error);
-      setRemoteChannelCatalog(null);
-      setCatalogStatus('error');
+  const loadChannelCatalog = React.useCallback(async ({ preserveStatus = false } = {}) => {
+    if (catalogLoadPromiseRef.current) {
+      return catalogLoadPromiseRef.current;
     }
+
+    if (!preserveStatus) {
+      setCatalogStatus('loading');
+    }
+
+    const request = (async () => {
+      try {
+        const catalog = await fetchChannelCatalog();
+
+        if (hasChannelCatalogData(catalog)) {
+          setRemoteChannelCatalog(catalog);
+          setCatalogStatus('success');
+          return catalog;
+        }
+
+        setRemoteChannelCatalog(null);
+        setCatalogStatus('empty');
+        return catalog;
+      } catch (error) {
+        console.error('Failed to load channel catalog:', error);
+        setRemoteChannelCatalog(null);
+        setCatalogStatus('error');
+        throw error;
+      } finally {
+        hasLoadedCatalogOnceRef.current = true;
+        catalogLoadPromiseRef.current = null;
+      }
+    })();
+
+    catalogLoadPromiseRef.current = request;
+    return request;
   }, []);
 
   useEffect(() => {
@@ -433,19 +584,57 @@ export default function ChannelManageScreen({
     };
   }, [loadChannelCatalog]);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!hasLoadedCatalogOnceRef.current) {
+        return undefined;
+      }
+
+      loadChannelCatalog({ preserveStatus: true }).catch(error => {
+        console.error('Failed to refresh channel catalog on focus:', error);
+      });
+
+      return undefined;
+    }, [loadChannelCatalog])
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      const isReturningToForeground =
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === 'active';
+
+      if (isReturningToForeground && hasLoadedCatalogOnceRef.current) {
+        loadChannelCatalog({ preserveStatus: true }).catch(error => {
+          console.error('Failed to refresh channel catalog after app became active:', error);
+        });
+      }
+
+      appStateRef.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [loadChannelCatalog]);
+
   useEffect(() => {
     let isMounted = true;
 
     const syncMyChannels = async () => {
       try {
         const subscribedChannels = await reloadMyChannels();
+        const decoratedSubscribedChannels = decorateChannelsWithCatalogState(
+          subscribedChannels,
+          remoteChannelCatalog
+        );
 
         if (!isMounted) {
           return;
         }
 
-        setPersistedMyChannels(subscribedChannels);
-        setMyChannels(subscribedChannels);
+        setPersistedMyChannels(decoratedSubscribedChannels);
+        setMyChannels(decoratedSubscribedChannels);
       } catch (error) {
         console.error('Failed to load my subscribed channels:', error);
 
@@ -526,9 +715,87 @@ export default function ChannelManageScreen({
     );
   }, [regionOptions, regionSearchText]);
 
+  const loadComboCategoryOptions = React.useCallback(async () => {
+    if (!comboSelection.categoryType) {
+      setComboCategoryStatus('idle');
+      setComboCategoryErrorMessage('');
+      return [];
+    }
+
+    const requestId = comboCategoryRequestIdRef.current + 1;
+    comboCategoryRequestIdRef.current = requestId;
+    setComboCategoryStatus('loading');
+    setComboCategoryErrorMessage('');
+
+    try {
+      const level1Categories = await questionCategoryService.getLevel1Categories();
+      const parentCategory = level1Categories.find(category =>
+        matchesComboCategoryType(category, comboSelection.categoryType)
+      );
+
+      if (!parentCategory) {
+        if (comboCategoryRequestIdRef.current !== requestId) {
+          return [];
+        }
+
+        setComboCategoryOptionsByType(currentOptions => ({
+          ...currentOptions,
+          [comboSelection.categoryType]: [],
+        }));
+        setComboCategoryStatus('empty');
+        return [];
+      }
+
+      const level2Categories = await questionCategoryService.getLevel2Categories(
+        parentCategory.id,
+        {
+          parentName: parentCategory.name,
+        }
+      );
+
+      if (comboCategoryRequestIdRef.current !== requestId) {
+        return level2Categories;
+      }
+
+      setComboCategoryOptionsByType(currentOptions => ({
+        ...currentOptions,
+        [comboSelection.categoryType]: level2Categories,
+      }));
+      setComboCategoryStatus(level2Categories.length > 0 ? 'success' : 'empty');
+      return level2Categories;
+    } catch (error) {
+      if (comboCategoryRequestIdRef.current !== requestId) {
+        return [];
+      }
+
+      console.error('Failed to load combo category options:', error);
+      setComboCategoryOptionsByType(currentOptions => ({
+        ...currentOptions,
+        [comboSelection.categoryType]: [],
+      }));
+      setComboCategoryStatus('error');
+      setComboCategoryErrorMessage(error?.message || '');
+      return [];
+    }
+  }, [comboSelection.categoryType]);
+
   const reloadMyChannels = React.useCallback(async () => {
     return fetchMySubscribedChannelItems();
   }, []);
+
+  useEffect(() => {
+    if (comboStep !== 'category') {
+      return;
+    }
+
+    if (!comboSelection.categoryType) {
+      setComboCategoryStatus('idle');
+      setComboCategoryErrorMessage('');
+      return;
+    }
+
+    loadComboCategoryOptions();
+  }, [comboSelection.categoryType, comboStep, loadComboCategoryOptions]);
 
   const setMyChannelTagRef = React.useCallback((channelKey, node) => {
     if (!channelKey) {
@@ -651,14 +918,38 @@ export default function ChannelManageScreen({
 
   const syncPersistedMyChannels = React.useCallback((nextPersistedChannels, options = {}) => {
     const { preserveDraftChanges = false } = options;
-
-    setPersistedMyChannels(nextPersistedChannels);
-    setMyChannels(currentChannels =>
-      preserveDraftChanges
-        ? applyDraftChannelChanges(nextPersistedChannels, persistedMyChannels, currentChannels)
-        : nextPersistedChannels
+    const decoratedPersistedChannels = decorateChannelsWithCatalogState(
+      nextPersistedChannels,
+      remoteChannelCatalog
     );
-  }, [persistedMyChannels]);
+
+    setPersistedMyChannels(decoratedPersistedChannels);
+    setMyChannels(currentChannels =>
+      decorateChannelsWithCatalogState(
+        preserveDraftChanges
+          ? applyDraftChannelChanges(
+            decoratedPersistedChannels,
+            decorateChannelsWithCatalogState(persistedMyChannels, remoteChannelCatalog),
+            currentChannels
+          )
+          : decoratedPersistedChannels,
+        remoteChannelCatalog
+      )
+    );
+  }, [persistedMyChannels, remoteChannelCatalog]);
+
+  useEffect(() => {
+    if (!remoteChannelCatalog) {
+      return;
+    }
+
+    setPersistedMyChannels(currentChannels =>
+      decorateChannelsWithCatalogState(currentChannels, remoteChannelCatalog)
+    );
+    setMyChannels(currentChannels =>
+      decorateChannelsWithCatalogState(currentChannels, remoteChannelCatalog)
+    );
+  }, [remoteChannelCatalog]);
 
   useEffect(() => {
     refreshMyChannelLayouts();
@@ -727,19 +1018,19 @@ export default function ChannelManageScreen({
         return;
       }
 
-      const nextRealChannelCount = myChannels.filter(item => {
-        if (getChannelDisplayName(item) === channelName) {
-          return false;
+      if (!isChannelUnavailable(existingChannel)) {
+        const nextAvailableChannelCount = myChannels.filter(item => {
+          if (getChannelDisplayName(item) === channelName) {
+            return false;
+          }
+
+          return !isLocalOnlyChannel(item) && !isChannelUnavailable(item);
+        }).length;
+
+        if (nextAvailableChannelCount <= 0) {
+          showAppAlert(t('common.ok'), t('channelManage.keepOneAvailableChannel'));
+          return;
         }
-
-        return !isLocalOnlyChannel(item);
-      }).length;
-
-      const subscribedChannelCount = nextRealChannelCount;
-
-      if (subscribedChannelCount <= 0) {
-        showAppAlert(t('common.ok'), '请至少保留一个已订阅频道');
-        return;
       }
 
       setMyChannels(currentChannels =>
@@ -858,7 +1149,13 @@ export default function ChannelManageScreen({
     runAutoScroll(direction, pageX, pageY);
   }, [runAutoScroll, stopAutoScroll]);
 
-  const handleDragChannelStart = React.useCallback((channelKey, channelLabel, event) => {
+  const handleDragChannelStart = React.useCallback((
+    channelKey,
+    channelLabel,
+    event,
+    isUnavailableChannel = false,
+    unavailableLabel = ''
+  ) => {
     if (!isEditMode || !channelKey) {
       return;
     }
@@ -882,6 +1179,8 @@ export default function ChannelManageScreen({
       setDraggingChannelKey(channelKey);
       setDraggingChannelSnapshot({
         channel: channelLabel,
+        isUnavailable: isUnavailableChannel,
+        unavailableLabel,
         width,
         height,
         offsetX,
@@ -997,10 +1296,10 @@ export default function ChannelManageScreen({
     }
 
     // 杩斿洖瀵瑰簲绫诲瀷鐨勯閬撳垪琛?
-    if (comboSelection.categoryType === 'country') return channelOptionsByType.country;
-    if (comboSelection.categoryType === 'industry') return channelOptionsByType.industry;
-    if (comboSelection.categoryType === 'enterprise') return channelOptionsByType.enterprise;
-    if (comboSelection.categoryType === 'personal') return channelOptionsByType.personal;
+    if (comboSelection.categoryType === 'country') return comboCategoryOptionsByType.country;
+    if (comboSelection.categoryType === 'industry') return comboCategoryOptionsByType.industry;
+    if (comboSelection.categoryType === 'enterprise') return comboCategoryOptionsByType.enterprise;
+    if (comboSelection.categoryType === 'personal') return comboCategoryOptionsByType.personal;
     return [];
   };
   const selectRegionOption = option => {
@@ -1073,18 +1372,13 @@ export default function ChannelManageScreen({
       comboSelection.city ||
       comboSelection.province ||
       comboSelection.country;
-    const normalizedRegionLevel = Number(selectedRegionNode?.regionLevel ?? 0);
     const numericRegionId = Number(
       selectedRegionNode?.regionId ??
       selectedRegionNode?.id ??
       selectedRegionNode?.value
     );
 
-    if (normalizedRegionLevel > 0 && normalizedRegionLevel < 4) {
-      return 0;
-    }
-
-    return Number.isInteger(numericRegionId) && numericRegionId >= 0 ? numericRegionId : 0;
+    return Number.isInteger(numericRegionId) && numericRegionId > 0 ? numericRegionId : 0;
   };
   const resolveSelectedLocationText = () => {
     const parts = [
@@ -1120,6 +1414,13 @@ export default function ChannelManageScreen({
       return;
     }
 
+    const selectedRegionId = resolveSelectedRegionId();
+
+    if (!Number.isInteger(selectedRegionId) || selectedRegionId <= 0) {
+      showAppAlert(t('common.ok'), t('channelManage.selectRegionPrompt'));
+      return;
+    }
+
     if (isCreatingCombo) {
       return;
     }
@@ -1129,7 +1430,7 @@ export default function ChannelManageScreen({
     try {
       await createCombinedChannel({
         name: autoGeneratedName,
-        regionId: resolveSelectedRegionId(),
+        regionId: selectedRegionId,
         locationText,
         parentCategoryId,
         subCategoryId
@@ -1167,6 +1468,81 @@ export default function ChannelManageScreen({
     } finally {
       setIsCreatingCombo(false);
     }
+  };
+  const renderComboCategoryContent = () => {
+    const categoryOptions = getCategoryOptions();
+
+    if (!comboSelection.categoryType) {
+      return categoryOptions.length > 0
+        ? categoryOptions.map((option, index) => (
+            <TouchableOpacity
+              key={index}
+              style={[styles.comboOption, option.icon && styles.comboOptionWithIcon]}
+              onPress={() => selectCategoryOption(option)}
+            >
+              {Boolean(option.icon) && (
+                <View
+                  style={[
+                    styles.categoryIcon,
+                    {
+                      backgroundColor: option.color + '20',
+                    },
+                  ]}
+                >
+                  <Ionicons name={option.icon} size={18} color={option.color} />
+                </View>
+              )}
+              <Text style={styles.comboOptionText}>{option.name}</Text>
+              <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
+            </TouchableOpacity>
+          ))
+        : <Text style={styles.inlineEmptyText}>{t('common.noData')}</Text>;
+    }
+
+    if (comboCategoryStatus === 'loading') {
+      return <Text style={styles.inlineHintText}>{t('common.loading')}</Text>;
+    }
+
+    if (comboCategoryStatus === 'error') {
+      return (
+        <View style={styles.inlineStateRow}>
+          <Text style={styles.inlineEmptyText}>
+            {comboCategoryErrorMessage || t('common.noData')}
+          </Text>
+          <TouchableOpacity onPress={loadComboCategoryOptions}>
+            <Text style={styles.inlineRetryText}>{t('common.retry')}</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return categoryOptions.length > 0
+      ? categoryOptions.map((option, index) => (
+          <TouchableOpacity
+            key={option.id || index}
+            style={[styles.comboOption, option.icon && styles.comboOptionWithIcon]}
+            onPress={() => selectCategoryOption(option)}
+          >
+            {Boolean(option.icon) && (
+              <View
+                style={[
+                  styles.categoryIcon,
+                  {
+                    backgroundColor: option.color + '20',
+                  },
+                ]}
+              >
+                <CategoryIcon
+                  icon={option.originalIcon || option.icon}
+                  size={18}
+                  color={option.color}
+                />
+              </View>
+            )}
+            <Text style={styles.comboOptionText}>{option.name}</Text>
+          </TouchableOpacity>
+        ))
+      : <Text style={styles.inlineEmptyText}>{t('common.noData')}</Text>;
   };
   const getSelectedPath = () => {
     const {
@@ -1212,16 +1588,18 @@ export default function ChannelManageScreen({
     );
     const channelsToSubscribe = myChannels.filter(channel => {
       const identityKey = getChannelIdentityKey(channel);
-      return identityKey && !persistedChannelKeySet.has(identityKey);
+      return identityKey && !persistedChannelKeySet.has(identityKey) && !isChannelUnavailable(channel);
     });
     const channelsToRemove = persistedMyChannels.filter(channel => {
       const identityKey = getChannelIdentityKey(channel);
       return identityKey && !draftChannelKeySet.has(identityKey);
     });
-    const finalSubscribedCount = myChannels.filter(channel => !isLocalOnlyChannel(channel)).length;
+    const finalSubscribedCount = myChannels.filter(
+      channel => !isLocalOnlyChannel(channel) && !isChannelUnavailable(channel)
+    ).length;
 
     if (finalSubscribedCount <= 0) {
-      showAppAlert(t('common.ok'), '请至少保留一个已订阅频道');
+      showAppAlert(t('common.ok'), t('channelManage.keepOneAvailableChannel'));
       return;
     }
 
@@ -1244,7 +1622,7 @@ export default function ChannelManageScreen({
 
       await saveMySubscribedChannelOrder({
         items: myChannels
-          .filter(channel => !isLocalOnlyChannel(channel))
+          .filter(channel => !isLocalOnlyChannel(channel) && !isChannelUnavailable(channel))
           .map((channel, index) => ({
             targetType: channel.targetType,
             targetKey: channel.targetKey,
@@ -1388,11 +1766,15 @@ export default function ChannelManageScreen({
                 index={index}
                 isDragging={draggingChannelKey === getRenderableChannelKey(channel, index)}
                 isEditMode={isEditMode}
+                isUnavailable={isChannelUnavailable(channel)}
+                unavailableLabel={t('channelManage.channelUnavailable')}
                 onDelete={() => toggleChannel(channel)}
                 onLongPress={event => handleDragChannelStart(
                   getRenderableChannelKey(channel, index),
                   getChannelDisplayName(channel),
-                  event
+                  event,
+                  isChannelUnavailable(channel),
+                  t('channelManage.channelUnavailable')
                 )}
                 setTagRef={setMyChannelTagRef}
               />
@@ -1531,16 +1913,7 @@ export default function ChannelManageScreen({
                         </TouchableOpacity>
                       </View> : <Text style={styles.inlineEmptyText}>{t('common.noData')}</Text> :
               // 鍒嗙被閫夋嫨
-              getCategoryOptions().length > 0 ? getCategoryOptions().map((option, index) => <TouchableOpacity key={index} style={[styles.comboOption, option.icon && styles.comboOptionWithIcon]} onPress={() => selectCategoryOption(option)}>
-                        {Boolean(option.icon) && <View style={[styles.categoryIcon, {
-                  backgroundColor: option.color + '20'
-                }]}>
-                            <Ionicons name={option.icon} size={18} color={option.color} />
-                          </View>}
-                        <Text style={styles.comboOptionText}>{option.name}</Text>
-                        {/* 鍙湁鍦ㄩ€夋嫨鍒嗙被绫诲瀷鏃舵墠鏄剧ず绠ご锛岄€夋嫨鍏蜂綋鍒嗙被鏃朵笉鏄剧ず */}
-                        {!comboSelection.categoryType && <Ionicons name="chevron-forward" size={16} color="#9ca3af" />}
-                      </TouchableOpacity>) : <Text style={styles.inlineEmptyText}>{t('common.noData')}</Text>}
+              renderComboCategoryContent()}
                 </ScrollView>
 
                 <View style={styles.comboActions}>
@@ -1601,7 +1974,6 @@ export default function ChannelManageScreen({
                 }} disabled={!comboSelection.category || isCreatingCombo}>
                         <Text style={styles.comboCreateText}>
                           {t('channelManage.createChannel')}
-                          {!comboSelection.category && ' (Disabled)'}
                         </Text>
                       </TouchableOpacity>
                     </>}
@@ -1629,7 +2001,17 @@ export default function ChannelManageScreen({
         height: 30
       }} />
       </ScrollView>
-      {draggingChannelSnapshot ? <DraggingChannelOverlay channel={draggingChannelSnapshot.channel} isEditMode={isEditMode} dragPosition={dragPosition} dragScale={dragScale} width={draggingChannelSnapshot.width} /> : null}
+      {draggingChannelSnapshot ? (
+        <DraggingChannelOverlay
+          channel={draggingChannelSnapshot.channel}
+          isEditMode={isEditMode}
+          dragPosition={dragPosition}
+          dragScale={dragScale}
+          width={draggingChannelSnapshot.width}
+          isUnavailable={draggingChannelSnapshot.isUnavailable}
+          unavailableLabel={draggingChannelSnapshot.unavailableLabel}
+        />
+      ) : null}
     </SafeAreaView>;
 }
 const styles = StyleSheet.create({
@@ -1761,10 +2143,41 @@ const styles = StyleSheet.create({
     paddingLeft: 14,
     paddingRight: 22
   },
+  myChannelTagUnavailable: {
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#d1d5db'
+  },
+  myChannelTagUnavailableViewMode: {
+    paddingRight: 58
+  },
+  myChannelTagUnavailableEditMode: {
+    paddingRight: 68
+  },
   myChannelText: {
     fontSize: scaleFont(15),
     color: '#374151',
     fontWeight: '400'
+  },
+  myChannelTextUnavailable: {
+    color: '#9ca3af'
+  },
+  myChannelStatusBadge: {
+    position: 'absolute',
+    right: 8,
+    bottom: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    backgroundColor: '#e5e7eb'
+  },
+  myChannelStatusBadgeEditMode: {
+    right: 18
+  },
+  myChannelStatusBadgeText: {
+    fontSize: scaleFont(10),
+    color: '#6b7280',
+    fontWeight: '500'
   },
   deleteIconContainer: {
     position: 'absolute',

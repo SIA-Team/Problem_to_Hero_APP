@@ -3,18 +3,30 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import deviceRiskService from '../services/deviceRiskService';
 
+const DEFAULT_WEBSITE_URL = 'https://problemvshero.com/';
 const DEFAULT_RECHARGE_URL = 'https://problemvshero.com/recharge';
 const URL_PLACEHOLDER_PATTERN = /\{([a-zA-Z0-9_]+)\}/g;
+const normalizeBaseUrl = value => String(value || '').trim().replace(/\/+$/, '');
 
 const getExpoExtra = () => Constants.expoConfig?.extra || Constants.manifest?.extra || {};
 
+export const getOfficialWebsiteUrl = () => {
+  const extra = getExpoExtra();
+
+  return String(
+    extra?.officialWebsiteUrl ||
+    DEFAULT_WEBSITE_URL
+  ).trim();
+};
+
 const getConfiguredRechargeUrl = () => {
   const extra = getExpoExtra();
+  const officialWebsiteUrl = getOfficialWebsiteUrl();
 
   return String(
     extra?.officialRechargeUrl ||
     extra?.rechargeUrl ||
-    extra?.officialWebsiteUrl ||
+    `${normalizeBaseUrl(officialWebsiteUrl || DEFAULT_WEBSITE_URL)}/recharge` ||
     DEFAULT_RECHARGE_URL
   ).trim();
 };

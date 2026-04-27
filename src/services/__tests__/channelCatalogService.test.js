@@ -76,6 +76,28 @@ describe('channelCatalogService', () => {
         name: '职场',
         targetType: 'DEFAULT',
         targetKey: 'workplace',
+        })
+    );
+  });
+
+  it('filters disabled catalog channels before rendering', () => {
+    const normalized = normalizeChannelCatalogResponse({
+      code: 200,
+      data: {
+        rows: [
+          { channelId: 51, channelName: '政策法规', parentName: '国家问题', status: 1 },
+          { channelId: 52, channelName: '旅游攻略', parentName: '国家问题', status: 0 },
+          { channelId: 53, channelName: '测试分类显示', parentName: '国家问题', disabled: true },
+        ],
+      },
+    });
+
+    expect(normalized.groupsByType.country).toHaveLength(1);
+    expect(normalized.channelStateByIdentity['CATEGORY::52']).toEqual(
+      expect.objectContaining({
+        targetType: 'CATEGORY',
+        targetKey: '52',
+        isUnavailable: true,
       })
     );
   });

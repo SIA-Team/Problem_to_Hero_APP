@@ -36,7 +36,10 @@ const isStaticResourceNotFoundError = error => {
   return /No static resource|404_NOT_FOUND|404 NOT_FOUND/i.test(message);
 };
 
-const isQuestionApiSuccessResponse = response => !!response && response.code === 200;
+const isQuestionApiSuccessResponse = response => {
+  const code = Number(response?.code ?? response?.data?.code);
+  return code === 0 || code === 200;
+};
 
 const buildQuestionRankingAllCacheKey = params => {
   const parsedRegionId = Number(params?.regionId);
@@ -601,25 +604,25 @@ const questionApi = {
   },
 
   // 首页推荐榜：/app/content/rank/list?rankType=recommend&sceneKey=home&regionId=0
-  getRecommendList: (params = {}) => {
+  getRecommendList: (params = {}, options = {}) => {
     const { sceneKey = 'home', regionId = 0 } = params;
 
     return questionApi.getRankList({
       rankType: 'recommend',
       sceneKey,
       regionId,
-    });
+    }, options);
   },
 
   // 首页热榜：/app/content/rank/list?rankType=hot&sceneKey=home&regionId=0
-  getHotList: (params = {}) => {
+  getHotList: (params = {}, options = {}) => {
     const { sceneKey = 'home', regionId = 0 } = params;
 
     return questionApi.getRankList({
       rankType: 'hot',
       sceneKey,
       regionId,
-    });
+    }, options);
   },
 
   /**
@@ -644,14 +647,14 @@ const questionApi = {
   },
 
   // 首页英雄榜：/app/content/rank/list?rankType=hero&sceneKey=home&regionId=0
-  getHeroList: (params = {}) => {
+  getHeroList: (params = {}, options = {}) => {
     const { sceneKey = 'home', regionId = 0 } = params;
 
     return questionApi.getRankList({
       rankType: 'hero',
       sceneKey,
       regionId,
-    });
+    }, options);
   },
 };
 

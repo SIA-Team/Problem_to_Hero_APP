@@ -18,6 +18,7 @@ import ExpertisePickerModal from '../components/ExpertisePickerModal';
 import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import UserCacheService from '../services/UserCacheService';
+import occupationApi from '../services/api/occupationApi';
 import userApi from '../services/api/userApi';
 import authApi from '../services/api/authApi';
 import { showAppAlert } from '../utils/appAlert';
@@ -143,6 +144,120 @@ export default function SettingsScreen({
       message,
       type
     });
+  };
+
+  const mapGenderToSexValue = gender => {
+    if (gender === '男') {
+      return '0';
+    }
+
+    if (gender === '女') {
+      return '1';
+    }
+
+    return '2';
+  };
+
+  const handleGenderSelect = async newGender => {
+    if (!newGender || newGender === userProfile.gender) {
+      return;
+    }
+
+    const previousGender = userProfile.gender;
+    setUserProfile(prev => ({
+      ...prev,
+      gender: newGender
+    }));
+
+    setIsLoading(true);
+    try {
+      const updatedProfile = await UserCacheService.updateUserProfile({
+        sex: mapGenderToSexValue(newGender)
+      });
+
+      if (updatedProfile) {
+        setUserProfile({
+          userId: updatedProfile.userId || '',
+          username: updatedProfile.username || '',
+          usernameLastModified: updatedProfile.usernameLastModified || userProfile.usernameLastModified || null,
+          name: updatedProfile.nickName || '用户',
+          bio: updatedProfile.signature || '',
+          location: updatedProfile.location || '',
+          occupation: updatedProfile.profession || '',
+          gender: updatedProfile.sex === '0' ? '男' : updatedProfile.sex === '1' ? '女' : '保密',
+          birthday: updatedProfile.birthday || '',
+          avatar: updatedProfile.avatar || null,
+          email: updatedProfile.email || '',
+          phone: updatedProfile.phonenumber || '',
+          passwordChanged: updatedProfile.passwordChanged === true || userProfile.passwordChanged
+        });
+      }
+
+      showToast(
+        t('screens.settings.toasts.profileUpdated').replace('{title}', t('screens.settings.profile.gender')),
+        'success'
+      );
+    } catch (error) {
+      console.error('❌ 更新性别失败:', error);
+      setUserProfile(prev => ({
+        ...prev,
+        gender: previousGender
+      }));
+      showToast(error.message || t('screens.settings.toasts.updateFailed'), 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleBirthdaySelect = async newBirthday => {
+    if (!newBirthday || newBirthday === userProfile.birthday) {
+      return;
+    }
+
+    const previousBirthday = userProfile.birthday;
+    setUserProfile(prev => ({
+      ...prev,
+      birthday: newBirthday
+    }));
+
+    setIsLoading(true);
+    try {
+      const updatedProfile = await UserCacheService.updateUserProfile({
+        birthday: newBirthday
+      });
+
+      if (updatedProfile) {
+        setUserProfile({
+          userId: updatedProfile.userId || '',
+          username: updatedProfile.username || '',
+          usernameLastModified: updatedProfile.usernameLastModified || userProfile.usernameLastModified || null,
+          name: updatedProfile.nickName || '用户',
+          bio: updatedProfile.signature || '',
+          location: updatedProfile.location || '',
+          occupation: updatedProfile.profession || '',
+          gender: updatedProfile.sex === '0' ? '男' : updatedProfile.sex === '1' ? '女' : '保密',
+          birthday: updatedProfile.birthday || '',
+          avatar: updatedProfile.avatar || null,
+          email: updatedProfile.email || '',
+          phone: updatedProfile.phonenumber || '',
+          passwordChanged: updatedProfile.passwordChanged === true || userProfile.passwordChanged
+        });
+      }
+
+      showToast(
+        t('screens.settings.toasts.profileUpdated').replace('{title}', t('screens.settings.profile.birthday')),
+        'success'
+      );
+    } catch (error) {
+      console.error('❌ 更新生日失败:', error);
+      setUserProfile(prev => ({
+        ...prev,
+        birthday: previousBirthday
+      }));
+      showToast(error.message || t('screens.settings.toasts.updateFailed'), 'error');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // 加载用户信息（使用缓存策略）
@@ -454,16 +569,28 @@ export default function SettingsScreen({
   };
 
   // 直接保存文本（用于区域选择等不使用 textModalConfig 的场景）
-  const handleOccupationSelect = async newOccupation => {
+  const handleOccupationSelect = async selection => {
     setShowOccupationModal(false);
-    if (!newOccupation || newOccupation === userProfile.occupation) {
+
+    const occupationSelection = typeof selection === 'string' ? {
+      value: selection,
+      displayValue: selection,
+      isCustom: false
+    } : selection;
+    const nextOccupation = occupationSelection?.value?.trim() || '';
+
+    if (!nextOccupation || nextOccupation === userProfile.occupation) {
       return;
     }
 
     setIsLoading(true);
     try {
+      if (occupationSelection?.isCustom) {
+        console.log('自定义职业待提交载荷:', occupationSelection);
+      }
+
       const updatedProfile = await UserCacheService.updateUserProfile({
-        profession: newOccupation.trim() || null
+        profession: nextOccupation || null
       });
 
       if (updatedProfile) {
@@ -489,6 +616,44 @@ export default function SettingsScreen({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleCustomOccupationApplication = async payload => {
+    const suggestedParentId =
+      payload?.parentId === null ||
+      payload?.parentId === undefined ||
+      payload?.parentId === ''
+        ? 0
+        : payload.parentId;
+
+    const requestBody = {
+      customName: payload?.customName?.trim() || payload?.value?.trim() || '',
+      suggestedParentId
+    };
+
+    if (!requestBody.customName) {
+      throw new Error('请输入自定义职业名称');
+    }
+
+    if (payload?.description) {
+      requestBody.description = payload.description;
+    }
+
+    console.log('自定义职业申请请求参数:', requestBody);
+
+    const response = await occupationApi.submitCustomOccupationRequest(requestBody);
+
+    if (response?.code !== 200) {
+      throw new Error(response?.msg || '提交职业申请失败');
+    }
+
+    console.log('自定义职业申请响应数据:', response?.data);
+
+    return {
+      message: response?.msg || '',
+      data: response?.data || {},
+      raw: response,
+    };
   };
 
   const handleSaveExpertise = async payload => {
@@ -1608,7 +1773,7 @@ export default function SettingsScreen({
       {/* 通用文本编辑弹窗 */}
       <EditTextModal visible={showTextModal} onClose={() => setShowTextModal(false)} title={textModalConfig.title} currentValue={textModalConfig.currentValue} onSave={handleSaveText} minLength={textModalConfig.minLength} maxLength={textModalConfig.maxLength} multiline={textModalConfig.multiline} hint={textModalConfig.hint} loading={isLoading} />
 
-      <OccupationPickerModal visible={showOccupationModal} currentValue={userProfile.occupation} onClose={() => setShowOccupationModal(false)} onConfirm={handleOccupationSelect} />
+      <OccupationPickerModal visible={showOccupationModal} currentValue={userProfile.occupation} onClose={() => setShowOccupationModal(false)} onConfirm={handleOccupationSelect} onSubmitCustomOccupation={handleCustomOccupationApplication} />
 
       <ExpertisePickerModal visible={showExpertiseModal} currentValue={expertisePreferences} onClose={() => setShowExpertiseModal(false)} onConfirm={handleSaveExpertise} />
 
@@ -1619,16 +1784,10 @@ export default function SettingsScreen({
       <BindContactModal visible={showBindModal} onClose={() => setShowBindModal(false)} type={bindType} currentValue={bindType === 'phone' ? userProfile.phone : userProfile.email} onSubmit={handleBindSuccess} />
 
       {/* 性别选择弹窗 */}
-      <GenderPickerModal visible={showGenderModal} onClose={() => setShowGenderModal(false)} currentGender={userProfile.gender} onSelect={gender => setUserProfile({
-      ...userProfile,
-      gender
-    })} />
+      <GenderPickerModal visible={showGenderModal} onClose={() => setShowGenderModal(false)} currentGender={userProfile.gender} onSelect={handleGenderSelect} />
 
       {/* 生日选择弹窗 */}
-      <DatePickerModal visible={showDateModal} onClose={() => setShowDateModal(false)} currentDate={userProfile.birthday} onSelect={birthday => setUserProfile({
-      ...userProfile,
-      birthday
-    })} />
+      <DatePickerModal visible={showDateModal} onClose={() => setShowDateModal(false)} currentDate={userProfile.birthday} onSelect={handleBirthdaySelect} />
 
       {/* 用户名编辑弹窗 */}
       <EditUsernameModal visible={showUsernameModal} onClose={() => setShowUsernameModal(false)} onSave={handleSaveUsername} currentUsername={userProfile.username} lastModifiedDate={userProfile.usernameLastModified} isLoading={isLoading} />

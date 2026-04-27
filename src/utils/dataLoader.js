@@ -448,6 +448,82 @@ const transformApiDataToHomeFormat = (apiData) => {
   });
 };
 
+const pickFirstArray = (values) => (
+  values.find(value => Array.isArray(value) && value.length > 0) ||
+  values.find(value => Array.isArray(value)) ||
+  []
+);
+
+const extractQuestionRowsFromResponse = (response) => {
+  const payload = response?.data;
+
+  return pickFirstArray([
+    payload?.items,
+    payload?.rows,
+    payload?.list,
+    payload?.records,
+    payload?.data?.items,
+    payload?.data?.rows,
+    payload?.data?.list,
+    payload?.data?.records,
+    payload?.page?.items,
+    payload?.page?.rows,
+    payload?.page?.list,
+    payload?.page?.records,
+    payload?.pagination?.items,
+    payload?.pagination?.rows,
+    payload?.pagination?.list,
+    payload?.pagination?.records,
+    response?.items,
+    response?.rows,
+    response?.list,
+    response?.records,
+    payload,
+    response,
+  ]);
+};
+
+const isSuccessfulQuestionResponse = (response) => {
+  const code = Number(response?.code ?? response?.data?.code);
+  return code === 0 || code === 200;
+};
+
+const getDebugArrayLength = value => (Array.isArray(value) ? value.length : null);
+
+const printRecommendResponseDebug = (response, rawData, transformedData) => {
+  if (!__DEV__) {
+    return;
+  }
+
+  const payload = response?.data;
+  const candidateLengths = {
+    'data.items': getDebugArrayLength(payload?.items),
+    'data.rows': getDebugArrayLength(payload?.rows),
+    'data.list': getDebugArrayLength(payload?.list),
+    'data.records': getDebugArrayLength(payload?.records),
+    'data.data.items': getDebugArrayLength(payload?.data?.items),
+    'data.data.rows': getDebugArrayLength(payload?.data?.rows),
+    'data.data.list': getDebugArrayLength(payload?.data?.list),
+    'data.data.records': getDebugArrayLength(payload?.data?.records),
+    'data.page.records': getDebugArrayLength(payload?.page?.records),
+    'data.pagination.records': getDebugArrayLength(payload?.pagination?.records),
+    'response.items': getDebugArrayLength(response?.items),
+    'response.rows': getDebugArrayLength(response?.rows),
+    'response.list': getDebugArrayLength(response?.list),
+    'response.records': getDebugArrayLength(response?.records),
+  };
+
+  console.log('[HomeRecommendDebug] response code:', response?.code ?? response?.data?.code);
+  console.log('[HomeRecommendDebug] candidate array lengths:', candidateLengths);
+  console.log('[HomeRecommendDebug] extracted rawData length:', rawData.length);
+  console.log('[HomeRecommendDebug] transformedData length:', transformedData.length);
+  console.log('[HomeRecommendDebug] rawData is empty array:', rawData.length === 0);
+
+  if (rawData.length > 0) {
+    console.log('[HomeRecommendDebug] first item:', JSON.stringify(rawData[0], null, 2));
+  }
+};
+
 /**
  * 格式化API时间为显示格式
  */
@@ -659,7 +735,9 @@ export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onD
     try {
       // 优化：如果是强制刷新，直接从网络加载，不检查缓存
       if (forceRefresh) {
-        const response = await fetchQuestionsByTab(tabType, page, onDebugUpdate, queryOptions);
+        const response = await fetchQuestionsByTab(tabType, page, onDebugUpdate, queryOptions, {
+          forceRefresh: true,
+        });
         const decoratedResponse = await applyPaidQuestionAccessState(response);
         
         // 保存到缓存
@@ -684,7 +762,9 @@ export const loadQuestions = async (tabType, page = 1, forceRefresh = false, onD
       }
       
       // 2. 从网络加载数据
-      const response = await fetchQuestionsByTab(tabType, page, onDebugUpdate, queryOptions);
+      const response = await fetchQuestionsByTab(tabType, page, onDebugUpdate, queryOptions, {
+        forceRefresh,
+      });
       const decoratedResponse = await applyPaidQuestionAccessState(response);
       
       // 3. 保存到缓存
@@ -755,11 +835,14 @@ const scheduleBackgroundUpdate = (tabType, page, onDebugUpdate = null, queryOpti
   backgroundRefreshTimers.set(cacheKey, timer);
 };
 
-const fetchQuestionsByTab = async (tabType, page, onDebugUpdate, queryOptions = {}) => {
+const fetchQuestionsByTab = async (tabType, page, onDebugUpdate, queryOptions = {}, requestOptions = {}) => {
   const pageSize = 20;
   const rankParams = {
     sceneKey: queryOptions.sceneKey || 'home',
     regionId: Number(queryOptions.regionId) || 0,
+  };
+  const rankOptions = {
+    forceRefresh: requestOptions.forceRefresh === true,
   };
   
   try {
@@ -779,13 +862,13 @@ const fetchQuestionsByTab = async (tabType, page, onDebugUpdate, queryOptions = 
     
     switch (tabType) {
       case 'recommend':
-        response = await questionApi.getRecommendList(rankParams);
+        response = await questionApi.getRecommendList(rankParams, rankOptions);
         break;
       case 'hot':
-        response = await questionApi.getHotList(rankParams);
+        response = await questionApi.getHotList(rankParams, rankOptions);
         break;
       case 'hero':
-        response = await questionApi.getHeroList(rankParams);
+        response = await questionApi.getHeroList(rankParams, rankOptions);
         break;
       case 'follow':
         response = await questionApi.getFollowList({ pageNum: page, pageSize });
@@ -809,16 +892,12 @@ const fetchQuestionsByTab = async (tabType, page, onDebugUpdate, queryOptions = 
     }
     
     // 处理响应数据
-    if (response && response.code === 200) {
-      const rawData =
-        response.data?.items ||
-        response.data?.rows ||
-        response.data?.list ||
-        response.rows ||
-        response.list ||
-        response.data ||
-        [];
+    if (isSuccessfulQuestionResponse(response)) {
+      const rawData = extractQuestionRowsFromResponse(response);
       const transformedData = transformApiDataToHomeFormat(rawData);
+      if (tabType === 'recommend') {
+        printRecommendResponseDebug(response, rawData, transformedData);
+      }
       return applyPersistedQuestionInteractionSnapshots(transformedData);
     } else {
       return [];

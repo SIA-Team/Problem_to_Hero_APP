@@ -65,7 +65,7 @@ describe('channelCombinedCreateService', () => {
     await expect(
       createCombinedChannel({
         name: 'Berlin Finance',
-        regionId: 0,
+        regionId: 101,
         locationText: 'Berlin',
         parentCategoryId: 3,
         subCategoryId: 30,
@@ -73,7 +73,7 @@ describe('channelCombinedCreateService', () => {
     ).resolves.toEqual({
       payload: {
         name: 'Berlin Finance',
-        regionId: 0,
+        regionId: 101,
         locationText: 'Berlin',
         parentCategoryId: 3,
         subCategoryId: 30,
@@ -94,7 +94,7 @@ describe('channelCombinedCreateService', () => {
 
     expect(channelApi.createCombinedChannel).toHaveBeenCalledWith({
       name: 'Berlin Finance',
-      regionId: 0,
+      regionId: 101,
       locationText: 'Berlin',
       parentCategoryId: 3,
       subCategoryId: 30,

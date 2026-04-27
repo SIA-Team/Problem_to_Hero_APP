@@ -9,6 +9,7 @@ const CUSTOM_SERVER_URL_KEY = '@app_custom_server_url';
 const SERVICES = {
   CONTENT: 'qa-hero-content',
   USER: 'qa-hero-app-user',
+  WALLET: 'qa-hero-wallet',
   ACTIVITY: 'qa-hero-activity',
 };
 
@@ -139,6 +140,8 @@ const API_SERVER_CONFIG = {
   [buildServicePath(SERVICES.USER, '/app/user/profile/username')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/user/profile/avatar')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/wallet/balance')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.WALLET, '/app/wallet/points/query-overview')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.WALLET, '/app/wallet/points/txn-list')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/group/public/question/*')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/team/public/question/*')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/group/public/ids/question/*')]: getCurrentServerSync,

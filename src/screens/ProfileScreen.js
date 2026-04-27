@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Alert, Share, Modal, TextInput, ActivityIndicator, AppState, KeyboardAvoidingView, Platform, Keyboard, Pressable } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Share, Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard, Pressable } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets, initialWindowMetrics } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -19,21 +19,59 @@ import userApi from '../services/api/userApi';
 import walletApi from '../services/api/walletApi';
 import answerApi from '../services/api/answerApi';
 import questionApi from '../services/api/questionApi';
-import deviceRiskService from '../services/deviceRiskService';
 import { showAppAlert } from '../utils/appAlert';
-import { openOfficialRechargePage } from '../utils/externalLinks';
-import { applyMockRecharge, getWalletBalanceWithMock } from '../utils/walletMock';
+import { getOfficialWebsiteUrl } from '../utils/externalLinks';
 import { resolveComposerTopInset } from '../utils/composerLayout';
 import { formatTime } from '../utils/timeFormatter';
 import { formatNumber } from '../utils/numberFormatter';
 import { formatAmount } from '../utils/rewardAmount';
 import { isVisibleMyTeam, normalizeMyTeam } from '../utils/teamTransforms';
+import { showToast } from '../utils/toast';
 import ServerSwitcher from '../components/ServerSwitcher';
 
 import { scaleFont } from '../utils/responsive';
 const HISTORY_PAGE_SIZE = 10;
 const ANSWERS_PAGE_SIZE = 10;
-const MOCK_RECHARGE_RETURN_AMOUNT = 100;
+const WALLET_TXN_PAGE_SIZE = 100;
+const WALLET_TXN_MAX_PAGES = 10;
+
+let clipboardModule;
+let clipboardResolved = false;
+
+const getClipboardModule = () => {
+  if (clipboardResolved) {
+    return clipboardModule;
+  }
+
+  clipboardResolved = true;
+
+  try {
+    const requiredModule = require('@react-native-clipboard/clipboard');
+    clipboardModule = requiredModule?.default || requiredModule;
+  } catch (error) {
+    console.warn('Clipboard module is not available in the current native build.', error);
+    clipboardModule = null;
+  }
+
+  return clipboardModule;
+};
+
+const copyTextSafely = async text => {
+  const Clipboard = getClipboardModule();
+
+  if (Clipboard?.setString) {
+    Clipboard.setString(text);
+    return 'copied';
+  }
+
+  try {
+    await Share.share({ message: text });
+    return 'shared';
+  } catch (error) {
+    console.error('Failed to share text without clipboard module.', error);
+    return 'failed';
+  }
+};
 
 const getFirstNonEmptyValue = (...values) => values.find(value => value !== undefined && value !== null && value !== '');
 
@@ -98,6 +136,97 @@ const extractMyAnswerRows = response => {
     rows: Array.isArray(rows) ? rows : [],
     total
   };
+};
+
+const extractWalletTransactionRows = response => {
+  const rawData = response?.data;
+  const payload = rawData?.data && typeof rawData?.data === 'object' ? rawData.data : rawData;
+
+  if (Array.isArray(payload)) {
+    return {
+      rows: payload,
+      total: payload.length
+    };
+  }
+
+  const rows = payload?.rows || payload?.list || payload?.records || payload?.items || response?.rows || [];
+  const total = Number(payload?.total ?? response?.total ?? payload?.count ?? payload?.totalCount ?? rows.length) || rows.length;
+
+  return {
+    rows: Array.isArray(rows) ? rows : [],
+    total
+  };
+};
+
+const normalizeWalletDirection = value => String(value ?? '').trim().toLowerCase();
+
+const normalizeWalletNumericValue = value => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
+};
+
+const getWalletTransactionSignedAmount = item => {
+  const candidateValues = [
+    item?.amount,
+    item?.txnAmount,
+    item?.transactionAmount,
+    item?.pointsAmount,
+    item?.changeAmount,
+    item?.deltaAmount,
+    item?.balanceChange,
+    item?.points,
+    item?.value,
+  ];
+
+  for (const value of candidateValues) {
+    const normalizedValue = normalizeWalletNumericValue(value);
+    if (normalizedValue !== null) {
+      return normalizedValue;
+    }
+  }
+
+  return 0;
+};
+
+const resolveWalletTransactionBucket = item => {
+  const directionValues = [
+    item?.direction,
+    item?.txnDirection,
+    item?.flowDirection,
+    item?.changeDirection,
+    item?.debitCredit,
+  ];
+
+  for (const value of directionValues) {
+    const normalizedDirection = normalizeWalletDirection(value);
+    if (['in', 'income', 'credit', 'plus', 'add', 'increase'].includes(normalizedDirection)) {
+      return 'income';
+    }
+
+    if (['out', 'expense', 'debit', 'minus', 'deduct', 'decrease'].includes(normalizedDirection)) {
+      return 'expense';
+    }
+  }
+
+  return getWalletTransactionSignedAmount(item) < 0 ? 'expense' : 'income';
+};
+
+const summarizeWalletTransactions = rows => {
+  return rows.reduce((summary, item) => {
+    const bucket = resolveWalletTransactionBucket(item);
+    const amount = Math.abs(getWalletTransactionSignedAmount(item));
+
+    if (bucket === 'expense') {
+      summary.expense += amount;
+    } else {
+      summary.income += amount;
+    }
+
+    return summary;
+  }, {
+    income: 0,
+    expense: 0,
+  });
 };
 
 const formatBrowseHistoryTime = rawTime => {
@@ -193,11 +322,15 @@ export default function ProfileScreen({
   
   const [walletData, setWalletData] = useState({
     balance: 0,
+    withdrawableBalance: 0,
+    lockedBalance: 0,
+    frozenBalance: 0,
+    incomeAmount: 0,
+    expenseAmount: 0,
     currency: 'usd'
   });
-  const pendingRechargeSimulationRef = React.useRef(false);
-  const appStateRef = React.useRef(AppState.currentState);
-  const handleRechargeReturnRef = React.useRef(async () => {});
+  const [showWalletNoticeModal, setShowWalletNoticeModal] = useState(false);
+  const officialFundingUrl = React.useMemo(() => getOfficialWebsiteUrl() || 'https://problemvshero.com/', []);
   const getCurrencySymbol = React.useCallback(currency => {
     switch (String(currency || 'usd').toLowerCase()) {
       case 'usd':
@@ -218,6 +351,18 @@ export default function ProfileScreen({
     const safeAmount = Number.isFinite(amount) ? amount : 0;
     return `${getCurrencySymbol(walletData.currency)}${safeAmount.toFixed(2)}`;
   }, [walletData.balance, walletData.currency, getCurrencySymbol]);
+  const formatWalletAmount = React.useCallback((amount, currency = walletData.currency) => {
+    const safeAmount = Number.isFinite(Number(amount)) ? Number(amount) : 0;
+    return `${getCurrencySymbol(currency)}${safeAmount.toFixed(2)}`;
+  }, [getCurrencySymbol, walletData.currency]);
+  const formattedWalletIncome = React.useMemo(() => formatWalletAmount(walletData.incomeAmount), [formatWalletAmount, walletData.incomeAmount]);
+  const formattedWalletExpense = React.useMemo(() => formatWalletAmount(walletData.expenseAmount), [formatWalletAmount, walletData.expenseAmount]);
+  const formattedWithdrawableBalance = React.useMemo(() => formatWalletAmount(walletData.withdrawableBalance), [formatWalletAmount, walletData.withdrawableBalance]);
+  const walletFundingTips = React.useMemo(() => [
+    t('profile.fundingNoticeTipBalance'),
+    t('profile.fundingNoticeTipRecords'),
+    t('profile.fundingNoticeTipRisk'),
+  ], [t]);
 
   // 用户信息状态
   const [userProfile, setUserProfile] = useState({
@@ -315,24 +460,76 @@ export default function ProfileScreen({
 
   // 首次加载
   const loadWalletBalance = React.useCallback(async () => {
-    const fallbackWalletBalance = await getWalletBalanceWithMock(0);
-
-    setWalletData(prev => ({
-      balance: fallbackWalletBalance.balance,
-      currency: prev?.currency || 'usd'
-    }));
-
     try {
-      const response = await userApi.getWalletBalance();
-      if (response.code === 0 || response.code === 200) {
-        const nextCurrency = response?.data?.currency || 'usd';
-        const walletBalance = await getWalletBalanceWithMock(response?.data?.balance);
+      const [overviewResult, transactionsResult] = await Promise.allSettled([
+        walletApi.getPointsOverview(),
+        walletApi.getPointsTransactionList({
+          pageNum: 1,
+          pageSize: WALLET_TXN_PAGE_SIZE
+        })
+      ]);
 
-        setWalletData({
-          balance: walletBalance.balance,
-          currency: nextCurrency
-        });
+      if (overviewResult.status !== 'fulfilled') {
+        throw overviewResult.reason || new Error('Failed to load wallet overview');
       }
+
+      const overviewResponse = overviewResult.value;
+
+      if (overviewResponse?.code !== 0 && overviewResponse?.code !== 200) {
+        throw new Error(overviewResponse?.msg || 'Failed to load wallet overview');
+      }
+
+      const overviewData = overviewResponse?.data || {};
+      let walletSummary = {
+        income: 0,
+        expense: 0
+      };
+
+      if (transactionsResult.status === 'fulfilled') {
+        const firstPage = extractWalletTransactionRows(transactionsResult.value);
+        let transactionRows = [...firstPage.rows];
+        let currentPage = 1;
+        const seenPageSignatures = new Set([
+          JSON.stringify(firstPage.rows.map(item => item?.id ?? item?.txnId ?? item?.bizId ?? item?.businessId ?? item?.createTime ?? item))
+        ]);
+
+        while (
+          firstPage.total > transactionRows.length &&
+          currentPage < WALLET_TXN_MAX_PAGES &&
+          firstPage.rows.length >= WALLET_TXN_PAGE_SIZE
+        ) {
+          currentPage += 1;
+          const nextResponse = await walletApi.getPointsTransactionList({
+            pageNum: currentPage,
+            pageSize: WALLET_TXN_PAGE_SIZE
+          });
+          const nextPage = extractWalletTransactionRows(nextResponse);
+          const nextSignature = JSON.stringify(nextPage.rows.map(item => item?.id ?? item?.txnId ?? item?.bizId ?? item?.businessId ?? item?.createTime ?? item));
+
+          if (!nextPage.rows.length || seenPageSignatures.has(nextSignature)) {
+            break;
+          }
+
+          seenPageSignatures.add(nextSignature);
+          transactionRows = transactionRows.concat(nextPage.rows);
+
+          if (nextPage.rows.length < WALLET_TXN_PAGE_SIZE) {
+            break;
+          }
+        }
+
+        walletSummary = summarizeWalletTransactions(transactionRows);
+      }
+
+      setWalletData({
+        balance: Number(overviewData?.balance) || 0,
+        withdrawableBalance: Number(overviewData?.withdrawableBalance) || 0,
+        lockedBalance: Number(overviewData?.lockedBalance) || 0,
+        frozenBalance: Number(overviewData?.frozenBalance) || 0,
+        incomeAmount: walletSummary.income,
+        expenseAmount: walletSummary.expense,
+        currency: overviewData?.currency || 'usd'
+      });
     } catch (error) {
       console.log('Failed to load wallet balance:', error?.message || error);
     }
@@ -360,53 +557,11 @@ export default function ProfileScreen({
     }
   }, []);
 
-  const handleMockRecharge = async amount => {
-    const numericAmount = Number(amount);
-
-    await applyMockRecharge({
-      amount: numericAmount,
-      currency: walletData.currency
-    });
-    setWalletData(prev => ({
-      ...prev,
-      balance: (Number(prev.balance) || 0) + (Number.isFinite(numericAmount) ? numericAmount : 0)
-    }));
-    await loadWalletBalance();
-    showAppAlert(
-      t('profile.rechargeSuccess'),
-      `${t('profile.rechargeSuccess')} $${numericAmount.toFixed(2)} (${t('profile.mockRechargeTag')})`
-    );
-  };
-  handleRechargeReturnRef.current = async () => {
-    await handleMockRecharge(MOCK_RECHARGE_RETURN_AMOUNT);
-  };
-
   useEffect(() => {
     loadUserProfile();
     loadWalletBalance();
     loadMyTeamsCount();
   }, [loadMyTeamsCount, loadUserProfile, loadWalletBalance]);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', nextAppState => {
-      const isReturningToForeground =
-        appStateRef.current.match(/inactive|background/) &&
-        nextAppState === 'active';
-
-      if (isReturningToForeground && pendingRechargeSimulationRef.current) {
-        pendingRechargeSimulationRef.current = false;
-        handleRechargeReturnRef.current().catch(error => {
-          console.error('Failed to simulate recharge after returning to app:', error);
-        });
-      }
-
-      appStateRef.current = nextAppState;
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
 
   // 每次页面获得焦点时重新加载（从设置页面返回时会触发）
   useFocusEffect(React.useCallback(() => {
@@ -1015,78 +1170,39 @@ export default function ProfileScreen({
       id: question.id
     });
   };
-  const handleWalletAction = async action => {
+  const handleCopyOfficialFundingUrl = React.useCallback(async () => {
+    const result = await copyTextSafely(officialFundingUrl);
+
+    if (result === 'copied') {
+      showToast(t('profile.fundingNoticeCopySuccess'), 'success');
+      return;
+    }
+
+    if (result === 'shared') {
+      showToast(t('profile.fundingNoticeCopyFallback'), 'info');
+      return;
+    }
+
+    showToast(t('profile.fundingNoticeCopyFailed'), 'warning');
+  }, [officialFundingUrl, t]);
+  const handleWalletAction = React.useCallback(action => {
     switch (action) {
-      case 'recharge': {
-        const result = await openOfficialRechargePage({
-          userId: userProfile.userId,
-          username: userProfile.username,
-          entryPoint: 'profile_wallet'
-        });
-
-        if (result.ok) {
-          pendingRechargeSimulationRef.current = true;
-        } else {
-          const reasonKey = `profile.${result.reason}`;
-          const reasonMessage = t(reasonKey);
-
-          showAppAlert(
-            t('profile.rechargeUnavailableTitle'),
-            reasonMessage === reasonKey ? t('profile.rechargeUnavailableMessage') : reasonMessage
-          );
-        }
-
-        break;
-      }
-      case 'withdraw':
-        showAppAlert(t('profile.withdraw'), t('profile.withdrawableAmount') + ': ' + formattedWalletBalance, [{
-          text: t('profile.withdrawAll'),
-          onPress: async () => {
-            try {
-              await deviceRiskService.recordWithdrawAttempt({
-                entryPoint: 'profile_wallet',
-                amount: walletBalance,
-                currency: walletCurrency,
-                userId: userProfile.userId,
-                username: userProfile.username,
-              });
-
-              const withdrawResponse = await walletApi.createWithdraw({
-                amount: walletBalance,
-                currency: walletCurrency,
-                destinationType: 'default',
-                metadata: {
-                  entryPoint: 'profile_wallet',
-                  userId: userProfile.userId,
-                  username: userProfile.username,
-                },
-              });
-
-              console.log('Withdraw request response:', JSON.stringify(withdrawResponse, null, 2));
-            } catch (error) {
-              console.warn('Failed to create withdraw request:', error);
-            }
-
-            showAppAlert(t('profile.withdrawSuccess'), t('profile.withdrawSuccess') + ': ' + t('profile.withdrawEstimate'));
-          }
-        }, {
-          text: t('common.cancel'),
-          style: 'cancel'
-        }]);
-        break;
       case 'expense':
-        showAppAlert(t('profile.expenseDetails'), t('profile.expenseDetailSummary'));
+        showAppAlert(t('profile.pointsExpense'), `${t('profile.pointsExpense')}: ${formattedWalletExpense}`);
         break;
       case 'income':
-        showAppAlert(t('profile.incomeDetails'), t('profile.incomeDetailSummary'));
+        showAppAlert(t('profile.pointsIncome'), `${t('profile.pointsIncome')}: ${formattedWalletIncome}`);
         break;
-      case 'pending':
-        showAppAlert(t('profile.pendingAdoption'), t('profile.pendingAnswers').replace('{count}', '12'));
+      case 'withdrawable':
+        showAppAlert(
+          t('profile.withdrawableBalance'),
+          `${t('profile.withdrawableBalance')}: ${formattedWithdrawableBalance}\n\n${t('profile.lockedBalance')}: ${formatWalletAmount(walletData.lockedBalance)}\n${t('profile.frozenBalance')}: ${formatWalletAmount(walletData.frozenBalance)}`
+        );
         break;
       default:
         break;
     }
-  };
+  }, [formatWalletAmount, formattedWalletExpense, formattedWalletIncome, formattedWithdrawableBalance, t, walletData.frozenBalance, walletData.lockedBalance]);
   const handleFavoritePress = item => {
     setShowFavoritesModal(false);
     navigation.navigate('QuestionDetail', {
@@ -1627,33 +1743,27 @@ export default function ProfileScreen({
                 <Text style={styles.walletBalance}>{formattedWalletBalance}</Text>
               </TouchableOpacity>
             </View>
+            <TouchableOpacity style={styles.walletNoticeEntryButton} onPress={() => setShowWalletNoticeModal(true)}>
+              <Ionicons name="information-circle-outline" size={15} color="#6b7280" />
+              <Text style={styles.walletNoticeEntryButtonText}>{t('profile.fundingNoticeEntry')}</Text>
+            </TouchableOpacity>
           </View>
           <View style={styles.walletStats}>
             <TouchableOpacity style={styles.walletStatItem} onPress={() => handleWalletAction('income')}>
               <Text style={[styles.walletStatValue, {
               color: '#22c55e'
-            }]}>$320.00</Text>
-              <Text style={styles.walletStatLabel}>{t('profile.answerIncome')}</Text>
+            }]}>{formattedWalletIncome}</Text>
+              <Text style={styles.walletStatLabel}>{t('profile.pointsIncome')}</Text>
             </TouchableOpacity>
             <View style={styles.walletStatDivider} />
             <TouchableOpacity style={styles.walletStatItem} onPress={() => handleWalletAction('expense')}>
-              <Text style={styles.walletStatValue}>$150.00</Text>
-              <Text style={styles.walletStatLabel}>{t('profile.rewardExpense')}</Text>
+              <Text style={styles.walletStatValue}>{formattedWalletExpense}</Text>
+              <Text style={styles.walletStatLabel}>{t('profile.pointsExpense')}</Text>
             </TouchableOpacity>
             <View style={styles.walletStatDivider} />
-            <TouchableOpacity style={styles.walletStatItem} onPress={() => handleWalletAction('pending')}>
-              <Text style={styles.walletStatValue}>12</Text>
-              <Text style={styles.walletStatLabel}>{t('profile.pendingAdoption')}</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.walletActions}>
-            <TouchableOpacity style={styles.rechargeBtn} onPress={() => handleWalletAction('recharge')}>
-              <Ionicons name="add-circle" size={18} color="#fff" />
-              <Text style={styles.rechargeBtnText}>{t('profile.recharge')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.withdrawBtn} onPress={() => handleWalletAction('withdraw')}>
-              <Ionicons name="cash-outline" size={18} color="#ef4444" />
-              <Text style={styles.withdrawBtnText}>{t('profile.withdraw')}</Text>
+            <TouchableOpacity style={styles.walletStatItem} onPress={() => handleWalletAction('withdrawable')}>
+              <Text style={styles.walletStatValue}>{formattedWithdrawableBalance}</Text>
+              <Text style={styles.walletStatLabel}>{t('profile.withdrawableBalance')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -2158,6 +2268,57 @@ export default function ProfileScreen({
               </>}
           </ScrollView>
         </View>
+      </Modal>
+
+      <Modal
+        visible={showWalletNoticeModal}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setShowWalletNoticeModal(false)}
+      >
+        <Pressable style={styles.walletNoticeModalOverlay} onPress={() => setShowWalletNoticeModal(false)}>
+          <Pressable style={styles.walletNoticeModalCard} onPress={() => {}}>
+            <View style={styles.walletNoticeModalHandle} />
+            <View style={styles.walletNoticeModalHeader}>
+              <Text style={styles.walletNoticeModalTitle}>{t('profile.fundingNoticeModalTitle')}</Text>
+              <TouchableOpacity onPress={() => setShowWalletNoticeModal(false)}>
+                <Ionicons name="close" size={20} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.walletNoticeModalContent}>
+              <Text style={styles.walletNoticeModalLead}>{t('profile.fundingNoticeTitle')}</Text>
+              <Text style={styles.walletNoticeModalText}>{t('profile.fundingNoticeDescription')}</Text>
+              <Text style={styles.walletNoticeModalText}>{t('profile.fundingNoticeSync')}</Text>
+
+              <View style={styles.walletNoticeModalUrlBox}>
+                <Text style={styles.walletNoticeUrlLabel}>{t('profile.fundingNoticeOfficialChannel')}</Text>
+                <Text selectable selectionColor="#ef4444" style={styles.walletNoticeModalUrlText}>
+                  {officialFundingUrl}
+                </Text>
+              </View>
+
+              <Text style={styles.walletNoticeTipsTitle}>{t('profile.fundingNoticeTipsTitle')}</Text>
+              {walletFundingTips.map(tip => (
+                <View key={`modal-${tip}`} style={styles.walletNoticeTipRow}>
+                  <View style={styles.walletNoticeTipDot} />
+                  <Text style={styles.walletNoticeTipText}>{tip}</Text>
+                </View>
+              ))}
+            </ScrollView>
+
+            <View style={styles.walletNoticeModalActions}>
+              <TouchableOpacity style={styles.walletNoticeModalPrimaryButton} onPress={handleCopyOfficialFundingUrl}>
+                <Ionicons name="copy-outline" size={16} color="#fff" />
+                <Text style={styles.walletNoticeModalPrimaryButtonText}>{t('profile.fundingNoticeCopyAction')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.walletNoticeModalSecondaryButton} onPress={() => setShowWalletNoticeModal(false)}>
+                <Text style={styles.walletNoticeModalSecondaryButtonText}>{t('common.confirm')}</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       <Modal visible={showFavoritesModal} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={() => setShowFavoritesModal(false)}>
@@ -2884,6 +3045,22 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 12
   },
+  walletNoticeEntryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb'
+  },
+  walletNoticeEntryButtonText: {
+    fontSize: scaleFont(11),
+    fontWeight: '600',
+    color: '#6b7280'
+  },
   walletLabel: {
     fontSize: scaleFont(12),
     color: '#9ca3af'
@@ -2920,42 +3097,132 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     marginTop: 2
   },
-  walletActions: {
-    flexDirection: 'row',
-    marginTop: 16,
-    gap: 12
+  walletNoticeUrlLabel: {
+    fontSize: scaleFont(11),
+    fontWeight: '600',
+    color: '#9ca3af',
+    marginBottom: 6
   },
-  rechargeBtn: {
+  walletNoticeTipsTitle: {
+    fontSize: scaleFont(12),
+    fontWeight: '700',
+    color: '#7c2d12',
+    marginTop: 20,
+    marginBottom: 8
+  },
+  walletNoticeTipRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 6
+  },
+  walletNoticeTipDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: '#f97316',
+    marginTop: 7,
+    marginRight: 8
+  },
+  walletNoticeTipText: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ef4444',
-    paddingVertical: 6,
-    borderRadius: 8,
-    gap: 6
+    fontSize: scaleFont(12),
+    lineHeight: 18,
+    color: '#9a3412'
   },
-  rechargeBtnText: {
-    fontSize: scaleFont(14),
-    color: '#fff',
-    fontWeight: '600'
-  },
-  withdrawBtn: {
+  walletNoticeModalOverlay: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.42)',
+    justifyContent: 'flex-end'
+  },
+  walletNoticeModalCard: {
     backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ef4444',
-    paddingVertical: 6,
-    borderRadius: 8,
-    gap: 6
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 24,
+    maxHeight: '78%'
   },
-  withdrawBtnText: {
+  walletNoticeModalHandle: {
+    alignSelf: 'center',
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: '#e5e7eb',
+    marginBottom: 14
+  },
+  walletNoticeModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12
+  },
+  walletNoticeModalTitle: {
+    fontSize: scaleFont(17),
+    fontWeight: '700',
+    color: '#111827'
+  },
+  walletNoticeModalContent: {
+    paddingBottom: 8
+  },
+  walletNoticeModalLead: {
+    fontSize: scaleFont(16),
+    lineHeight: 24,
+    fontWeight: '700',
+    color: '#7c2d12'
+  },
+  walletNoticeModalText: {
+    marginTop: 10,
     fontSize: scaleFont(14),
-    color: '#ef4444',
-    fontWeight: '600'
+    lineHeight: 22,
+    color: '#374151'
+  },
+  walletNoticeModalUrlBox: {
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: '#fff7ed',
+    borderWidth: 1,
+    borderColor: '#fdba74'
+  },
+  walletNoticeModalUrlText: {
+    fontSize: scaleFont(14),
+    lineHeight: 22,
+    color: '#111827'
+  },
+  walletNoticeModalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16
+  },
+  walletNoticeModalPrimaryButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#ea580c',
+    borderRadius: 12,
+    paddingVertical: 12
+  },
+  walletNoticeModalPrimaryButtonText: {
+    fontSize: scaleFont(14),
+    fontWeight: '700',
+    color: '#fff'
+  },
+  walletNoticeModalSecondaryButton: {
+    minWidth: 88,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    backgroundColor: '#f3f4f6'
+  },
+  walletNoticeModalSecondaryButtonText: {
+    fontSize: scaleFont(14),
+    fontWeight: '600',
+    color: '#374151'
   },
   superLikeCard: {
     backgroundColor: '#fff',

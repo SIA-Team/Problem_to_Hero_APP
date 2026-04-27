@@ -27,6 +27,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [hasNewContent, setHasNewContent] = useState(false);
+  const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
 
   const appState = useRef(AppState.currentState);
@@ -83,6 +84,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
     setPage(1);
     setHasMore(false);
     setHasNewContent(false);
+    setError(null);
   }, []);
 
   const resetTransientLoadingState = useCallback(() => {
@@ -131,9 +133,11 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
 
       try {
         const { data } = await loadQuestions(tabType, pageNum, forceRefresh, onDebugUpdate, normalizedQueryOptions);
+        setError(null);
         return data || [];
       } catch (error) {
         console.warn(`Failed to load questions for ${tabType} page ${pageNum}:`, error);
+        setError(error?.message || '加载失败，请稍后重试');
         return [];
       }
     },
@@ -169,6 +173,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
     }
 
     setLoading(true);
+    setError(null);
 
     try {
       const data = await loadData(tabType, 1, false);
@@ -202,6 +207,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
 
     setRefreshing(true);
     setHasNewContent(false);
+    setError(null);
 
     try {
       const freshData = await loadData(tabType, 1, true);
@@ -403,6 +409,7 @@ export const useOptimizedQuestions = (activeTab, allTabs = [], onDebugUpdate = n
     loading,
     refreshing,
     loadingMore,
+    error,
     hasMore,
     hasNewContent,
     onRefresh,

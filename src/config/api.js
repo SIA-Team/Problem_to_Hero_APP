@@ -4,6 +4,7 @@ import ENV, { getApiServerUrl } from './env';
 export const SERVICES = {
   CONTENT: 'qa-hero-content',  // 内容服务
   USER: 'qa-hero-app-user',    // 用户服务
+  WALLET: 'qa-hero-wallet',    // 钱包服务
   ACTIVITY: 'qa-hero-activity', // 活动服务
   // 可以继续添加其他服务
 };
@@ -76,6 +77,8 @@ export const API_ENDPOINTS = {
 
   WALLET: {
     BALANCE: buildApiPath(SERVICES.USER, '/app/wallet/balance'),
+    POINTS_OVERVIEW: buildApiPath(SERVICES.WALLET, '/app/wallet/points/query-overview'),
+    POINTS_TXN_LIST: buildApiPath(SERVICES.WALLET, '/app/wallet/points/txn-list'),
     RECHARGE_CREATE: buildApiPath(SERVICES.USER, '/app/wallet/recharge/create'),
     RECHARGE_CONFIRM: buildApiPath(SERVICES.USER, '/app/wallet/recharge/confirm'),
     WITHDRAW_CREATE: buildApiPath(SERVICES.USER, '/app/wallet/withdraw/create'),

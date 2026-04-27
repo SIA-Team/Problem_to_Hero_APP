@@ -31,6 +31,39 @@ const buildBaseWalletPayload = async ({
 };
 
 const walletApi = {
+  async getPointsOverview() {
+    if (!API_ENDPOINTS.WALLET.POINTS_OVERVIEW) {
+      return {
+        code: 200,
+        msg: WALLET_API_PLACEHOLDER_MESSAGE,
+        data: {
+          balance: 0,
+          withdrawableBalance: 0,
+          lockedBalance: 0,
+          frozenBalance: 0,
+          currency: 'usd',
+        },
+      };
+    }
+
+    return apiClient.get(API_ENDPOINTS.WALLET.POINTS_OVERVIEW);
+  },
+
+  async getPointsTransactionList(params = {}) {
+    if (!API_ENDPOINTS.WALLET.POINTS_TXN_LIST) {
+      return {
+        code: 200,
+        msg: WALLET_API_PLACEHOLDER_MESSAGE,
+        total: 0,
+        rows: [],
+      };
+    }
+
+    return apiClient.get(API_ENDPOINTS.WALLET.POINTS_TXN_LIST, {
+      params,
+    });
+  },
+
   async buildRechargeCreatePayload({
     amount,
     currency = 'usd',
