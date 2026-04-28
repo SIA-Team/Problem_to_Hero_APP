@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
+import EmergencyReceivedCard from '../components/EmergencyReceivedCard';
 import KeyboardDismissView from '../components/KeyboardDismissView';
 import ModalSafeAreaView from '../components/ModalSafeAreaView';
 import { useTranslation } from '../i18n/withTranslation';
@@ -14,6 +15,7 @@ import { openMapChooser } from '../utils/mapChooser';
 import notificationApi from '../services/api/notificationApi';
 import userApi from '../services/api/userApi';
 import emergencyApi from '../services/api/emergencyApi';
+import authApi from '../services/api/authApi';
 import { filterFriendUsers, normalizeFollowingResponse, sendPlainPrivateMessage } from '../utils/privateShareService';
 
 import { scaleFont } from '../utils/responsive';
@@ -156,6 +158,8 @@ const safeJsonParse = value => {
   }
 };
 
+const MOJIBAKE_PATTERN = /�|[閺闂缁濮娴妤鐠鍒鍓宸韫堫亞銉璇]{2,}/;
+
 const isLikelyMojibakeText = value => {
   if (typeof value !== 'string') {
     return false;
@@ -175,7 +179,7 @@ const sanitizeDisplayText = (value, fallback = '') => {
   }
 
   const trimmed = value.trim();
-  if (!trimmed || isLikelyMojibakeText(trimmed)) {
+  if (!trimmed || /\uFFFD|[\u95FA\u95C2\u7F01\u6FDE\u5A34\u59A4\u9420\u9352\u9353\u5BB8\u97EB]{2,}/.test(trimmed)) {
     return fallback;
   }
 
@@ -193,18 +197,18 @@ const formatRelativeTime = value => {
   const diffMs = Date.now() - date.getTime();
   const diffMinutes = Math.floor(diffMs / 60000);
   if (diffMinutes < 1) {
-    return '刚刚';
+    return '\u521a\u521a';
   }
   if (diffMinutes < 60) {
-    return `${diffMinutes}分钟前`;
+    return `${diffMinutes}\u5206\u949f\u524d`;
   }
   const diffHours = Math.floor(diffMinutes / 60);
   if (diffHours < 24) {
-    return `${diffHours}小时前`;
+    return `${diffHours}\u5c0f\u65f6\u524d`;
   }
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays < 7) {
-    return `${diffDays}天前`;
+    return `${diffDays}\u5929\u524d`;
   }
   return `${date.getMonth() + 1}-${date.getDate()}`;
 };
@@ -283,17 +287,40 @@ const formatDistanceLabel = (distanceMeters, fallbackLabel = '') => {
 const normalizeEmergencyListItem = (item = {}, index = 0) => {
   const id = item?.id ?? item?.helpId ?? item?.emergencyId ?? `emergency-${index}`;
   const rescuerCount = Math.max(0, Math.round(toSafeNumber(item?.neededHelperCount ?? item?.rescuerCount)));
-  const respondedCount = Math.max(0, Math.round(toSafeNumber(item?.respondedHelperCount ?? item?.respondedCount ?? item?.currentHelperCount)));
+  const respondedCount = Math.max(0, Math.round(toSafeNumber(
+    item?.responderCount ??
+    item?.responseCount ??
+    item?.respondedHelperCount ??
+    item?.respondedCount ??
+    item?.currentHelperCount
+  )));
   const rawTimestamp = item?.createTime ?? item?.publishTime ?? item?.gmtCreate ?? item?.createdAt ?? item?.timestamp ?? null;
   const parsedTimestamp = rawTimestamp ? new Date(rawTimestamp).getTime() : NaN;
   const timestamp = Number.isFinite(parsedTimestamp) ? parsedTimestamp : Date.now();
 
   return {
     id,
-    avatar: item?.avatar || item?.avatarUrl || item?.userAvatar || '',
-    name: item?.nickname || item?.userName || item?.username || item?.name || `User ${id}`,
-    title: item?.title || item?.description || '紧急求助',
-    location: item?.regionDisplay || item?.addressText || item?.location || item?.locationText || '鏈煡浣嶇疆',
+    ownerUserId: String(
+      item?.appUserId ??
+      item?.seekerUserId ??
+      item?.authorId ??
+      item?.creatorId ??
+      item?.userId ??
+      ''
+    ),
+    avatar: item?.avatar || item?.avatarUrl || item?.userAvatar || item?.seekerAvatar || '',
+    name: sanitizeDisplayText(
+      item?.seekerNickName ||
+      item?.nickName ||
+      item?.nickname ||
+      item?.seekerName ||
+      item?.userName ||
+      item?.username ||
+      item?.name,
+      `User ${id}`
+    ),
+    title: sanitizeDisplayText(item?.title || item?.description, '\u7d27\u6025\u6c42\u52a9'),
+    location: sanitizeDisplayText(item?.regionDisplay || item?.addressText || item?.location || item?.locationText, '\u4f4d\u7f6e\u5f85\u8865\u5145'),
     latitude: toNullableNumber(item?.latitude),
     longitude: toNullableNumber(item?.longitude),
     distance: formatDistanceLabel(item?.distanceMeters, item?.distanceText || item?.distance),
@@ -301,8 +328,85 @@ const normalizeEmergencyListItem = (item = {}, index = 0) => {
     timestamp,
     rescuerCount,
     respondedCount,
+    responseCount: respondedCount,
     status: item?.status || '',
     urgencyLevel: item?.urgencyLevel,
+  };
+};
+
+const extractEmergencyDetailPayload = (response) => {
+  const rootData = response?.data;
+  const candidates = [rootData, rootData?.data];
+
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+      return candidate;
+    }
+  }
+
+  return {};
+};
+
+const normalizeEmergencyResponder = (item = {}, index = 0) => {
+  const id = item?.userId ?? item?.id ?? `responder-${index}`;
+  return {
+    id: String(id),
+    userId: item?.userId ?? id,
+    name: sanitizeDisplayText(item?.nickName || item?.nickname || item?.name, '\u533f\u540d\u7528\u6237'),
+    avatar: item?.avatar || item?.avatarUrl || '',
+    joinTime: item?.joinTime || '',
+  };
+};
+
+const formatCurrencyFromCents = (value) => {
+  const cents = Math.max(0, Math.round(toSafeNumber(value, 0)));
+  return '$' + (cents / 100).toFixed(2);
+};
+
+const getEmergencyOwnerUserId = (detail = {}, fallbackOwnerUserId = '') => String(
+  detail?.ownerUserId ??
+  detail?.appUserId ??
+  detail?.seekerUserId ??
+  detail?.authorId ??
+  detail?.creatorId ??
+  detail?.publisherId ??
+  detail?.userId ??
+  detail?.user?.id ??
+  fallbackOwnerUserId ??
+  ''
+).trim();
+
+const canViewEmergencyFee = (detail, currentUserId) => {
+  const normalizedCurrentUserId = String(currentUserId || '').trim();
+  const ownerUserId = getEmergencyOwnerUserId(detail);
+  return Boolean(normalizedCurrentUserId && ownerUserId && normalizedCurrentUserId === ownerUserId);
+};
+
+const normalizeEmergencyDetail = (detail = {}, fallbackItem = null) => {
+  const neededHelperCount = Math.max(0, Math.round(toSafeNumber(detail?.neededHelperCount, fallbackItem?.rescuerCount || 0)));
+  const responderCount = Math.max(0, Math.round(toSafeNumber(detail?.responderCount, fallbackItem?.respondedCount || fallbackItem?.responseCount || 0)));
+  const responders = Array.isArray(detail?.responders)
+    ? detail.responders.map((item, index) => normalizeEmergencyResponder(item, index))
+    : (fallbackItem?.responders || []).map((item, index) => normalizeEmergencyResponder(item, index));
+
+  const locationParts = [detail?.regionDisplay, detail?.detailAddress].filter(Boolean);
+  const fallbackLocation = sanitizeDisplayText(fallbackItem?.location, '\u4f4d\u7f6e\u5f85\u8865\u5145');
+
+  return {
+    id: String(detail?.id ?? fallbackItem?.id ?? ''),
+    ownerUserId: getEmergencyOwnerUserId(detail, fallbackItem?.ownerUserId),
+    name: sanitizeDisplayText(detail?.seekerNickName || fallbackItem?.name, '\u533f\u540d\u7528\u6237'),
+    avatar: detail?.seekerAvatar || fallbackItem?.avatar || '',
+    title: sanitizeDisplayText(detail?.title || fallbackItem?.title, '\u7d27\u6025\u6c42\u52a9'),
+    description: sanitizeDisplayText(detail?.description || detail?.descriptionSummary, '\u6682\u65e0\u8be6\u7ec6\u63cf\u8ff0'),
+    location: locationParts.length > 0 ? sanitizeDisplayText(locationParts.join(' '), fallbackLocation) : fallbackLocation,
+    distanceLabel: formatDistanceLabel(detail?.distanceMeters, fallbackItem?.distance || ''),
+    relativeTime: detail?.relativeTime || formatRelativeTime(detail?.createTime) || fallbackItem?.time || '',
+    neededHelperCount,
+    responderCount,
+    publishFeeCents: Math.max(0, Math.round(toSafeNumber(detail?.publishFeeCents, 0))),
+    helperOverageFeeCents: Math.max(0, Math.round(toSafeNumber(detail?.helperOverageFeeCents, 0))),
+    responders,
   };
 };
 
@@ -471,6 +575,7 @@ export default function MessagesScreen({
   const { respondedEmergencies, ignoredEmergencies, respondToEmergency, ignoreEmergency } = useEmergency();
   const [showPrivateModal, setShowPrivateModal] = useState(false);
   const [searchText, setSearchText] = useState('');
+  const [currentUserId, setCurrentUserId] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [messageContent, setMessageContent] = useState('');
   const [showVoteModal, setShowVoteModal] = useState(false);
@@ -496,6 +601,14 @@ export default function MessagesScreen({
   const [emergencyRequestsData, setEmergencyRequestsData] = useState([]);
   const [emergencyLoading, setEmergencyLoading] = useState(false);
   const [emergencyLoadError, setEmergencyLoadError] = useState('');
+  const [showEmergencyRespondersModal, setShowEmergencyRespondersModal] = useState(false);
+  const [selectedEmergencyResponders, setSelectedEmergencyResponders] = useState(null);
+  const [emergencyRespondersLoading, setEmergencyRespondersLoading] = useState(false);
+  const [emergencyRespondersError, setEmergencyRespondersError] = useState('');
+  const [showEmergencyDetailModal, setShowEmergencyDetailModal] = useState(false);
+  const [selectedEmergencyDetail, setSelectedEmergencyDetail] = useState(null);
+  const [emergencyDetailLoading, setEmergencyDetailLoading] = useState(false);
+  const [emergencyDetailError, setEmergencyDetailError] = useState('');
 
   const quickEntryLabels = {
     comment: t('screens.messagesScreen.quickEntries.commentForward'),
@@ -746,6 +859,32 @@ export default function MessagesScreen({
   };
 
   useEffect(() => {
+    let mounted = true;
+
+    const loadCurrentUser = async () => {
+      try {
+        const currentUser = await authApi.getCurrentUser();
+        if (!mounted) {
+          return;
+        }
+
+        setCurrentUserId(String(currentUser?.userId ?? currentUser?.id ?? '').trim());
+      } catch (error) {
+        console.error('Failed to load current user for messages emergency cards:', error);
+        if (mounted) {
+          setCurrentUserId('');
+        }
+      }
+    };
+
+    void loadCurrentUser();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isFocused) {
       return;
     }
@@ -936,15 +1075,15 @@ export default function MessagesScreen({
 
   // 澶勭悊鍝嶅簲绱ф€ユ眰鍔?  // 处理响应紧急求助
   const handleRespondEmergency = (item) => {
-    showAppAlert('确认响应', `确定要响应 ${item.name} 的紧急求助吗？`, [
-      { text: '取消', style: 'cancel' },
+    showAppAlert('\u786e\u8ba4\u54cd\u5e94', `\u786e\u5b9a\u8981\u54cd\u5e94 ${item.name} \u7684\u7d27\u6025\u6c42\u52a9\u5417\uff1f`, [
+      { text: '\u53d6\u6d88', style: 'cancel' },
       {
-        text: '立即响应',
+        text: '\u7acb\u5373\u54cd\u5e94',
         onPress: async () => {
           try {
             const response = await emergencyApi.joinHelp(item.id);
             if (!isSuccessResponse(response)) {
-              throw new Error(response?.msg || '加入救援失败');
+              throw new Error(response?.msg || '\u52a0\u5165\u6551\u63f4\u5931\u8d25');
             }
 
             respondToEmergency(String(item.id));
@@ -959,10 +1098,10 @@ export default function MessagesScreen({
                 respondedCount: nextCount,
               };
             }));
-            showAppAlert('成功', '已加入救援，请尽快前往现场');
+            showAppAlert('\u6210\u529f', '\u5df2\u52a0\u5165\u6551\u63f4\uff0c\u8bf7\u5c3d\u5feb\u524d\u5f80\u73b0\u573a');
           } catch (error) {
-            console.error('加入救援失败:', error);
-            showAppAlert('失败', error?.message || '加入救援失败，请稍后重试');
+            console.error('\u52a0\u5165\u6551\u63f4\u5931\u8d25:', error);
+            showAppAlert('\u5931\u8d25', error?.message || '\u52a0\u5165\u6551\u63f4\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5');
           }
         }
       }
@@ -975,12 +1114,12 @@ export default function MessagesScreen({
 
   const handleOpenEmergencyLocation = (item) => {
     if (!Number.isFinite(item.latitude) || !Number.isFinite(item.longitude)) {
-      showAppAlert('提示', '当前求助未提供可用坐标');
+      showAppAlert('\u63d0\u793a', '\u5f53\u524d\u6c42\u52a9\u672a\u63d0\u4f9b\u53ef\u7528\u5750\u6807');
       return;
     }
 
     void openMapChooser({
-      label: `${item.name} 的求助位置`,
+      label: `${item.name} \u7684\u6c42\u52a9\u4f4d\u7f6e`,
       location: item.location,
       distance: item.distance,
       latitude: item.latitude,
@@ -988,15 +1127,75 @@ export default function MessagesScreen({
     });
   };
 
+  const handleShowEmergencyResponders = async (item) => {
+    setSelectedEmergencyResponders(item);
+    setEmergencyRespondersError('');
+    setShowEmergencyRespondersModal(true);
+
+    if (!item?.id) {
+      return;
+    }
+
+    setEmergencyRespondersLoading(true);
+    try {
+      const response = await emergencyApi.getDetail(item.id);
+      if (!isSuccessResponse(response)) {
+        throw new Error(response?.msg || '\u52a0\u8f7d\u54cd\u5e94\u8005\u5931\u8d25');
+      }
+
+      const detailPayload = extractEmergencyDetailPayload(response);
+      const normalizedDetail = normalizeEmergencyDetail(detailPayload, item);
+      setSelectedEmergencyResponders({
+        ...item,
+        responders: normalizedDetail.responders,
+        responseCount: normalizedDetail.responderCount,
+      });
+    } catch (error) {
+      console.error('Failed to load emergency responders in messages screen:', error);
+      setEmergencyRespondersError(error?.message || '\u52a0\u8f7d\u54cd\u5e94\u8005\u5931\u8d25');
+    } finally {
+      setEmergencyRespondersLoading(false);
+    }
+  };
+
+  const handleShowEmergencyDetail = async (item) => {
+    setSelectedEmergencyDetail(normalizeEmergencyDetail({}, item));
+    setEmergencyDetailError('');
+    setShowEmergencyDetailModal(true);
+
+    if (!item?.id) {
+      return;
+    }
+
+    setEmergencyDetailLoading(true);
+    try {
+      const response = await emergencyApi.getDetail(item.id);
+      if (!isSuccessResponse(response)) {
+        throw new Error(response?.msg || '\u52a0\u8f7d\u8be6\u60c5\u5931\u8d25');
+      }
+
+      const detailPayload = extractEmergencyDetailPayload(response);
+      setSelectedEmergencyDetail(normalizeEmergencyDetail(detailPayload, item));
+    } catch (error) {
+      console.error('Failed to load emergency detail in messages screen:', error);
+      setEmergencyDetailError(error?.message || '\u52a0\u8f7d\u8be6\u60c5\u5931\u8d25');
+    } finally {
+      setEmergencyDetailLoading(false);
+    }
+  };
+
   const isWithinOneHour = (timestamp) => Number.isFinite(Number(timestamp)) && Date.now() - Number(timestamp) < 60 * 60 * 1000;
 
   const filteredEmergencyRequests = emergencyRequestsData
     .filter(item => {
+      const isOwnEmergency = currentUserId !== '' && String(item?.ownerUserId || '').trim() === currentUserId;
+      if (isOwnEmergency) {
+        return false;
+      }
+
       const isCompleted = toSafeNumber(item.respondedCount) >= toSafeNumber(item.rescuerCount) && toSafeNumber(item.rescuerCount) > 0;
       const idKey = String(item.id);
-      return !respondedEmergencyIdSet.has(idKey) &&
-             !ignoredEmergencyIdSet.has(idKey) &&
-             !isCompleted;
+      return !ignoredEmergencyIdSet.has(idKey) && !isCompleted;
     })
     .slice(0, 3);
 
@@ -1006,6 +1205,7 @@ export default function MessagesScreen({
     }
     loadNotifications(notificationFilter, notificationPage + 1, true);
   };
+  const showMessageEmergencyFee = canViewEmergencyFee(selectedEmergencyDetail, currentUserId);
   const filteredUsers = filterFriendUsers(followingUsers, searchText);
   return <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
@@ -1091,109 +1291,43 @@ export default function MessagesScreen({
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
               <Ionicons name="alert-circle" size={20} color="#ef4444" />
-              <Text style={styles.sectionTitle}>紧急求助</Text>
+              <Text style={styles.sectionTitle}>{'\u7d27\u6025\u6c42\u52a9'}</Text>
               <View style={styles.emergencyPulse}>
                 <View style={styles.emergencyPulseDot} />
               </View>
             </View>
             <TouchableOpacity onPress={() => navigation.navigate('EmergencyList')}>
-              <Text style={styles.sectionMore}>查看全部</Text>
+              <Text style={styles.sectionMore}>{'\u67e5\u770b\u5168\u90e8'}</Text>
             </TouchableOpacity>
           </View>
-          
+
           {emergencyLoading ? (
             <View style={styles.sectionLoading}>
               <ActivityIndicator color="#ef4444" />
             </View>
           ) : filteredEmergencyRequests.length === 0 ? (
             <View style={styles.sectionEmpty}>
-              <Text style={styles.sectionEmptyText}>{emergencyLoadError || '暂无紧急求助'}</Text>
+              <Text style={styles.sectionEmptyText}>{emergencyLoadError || '\u6682\u65e0\u7d27\u6025\u6c42\u52a9'}</Text>
             </View>
           ) : filteredEmergencyRequests.map(item => {
             const withinOneHour = isWithinOneHour(item.timestamp);
             const isResponded = respondedEmergencyIdSet.has(String(item.id));
-            
+
             return (
-              <View 
-                key={item.id} 
-                style={[
-                  styles.emergencyItem,
-                  withinOneHour && styles.emergencyItemHigh
-                ]}
-              >
-                {/* 绱ф€ユ爣璇嗘潯 - 鍙湪1灏忔椂鍐呮樉绀?*/}
-                {withinOneHour && (
-                  <View style={styles.emergencyIndicator} />
-                )}
-                
-                <View style={styles.emergencyHeader}>
-                  <Avatar uri={item.avatar} name={item.name} size={44} />
-                  <View style={styles.emergencyHeaderContent}>
-                    <Text style={styles.emergencyName}>{item.name}</Text>
-                    <Text style={styles.emergencyTime}>{item.time}</Text>
-                  </View>
-                </View>
-
-                <Text style={styles.emergencyTitle} numberOfLines={2}>
-                  {item.title}
-                </Text>
-
-                <View style={styles.emergencyInfo}>
-                  <TouchableOpacity
-                    style={styles.emergencyInfoItem}
-                    activeOpacity={0.72}
-                    onPress={() => handleOpenEmergencyLocation(item)}
-                  >
-                    <Ionicons name="location" size={14} color="#ef4444" />
-                    <Text style={styles.emergencyLocation} numberOfLines={1}>
-                      {item.location}
-                    </Text>
-                  </TouchableOpacity>
-                  <View style={styles.emergencyDistance}>
-                    <Ionicons name="navigate" size={12} color="#f59e0b" />
-                    <Text style={styles.emergencyDistanceText}>{item.distance}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.emergencyFooter}>
-                  <View style={styles.emergencyRescuerInfo}>
-                    <Ionicons name="people-outline" size={16} color="#6b7280" />
-                    <Text style={styles.emergencyRescuerText}>
-                      闇€瑕?{item.rescuerCount} 浜烘晳鎻?
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.emergencyActions}>
-                    {isResponded ? (
-                      <View style={styles.respondedBadge}>
-                        <Ionicons name="checkmark-circle" size={14} color="#22c55e" />
-                        <Text style={styles.respondedBadgeText}>已响应</Text>
-                      </View>
-                    ) : (
-                      <>
-                        <TouchableOpacity 
-                          style={styles.ignoreBtn}
-                          onPress={() => handleIgnoreEmergency(item)}
-                        >
-                          <Text style={styles.ignoreBtnText}>蹇界暐</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                          style={styles.respondBtn}
-                          onPress={() => handleRespondEmergency(item)}
-                        >
-                          <Ionicons name="flash" size={14} color="#fff" />
-                          <Text style={styles.respondBtnText}>绔嬪嵆鍝嶅簲</Text>
-                        </TouchableOpacity>
-                      </>
-                    )}
-                  </View>
-                </View>
-              </View>
+              <EmergencyReceivedCard
+                key={item.id}
+                item={item}
+                highlight={withinOneHour}
+                isResponded={isResponded}
+                onPressLocation={() => handleOpenEmergencyLocation(item)}
+                onPressResponders={() => handleShowEmergencyResponders(item)}
+                onPressViewDetail={() => handleShowEmergencyDetail(item)}
+                onPressIgnore={() => handleIgnoreEmergency(item)}
+                onPressRespond={() => handleRespondEmergency(item)}
+              />
             );
           })}
         </View>
-
-        {/* 浠茶閭€璇?- 宸查殣钘?*/}
         {/* <View style={styles.arbitrationSection}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
@@ -1387,6 +1521,108 @@ export default function MessagesScreen({
       </ScrollView>
 
       {/* 鍙戦€佺淇″脊绐?*/}
+      <Modal visible={showEmergencyRespondersModal} transparent animationType="slide" statusBarTranslucent onRequestClose={() => setShowEmergencyRespondersModal(false)}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowEmergencyRespondersModal(false)} />
+          <View style={styles.respondersModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{'响应者列表'}</Text>
+              <TouchableOpacity onPress={() => setShowEmergencyRespondersModal(false)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalSubHeader}>
+              <Text style={styles.modalSubTitle}>{`共 ${selectedEmergencyResponders?.responseCount || 0} 人响应`}</Text>
+            </View>
+            <ScrollView style={styles.respondersList} contentContainerStyle={styles.respondersListContent}>
+              {emergencyRespondersLoading ? <View style={styles.detailLoadingRow}>
+                  <ActivityIndicator color="#ef4444" size="small" />
+                  <Text style={styles.detailLoadingText}>{'响应者加载中...'}</Text>
+                </View> : emergencyRespondersError ? <Text style={styles.commentsErrorText}>{emergencyRespondersError}</Text> : selectedEmergencyResponders?.responders?.length ? selectedEmergencyResponders.responders.map(responder => <View key={responder.id || responder.userId || responder.name} style={styles.responderItem}>
+                    <Avatar uri={responder.avatar || responder.avatarUrl} name={responder.name} size={40} />
+                    <View style={styles.responderMeta}>
+                      <Text style={styles.responderName}>{responder.name || '匿名用户'}</Text>
+                      <Text style={styles.responderJoinTime}>{formatRelativeTime(responder.joinTime) || responder.joinTime || ''}</Text>
+                    </View>
+                  </View>) : <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>{'暂无响应者'}</Text>
+                </View>}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showEmergencyDetailModal} transparent animationType="slide" statusBarTranslucent onRequestClose={() => setShowEmergencyDetailModal(false)}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowEmergencyDetailModal(false)} />
+          <View style={styles.detailModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{'求助详情'}</Text>
+              <TouchableOpacity onPress={() => setShowEmergencyDetailModal(false)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            {emergencyDetailLoading ? <View style={styles.emptyContainer}>
+                <ActivityIndicator color="#ef4444" />
+                <Text style={styles.emptyText}>{'详情加载中...'}</Text>
+              </View> : <ScrollView style={styles.detailScroll} contentContainerStyle={styles.detailScrollContent}>
+                <View style={styles.detailSection}>
+                  <View style={styles.detailHeaderRow}>
+                    <Avatar uri={selectedEmergencyDetail?.avatar} name={selectedEmergencyDetail?.name} size={44} />
+                    <View style={styles.detailHeaderMeta}>
+                      <Text style={styles.detailName}>{selectedEmergencyDetail?.name || '匿名用户'}</Text>
+                      <Text style={styles.detailTime}>{selectedEmergencyDetail?.relativeTime || '--'}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.detailTitle}>{selectedEmergencyDetail?.title || '紧急求助'}</Text>
+                  <Text style={styles.detailDescription}>{selectedEmergencyDetail?.description || '暂无详细描述'}</Text>
+                  <View style={styles.detailInfoGrid}>
+                    <View style={styles.detailInfoItem}>
+                      <Text style={styles.detailInfoLabel}>{'求助位置'}</Text>
+                      <Text style={styles.detailInfoValue}>{selectedEmergencyDetail?.location || '位置待补充'}</Text>
+                    </View>
+                    <View style={styles.detailInfoItem}>
+                      <Text style={styles.detailInfoLabel}>{'距离'}</Text>
+                      <Text style={styles.detailInfoValue}>{selectedEmergencyDetail?.distanceLabel || '--'}</Text>
+                    </View>
+                    <View style={styles.detailInfoItem}>
+                      <Text style={styles.detailInfoLabel}>{'响应进度'}</Text>
+                      <Text style={styles.detailInfoValue}>{`${selectedEmergencyDetail?.responderCount || 0}/${selectedEmergencyDetail?.neededHelperCount || 0}`}</Text>
+                    </View>
+                    <View style={styles.detailInfoItem}>
+                      <Text style={styles.detailInfoLabel}>{'发布时间'}</Text>
+                      <Text style={styles.detailInfoValue}>{selectedEmergencyDetail?.relativeTime || '--'}</Text>
+                    </View>
+                  </View>
+                  {showMessageEmergencyFee ? <View style={styles.detailFeeBox}>
+                      <Text style={styles.detailFeeText}>{`发布超额费：${formatCurrencyFromCents(selectedEmergencyDetail?.publishFeeCents)}`}</Text>
+                      <Text style={styles.detailFeeText}>{`救援超额费：${formatCurrencyFromCents(selectedEmergencyDetail?.helperOverageFeeCents)}`}</Text>
+                    </View> : null}
+                  <View style={styles.detailTagsRow}>
+                    <View style={styles.detailTagNeutral}>
+                      <Text style={styles.detailTagNeutralText}>{`${selectedEmergencyDetail?.responderCount || 0}人响应`}</Text>
+                    </View>
+                    <View style={styles.detailTagWarning}>
+                      <Text style={styles.detailTagWarningText}>{`需${selectedEmergencyDetail?.neededHelperCount || 0}人`}</Text>
+                    </View>
+                  </View>
+                  {emergencyDetailError ? <Text style={styles.detailErrorText}>{emergencyDetailError}</Text> : null}
+                </View>
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>{'响应者'}</Text>
+                  {selectedEmergencyDetail?.responders?.length ? selectedEmergencyDetail.responders.map(responder => <View key={responder.id || responder.userId || responder.name} style={styles.responderItem}>
+                      <Avatar uri={responder.avatar || responder.avatarUrl} name={responder.name} size={38} />
+                      <View style={styles.responderMeta}>
+                        <Text style={styles.responderName}>{responder.name || '匿名用户'}</Text>
+                        <Text style={styles.responderJoinTime}>{formatRelativeTime(responder.joinTime) || responder.joinTime || ''}</Text>
+                      </View>
+                    </View>) : <Text style={styles.emptyText}>{'暂无响应者'}</Text>}
+                </View>
+              </ScrollView>}
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={showPrivateModal} animationType="slide" statusBarTranslucent>
         <KeyboardAvoidingView
           style={styles.privateModalKeyboardView}
@@ -1783,7 +2019,7 @@ const styles = StyleSheet.create({
     marginBottom: 2
   },
   emergencyName: {
-    fontSize: scaleFont(15),
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937'
   },
@@ -1820,10 +2056,10 @@ const styles = StyleSheet.create({
     color: '#9ca3af'
   },
   emergencyTitle: {
-    fontSize: scaleFont(15),
+    fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937',
-    lineHeight: scaleFont(22),
+    lineHeight: scaleFont(20),
     marginBottom: 10
   },
   emergencyInfo: {
@@ -1863,26 +2099,45 @@ const styles = StyleSheet.create({
   },
   emergencyFooter: {
     flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 12
+  },
+  emergencyFooterLeft: {
+    flex: 1,
+    gap: 8,
+    marginRight: 8,
+    minWidth: 0
+  },
+  emergencyFooterRight: {
+    alignItems: 'flex-end',
+    gap: 8
+  },
+  emergencyFooterActionRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between'
+    gap: 8,
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end'
   },
   emergencyRescuerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4
+    gap: 4,
+    flexWrap: 'nowrap'
   },
   emergencyRescuerText: {
-    fontSize: scaleFont(13),
+    fontSize: scaleFont(12),
     color: '#6b7280'
   },
   respondBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     backgroundColor: '#ef4444',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 18,
     shadowColor: '#ef4444',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -1901,9 +2156,9 @@ const styles = StyleSheet.create({
   },
   ignoreBtn: {
     backgroundColor: '#f3f4f6',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: '#e5e7eb'
   },
@@ -1944,6 +2199,19 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontWeight: '600'
   },
+  responseCountBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 3
+  },
+  responseCountText: {
+    fontSize: scaleFont(12),
+    color: '#2563eb',
+    fontWeight: '600'
+  },
   viewDetailBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1951,7 +2219,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16
+    borderRadius: 16,
+    alignSelf: 'flex-start'
   },
   viewDetailBtnText: {
     fontSize: scaleFont(12),
@@ -2033,6 +2302,247 @@ const styles = StyleSheet.create({
   sectionEmptyText: {
     fontSize: scaleFont(13),
     color: '#9ca3af'
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end'
+  },
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: modalTokens.overlay
+  },
+  respondersModal: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    maxHeight: '65%',
+    paddingBottom: 24
+  },
+  detailModal: {
+    backgroundColor: '#F8F9FB',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '88%',
+    paddingBottom: 24
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEF2F7'
+  },
+  modalTitle: {
+    fontSize: scaleFont(18),
+    fontWeight: '700',
+    color: '#111827'
+  },
+  modalCloseBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  modalSubHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 10
+  },
+  modalSubTitle: {
+    fontSize: scaleFont(16),
+    color: '#6b7280'
+  },
+  respondersList: {
+    maxHeight: 420
+  },
+  respondersListContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 8
+  },
+  responderItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  responderMeta: {
+    flex: 1
+  },
+  responderName: {
+    fontSize: scaleFont(15),
+    color: '#111827',
+    fontWeight: '600'
+  },
+  responderJoinTime: {
+    fontSize: scaleFont(12),
+    color: '#9ca3af',
+    marginTop: 4
+  },
+  detailLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 24
+  },
+  detailLoadingText: {
+    fontSize: scaleFont(14),
+    color: '#6b7280'
+  },
+  commentsErrorText: {
+    fontSize: scaleFont(14),
+    color: '#ef4444',
+    textAlign: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 24
+  },
+  detailScroll: {
+    maxHeight: 640
+  },
+  detailScrollContent: {
+    paddingTop: 16,
+    paddingBottom: 24
+  },
+  detailSection: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 18,
+    marginHorizontal: 16,
+    marginBottom: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 12
+  },
+  detailSectionTitle: {
+    fontSize: scaleFont(17),
+    fontWeight: '700',
+    color: '#111827'
+  },
+  detailHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  detailHeaderMeta: {
+    flex: 1
+  },
+  detailName: {
+    fontSize: scaleFont(16),
+    color: '#111827',
+    fontWeight: '600'
+  },
+  detailTime: {
+    fontSize: scaleFont(12),
+    color: '#9ca3af',
+    marginTop: 3
+  },
+  detailTitle: {
+    fontSize: scaleFont(21),
+    color: '#111827',
+    fontWeight: '700',
+    lineHeight: scaleFont(28)
+  },
+  detailDescription: {
+    fontSize: scaleFont(15),
+    color: '#6B7280',
+    lineHeight: scaleFont(23)
+  },
+  detailInfoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -4,
+    marginTop: 2
+  },
+  detailInfoItem: {
+    width: '50%',
+    paddingHorizontal: 4,
+    marginBottom: 12
+  },
+  detailInfoLabel: {
+    fontSize: scaleFont(13),
+    color: '#9ca3af',
+    marginBottom: 6
+  },
+  detailInfoValue: {
+    fontSize: scaleFont(15),
+    color: '#111827',
+    fontWeight: '500',
+    lineHeight: scaleFont(22)
+  },
+  detailFeeBox: {
+    backgroundColor: '#fff7ed',
+    borderColor: '#FDBA74',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8
+  },
+  detailFeeText: {
+    fontSize: scaleFont(14),
+    color: '#c2410c',
+    fontWeight: '600'
+  },
+  detailTagsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8
+  },
+  detailTagNeutral: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#bfdbfe',
+    borderWidth: 1,
+    borderRadius: 999,
+    minHeight: 30,
+    paddingHorizontal: 12,
+    paddingVertical: 6
+  },
+  detailTagNeutralText: {
+    fontSize: scaleFont(13),
+    color: '#2563eb',
+    fontWeight: '600'
+  },
+  detailTagWarning: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+    borderWidth: 1,
+    borderRadius: 999,
+    minHeight: 30,
+    paddingHorizontal: 12,
+    paddingVertical: 6
+  },
+  detailTagWarningText: {
+    fontSize: scaleFont(13),
+    color: '#d97706',
+    fontWeight: '600'
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 36,
+    gap: 10
+  },
+  emptyText: {
+    fontSize: scaleFont(14),
+    color: '#9ca3af',
+    textAlign: 'center'
+  },
+  detailErrorText: {
+    fontSize: scaleFont(14),
+    color: '#ef4444',
+    lineHeight: scaleFont(20),
+    marginHorizontal: 16,
+    marginBottom: 18
   },
   notificationItem: {
     flexDirection: 'row',

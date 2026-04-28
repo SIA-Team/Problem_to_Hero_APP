@@ -90,6 +90,9 @@ const buildNextRegion = (region, step, option) => {
   return nextRegion;
 };
 
+const isAllRegionSelected = (region = {}) =>
+  LEVEL_KEYS.every((key) => !String(region?.[key] || '').trim());
+
 export default function RegionSelector({
   visible,
   onClose,
@@ -169,6 +172,13 @@ export default function RegionSelector({
   const handleConfirm = () => {
     onRegionChange?.(draftRegion);
     handleDismiss();
+  };
+
+  const handleSelectAllRegions = () => {
+    setDraftRegion({ ...DEFAULT_REGION });
+    setRegionStep(0);
+    setSearchText('');
+    setErrorMessage('');
   };
 
   const openStep = async (step) => {
@@ -290,6 +300,20 @@ export default function RegionSelector({
                 </TouchableOpacity>
               ) : null}
             </View>
+            <TouchableOpacity
+              style={[styles.allRegionBtn, isAllRegionSelected(draftRegion) && styles.allRegionBtnActive]}
+              onPress={handleSelectAllRegions}
+              activeOpacity={0.75}
+            >
+              <Ionicons
+                name={isAllRegionSelected(draftRegion) ? 'checkmark-circle' : 'globe-outline'}
+                size={16}
+                color={isAllRegionSelected(draftRegion) ? '#ef4444' : '#6b7280'}
+              />
+              <Text style={[styles.allRegionBtnText, isAllRegionSelected(draftRegion) && styles.allRegionBtnTextActive]}>
+                {t ? t('home.all') : '全部区域'}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.regionList} keyboardShouldPersistTaps="handled">
@@ -446,6 +470,32 @@ const styles = StyleSheet.create({
     padding: 0,
     fontSize: scaleFont(14),
     color: modalTokens.textPrimary,
+  },
+  allRegionBtn: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+  },
+  allRegionBtnActive: {
+    borderColor: '#fecaca',
+    backgroundColor: '#fff1f2',
+  },
+  allRegionBtnText: {
+    fontSize: scaleFont(13),
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  allRegionBtnTextActive: {
+    color: '#ef4444',
+    fontWeight: '600',
   },
   regionList: {
     padding: 8,
