@@ -148,6 +148,7 @@ const API_SERVER_CONFIG = {
   [buildServicePath(SERVICES.USER, '/app/group/*/join')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/group-message/list')]: getCurrentServerSync,
   [buildServicePath(SERVICES.USER, '/app/group-message/create')]: getCurrentServerSync,
+  [buildServicePath(SERVICES.USER, '/app/region/children')]: getCurrentServerSync,
   [buildServicePath(SERVICES.CONTENT, '/app/content/emergency-help/quota')]: getCurrentServerSync,
   [buildServicePath(SERVICES.CONTENT, '/app/content/emergency-help/settings/public')]: getCurrentServerSync,
   [buildServicePath(SERVICES.CONTENT, '/app/content/emergency-help/list')]: getCurrentServerSync,

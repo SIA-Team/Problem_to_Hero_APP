@@ -2376,6 +2376,14 @@
       "selectTeam": "Select Team",
       "selectedCount": "Selected {count} teams",
       "members": "members"
+    },
+    "emergencyReceivedCard": {
+      "rescuerCount": "Need {count} helpers",
+      "responseCount": "{count} responded",
+      "viewDetail": "View Details",
+      "responded": "Responded",
+      "ignore": "Ignore",
+      "respondNow": "Respond Now"
     }
   },
   "channelManage": {

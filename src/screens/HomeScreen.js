@@ -26,13 +26,15 @@ import { formatTime } from '../utils/timeFormatter';
 import { getLastLocationLevel } from '../utils/locationFormatter';
 import { shouldRequirePaidQuestionAccess } from '../utils/questionAccessRules';
 import { openOfficialRechargePage } from '../utils/externalLinks';
+import { buildCombinedChannelResolvedDisplayName, getChannelDisplayName } from '../utils/combinedChannelDisplay';
 import { applyMockRecharge, applyMockWalletExpense, getWalletBalanceWithMock } from '../utils/walletMock';
 import { markQuestionAsPaid } from '../utils/paidQuestionAccess';
 import { navigateToPublicProfile, resolvePublicUserId } from '../utils/publicProfileNavigation';
 import questionApi from '../services/api/questionApi';
 import userApi from '../services/api/userApi';
 import { getBlockedUserIds, subscribeBlockedUsers } from '../services/blacklistState';
-import { fetchHomeChannels } from '../services/channelHomeService';
+import { fetchHomeChannelItems } from '../services/channelHomeService';
+import { fetchChannelCatalog } from '../services/channelCatalogService';
 import {
   applyQuestionInteractionSnapshot,
   buildQuestionInteractionSnapshot,
@@ -213,7 +215,9 @@ export default function HomeScreen({ navigation }) {
   
   // 添加调试信息 - 显示检测到的语言
   
-  const [comboTabs, setComboTabs] = useState([]);
+  const [comboTabItems, setComboTabItems] = useState([]);
+  const [comboTabDisplayNamesByName, setComboTabDisplayNamesByName] = useState({});
+  const [comboCategoryDisplayNames, setComboCategoryDisplayNames] = useState([]);
 
   // Tabs array using translation with useMemo
   const baseTabs = useMemo(() => [
@@ -233,10 +237,14 @@ export default function HomeScreen({ navigation }) {
     t('home.education')
   ], [locale]);
 
+  const comboTabNames = useMemo(
+    () => comboTabItems.map((item) => getChannelDisplayName(item)).filter(Boolean),
+    [comboTabItems]
+  );
   const tabs = useMemo(() => [
     ...baseTabs,
-    ...comboTabs.filter(tab => !baseTabs.includes(tab))
-  ], [baseTabs, comboTabs]);
+    ...comboTabNames.filter(tab => !baseTabs.includes(tab))
+  ], [baseTabs, comboTabNames]);
 
   const questionFeedTabs = useMemo(() => {
     const excludedTabs = new Set([
@@ -251,18 +259,23 @@ export default function HomeScreen({ navigation }) {
   
   const [activeTab, setActiveTab] = useState('');
 
+  const getRenderedHomeTabName = useCallback(
+    (tab) => comboTabDisplayNamesByName[tab] || tab,
+    [comboTabDisplayNamesByName]
+  );
+
   const syncComboTabs = React.useCallback(async () => {
     try {
-      const homeChannelTabs = await fetchHomeChannels();
-      setComboTabs(prevTabs => {
-        if (JSON.stringify(prevTabs) === JSON.stringify(homeChannelTabs)) {
-          return prevTabs;
+      const homeChannelItems = await fetchHomeChannelItems();
+      setComboTabItems(prevItems => {
+        if (JSON.stringify(prevItems) === JSON.stringify(homeChannelItems)) {
+          return prevItems;
         }
-        return homeChannelTabs;
+        return homeChannelItems;
       });
     } catch (error) {
       console.error('Failed to load home channel tabs:', error);
-      setComboTabs(prevTabs => (prevTabs.length === 0 ? prevTabs : []));
+      setComboTabItems(prevItems => (prevItems.length === 0 ? prevItems : []));
     }
   }, []);
   
@@ -280,6 +293,94 @@ export default function HomeScreen({ navigation }) {
   useFocusEffect(React.useCallback(() => {
     syncComboTabs();
   }, [syncComboTabs]));
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadComboCategoryDisplayNames = async () => {
+      try {
+        const catalog = await fetchChannelCatalog();
+        const names = [
+          ...(Array.isArray(catalog?.groupsByType?.country) ? catalog.groupsByType.country : []),
+          ...(Array.isArray(catalog?.groupsByType?.industry) ? catalog.groupsByType.industry : []),
+          ...(Array.isArray(catalog?.groupsByType?.enterprise) ? catalog.groupsByType.enterprise : []),
+          ...(Array.isArray(catalog?.groupsByType?.personal) ? catalog.groupsByType.personal : []),
+        ]
+          .map((channel) => getChannelDisplayName(channel))
+          .filter(Boolean);
+        const uniqueSortedNames = Array.from(new Set(names)).sort((left, right) => right.length - left.length);
+
+        if (isMounted) {
+          setComboCategoryDisplayNames(uniqueSortedNames);
+        }
+      } catch (error) {
+        console.error('Failed to load combo category display names:', error);
+        if (isMounted) {
+          setComboCategoryDisplayNames([]);
+        }
+      }
+    };
+
+    loadComboCategoryDisplayNames();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const resolveComboTabDisplayNames = async () => {
+      if (comboTabItems.length === 0) {
+        if (isMounted) {
+          setComboTabDisplayNamesByName({});
+        }
+        return;
+      }
+
+      const resolvedEntries = await Promise.all(
+        comboTabItems.map(async (item) => {
+          const fullName = getChannelDisplayName(item);
+
+          if (!fullName) {
+            return null;
+          }
+
+          const displayName = await buildCombinedChannelResolvedDisplayName(
+            item,
+            comboCategoryDisplayNames
+          );
+
+          return [fullName, displayName || fullName];
+        })
+      );
+
+      if (!isMounted) {
+        return;
+      }
+
+      const nextDisplayNameMap = {};
+      resolvedEntries.forEach((entry) => {
+        if (!entry) {
+          return;
+        }
+
+        const [fullName, displayName] = entry;
+        nextDisplayNameMap[fullName] = displayName;
+      });
+
+      setComboTabDisplayNamesByName(nextDisplayNameMap);
+    };
+
+    resolveComboTabDisplayNames().catch((error) => {
+      console.error('Failed to resolve home combo tab display names:', error);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [comboCategoryDisplayNames, comboTabItems]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -1738,7 +1839,9 @@ export default function HomeScreen({ navigation }) {
                 }
               }}
             >
-              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                {getRenderedHomeTabName(tab)}
+              </Text>
               {activeTab === tab && <View style={styles.tabIndicator} />}
             </TouchableOpacity>
           ))}

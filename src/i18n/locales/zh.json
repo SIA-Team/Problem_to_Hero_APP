@@ -2376,6 +2376,14 @@
       "selectTeam": "选择团队",
       "selectedCount": "已选 {count} 个团队",
       "members": "成员"
+    },
+    "emergencyReceivedCard": {
+      "rescuerCount": "需 {count} 人",
+      "responseCount": "{count} 人已响应",
+      "viewDetail": "查看详情",
+      "responded": "已响应",
+      "ignore": "忽略",
+      "respondNow": "立即响应"
     }
   },
   "channelManage": {

@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import Avatar from './Avatar';
+import { useTranslation } from '../i18n/withTranslation';
 import { scaleFont } from '../utils/responsive';
 
 export default function EmergencyReceivedCard({
@@ -16,6 +17,7 @@ export default function EmergencyReceivedCard({
   onPressRespond,
   style,
 }) {
+  const { t } = useTranslation();
   const LocationWrapper = onPressLocation ? TouchableOpacity : View;
 
   return (
@@ -28,12 +30,6 @@ export default function EmergencyReceivedCard({
           <Text style={styles.name}>{item.name}</Text>
           <Text style={styles.time}>{item.time}</Text>
         </View>
-        {isResponded ? (
-          <View style={styles.respondedBadge}>
-            <Ionicons name="checkmark-circle" size={14} color="#22c55e" />
-            <Text style={styles.respondedBadgeText}>{'已响应'}</Text>
-          </View>
-        ) : null}
       </View>
 
       <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
@@ -56,18 +52,22 @@ export default function EmergencyReceivedCard({
         <View style={styles.footerLeft}>
           <View style={styles.rescuerInfo}>
             <Ionicons name="people-outline" size={16} color="#6b7280" />
-            <Text style={styles.rescuerText}>{`需 ${item.rescuerCount} 人`}</Text>
+            <Text style={styles.rescuerText}>
+              {t('components.emergencyReceivedCard.rescuerCount', { count: item.rescuerCount })}
+            </Text>
             <TouchableOpacity
               style={styles.responseCountBtn}
               activeOpacity={0.72}
               onPress={onPressResponders}
             >
-              <Text style={styles.responseCountText}>{`${item.responseCount} 人已响应`}</Text>
+              <Text style={styles.responseCountText}>
+                {t('components.emergencyReceivedCard.responseCount', { count: item.responseCount })}
+              </Text>
             </TouchableOpacity>
           </View>
           <TouchableOpacity style={styles.viewDetailBtn} onPress={onPressViewDetail}>
             <Ionicons name="document-text-outline" size={14} color="#6b7280" />
-            <Text style={styles.viewDetailBtnText}>{'查看详情'}</Text>
+            <Text style={styles.viewDetailBtnText}>{t('components.emergencyReceivedCard.viewDetail')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -75,16 +75,16 @@ export default function EmergencyReceivedCard({
           {isResponded ? (
             <View style={styles.respondedBadge}>
               <Ionicons name="checkmark-circle" size={14} color="#22c55e" />
-              <Text style={styles.respondedBadgeText}>{'已响应'}</Text>
+              <Text style={styles.respondedBadgeText}>{t('components.emergencyReceivedCard.responded')}</Text>
             </View>
           ) : (
             <>
               <TouchableOpacity style={styles.ignoreBtn} onPress={onPressIgnore}>
-                <Text style={styles.ignoreBtnText}>{'忽略'}</Text>
+                <Text style={styles.ignoreBtnText}>{t('components.emergencyReceivedCard.ignore')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.respondBtn} onPress={onPressRespond}>
                 <Ionicons name="flash" size={14} color="#fff" />
-                <Text style={styles.respondBtnText}>{'立即响应'}</Text>
+                <Text style={styles.respondBtnText}>{t('components.emergencyReceivedCard.respondNow')}</Text>
               </TouchableOpacity>
             </>
           )}

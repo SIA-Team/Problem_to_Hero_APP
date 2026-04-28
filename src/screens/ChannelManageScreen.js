@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { AppState, View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert, Animated } from 'react-native';
+import { AppState, View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert, Animated, KeyboardAvoidingView, Keyboard, Platform, InteractionManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import CategoryIcon from '../components/CategoryIcon';
@@ -17,6 +17,12 @@ import {
 } from '../services/channelSubscribedService';
 import { getRegionChildren } from '../services/regionService';
 import { showAppAlert } from '../utils/appAlert';
+import {
+  buildCombinedChannelResolvedDisplayName,
+  getChannelDisplayName,
+  getCombinedChannelDisplayName,
+  shouldCompactCombinedChannelDisplay,
+} from '../utils/combinedChannelDisplay';
 
 import { scaleFont } from '../utils/responsive';
 // 鍦板尯鏁版嵁锛堜娇鐢ㄥ璇█鏁版嵁锛?
@@ -46,6 +52,101 @@ const COMBO_CATEGORY_PARENT_NAME_ALIASES = {
   industry: ['行业', '行业问题', 'industry'],
   enterprise: ['企业', '企业问题', 'enterprise', 'company'],
   personal: ['个人', '个人问题', 'personal', 'individual'],
+};
+
+const CHANNEL_MANAGE_SCREEN_CACHE_TTL_MS = 30 * 1000;
+
+const channelManageScreenCache = {
+  remoteChannelCatalog: null,
+  persistedMyChannels: [],
+  comboChannels: [],
+  combinedChannelDisplayNamesByName: {},
+  updatedAt: 0,
+};
+
+const cloneComparableValue = (value) => JSON.parse(JSON.stringify(value ?? null));
+
+const areValuesEquivalent = (left, right) =>
+  JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+
+const hasChannelManageScreenCache = () =>
+  Boolean(
+    channelManageScreenCache.remoteChannelCatalog ||
+    channelManageScreenCache.persistedMyChannels.length > 0 ||
+    channelManageScreenCache.comboChannels.length > 0 ||
+    Object.keys(channelManageScreenCache.combinedChannelDisplayNamesByName).length > 0
+  );
+
+const isChannelManageScreenCacheFresh = () =>
+  hasChannelManageScreenCache() &&
+  Date.now() - channelManageScreenCache.updatedAt < CHANNEL_MANAGE_SCREEN_CACHE_TTL_MS;
+
+const getComboCategoryDisplayNamesFromCatalog = (catalog) => {
+  const groupsByType = catalog?.groupsByType || emptyChannelGroups;
+  const seen = new Set();
+  const names = [
+    ...(groupsByType.country || []),
+    ...(groupsByType.industry || []),
+    ...(groupsByType.enterprise || []),
+    ...(groupsByType.personal || []),
+  ]
+    .map(channel => getChannelDisplayName(channel))
+    .filter(Boolean)
+    .filter(name => {
+      if (seen.has(name)) {
+        return false;
+      }
+
+      seen.add(name);
+      return true;
+    });
+
+  return names.sort((left, right) => right.length - left.length);
+};
+
+const buildResolvedCombinedChannelDisplayNameMap = async (
+  channels,
+  knownCategoryNames = []
+) => {
+  const combinedChannels = (Array.isArray(channels) ? channels : []).filter(
+    channel =>
+      channel &&
+      typeof channel === 'object' &&
+      shouldCompactCombinedChannelDisplay(channel, knownCategoryNames)
+  );
+
+  if (combinedChannels.length === 0) {
+    return {};
+  }
+
+  const resolvedEntries = await Promise.all(
+    combinedChannels.map(async channel => {
+      const fullName = getChannelDisplayName(channel);
+
+      if (!fullName) {
+        return null;
+      }
+
+      const displayName = await buildCombinedChannelResolvedDisplayName(
+        channel,
+        knownCategoryNames
+      );
+
+      return displayName ? [fullName, displayName] : null;
+    })
+  );
+
+  const nextDisplayNameMap = {};
+  resolvedEntries.forEach(entry => {
+    if (!entry) {
+      return;
+    }
+
+    const [fullName, displayName] = entry;
+    nextDisplayNameMap[fullName] = displayName;
+  });
+
+  return nextDisplayNameMap;
 };
 
 const normalizeComboCategoryText = value =>
@@ -313,14 +414,6 @@ const DraggingChannelOverlay = ({
     </Animated.View>;
 };
 
-const getChannelDisplayName = channel => {
-  if (typeof channel === 'string') {
-    return channel.trim();
-  }
-
-  return String(channel?.name ?? '').trim();
-};
-
 const getChannelIdentityKey = channel => {
   const targetType = String(channel?.targetType ?? '').trim();
   const targetKey = String(channel?.targetKey ?? '').trim();
@@ -430,12 +523,19 @@ export default function ChannelManageScreen({
     i18n
   } = useTranslation();
   const locale = i18n?.locale || 'en';
+  const initialScreenCache = channelManageScreenCache;
+  const hasInitialScreenCacheRef = useRef(hasChannelManageScreenCache());
+  const hasInitialScreenCache = hasInitialScreenCacheRef.current;
 
-  const [remoteChannelCatalog, setRemoteChannelCatalog] = useState(null);
-  const [catalogStatus, setCatalogStatus] = useState('loading');
+  const [remoteChannelCatalog, setRemoteChannelCatalog] = useState(initialScreenCache.remoteChannelCatalog);
+  const [catalogStatus, setCatalogStatus] = useState(
+    initialScreenCache.remoteChannelCatalog ? 'success' : 'loading'
+  );
   const appStateRef = useRef(AppState.currentState);
   const catalogLoadPromiseRef = useRef(null);
-  const hasLoadedCatalogOnceRef = useRef(false);
+  const hasLoadedCatalogOnceRef = useRef(Boolean(initialScreenCache.remoteChannelCatalog));
+  const hasBootstrappedInitialDataRef = useRef(hasInitialScreenCache);
+  const [isInitialHydrating, setIsInitialHydrating] = useState(!hasInitialScreenCache);
   const [isCreatingCombo, setIsCreatingCombo] = useState(false);
   const [isSavingChannels, setIsSavingChannels] = useState(false);
   const [regionOptions, setRegionOptions] = useState([]);
@@ -459,10 +559,14 @@ export default function ChannelManageScreen({
   }, [remoteChannelCatalog]);
   const isCatalogLoading = catalogStatus === 'loading';
   const isCatalogError = catalogStatus === 'error';
+  const showColdStartSkeleton = isInitialHydrating && !hasInitialScreenCache;
 
   // 鎴戠殑棰戦亾 - 浣跨敤缈昏瘧鍚庣殑榛樿鍊?
-  const [persistedMyChannels, setPersistedMyChannels] = useState([]);
-  const [myChannels, setMyChannels] = useState([]);
+  const [persistedMyChannels, setPersistedMyChannels] = useState(initialScreenCache.persistedMyChannels);
+  const [myChannels, setMyChannels] = useState(initialScreenCache.persistedMyChannels);
+  const [combinedChannelDisplayNamesByName, setCombinedChannelDisplayNamesByName] = useState(
+    initialScreenCache.combinedChannelDisplayNamesByName
+  );
   const myChannelNames = React.useMemo(
     () => myChannels.map(channel => getChannelDisplayName(channel)).filter(Boolean),
     [myChannels]
@@ -473,7 +577,7 @@ export default function ChannelManageScreen({
     enterprise: channelOptionsByType.enterprise.filter(channel => !myChannelNames.includes(getChannelDisplayName(channel))),
     personal: channelOptionsByType.personal.filter(channel => !myChannelNames.includes(getChannelDisplayName(channel))),
   }), [channelOptionsByType, myChannelNames]);
-  const [comboChannels, setComboChannels] = useState([]);
+  const [comboChannels, setComboChannels] = useState(initialScreenCache.comboChannels);
   
   // 缂栬緫妯″紡鐘舵€?
   const [isEditMode, setIsEditMode] = useState(false);
@@ -482,6 +586,9 @@ export default function ChannelManageScreen({
   const myChannelTagRefs = useRef(new Map());
   const myChannelTagLayoutsRef = useRef(new Map());
   const scrollViewRef = useRef(null);
+  const comboCreatorRef = useRef(null);
+  const regionSearchRef = useRef(null);
+  const comboActionsRef = useRef(null);
   const draggingChannelKeyRef = useRef('');
   const handleDragChannelMoveRef = useRef(null);
   const isFinishingDragRef = useRef(false);
@@ -495,6 +602,7 @@ export default function ChannelManageScreen({
     contentHeight: 0,
     pageY: 0,
   });
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   // 缁勫悎棰戦亾鍒涘缓
   const [showComboCreator, setShowComboCreator] = useState(true);
@@ -513,6 +621,10 @@ export default function ChannelManageScreen({
 
   // 鍖哄煙鎼滅储
   const [regionSearchText, setRegionSearchText] = useState('');
+  const comboCategoryDisplayNames = React.useMemo(
+    () => getComboCategoryDisplayNamesFromCatalog(remoteChannelCatalog),
+    [remoteChannelCatalog]
+  );
 
   const hasPendingChannelChanges = React.useMemo(() => {
     const persistedKeys = persistedMyChannels
@@ -529,6 +641,121 @@ export default function ChannelManageScreen({
     return persistedKeys.some((identityKey, index) => identityKey !== draftKeys[index]);
   }, [myChannels, persistedMyChannels]);
 
+  const getRenderedMyChannelName = React.useCallback((channel) => {
+    const fullName = getChannelDisplayName(channel);
+
+    if (fullName && combinedChannelDisplayNamesByName[fullName]) {
+      return combinedChannelDisplayNamesByName[fullName];
+    }
+
+    return getCombinedChannelDisplayName(channel);
+  }, [combinedChannelDisplayNamesByName]);
+
+  const scheduleRefreshAfterInteractions = React.useCallback((task) => {
+    if (!hasChannelManageScreenCache()) {
+      task();
+      return {
+        cancel() {},
+      };
+    }
+
+    return InteractionManager.runAfterInteractions(task);
+  }, []);
+
+  const reloadMyChannels = React.useCallback(async () => {
+    return fetchMySubscribedChannelItems();
+  }, []);
+
+  const reloadMyCreatedCombinedChannels = React.useCallback(async () => {
+    return fetchMyCreatedCombinedChannels();
+  }, []);
+
+  useEffect(() => {
+    if (hasBootstrappedInitialDataRef.current) {
+      setIsInitialHydrating(false);
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    const hydrateInitialScreenData = async () => {
+      setIsInitialHydrating(true);
+
+      const [catalogResult, subscribedResult, combinedResult] = await Promise.allSettled([
+        fetchChannelCatalog(),
+        reloadMyChannels(),
+        reloadMyCreatedCombinedChannels(),
+      ]);
+
+      if (!isMounted) {
+        return;
+      }
+
+      let nextCatalog = null;
+      let nextCatalogStatus = 'empty';
+      let nextPersistedChannels = [];
+      let nextComboChannels = [];
+
+      if (catalogResult.status === 'fulfilled' && hasChannelCatalogData(catalogResult.value)) {
+        nextCatalog = catalogResult.value;
+        nextCatalogStatus = 'success';
+      } else if (catalogResult.status === 'rejected') {
+        console.error('Failed to hydrate channel catalog:', catalogResult.reason);
+        nextCatalogStatus = 'error';
+      }
+
+      if (subscribedResult.status === 'fulfilled') {
+        nextPersistedChannels = decorateChannelsWithCatalogState(
+          subscribedResult.value,
+          nextCatalog
+        );
+      } else {
+        console.error('Failed to hydrate my subscribed channels:', subscribedResult.reason);
+      }
+
+      if (combinedResult.status === 'fulfilled') {
+        nextComboChannels = combinedResult.value;
+      } else {
+        console.error('Failed to hydrate my created combined channels:', combinedResult.reason);
+      }
+
+      const nextCombinedDisplayNamesByName = await buildResolvedCombinedChannelDisplayNameMap(
+        nextPersistedChannels,
+        getComboCategoryDisplayNamesFromCatalog(nextCatalog)
+      );
+
+      if (!isMounted) {
+        return;
+      }
+
+      hasBootstrappedInitialDataRef.current = true;
+      hasLoadedCatalogOnceRef.current = nextCatalogStatus !== 'loading';
+      setRemoteChannelCatalog(nextCatalog);
+      setCatalogStatus(nextCatalogStatus);
+      setPersistedMyChannels(nextPersistedChannels);
+      setMyChannels(nextPersistedChannels);
+      setComboChannels(nextComboChannels);
+      setCombinedChannelDisplayNamesByName(nextCombinedDisplayNamesByName);
+      setIsInitialHydrating(false);
+    };
+
+    hydrateInitialScreenData().catch(error => {
+      console.error('Failed to hydrate channel manage screen:', error);
+
+      if (!isMounted) {
+        return;
+      }
+
+      hasBootstrappedInitialDataRef.current = true;
+      setCatalogStatus(currentStatus => (currentStatus === 'loading' ? 'error' : currentStatus));
+      setIsInitialHydrating(false);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [reloadMyChannels, reloadMyCreatedCombinedChannels]);
+
   const loadChannelCatalog = React.useCallback(async ({ preserveStatus = false } = {}) => {
     if (catalogLoadPromiseRef.current) {
       return catalogLoadPromiseRef.current;
@@ -543,17 +770,19 @@ export default function ChannelManageScreen({
         const catalog = await fetchChannelCatalog();
 
         if (hasChannelCatalogData(catalog)) {
-          setRemoteChannelCatalog(catalog);
+          setRemoteChannelCatalog(currentCatalog =>
+            areValuesEquivalent(currentCatalog, catalog) ? currentCatalog : catalog
+          );
           setCatalogStatus('success');
           return catalog;
         }
 
-        setRemoteChannelCatalog(null);
+        setRemoteChannelCatalog(currentCatalog => (currentCatalog === null ? currentCatalog : null));
         setCatalogStatus('empty');
         return catalog;
       } catch (error) {
         console.error('Failed to load channel catalog:', error);
-        setRemoteChannelCatalog(null);
+        setRemoteChannelCatalog(currentCatalog => (currentCatalog === null ? currentCatalog : null));
         setCatalogStatus('error');
         throw error;
       } finally {
@@ -567,26 +796,33 @@ export default function ChannelManageScreen({
   }, []);
 
   useEffect(() => {
+    if (!hasBootstrappedInitialDataRef.current) {
+      return undefined;
+    }
+
     let isMounted = true;
 
     const syncChannelCatalog = async () => {
-      await loadChannelCatalog();
+      await loadChannelCatalog({ preserveStatus: hasChannelManageScreenCache() });
 
       if (!isMounted) {
         return;
       }
     };
 
-    syncChannelCatalog();
+    const refreshTask = scheduleRefreshAfterInteractions(() => {
+      syncChannelCatalog();
+    });
 
     return () => {
       isMounted = false;
+      refreshTask.cancel?.();
     };
-  }, [loadChannelCatalog]);
+  }, [loadChannelCatalog, scheduleRefreshAfterInteractions]);
 
   useFocusEffect(
     React.useCallback(() => {
-      if (!hasLoadedCatalogOnceRef.current) {
+      if (!hasLoadedCatalogOnceRef.current || isChannelManageScreenCacheFresh()) {
         return undefined;
       }
 
@@ -619,6 +855,10 @@ export default function ChannelManageScreen({
   }, [loadChannelCatalog]);
 
   useEffect(() => {
+    if (!hasBootstrappedInitialDataRef.current) {
+      return undefined;
+    }
+
     let isMounted = true;
 
     const syncMyChannels = async () => {
@@ -633,8 +873,16 @@ export default function ChannelManageScreen({
           return;
         }
 
-        setPersistedMyChannels(decoratedSubscribedChannels);
-        setMyChannels(decoratedSubscribedChannels);
+        setPersistedMyChannels(currentChannels =>
+          areValuesEquivalent(currentChannels, decoratedSubscribedChannels)
+            ? currentChannels
+            : decoratedSubscribedChannels
+        );
+        setMyChannels(currentChannels =>
+          areValuesEquivalent(currentChannels, decoratedSubscribedChannels)
+            ? currentChannels
+            : decoratedSubscribedChannels
+        );
       } catch (error) {
         console.error('Failed to load my subscribed channels:', error);
 
@@ -642,17 +890,64 @@ export default function ChannelManageScreen({
           return;
         }
 
-        setPersistedMyChannels([]);
-        setMyChannels([]);
+        setPersistedMyChannels(currentChannels =>
+          currentChannels.length === 0 ? currentChannels : []
+        );
+        setMyChannels(currentChannels =>
+          currentChannels.length === 0 ? currentChannels : []
+        );
       }
     };
 
-    syncMyChannels();
+    const refreshTask = scheduleRefreshAfterInteractions(() => {
+      syncMyChannels();
+    });
+
+    return () => {
+      isMounted = false;
+      refreshTask.cancel?.();
+    };
+  }, [locale, reloadMyChannels, scheduleRefreshAfterInteractions]);
+
+  useEffect(() => {
+    if (!hasBootstrappedInitialDataRef.current) {
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    const resolveCombinedChannelDisplayNames = async () => {
+      const nextDisplayNameMap = await buildResolvedCombinedChannelDisplayNameMap(
+        myChannels,
+        comboCategoryDisplayNames
+      );
+
+      if (Object.keys(nextDisplayNameMap).length === 0) {
+        if (isMounted) {
+          setCombinedChannelDisplayNamesByName(currentMap =>
+            Object.keys(currentMap).length === 0 ? currentMap : {}
+          );
+        }
+        return;
+      }
+
+      if (!isMounted) {
+        return;
+      }
+
+      setCombinedChannelDisplayNamesByName(currentMap =>
+        areValuesEquivalent(currentMap, nextDisplayNameMap) ? currentMap : nextDisplayNameMap
+      );
+    };
+
+    resolveCombinedChannelDisplayNames().catch((error) => {
+      console.error('Failed to resolve combined channel display names:', error);
+    });
 
     return () => {
       isMounted = false;
     };
-  }, [locale, reloadMyChannels]);
+  }, [comboCategoryDisplayNames, myChannels]);
 
   const getRegionParentIdByStep = React.useCallback(() => {
     switch (regionStep) {
@@ -779,10 +1074,6 @@ export default function ChannelManageScreen({
     }
   }, [comboSelection.categoryType]);
 
-  const reloadMyChannels = React.useCallback(async () => {
-    return fetchMySubscribedChannelItems();
-  }, []);
-
   useEffect(() => {
     if (comboStep !== 'category') {
       return;
@@ -846,6 +1137,83 @@ export default function ChannelManageScreen({
       }
     });
   }, [myChannels]);
+
+  const ensureComboRegionStepVisible = React.useCallback(() => {
+    if (
+      !showComboCreator ||
+      comboStep !== 'region' ||
+      !scrollViewRef.current?.scrollTo ||
+      !regionSearchRef.current?.measureInWindow ||
+      !comboActionsRef.current?.measureInWindow
+    ) {
+      return;
+    }
+
+    regionSearchRef.current.measureInWindow((searchX, searchY, searchWidth, searchHeight) => {
+      comboActionsRef.current.measureInWindow((actionsX, actionsY, actionsWidth, actionsHeight) => {
+        const viewportTop = scrollMetricsRef.current.pageY;
+        const viewportBottom = viewportTop + scrollMetricsRef.current.viewportHeight;
+        const topPadding = 12;
+        const bottomPadding = 12;
+        const topLimit = viewportTop + topPadding;
+        const bottomLimit = viewportBottom - bottomPadding;
+        const preferredSearchTop = viewportTop + 28;
+        const actionsBottom = actionsY + actionsHeight;
+        const searchLiftOffset = Math.max(0, searchY - preferredSearchTop);
+        const actionsLiftOffset = Math.max(0, actionsBottom - bottomLimit);
+        let nextOffsetY = scrollMetricsRef.current.offsetY;
+
+        if (searchY < topLimit) {
+          nextOffsetY -= topLimit - searchY;
+        }
+
+        if (searchLiftOffset > 0 || actionsLiftOffset > 0) {
+          nextOffsetY += Math.max(searchLiftOffset, actionsLiftOffset);
+        }
+
+        nextOffsetY = Math.max(0, nextOffsetY);
+
+        if (Math.abs(nextOffsetY - scrollMetricsRef.current.offsetY) < 2) {
+          return;
+        }
+
+        scrollViewRef.current.scrollTo({
+          y: nextOffsetY,
+          animated: true,
+        });
+      });
+    });
+  }, [comboStep, showComboCreator]);
+
+  const handleRegionSearchFocus = React.useCallback(() => {
+    requestAnimationFrame(() => {
+      refreshMyChannelLayouts();
+      ensureComboRegionStepVisible();
+    });
+  }, [ensureComboRegionStepVisible, refreshMyChannelLayouts]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSubscription = Keyboard.addListener(showEvent, () => {
+      setIsKeyboardVisible(true);
+
+      requestAnimationFrame(() => {
+        refreshMyChannelLayouts();
+        ensureComboRegionStepVisible();
+      });
+    });
+
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setIsKeyboardVisible(false);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [ensureComboRegionStepVisible, refreshMyChannelLayouts]);
 
   const stopAutoScroll = React.useCallback(() => {
     if (autoScrollFrameRef.current) {
@@ -912,10 +1280,6 @@ export default function ChannelManageScreen({
     stopAutoScroll,
   ]);
 
-  const reloadMyCreatedCombinedChannels = React.useCallback(async () => {
-    return fetchMyCreatedCombinedChannels();
-  }, []);
-
   const syncPersistedMyChannels = React.useCallback((nextPersistedChannels, options = {}) => {
     const { preserveDraftChanges = false } = options;
     const decoratedPersistedChannels = decorateChannelsWithCatalogState(
@@ -923,9 +1287,13 @@ export default function ChannelManageScreen({
       remoteChannelCatalog
     );
 
-    setPersistedMyChannels(decoratedPersistedChannels);
-    setMyChannels(currentChannels =>
-      decorateChannelsWithCatalogState(
+    setPersistedMyChannels(currentChannels =>
+      areValuesEquivalent(currentChannels, decoratedPersistedChannels)
+        ? currentChannels
+        : decoratedPersistedChannels
+    );
+    setMyChannels(currentChannels => {
+      const nextChannels = decorateChannelsWithCatalogState(
         preserveDraftChanges
           ? applyDraftChannelChanges(
             decoratedPersistedChannels,
@@ -934,8 +1302,12 @@ export default function ChannelManageScreen({
           )
           : decoratedPersistedChannels,
         remoteChannelCatalog
-      )
-    );
+      );
+
+      return areValuesEquivalent(currentChannels, nextChannels)
+        ? currentChannels
+        : nextChannels;
+    });
   }, [persistedMyChannels, remoteChannelCatalog]);
 
   useEffect(() => {
@@ -943,12 +1315,14 @@ export default function ChannelManageScreen({
       return;
     }
 
-    setPersistedMyChannels(currentChannels =>
-      decorateChannelsWithCatalogState(currentChannels, remoteChannelCatalog)
-    );
-    setMyChannels(currentChannels =>
-      decorateChannelsWithCatalogState(currentChannels, remoteChannelCatalog)
-    );
+    setPersistedMyChannels(currentChannels => {
+      const nextChannels = decorateChannelsWithCatalogState(currentChannels, remoteChannelCatalog);
+      return areValuesEquivalent(currentChannels, nextChannels) ? currentChannels : nextChannels;
+    });
+    setMyChannels(currentChannels => {
+      const nextChannels = decorateChannelsWithCatalogState(currentChannels, remoteChannelCatalog);
+      return areValuesEquivalent(currentChannels, nextChannels) ? currentChannels : nextChannels;
+    });
   }, [remoteChannelCatalog]);
 
   useEffect(() => {
@@ -974,6 +1348,10 @@ export default function ChannelManageScreen({
   }, []);
 
   useEffect(() => {
+    if (!hasBootstrappedInitialDataRef.current) {
+      return undefined;
+    }
+
     let isMounted = true;
 
     const syncMyCreatedCombinedChannels = async () => {
@@ -984,7 +1362,11 @@ export default function ChannelManageScreen({
           return;
         }
 
-        setComboChannels(createdCombinedChannels);
+        setComboChannels(currentChannels =>
+          areValuesEquivalent(currentChannels, createdCombinedChannels)
+            ? currentChannels
+            : createdCombinedChannels
+        );
       } catch (error) {
         console.error('Failed to load my created combined channels:', error);
 
@@ -992,16 +1374,91 @@ export default function ChannelManageScreen({
           return;
         }
 
-        setComboChannels([]);
+        setComboChannels(currentChannels =>
+          currentChannels.length === 0 ? currentChannels : []
+        );
       }
     };
 
-    syncMyCreatedCombinedChannels();
+    const refreshTask = scheduleRefreshAfterInteractions(() => {
+      syncMyCreatedCombinedChannels();
+    });
 
     return () => {
       isMounted = false;
+      refreshTask.cancel?.();
     };
-  }, [locale, reloadMyCreatedCombinedChannels]);
+  }, [locale, reloadMyCreatedCombinedChannels, scheduleRefreshAfterInteractions]);
+
+  useEffect(() => {
+    channelManageScreenCache.remoteChannelCatalog = cloneComparableValue(remoteChannelCatalog);
+    channelManageScreenCache.persistedMyChannels = cloneComparableValue(persistedMyChannels) || [];
+    channelManageScreenCache.comboChannels = cloneComparableValue(comboChannels) || [];
+    channelManageScreenCache.combinedChannelDisplayNamesByName =
+      cloneComparableValue(combinedChannelDisplayNamesByName) || {};
+    channelManageScreenCache.updatedAt = Date.now();
+  }, [
+    combinedChannelDisplayNamesByName,
+    comboChannels,
+    persistedMyChannels,
+    remoteChannelCatalog,
+  ]);
+
+  const renderSkeletonTags = React.useCallback((count, keyPrefix) => (
+    Array.from({ length: count }).map((_, index) => (
+      <View
+        key={`${keyPrefix}-${index}`}
+        style={[
+          styles.skeletonChip,
+          index % 3 === 0 ? styles.skeletonChipWide : null,
+        ]}
+      />
+    ))
+  ), []);
+
+  const renderInitialLoadingContent = React.useCallback(() => (
+    <>
+      <View style={styles.section}>
+        <View style={styles.sectionTitleRow}>
+          <View style={styles.skeletonTitleBar} />
+          <View style={styles.skeletonActionBar} />
+        </View>
+        <View style={styles.skeletonTagGrid}>
+          {renderSkeletonTags(6, 'my-channel')}
+        </View>
+      </View>
+
+      {['country', 'industry', 'enterprise', 'personal'].map(sectionKey => (
+        <View key={sectionKey} style={styles.section}>
+          <View style={[styles.sectionTitleLeft, styles.channelSectionTitleRow]}>
+            <View style={styles.skeletonTitleBarShort} />
+          </View>
+          <View style={styles.skeletonTagGrid}>
+            {renderSkeletonTags(5, sectionKey)}
+          </View>
+        </View>
+      ))}
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.skeletonTitleBar} />
+          <View style={styles.skeletonActionBar} />
+        </View>
+        <View style={styles.skeletonNoteBar} />
+        <View style={[styles.skeletonNoteBar, styles.skeletonNoteBarShort]} />
+        <View style={styles.skeletonCard}>
+          <View style={styles.skeletonTitleBarShort} />
+          <View style={[styles.skeletonNoteBar, styles.skeletonCardBar]} />
+          <View style={styles.skeletonInputBar} />
+          <View style={styles.skeletonListBlock} />
+          <View style={styles.skeletonButtonRow}>
+            <View style={styles.skeletonButtonSecondary} />
+            <View style={styles.skeletonButtonPrimary} />
+          </View>
+        </View>
+      </View>
+    </>
+  ), [renderSkeletonTags]);
 
   // 鍒囨崲棰戦亾璁㈤槄
   const toggleChannel = channel => {
@@ -1717,30 +2174,41 @@ export default function ChannelManageScreen({
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        ref={scrollViewRef}
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        scrollEnabled={!draggingChannelSnapshot}
-        scrollEventThrottle={16}
-        onLayout={() => {
-        refreshMyChannelLayouts();
-      }}
-        onContentSizeChange={(width, height) => {
-        scrollMetricsRef.current = {
-          ...scrollMetricsRef.current,
-          contentHeight: height
-        };
-      }}
-        onScroll={event => {
-        scrollMetricsRef.current = {
-          ...scrollMetricsRef.current,
-          offsetY: event.nativeEvent.contentOffset.y,
-          viewportHeight: event.nativeEvent.layoutMeasurement.height,
-          contentHeight: event.nativeEvent.contentSize.height
-        };
-      }}
+      <KeyboardAvoidingView
+        style={styles.contentWrapper}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.content}
+          contentContainerStyle={[
+            styles.contentContainer,
+            isKeyboardVisible ? styles.contentContainerKeyboardVisible : null,
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          scrollEnabled={!draggingChannelSnapshot}
+          scrollEventThrottle={16}
+          onLayout={() => {
+          refreshMyChannelLayouts();
+        }}
+          onContentSizeChange={(width, height) => {
+          scrollMetricsRef.current = {
+            ...scrollMetricsRef.current,
+            contentHeight: height
+          };
+        }}
+          onScroll={event => {
+          scrollMetricsRef.current = {
+            ...scrollMetricsRef.current,
+            offsetY: event.nativeEvent.contentOffset.y,
+            viewportHeight: event.nativeEvent.layoutMeasurement.height,
+            contentHeight: event.nativeEvent.contentSize.height
+          };
+        }}
+        >
+        {showColdStartSkeleton ? renderInitialLoadingContent() : <>
         {/* 鎴戠殑棰戦亾 */}
         <View style={styles.section}>
           <View style={styles.sectionTitleRow}>
@@ -1762,7 +2230,7 @@ export default function ChannelManageScreen({
               <ShakingChannelTag
                 key={getRenderableChannelKey(channel, index)}
                 channelKey={getRenderableChannelKey(channel, index)}
-                channel={getChannelDisplayName(channel)}
+                channel={getRenderedMyChannelName(channel)}
                 index={index}
                 isDragging={draggingChannelKey === getRenderableChannelKey(channel, index)}
                 isEditMode={isEditMode}
@@ -1771,7 +2239,7 @@ export default function ChannelManageScreen({
                 onDelete={() => toggleChannel(channel)}
                 onLongPress={event => handleDragChannelStart(
                   getRenderableChannelKey(channel, index),
-                  getChannelDisplayName(channel),
+                  getRenderedMyChannelName(channel),
                   event,
                   isChannelUnavailable(channel),
                   t('channelManage.channelUnavailable')
@@ -1875,7 +2343,7 @@ export default function ChannelManageScreen({
           </Text>
 
           {/* 鍒涘缓缁勫悎棰戦亾琛ㄥ崟 */}
-          {Boolean(showComboCreator) && <View style={styles.comboCreator}>
+          {Boolean(showComboCreator) && <View ref={comboCreatorRef} collapsable={false} style={styles.comboCreator}>
               <View style={styles.comboSteps}>
                 <View style={styles.comboStepHeader}>
                   <Text style={styles.comboStepTitle}>
@@ -1885,9 +2353,9 @@ export default function ChannelManageScreen({
                 <Text style={styles.comboPath}>{t('channelManage.selected')} {getSelectedPath()}</Text>
                 
                 {/* 鍖哄煙鎼滅储妗?- 鍙湪鍖哄煙閫夋嫨姝ラ鏄剧ず */}
-                {comboStep === 'region' && <View style={styles.regionSearchContainer}>
+                {comboStep === 'region' && <View ref={regionSearchRef} collapsable={false} style={styles.regionSearchContainer}>
                     <Ionicons name="search" size={16} color="#9ca3af" style={styles.searchIcon} />
-                    <TextInput style={styles.regionSearchInput} placeholder={t('channelManage.searchRegion') || '鎼滅储鍦板尯...'} placeholderTextColor="#9ca3af" value={regionSearchText} onChangeText={setRegionSearchText} />
+                    <TextInput style={styles.regionSearchInput} placeholder={t('channelManage.searchRegion') || '鎼滅储鍦板尯...'} placeholderTextColor="#9ca3af" value={regionSearchText} onChangeText={setRegionSearchText} onFocus={handleRegionSearchFocus} />
                     {regionSearchText.length > 0 && <TouchableOpacity onPress={() => setRegionSearchText('')} hitSlop={{
                 top: 10,
                 bottom: 10,
@@ -1898,7 +2366,7 @@ export default function ChannelManageScreen({
                       </TouchableOpacity>}
                   </View>}
                 
-                <ScrollView style={styles.comboOptions} nestedScrollEnabled>
+                <ScrollView style={styles.comboOptions} nestedScrollEnabled keyboardShouldPersistTaps="handled">
                   {comboStep === 'region' ?
               // 鍖哄煙閫夋嫨
               regionStatus === 'loading' ? <Text style={styles.inlineHintText}>{t('common.loading')}</Text> : getRegionOptions().length > 0 ? getRegionOptions().map((option, index) => <TouchableOpacity key={index} style={styles.comboOption} onPress={() => selectRegionOption(option)}>
@@ -1916,7 +2384,7 @@ export default function ChannelManageScreen({
               renderComboCategoryContent()}
                 </ScrollView>
 
-                <View style={styles.comboActions}>
+                <View ref={comboActionsRef} collapsable={false} style={styles.comboActions}>
                   {comboStep === 'region' ? <>
                       {regionStep > 0 && <TouchableOpacity style={styles.comboBackBtn} onPress={() => {
                   setRegionStep(regionStep - 1);
@@ -1982,7 +2450,7 @@ export default function ChannelManageScreen({
             </View>}
 
           {/* 宸插垱寤虹殑缁勫悎棰戦亾 */}
-          <View style={styles.comboList}>
+        <View style={styles.comboList}>
             {false && myComboChannels.map(combo => <View key={combo.id} style={styles.comboItem}>
                 <View style={styles.comboItemContent}>
                   <Text style={styles.comboItemName}>{combo.name}</Text>
@@ -1996,11 +2464,13 @@ export default function ChannelManageScreen({
               </View>)}
           </View>
         </View>
+        </>}
 
         <View style={{
         height: 30
       }} />
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
       {draggingChannelSnapshot ? (
         <DraggingChannelOverlay
           channel={draggingChannelSnapshot.channel}
@@ -2043,6 +2513,104 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1
+  },
+  contentWrapper: {
+    flex: 1
+  },
+  contentContainer: {
+    paddingBottom: 16
+  },
+  contentContainerKeyboardVisible: {
+    paddingBottom: 12
+  },
+  skeletonTitleBar: {
+    width: 132,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#e5e7eb'
+  },
+  skeletonTitleBarShort: {
+    width: 112,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#e5e7eb'
+  },
+  skeletonActionBar: {
+    width: 68,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6'
+  },
+  skeletonTagGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginRight: -8,
+    marginBottom: -8
+  },
+  skeletonChip: {
+    width: 88,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: '#f3f4f6',
+    marginRight: 8,
+    marginBottom: 8
+  },
+  skeletonChipWide: {
+    width: 118
+  },
+  skeletonNoteBar: {
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#f3f4f6',
+    marginBottom: 8
+  },
+  skeletonNoteBarShort: {
+    width: '72%'
+  },
+  skeletonCard: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8
+  },
+  skeletonCardBar: {
+    marginTop: 10,
+    width: '54%'
+  },
+  skeletonInputBar: {
+    height: 40,
+    borderRadius: 6,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginTop: 12,
+    marginBottom: 12
+  },
+  skeletonListBlock: {
+    height: 140,
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#eef2f7',
+    marginBottom: 12
+  },
+  skeletonButtonRow: {
+    flexDirection: 'row',
+    gap: 8
+  },
+  skeletonButtonSecondary: {
+    width: 92,
+    height: 36,
+    borderRadius: 6,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb'
+  },
+  skeletonButtonPrimary: {
+    flex: 1,
+    height: 36,
+    borderRadius: 6,
+    backgroundColor: '#fca5a5'
   },
   section: {
     backgroundColor: '#fff',

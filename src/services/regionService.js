@@ -5,6 +5,7 @@ const ROOT_PARENT_ID = '0';
 
 const childrenCache = new Map();
 const inFlightRequests = new Map();
+const regionPathCache = new Map();
 
 const getCacheKey = (parentId) => normalizeEntityId(parentId) ?? ROOT_PARENT_ID;
 
@@ -101,13 +102,67 @@ export const getRegionChildren = async (parentId = ROOT_PARENT_ID, options = {})
   }
 };
 
+const searchRegionPath = async (parentId, targetId, ancestors = [], visited = new Set()) => {
+  const normalizedParentId = getCacheKey(parentId);
+
+  if (visited.has(normalizedParentId)) {
+    return null;
+  }
+
+  visited.add(normalizedParentId);
+
+  const children = await getRegionChildren(normalizedParentId);
+
+  for (const child of children) {
+    const nextPath = [...ancestors, child];
+
+    if (child.id === targetId) {
+      return nextPath;
+    }
+  }
+
+  for (const child of children) {
+    const nextPath = [...ancestors, child];
+    const matchedPath = await searchRegionPath(child.id, targetId, nextPath, visited);
+
+    if (matchedPath) {
+      return matchedPath;
+    }
+  }
+
+  return null;
+};
+
+export const getRegionPathById = async (regionId) => {
+  const targetId = getCacheKey(regionId);
+
+  if (!targetId || targetId === ROOT_PARENT_ID) {
+    return [];
+  }
+
+  if (regionPathCache.has(targetId)) {
+    return regionPathCache.get(targetId);
+  }
+
+  const matchedPath = await searchRegionPath(ROOT_PARENT_ID, targetId);
+  const normalizedPath = Array.isArray(matchedPath) ? matchedPath : [];
+
+  normalizedPath.forEach((node, index) => {
+    regionPathCache.set(node.id, normalizedPath.slice(0, index + 1));
+  });
+
+  return normalizedPath;
+};
+
 export const resetRegionCache = () => {
   childrenCache.clear();
   inFlightRequests.clear();
+  regionPathCache.clear();
 };
 
 const regionService = {
   getRegionChildren,
+  getRegionPathById,
   resetRegionCache,
 };
 
