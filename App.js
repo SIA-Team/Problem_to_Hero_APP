@@ -1709,8 +1709,28 @@ function AppContent() {
     <UpdateChecker enabled={fontsLoaded && !isInitializing} />
   );
 
-  const handleLogin = async () => {
+  const handleLogin = async (loginContext = {}) => {
     await markBootstrapCompleted();
+
+    const loggedInUserId = resolveInterestOnboardingUserId({
+      currentUser: loginContext?.user,
+    });
+    const shouldSkipInterestOnboarding =
+      loginContext?.loginMethod === 'password' && Boolean(loggedInUserId);
+
+    if (shouldSkipInterestOnboarding) {
+      try {
+        await markInterestOnboardingCompleted(loggedInUserId);
+      } catch (error) {
+        console.error('Failed to mark interest onboarding completed for existing user:', error);
+      }
+
+      setShouldShowInterestOnboardingScreen(false);
+      setInterestOnboardingUserId(loggedInUserId);
+      enterAuthenticatedApp({ skipInterestCheck: true });
+      return;
+    }
+
     enterAuthenticatedApp();
   };
 
