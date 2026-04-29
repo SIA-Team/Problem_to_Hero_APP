@@ -19,7 +19,10 @@ export const EmergencyProvider = ({ children }) => {
   };
 
   const ignoreEmergency = (emergencyId) => {
-    setIgnoredEmergencies(prev => [...prev, emergencyId]);
+    const normalizedId = String(emergencyId);
+    setIgnoredEmergencies(prev => (
+      prev.some(id => String(id) === normalizedId) ? prev : [...prev, normalizedId]
+    ));
   };
 
   const isResponded = (emergencyId) => {
@@ -27,7 +30,7 @@ export const EmergencyProvider = ({ children }) => {
   };
 
   const isIgnored = (emergencyId) => {
-    return ignoredEmergencies.includes(emergencyId);
+    return ignoredEmergencies.some(id => String(id) === String(emergencyId));
   };
 
   return (

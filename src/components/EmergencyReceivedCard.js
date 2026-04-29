@@ -1,15 +1,45 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import Avatar from './Avatar';
 import { useTranslation } from '../i18n/withTranslation';
 import { scaleFont } from '../utils/responsive';
 
+const STATUS_META = {
+  responding: {
+    icon: 'time-outline',
+    label: '响应中',
+    containerStyle: 'statusBadgeResponding',
+    textStyle: 'statusBadgeRespondingText',
+    iconColor: '#ef4444',
+  },
+  completed: {
+    icon: 'checkmark-circle',
+    label: '已完成',
+    containerStyle: 'statusBadgeCompleted',
+    textStyle: 'statusBadgeCompletedText',
+    iconColor: '#6b7280',
+  },
+  ignored: {
+    icon: 'remove-circle',
+    label: '已忽略',
+    containerStyle: 'statusBadgeIgnored',
+    textStyle: 'statusBadgeIgnoredText',
+    iconColor: '#6b7280',
+  },
+};
+
 export default function EmergencyReceivedCard({
   item,
   highlight = false,
   isResponded = false,
+  statusType,
+  statusText,
+  footerMode,
+  completedActionLabel = '已完成',
+  isActionLoading = false,
+  showViewDetailInPending,
   onPressLocation,
   onPressResponders,
   onPressViewDetail,
@@ -19,6 +49,10 @@ export default function EmergencyReceivedCard({
 }) {
   const { t } = useTranslation();
   const LocationWrapper = onPressLocation ? TouchableOpacity : View;
+  const resolvedFooterMode = footerMode || (isResponded ? 'responded' : 'pending');
+  const statusMeta = statusType ? STATUS_META[statusType] : null;
+  const rightActionDisabled = resolvedFooterMode !== 'pending' || isActionLoading;
+  const shouldShowDetailInPending = resolvedFooterMode === 'pending' && (showViewDetailInPending ?? !footerMode);
 
   return (
     <View style={[styles.card, highlight && styles.cardHigh, style]}>
@@ -27,7 +61,17 @@ export default function EmergencyReceivedCard({
       <View style={styles.header}>
         <Avatar uri={item.avatar} name={item.name} size={44} />
         <View style={styles.headerContent}>
-          <Text style={styles.name}>{item.name}</Text>
+          <View style={styles.headerTopRow}>
+            <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+            {statusMeta ? (
+              <View style={[styles.statusBadge, styles[statusMeta.containerStyle]]}>
+                <Ionicons name={statusMeta.icon} size={13} color={statusMeta.iconColor} />
+                <Text style={[styles.statusBadgeText, styles[statusMeta.textStyle]]}>
+                  {statusText || statusMeta.label}
+                </Text>
+              </View>
+            ) : null}
+          </View>
           <Text style={styles.time}>{item.time}</Text>
         </View>
       </View>
@@ -48,47 +92,92 @@ export default function EmergencyReceivedCard({
         </View>
       </View>
 
-      <View style={styles.footer}>
-        <View style={styles.footerLeft}>
-          <View style={styles.rescuerInfo}>
-            <Ionicons name="people-outline" size={16} color="#6b7280" />
-            <Text style={styles.rescuerText}>
-              {t('components.emergencyReceivedCard.rescuerCount', { count: item.rescuerCount })}
-            </Text>
-            <TouchableOpacity
-              style={styles.responseCountBtn}
-              activeOpacity={0.72}
-              onPress={onPressResponders}
-            >
-              <Text style={styles.responseCountText}>
-                {t('components.emergencyReceivedCard.responseCount', { count: item.responseCount })}
-              </Text>
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity style={styles.viewDetailBtn} onPress={onPressViewDetail}>
-            <Ionicons name="document-text-outline" size={14} color="#6b7280" />
-            <Text style={styles.viewDetailBtnText}>{t('components.emergencyReceivedCard.viewDetail')}</Text>
-          </TouchableOpacity>
-        </View>
+      <View style={styles.rescuerInfo}>
+        <Ionicons name="people-outline" size={16} color="#6b7280" />
+        <Text style={styles.rescuerText}>
+          {t('components.emergencyReceivedCard.rescuerCount', { count: item.rescuerCount })}
+        </Text>
+        <TouchableOpacity
+          style={styles.responseCountInlineBtn}
+          activeOpacity={onPressResponders ? 0.72 : 1}
+          onPress={onPressResponders}
+          disabled={!onPressResponders}
+        >
+          <Text style={styles.responseCountInlineText}>
+            {t('components.emergencyReceivedCard.responseCount', { count: item.responseCount })}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-        <View style={styles.actionRow}>
-          {isResponded ? (
-            <View style={styles.respondedBadge}>
-              <Ionicons name="checkmark-circle" size={14} color="#22c55e" />
-              <Text style={styles.respondedBadgeText}>{t('components.emergencyReceivedCard.responded')}</Text>
-            </View>
-          ) : (
-            <>
-              <TouchableOpacity style={styles.ignoreBtn} onPress={onPressIgnore}>
+      <View style={styles.footer}>
+        {resolvedFooterMode === 'pending' ? (
+          <>
+            {shouldShowDetailInPending ? (
+              <TouchableOpacity style={styles.viewDetailBtn} onPress={onPressViewDetail}>
+                <Ionicons name="document-text-outline" size={14} color="#6b7280" />
+                <Text style={styles.viewDetailBtnText}>{t('components.emergencyReceivedCard.viewDetail')}</Text>
+              </TouchableOpacity>
+            ) : null}
+            <View style={styles.pendingActionRow}>
+              <TouchableOpacity
+                style={[styles.ignoreBtn, isActionLoading && styles.actionBtnDisabled]}
+                onPress={onPressIgnore}
+                disabled={isActionLoading}
+              >
                 <Text style={styles.ignoreBtnText}>{t('components.emergencyReceivedCard.ignore')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.respondBtn} onPress={onPressRespond}>
-                <Ionicons name="flash" size={14} color="#fff" />
-                <Text style={styles.respondBtnText}>{t('components.emergencyReceivedCard.respondNow')}</Text>
+              <TouchableOpacity
+                style={[styles.respondBtn, isActionLoading && styles.actionBtnDisabled]}
+                onPress={onPressRespond}
+                disabled={isActionLoading}
+              >
+                {isActionLoading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="flash" size={14} color="#fff" />
+                    <Text style={styles.respondBtnText}>{t('components.emergencyReceivedCard.respondNow')}</Text>
+                  </>
+                )}
               </TouchableOpacity>
-            </>
-          )}
-        </View>
+            </View>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity style={styles.viewDetailBtn} onPress={onPressViewDetail}>
+              <Ionicons name="document-text-outline" size={14} color="#6b7280" />
+              <Text style={styles.viewDetailBtnText}>{t('components.emergencyReceivedCard.viewDetail')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.stateActionBtn,
+                resolvedFooterMode === 'responded' && styles.stateActionBtnResponded,
+                resolvedFooterMode === 'ignored' && styles.stateActionBtnIgnored,
+                resolvedFooterMode === 'completed' && styles.stateActionBtnCompleted,
+              ]}
+              disabled={rightActionDisabled}
+              onPress={resolvedFooterMode === 'pending' ? onPressRespond : undefined}
+              activeOpacity={1}
+            >
+              {resolvedFooterMode === 'responded' ? (
+                <>
+                  <Ionicons name="checkmark-circle" size={14} color="#16a34a" />
+                  <Text style={[styles.stateActionBtnText, styles.stateActionBtnTextResponded]}>我已响应</Text>
+                </>
+              ) : resolvedFooterMode === 'ignored' ? (
+                <>
+                  <Ionicons name="remove-circle" size={14} color="#6b7280" />
+                  <Text style={[styles.stateActionBtnText, styles.stateActionBtnTextMuted]}>我已忽略</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="checkmark-done-circle" size={14} color="#6b7280" />
+                  <Text style={[styles.stateActionBtnText, styles.stateActionBtnTextMuted]}>{completedActionLabel}</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </View>
   );
@@ -127,7 +216,14 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 10,
   },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   name: {
+    flex: 1,
     fontSize: scaleFont(14),
     fontWeight: '600',
     color: '#1f2937',
@@ -179,39 +275,39 @@ const styles = StyleSheet.create({
     color: '#d97706',
     fontWeight: '600',
   },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  footerLeft: {
-    flex: 1,
-    gap: 8,
-    marginRight: 8,
-    minWidth: 0,
-  },
   rescuerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    flexWrap: 'nowrap',
+    flexWrap: 'wrap',
+    marginBottom: 12,
   },
   rescuerText: {
     fontSize: scaleFont(12),
     color: '#6b7280',
   },
-  responseCountBtn: {
+  responseCountInlineBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
   },
-  responseCountText: {
+  responseCountInlineText: {
     fontSize: scaleFont(12),
     color: '#2563eb',
     fontWeight: '600',
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  pendingActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 'auto',
   },
   viewDetailBtn: {
     flexDirection: 'row',
@@ -228,14 +324,43 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontWeight: '500',
   },
-  actionRow: {
+  statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-    justifyContent: 'flex-end',
+    gap: 4,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+  },
+  statusBadgeText: {
+    fontSize: scaleFont(12),
+    fontWeight: '600',
+  },
+  statusBadgeResponding: {
+    backgroundColor: '#fff1f2',
+    borderColor: '#fecdd3',
+  },
+  statusBadgeRespondingText: {
+    color: '#ef4444',
+  },
+  statusBadgeCompleted: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#d1d5db',
+  },
+  statusBadgeCompletedText: {
+    color: '#6b7280',
+  },
+  statusBadgeIgnored: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#d1d5db',
+  },
+  statusBadgeIgnoredText: {
+    color: '#6b7280',
   },
   ignoreBtn: {
+    minWidth: 88,
+    alignItems: 'center',
     backgroundColor: '#f3f4f6',
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -251,8 +376,11 @@ const styles = StyleSheet.create({
   respondBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 5,
     backgroundColor: '#ef4444',
+    minWidth: 108,
+    minHeight: 38,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 18,
@@ -267,20 +395,42 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
   },
-  respondedBadge: {
+  actionBtnDisabled: {
+    opacity: 0.7,
+  },
+  stateActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
-    backgroundColor: '#f0fdf4',
+    minWidth: 104,
+    minHeight: 38,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 18,
     borderWidth: 1,
+  },
+  stateActionBtnResponded: {
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 12,
     borderColor: '#bbf7d0',
   },
-  respondedBadgeText: {
+  stateActionBtnIgnored: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#d1d5db',
+  },
+  stateActionBtnCompleted: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#d1d5db',
+  },
+  stateActionBtnText: {
     fontSize: scaleFont(13),
-    color: '#22c55e',
     fontWeight: '600',
+  },
+  stateActionBtnTextResponded: {
+    color: '#16a34a',
+  },
+  stateActionBtnTextMuted: {
+    color: '#6b7280',
   },
 });
