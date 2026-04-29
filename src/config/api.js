@@ -76,13 +76,8 @@ export const API_ENDPOINTS = {
   },
 
   WALLET: {
-    BALANCE: buildApiPath(SERVICES.USER, '/app/wallet/balance'),
     POINTS_OVERVIEW: buildApiPath(SERVICES.WALLET, '/app/wallet/points/query-overview'),
     POINTS_TXN_LIST: buildApiPath(SERVICES.WALLET, '/app/wallet/points/txn-list'),
-    RECHARGE_CREATE: buildApiPath(SERVICES.USER, '/app/wallet/recharge/create'),
-    RECHARGE_CONFIRM: buildApiPath(SERVICES.USER, '/app/wallet/recharge/confirm'),
-    WITHDRAW_CREATE: buildApiPath(SERVICES.USER, '/app/wallet/withdraw/create'),
-    WITHDRAW_LIST: buildApiPath(SERVICES.USER, '/app/wallet/withdraw/list'),
   },
 
   GROUP: {
@@ -171,8 +166,8 @@ export const API_ENDPOINTS = {
   ACTIVITY: {
     LIST: buildApiPath(SERVICES.ACTIVITY, '/app/activity/list'),
     CENTER_LIST: buildApiPath(SERVICES.ACTIVITY, '/app/activity/center/list'),
+    CREATE: buildApiPath(SERVICES.ACTIVITY, '/app/activity/create'),
     DETAIL: '/activities/:id',
-    CREATE: '/activities',
     JOIN: '/activities/:id/join',
     PARTICIPANTS: '/activities/:id/participants',
   },

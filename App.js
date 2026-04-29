@@ -855,6 +855,7 @@ function AppContent() {
   const [interestOnboardingUserId, setInterestOnboardingUserId] = useState(null);
   const [otaRecoveryNotice, setOtaRecoveryNotice] = useState(null);
   const [startupRecoveryNotice, setStartupRecoveryNotice] = useState(null);
+  const [branchRenderEpoch, setBranchRenderEpoch] = useState(0);
   const [launchExperience, setLaunchExperience] = useState(
     APP_LAUNCH_EXPERIENCE.RETURNING_USER
   );
@@ -868,6 +869,7 @@ function AppContent() {
   const nativeSplashStateRef = React.useRef('pending');
   const startupAuthInFlightRef = React.useRef(false);
   const startupTimeoutDeferCountRef = React.useRef(0);
+  const previousLoggedInRef = React.useRef(isLoggedIn);
 
   const updateStartupStatus = React.useCallback((title, message) => {
     setStartupStatus((prev) =>
@@ -1012,11 +1014,23 @@ function AppContent() {
     }
 
     const timer = setTimeout(() => {
-      showAppAlert('热更新已自动回退', otaRecoveryNotice, [{ text: '知道了' }]);
+      if (isLoggedIn) {
+        showAppAlert('热更新已自动回退', otaRecoveryNotice, [{ text: '知道了' }]);
+      } else {
+        showToast('热更新已自动回退', 'warning', 3000);
+      }
     }, 800);
 
     return () => clearTimeout(timer);
-  }, [otaRecoveryNotice]);
+  }, [isLoggedIn, otaRecoveryNotice]);
+
+  useEffect(() => {
+    if (previousLoggedInRef.current && !isLoggedIn) {
+      setBranchRenderEpoch((prev) => prev + 1);
+    }
+
+    previousLoggedInRef.current = isLoggedIn;
+  }, [isLoggedIn]);
 
   useEffect(() => {
     if (!isInitializing) {
@@ -1065,9 +1079,7 @@ function AppContent() {
   appDebugLog('📱 App state:', { isLoggedIn, isInitializing, fontsLoaded });
   
   const appAlertRef = React.useCallback((ref) => {
-    if (ref) {
-      setAppAlertRef(ref);
-    }
+    setAppAlertRef(ref || null);
   }, []);
 
   const resolveDeviceFingerprint = async () => {
@@ -1705,8 +1717,14 @@ function AppContent() {
 
   appDebugLog('✅ App ready, isLoggedIn:', isLoggedIn);
 
+  const appBranchKey = isLoggedIn
+    ? (shouldShowInterestOnboardingScreen ? 'onboarding' : 'authenticated')
+    : `login-${branchRenderEpoch}`;
+
   const updateChecker = (
-    <UpdateChecker enabled={fontsLoaded && !isInitializing} />
+    <UpdateChecker
+      enabled={fontsLoaded && !isInitializing && isLoggedIn && !shouldShowInterestOnboardingScreen}
+    />
   );
 
   const handleLogin = async () => {
@@ -1763,9 +1781,13 @@ function AppContent() {
 
   if (isLoggedIn && shouldShowInterestOnboardingScreen) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#fff' }} onLayout={handleRootLayout}>
+      <View
+        key={`${appBranchKey}-root`}
+        style={{ flex: 1, backgroundColor: '#fff' }}
+        onLayout={handleRootLayout}
+      >
         <EmergencyProvider>
-          <SafeAreaProvider>
+          <SafeAreaProvider key={`${appBranchKey}-safearea`}>
             <StatusBar style="dark" />
             {updateChecker}
             <SafeInterestOnboardingScreen
@@ -1783,9 +1805,13 @@ function AppContent() {
 
   if (!isLoggedIn) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#fff' }} onLayout={handleRootLayout}>
+      <View
+        key={`${appBranchKey}-root`}
+        style={{ flex: 1, backgroundColor: '#fff' }}
+        onLayout={handleRootLayout}
+      >
         <EmergencyProvider>
-          <SafeAreaProvider>
+          <SafeAreaProvider key={`${appBranchKey}-safearea`}>
             {startupRecoveryNotice ? (
               <View style={{ backgroundColor: '#fff1f2', paddingHorizontal: 16, paddingVertical: 10 }}>
                 <Text style={{ color: '#b91c1c', fontSize: 13, lineHeight: 18 }}>
@@ -1794,15 +1820,19 @@ function AppContent() {
               </View>
             ) : null}
             {updateChecker}
-            <NavigationContainer>
+            <NavigationContainer key={`${appBranchKey}-nav`}>
               <StatusBar style="dark" />
-              <Stack.Navigator screenOptions={{ headerShown: false }}>
+              <Stack.Navigator key={`${appBranchKey}-stack`} screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="Login">
-                  {(props) => <LoginScreen {...props} onLogin={handleLogin} />}
+                  {(props) => (
+                    <LoginScreen
+                      {...props}
+                      onLogin={handleLogin}
+                    />
+                  )}
                 </Stack.Screen>
                 <Stack.Screen name="NetworkTest" component={NetworkTestScreen} />
               </Stack.Navigator>
-              <AppAlertContainer ref={appAlertRef} />
               <ToastContainer />
             </NavigationContainer>
           </SafeAreaProvider>
@@ -1814,13 +1844,17 @@ function AppContent() {
   const navigationLinking = __DEV__ ? undefined : APP_LINKING;
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#fff' }} onLayout={handleRootLayout}>
+    <View
+      key={`${appBranchKey}-root`}
+      style={{ flex: 1, backgroundColor: '#fff' }}
+      onLayout={handleRootLayout}
+    >
       <EmergencyProvider>
-      <SafeAreaProvider>
+      <SafeAreaProvider key={`${appBranchKey}-safearea`}>
         {updateChecker}
-        <NavigationContainer linking={navigationLinking}>
+        <NavigationContainer key={`${appBranchKey}-nav`} linking={navigationLinking}>
         <StatusBar style="dark" />
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Navigator key={`${appBranchKey}-stack`} screenOptions={{ headerShown: false }}>
             <Stack.Screen name="Main">
               {() => <MainTabs onLogout={handleLogout} />}
             </Stack.Screen>

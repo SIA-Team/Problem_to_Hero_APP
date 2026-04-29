@@ -1,39 +1,157 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from './apiClient';
 import { API_ENDPOINTS } from '../../config/api';
-import deviceRiskService from '../deviceRiskService';
+import {
+  applyWalletPointsBalanceDelta,
+  extractWalletTransactionRows,
+  mergeLocalWalletTransactions,
+  normalizeWalletServerOverview,
+  normalizeWalletServerTransactionResponse,
+  normalizeWalletPointsTxnListParams,
+  roundWalletPointsAmount,
+  WALLET_POINTS_DEFAULT_CURRENCY,
+} from '../../utils/walletPoints';
 
 const WALLET_API_PLACEHOLDER_MESSAGE = 'wallet api not configured';
+const LOCAL_WALLET_LEDGER_STORAGE_KEY = '@wallet_points_local_ledger';
+const LOCAL_WALLET_LEDGER_MAX_TRANSACTIONS = 50;
 
-const buildBaseWalletPayload = async ({
-  action,
-  amount,
-  currency,
-  metadata = {},
-  riskScene,
-  riskAction,
-} = {}) => {
-  const normalizedAmount = amount === undefined || amount === null ? null : Number(amount);
-  const normalizedCurrency = String(currency || 'usd').toLowerCase();
-  const riskContext = await deviceRiskService.captureRiskContext({
-    scene: riskScene || 'wallet',
-    action: riskAction || action || 'unknown',
-    includeFullDeviceInfo: true,
-    metadata,
-  });
+const createEmptyLocalLedger = () => ({
+  balanceDelta: 0,
+  transactions: [],
+});
+
+const normalizeLocalWalletTransaction = transaction => {
+  if (!transaction || typeof transaction !== 'object') {
+    return null;
+  }
+
+  const amount = roundWalletPointsAmount(transaction.amount);
+  if (!(amount > 0)) {
+    return null;
+  }
+
+  const txnNo = String(
+    transaction.txnNo ||
+      `LOCAL-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  ).trim();
 
   return {
-    action: action || 'unknown',
-    amount: Number.isFinite(normalizedAmount) ? normalizedAmount : null,
-    currency: normalizedCurrency,
-    riskContext,
-    metadata,
+    txnNo,
+    amount,
+    direction: String(transaction.direction || 'DEBIT').trim().toUpperCase(),
+    sourceType: String(transaction.sourceType || 'BOUNTY').trim().toUpperCase(),
+    remark: String(transaction.remark || '').trim(),
+    refId:
+      transaction.refId === undefined || transaction.refId === null
+        ? null
+        : String(transaction.refId).trim(),
+    refType: String(transaction.refType || 'QUESTION').trim(),
+    createTime: transaction.createTime || new Date().toISOString(),
+    currency: String(transaction.currency || WALLET_POINTS_DEFAULT_CURRENCY).trim(),
+  };
+};
+
+const normalizeLocalWalletLedger = rawValue => {
+  if (!rawValue || typeof rawValue !== 'object') {
+    return createEmptyLocalLedger();
+  }
+
+  const normalizedTransactions = Array.isArray(rawValue.transactions)
+    ? rawValue.transactions
+      .map(normalizeLocalWalletTransaction)
+      .filter(Boolean)
+      .slice(0, LOCAL_WALLET_LEDGER_MAX_TRANSACTIONS)
+    : [];
+
+  return {
+    balanceDelta: roundWalletPointsAmount(rawValue.balanceDelta),
+    transactions: normalizedTransactions,
+  };
+};
+
+const loadLocalWalletLedger = async () => {
+  try {
+    const rawValue = await AsyncStorage.getItem(LOCAL_WALLET_LEDGER_STORAGE_KEY);
+
+    if (!rawValue) {
+      return createEmptyLocalLedger();
+    }
+
+    return normalizeLocalWalletLedger(JSON.parse(rawValue));
+  } catch (error) {
+    console.warn('Failed to load local wallet ledger:', error);
+    return createEmptyLocalLedger();
+  }
+};
+
+const saveLocalWalletLedger = async ledger => {
+  const normalizedLedger = normalizeLocalWalletLedger(ledger);
+  await AsyncStorage.setItem(
+    LOCAL_WALLET_LEDGER_STORAGE_KEY,
+    JSON.stringify(normalizedLedger)
+  );
+  return normalizedLedger;
+};
+
+const applyLocalLedgerToOverviewResponse = async response => {
+  const ledger = await loadLocalWalletLedger();
+  const normalizedOverview = normalizeWalletServerOverview(response?.data);
+  const baseData = applyWalletPointsBalanceDelta(normalizedOverview, ledger.balanceDelta);
+
+  return {
+    ...response,
+    data: baseData,
+  };
+};
+
+const applyLocalLedgerToTransactionResponse = async (response, params = {}) => {
+  const normalizedParams = normalizeWalletPointsTxnListParams(params);
+  const ledger = await loadLocalWalletLedger();
+  const normalizedResponse = normalizeWalletServerTransactionResponse(response);
+
+  if (ledger.transactions.length === 0) {
+    return normalizedResponse;
+  }
+
+  const requestedPageNum = Number(normalizedParams.pageNum) || 1;
+  if (requestedPageNum > 1) {
+    return normalizedResponse;
+  }
+
+  const mergedTransactions = mergeLocalWalletTransactions(
+    extractWalletTransactionRows(normalizedResponse),
+    ledger.transactions,
+    normalizedParams
+  );
+
+  if (
+    normalizedResponse?.data &&
+    typeof normalizedResponse.data === 'object' &&
+    !Array.isArray(normalizedResponse.data) &&
+    (Array.isArray(normalizedResponse.data.rows) || normalizedResponse.data.total !== undefined)
+  ) {
+    return {
+      ...normalizedResponse,
+      data: {
+        ...normalizedResponse.data,
+        rows: mergedTransactions.rows,
+        total: mergedTransactions.total,
+      },
+    };
+  }
+
+  return {
+    ...normalizedResponse,
+    rows: mergedTransactions.rows,
+    total: mergedTransactions.total,
   };
 };
 
 const walletApi = {
   async getPointsOverview() {
-    if (!API_ENDPOINTS.WALLET.POINTS_OVERVIEW) {
-      return {
+    const baseResponse = !API_ENDPOINTS.WALLET.POINTS_OVERVIEW
+      ? {
         code: 200,
         msg: WALLET_API_PLACEHOLDER_MESSAGE,
         data: {
@@ -41,141 +159,77 @@ const walletApi = {
           withdrawableBalance: 0,
           lockedBalance: 0,
           frozenBalance: 0,
-          currency: 'usd',
+          currency: WALLET_POINTS_DEFAULT_CURRENCY,
         },
-      };
-    }
+      }
+      : await apiClient.get(API_ENDPOINTS.WALLET.POINTS_OVERVIEW);
 
-    return apiClient.get(API_ENDPOINTS.WALLET.POINTS_OVERVIEW);
+    return applyLocalLedgerToOverviewResponse(baseResponse);
   },
 
   async getPointsTransactionList(params = {}) {
-    if (!API_ENDPOINTS.WALLET.POINTS_TXN_LIST) {
-      return {
+    const normalizedParams = normalizeWalletPointsTxnListParams(params);
+
+    const baseResponse = !API_ENDPOINTS.WALLET.POINTS_TXN_LIST
+      ? {
         code: 200,
         msg: WALLET_API_PLACEHOLDER_MESSAGE,
         total: 0,
         rows: [],
+      }
+      : await apiClient.get(API_ENDPOINTS.WALLET.POINTS_TXN_LIST, {
+        params: normalizedParams,
+      });
+
+    return applyLocalLedgerToTransactionResponse(baseResponse, normalizedParams);
+  },
+
+  async consumePoints(amount, options = {}) {
+    const normalizedAmount = roundWalletPointsAmount(amount);
+    if (!(normalizedAmount > 0)) {
+      return {
+        code: 400,
+        msg: 'invalid wallet amount',
       };
     }
 
-    return apiClient.get(API_ENDPOINTS.WALLET.POINTS_TXN_LIST, {
-      params,
-    });
-  },
+    const overviewResponse = await walletApi.getPointsOverview();
+    const currentBalance = roundWalletPointsAmount(overviewResponse?.data?.balance);
 
-  async buildRechargeCreatePayload({
-    amount,
-    currency = 'usd',
-    channel = 'official_web',
-    returnUrl = null,
-    metadata = {},
-  } = {}) {
-    return buildBaseWalletPayload({
-      action: 'recharge_create',
-      amount,
-      currency,
-      riskScene: 'wallet',
-      riskAction: 'recharge_create',
-      metadata: {
-        channel,
-        returnUrl,
-        ...metadata,
+    if (currentBalance < normalizedAmount) {
+      return {
+        code: 400,
+        msg: 'insufficient wallet balance',
+      };
+    }
+
+    const ledger = await loadLocalWalletLedger();
+    const transaction = normalizeLocalWalletTransaction({
+      amount: normalizedAmount,
+      direction: 'DEBIT',
+      sourceType: options.sourceType || 'BOUNTY',
+      remark: options.remark,
+      refId: options.refId,
+      refType: options.refType || 'QUESTION',
+      createTime: options.createTime || new Date().toISOString(),
+      currency: options.currency || overviewResponse?.data?.currency,
+    });
+
+    const nextLedger = await saveLocalWalletLedger({
+      balanceDelta: roundWalletPointsAmount(ledger.balanceDelta - normalizedAmount),
+      transactions: [transaction, ...ledger.transactions],
+    });
+
+    return {
+      code: 200,
+      msg: 'ok',
+      data: {
+        balance: Math.max(0, roundWalletPointsAmount(currentBalance - normalizedAmount)),
+        currency: overviewResponse?.data?.currency || WALLET_POINTS_DEFAULT_CURRENCY,
+        ledger: nextLedger,
+        transaction,
       },
-    });
-  },
-
-  async buildWithdrawCreatePayload({
-    amount,
-    currency = 'usd',
-    destinationType = 'default',
-    destinationAccount = null,
-    metadata = {},
-  } = {}) {
-    return buildBaseWalletPayload({
-      action: 'withdraw_create',
-      amount,
-      currency,
-      riskScene: 'wallet',
-      riskAction: 'withdraw_create',
-      metadata: {
-        destinationType,
-        destinationAccount,
-        ...metadata,
-      },
-    });
-  },
-
-  async createRecharge(params = {}) {
-    const payload = await this.buildRechargeCreatePayload(params);
-
-    if (!API_ENDPOINTS.WALLET.RECHARGE_CREATE) {
-      return {
-        code: 200,
-        msg: WALLET_API_PLACEHOLDER_MESSAGE,
-        data: {
-          disabled: true,
-          payload,
-        },
-      };
-    }
-
-    return apiClient.post(API_ENDPOINTS.WALLET.RECHARGE_CREATE, payload);
-  },
-
-  async confirmRecharge(params = {}) {
-    const payload = await buildBaseWalletPayload({
-      action: 'recharge_confirm',
-      amount: params.amount,
-      currency: params.currency,
-      riskScene: 'wallet',
-      riskAction: 'recharge_confirm',
-      metadata: params.metadata || {},
-    });
-
-    if (!API_ENDPOINTS.WALLET.RECHARGE_CONFIRM) {
-      return {
-        code: 200,
-        msg: WALLET_API_PLACEHOLDER_MESSAGE,
-        data: {
-          disabled: true,
-          payload,
-        },
-      };
-    }
-
-    return apiClient.post(API_ENDPOINTS.WALLET.RECHARGE_CONFIRM, payload);
-  },
-
-  async createWithdraw(params = {}) {
-    const payload = await this.buildWithdrawCreatePayload(params);
-
-    if (!API_ENDPOINTS.WALLET.WITHDRAW_CREATE) {
-      return {
-        code: 200,
-        msg: WALLET_API_PLACEHOLDER_MESSAGE,
-        data: {
-          disabled: true,
-          payload,
-        },
-      };
-    }
-
-    return apiClient.post(API_ENDPOINTS.WALLET.WITHDRAW_CREATE, payload);
-  },
-
-  async getWithdrawList(params = {}) {
-    if (!API_ENDPOINTS.WALLET.WITHDRAW_LIST) {
-      return {
-        code: 200,
-        msg: WALLET_API_PLACEHOLDER_MESSAGE,
-        data: [],
-      };
-    }
-
-    return apiClient.get(API_ENDPOINTS.WALLET.WITHDRAW_LIST, {
-      params,
-    });
+    };
   },
 };
 

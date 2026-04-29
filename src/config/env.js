@@ -214,6 +214,7 @@ const API_SERVER_CONFIG = {
   
   // 上传相关接口
   [buildServicePath(SERVICES.CONTENT, '/app/content/image/upload')]: getCurrentServerSync,
+  ['/upload/file']: getCurrentServerSync,
 
   // 活动相关接口
   [buildServicePath(SERVICES.ACTIVITY, '/app/activity/list')]: getCurrentServerSync,

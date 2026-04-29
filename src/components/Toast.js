@@ -102,8 +102,9 @@ const Toast = ({ visible, message, type = 'success', duration = 2000, onHide }) 
   if (!visible) return null;
 
   return (
-    <View style={styles.container}>
+    <View pointerEvents="box-none" style={styles.container}>
       <Animated.View
+        pointerEvents="auto"
         style={[
           styles.toast,
           {

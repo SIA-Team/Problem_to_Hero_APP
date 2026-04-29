@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, TextInput } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,31 +7,54 @@ import DateTimePickerModal from '../components/DateTimePickerModal';
 import KeyboardDismissView from '../components/KeyboardDismissView';
 import { showAppAlert } from '../utils/appAlert';
 import { scaleFont } from '../utils/responsive';
+import activityApi from '../services/api/activityApi';
+import teamApi from '../services/api/teamApi';
+import { isVisibleMyTeam, normalizeMyTeam } from '../utils/teamTransforms';
 
 const parseActivityDateTime = value => {
   if (!value) {
     return null;
   }
+
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) {
     return null;
   }
+
   const [, year, month, day] = match;
   return new Date(Number(year), Number(month) - 1, Number(day), 0, 0, 0, 0);
 };
-export default function CreateActivityScreen({
-  navigation,
-  route
-}) {
-  const {
-    t
-  } = useTranslation();
+
+const formatActivityApiDateTime = (value, boundary = 'start') => {
+  const parsedDate = parseActivityDateTime(value);
+  if (!parsedDate) {
+    return '';
+  }
+
+  const year = parsedDate.getFullYear();
+  const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+  const day = String(parsedDate.getDate()).padStart(2, '0');
+  const time = boundary === 'end' ? '23:59:59' : '00:00:00';
+
+  return `${year}-${month}-${day}T${time}`;
+};
+
+const toPositiveInt = value => {
+  const normalizedValue = Number(value);
+  return Number.isInteger(normalizedValue) && normalizedValue > 0 ? normalizedValue : undefined;
+};
+
+export default function CreateActivityScreen({ navigation, route }) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const teamId = route?.params?.teamId;
   const teamName = route?.params?.teamName;
-  const fromTeamDetail = route?.params?.fromTeamDetail === true;
+  const questionId = route?.params?.questionId;
+  const onActivityCreated = route?.params?.onActivityCreated;
   const [showTeamSelector, setShowTeamSelector] = useState(false);
   const [activeTimeField, setActiveTimeField] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [myTeams, setMyTeams] = useState([]);
   const [newActivity, setNewActivity] = useState({
     title: '',
     desc: '',
@@ -44,106 +67,199 @@ export default function CreateActivityScreen({
     contact: '',
     organizerType: teamId ? 'team' : 'personal',
     teamId: teamId || null,
-    teamName: teamName || ''
+    teamName: teamName || '',
   });
-  const myTeams = [{
-    id: 1,
-    name: 'Python学习互助团队',
-    members: 12
-  }, {
-    id: 2,
-    name: 'JavaScript开发者社区',
-    members: 25
-  }, {
-    id: 3,
-    name: '数据分析爱好者',
-    members: 8
-  }];
+
+  useEffect(() => {
+    if (teamId) {
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    const loadMyTeams = async () => {
+      try {
+        const response = await teamApi.getMyTeams();
+        const isSuccess = response?.code === 0 || response?.code === 200;
+
+        if (!isSuccess) {
+          throw new Error(response?.msg || t('publish.toasts.serverError'));
+        }
+
+        const teamList = Array.isArray(response?.data) ? response.data : [];
+        const normalizedTeams = teamList
+          .map(team => normalizeMyTeam(team))
+          .filter(isVisibleMyTeam);
+
+        if (isMounted) {
+          setMyTeams(normalizedTeams);
+        }
+      } catch (error) {
+        console.error('Failed to load teams for activity creation:', error);
+        if (isMounted) {
+          setMyTeams([]);
+        }
+      }
+    };
+
+    void loadMyTeams();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [t, teamId]);
+
   const updateNewActivity = updates => {
     setNewActivity(current => ({
       ...current,
-      ...updates
+      ...updates,
     }));
   };
+
   const handleSelectDateTime = (field, value) => {
     if (!field) {
       return;
     }
+
     updateNewActivity({
-      [field]: value
+      [field]: value,
     });
   };
-  const handleCreateActivity = () => {
+
+  const handleCreateActivity = async () => {
+    if (submitting) {
+      return;
+    }
+
     if (!newActivity.title.trim()) {
       showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.titleRequired'));
       return;
     }
+
     if (!newActivity.desc.trim()) {
       showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.descriptionRequired'));
       return;
     }
+
     if (!newActivity.startTime || !newActivity.endTime) {
       showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.timeRequired'));
       return;
     }
+
     const startDate = parseActivityDateTime(newActivity.startTime);
     const endDate = parseActivityDateTime(newActivity.endTime);
+
     if (!startDate || !endDate || endDate < startDate) {
       showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.endTimeInvalid'));
       return;
     }
+
     if (newActivity.type === 'offline' && !newActivity.address.trim()) {
       showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.locationRequired'));
       return;
     }
+
     if (newActivity.organizerType === 'team' && !newActivity.teamName) {
       showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.teamRequired'));
       return;
     }
-    showAppAlert(t('screens.createActivity.success.title'), t('screens.createActivity.success.message'), [{
-      text: t('screens.createActivity.success.confirm'),
-      onPress: () => {
-        navigation.goBack();
+
+    try {
+      setSubmitting(true);
+
+      const requestPayload = {
+        title: newActivity.title.trim(),
+        description: newActivity.desc.trim(),
+        coverImage: newActivity.images[0] || '',
+        images: newActivity.images,
+        activeStartTime: formatActivityApiDateTime(newActivity.startTime, 'start'),
+        activeEndTime: formatActivityApiDateTime(newActivity.endTime, 'end'),
+        location: newActivity.type === 'offline' ? newActivity.address.trim() : '',
+        activeType: newActivity.type === 'offline' ? 2 : 1,
+        sponsorType: newActivity.organizerType === 'team' ? 2 : 1,
+        teamId: newActivity.organizerType === 'team' ? toPositiveInt(newActivity.teamId) : undefined,
+        questionId: toPositiveInt(questionId),
+        activeData: newActivity.contact.trim()
+          ? JSON.stringify({
+              contact: newActivity.contact.trim(),
+            })
+          : '',
+      };
+
+      const response = await activityApi.createActivity(requestPayload);
+      const isSuccess = response?.code === 0 || response?.code === 200;
+
+      if (!isSuccess || !response?.data) {
+        throw new Error(response?.msg || t('publish.toasts.publishFailed'));
       }
-    }]);
+
+      showAppAlert(t('screens.createActivity.success.title'), t('screens.createActivity.success.message'), [{
+        text: t('screens.createActivity.success.confirm'),
+        onPress: () => {
+          if (typeof onActivityCreated === 'function') {
+            onActivityCreated(response.data);
+          }
+          navigation.goBack();
+        },
+      }]);
+    } catch (error) {
+      console.error('Failed to create activity:', error);
+      showAppAlert(
+        t('screens.createActivity.validation.hint'),
+        error?.message || t('publish.toasts.publishFailed')
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
+
   const addActivityImage = () => {
     if (newActivity.images.length < 9) {
       setNewActivity({
         ...newActivity,
-        images: [...newActivity.images, `https://images.unsplash.com/photo-${Math.floor(Math.random() * 1000000)}?w=800&h=600&fit=crop`]
+        images: [...newActivity.images, `https://images.unsplash.com/photo-${Math.floor(Math.random() * 1000000)}?w=800&h=600&fit=crop`],
       });
     } else {
       showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.images.maxLimit'));
     }
   };
+
   const removeActivityImage = index => {
     setNewActivity({
       ...newActivity,
-      images: newActivity.images.filter((_, i) => i !== index)
+      images: newActivity.images.filter((_, i) => i !== index),
     });
   };
+
   const handleSelectTeam = team => {
     updateNewActivity({
+      organizerType: 'team',
       teamId: team.id,
-      teamName: team.name
+      teamName: team.name,
     });
     setShowTeamSelector(false);
   };
+
   const handleOrganizerTypeChange = type => {
     if (type === 'team' && !teamId) {
-      setShowTeamSelector(true);
-    } else {
       updateNewActivity({
-        organizerType: type,
-        teamId: null,
-        teamName: ''
+        organizerType: 'team',
       });
+      setShowTeamSelector(true);
+      return;
     }
+
+    updateNewActivity({
+      organizerType: type,
+      teamId: null,
+      teamName: '',
+    });
   };
+
   const headerSafeAreaStyle = {
-    paddingTop: insets.top + 8
+    paddingTop: insets.top + 8,
   };
+
   return <SafeAreaView style={styles.container} edges={['bottom']}>
       <KeyboardDismissView>
       <View style={styles.screenContent}>
@@ -162,7 +278,7 @@ export default function CreateActivityScreen({
         bottom: 15,
         left: 15,
         right: 15
-      }} activeOpacity={0.7}>
+      }} activeOpacity={0.7} disabled={submitting}>
           <Text style={styles.submitText}>{t('screens.createActivity.publish')}</Text>
         </TouchableOpacity>
       </View>
@@ -172,7 +288,6 @@ export default function CreateActivityScreen({
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
       >
-        {/* 发起身份选择 - 仅在非团队详情页进入时显示 */}
         {!teamId && <>
             <Text style={styles.inputLabel}>{t('screens.createActivity.organizerType.label')} <Text style={styles.required}>{t('screens.createActivity.organizerType.required')}</Text></Text>
             <View style={styles.organizerSelector}>
@@ -186,7 +301,6 @@ export default function CreateActivityScreen({
               </TouchableOpacity>
             </View>
 
-            {/* 已选择的团队显示 */}
             {Boolean(newActivity.organizerType === 'team' && newActivity.teamName) && <TouchableOpacity style={styles.selectedTeamBanner} onPress={() => setShowTeamSelector(true)}>
                 <View style={styles.selectedTeamInfo}>
                   <Ionicons name="people" size={18} color="#8b5cf6" />
@@ -198,14 +312,12 @@ export default function CreateActivityScreen({
                 </View>
               </TouchableOpacity>}
 
-            {/* 未选择团队提示 */}
             {newActivity.organizerType === 'team' && !newActivity.teamName && <TouchableOpacity style={styles.selectTeamPrompt} onPress={() => setShowTeamSelector(true)}>
                 <Ionicons name="add-circle-outline" size={20} color="#8b5cf6" />
                 <Text style={styles.selectTeamPromptText}>{t('screens.createActivity.selectedTeam.select')}</Text>
               </TouchableOpacity>}
           </>}
 
-        {/* 从团队详情页进入时显示固定的团队身份 */}
         {Boolean(teamId && teamName) && <>
             <Text style={styles.inputLabel}>{t('screens.createActivity.organizerType.label')}</Text>
             <View style={styles.fixedOrganizerBanner}>
@@ -217,7 +329,6 @@ export default function CreateActivityScreen({
             </View>
           </>}
 
-        {/* 活动类型 */}
         <Text style={styles.inputLabel}>{t('screens.createActivity.activityType.label')}</Text>
         <View style={styles.typeSelector}>
           <TouchableOpacity style={[styles.typeOption, newActivity.type === 'online' && styles.typeOptionActive]} onPress={() => updateNewActivity({
@@ -234,19 +345,16 @@ export default function CreateActivityScreen({
           </TouchableOpacity>
         </View>
 
-        {/* 活动标题 */}
         <Text style={styles.inputLabel}>{t('screens.createActivity.activityTitle.label')} <Text style={styles.required}>{t('screens.createActivity.activityTitle.required')}</Text></Text>
         <TextInput style={styles.input} placeholder={t('screens.createActivity.activityTitle.placeholder')} value={newActivity.title} onChangeText={text => updateNewActivity({
         title: text
       })} maxLength={50} />
 
-        {/* 活动内容 */}
         <Text style={styles.inputLabel}>{t('screens.createActivity.description.label')} <Text style={styles.required}>{t('screens.createActivity.description.required')}</Text></Text>
         <TextInput style={[styles.input, styles.textArea]} placeholder={t('screens.createActivity.description.placeholder')} value={newActivity.desc} onChangeText={text => updateNewActivity({
         desc: text
       })} multiline maxLength={500} />
 
-        {/* 活动时间 */}
         <Text style={styles.inputLabel}>{t('screens.createActivity.time.label')} <Text style={styles.required}>{t('screens.createActivity.time.required')}</Text></Text>
         <View style={styles.timeContainer}>
           <View style={styles.timeInputWrapper}>
@@ -272,7 +380,6 @@ export default function CreateActivityScreen({
           </View>
         </View>
 
-        {/* 活动地址（线下活动） */}
         {newActivity.type === 'offline' && <>
             <Text style={styles.inputLabel}>{t('screens.createActivity.location.label')} <Text style={styles.required}>{t('screens.createActivity.location.required')}</Text></Text>
             <TextInput style={styles.input} placeholder={t('screens.createActivity.location.placeholder')} value={newActivity.address} onChangeText={text => updateNewActivity({
@@ -280,7 +387,6 @@ export default function CreateActivityScreen({
         })} />
           </>}
 
-        {/* 活动图片 */}
         <Text style={styles.inputLabel}>{t('screens.createActivity.images.label')}</Text>
         <View style={styles.imageGrid}>
           {newActivity.images.map((img, idx) => <View key={idx} style={styles.imageItem}>
@@ -297,7 +403,6 @@ export default function CreateActivityScreen({
             </TouchableOpacity>}
         </View>
 
-        {/* 联系方式 */}
         <Text style={styles.inputLabel}>{t('screens.createActivity.contact.label')}</Text>
         <TextInput style={styles.input} placeholder={t('screens.createActivity.contact.placeholder')} value={newActivity.contact} onChangeText={text => updateNewActivity({
         contact: text
@@ -308,7 +413,6 @@ export default function CreateActivityScreen({
       }} />
       </ScrollView>
 
-      {/* 团队选择器弹窗 */}
       {Boolean(showTeamSelector) && <View style={styles.teamSelectorOverlay}>
           <View style={styles.teamSelectorModal}>
             <View style={styles.teamSelectorHeader}>
@@ -338,6 +442,7 @@ export default function CreateActivityScreen({
       </KeyboardDismissView>
     </SafeAreaView>;
 }
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,

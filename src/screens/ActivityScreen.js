@@ -21,8 +21,10 @@ import { scaleFont } from '../utils/responsive';
 import activityApi from '../services/api/activityApi';
 import {
   getActivityImages,
+  getActivitiesByTab,
   getJoinedActivityState,
   getQuitActivityState,
+  normalizeActivityItem,
   normalizeActivityList,
 } from '../utils/activityUtils';
 
@@ -392,6 +394,29 @@ export default function ActivityScreen({ navigation, route }) {
     invalidateActivityTabs(['my']);
   }, [invalidateActivityTabs, mutateActivityCaches]);
 
+  const handleActivityCreated = useCallback((createdActivity) => {
+    const normalizedCreatedActivity = normalizeActivityItem(createdActivity);
+
+    activityCacheRef.current = new Map();
+    activeQueryKeyRef.current = '';
+
+    if (!normalizedCreatedActivity || searchKeyword || currentTabKey === 'history') {
+      void loadActivities({ force: true });
+      return;
+    }
+
+    setActivities(currentActivities =>
+      getActivitiesByTab(
+        [
+          normalizedCreatedActivity,
+          ...currentActivities.filter(activity => activity.id !== normalizedCreatedActivity.id),
+        ],
+        currentTabKey
+      )
+    );
+    setErrorMessage('');
+  }, [currentTabKey, loadActivities, searchKeyword]);
+
   const handleJoinActivity = id => {
     const targetActivity = activities.find(activity => activity.id === id);
     if (!targetActivity) {
@@ -492,7 +517,9 @@ export default function ActivityScreen({ navigation, route }) {
         </Text>
 
         <TouchableOpacity
-          onPress={() => navigation.navigate('CreateActivity')}
+          onPress={() => navigation.navigate('CreateActivity', {
+            onActivityCreated: handleActivityCreated,
+          })}
           style={styles.createBtn}
           hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
           activeOpacity={0.7}

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Share, Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard, Pressable } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Share, Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard, Pressable, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets, initialWindowMetrics } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import Avatar from '../components/Avatar';
+import ImagePickerSheet from '../components/ImagePickerSheet';
 import SuperLikeBalance from '../components/SuperLikeBalance';
 import LogoutConfirmModal from '../components/LogoutConfirmModal';
 import { modalTokens } from '../components/modalTokens';
@@ -19,6 +20,7 @@ import userApi from '../services/api/userApi';
 import walletApi from '../services/api/walletApi';
 import answerApi from '../services/api/answerApi';
 import questionApi from '../services/api/questionApi';
+import uploadApi from '../services/api/uploadApi';
 import { showAppAlert } from '../utils/appAlert';
 import { getOfficialWebsiteUrl } from '../utils/externalLinks';
 import { resolveComposerTopInset } from '../utils/composerLayout';
@@ -27,6 +29,13 @@ import { formatNumber } from '../utils/numberFormatter';
 import { formatAmount } from '../utils/rewardAmount';
 import { isVisibleMyTeam, normalizeMyTeam } from '../utils/teamTransforms';
 import { showToast } from '../utils/toast';
+import {
+  extractWalletTransactionRows,
+  getWalletTransactionUniqueKey,
+  normalizeWalletPointsOverview,
+  WALLET_POINTS_DEFAULT_CURRENCY,
+  summarizeWalletTransactions,
+} from '../utils/walletPoints';
 import ServerSwitcher from '../components/ServerSwitcher';
 
 import { scaleFont } from '../utils/responsive';
@@ -34,9 +43,112 @@ const HISTORY_PAGE_SIZE = 10;
 const ANSWERS_PAGE_SIZE = 10;
 const WALLET_TXN_PAGE_SIZE = 100;
 const WALLET_TXN_MAX_PAGES = 10;
+const VERIFICATION_FILE_TYPES = [
+  'application/pdf',
+  'image/*',
+];
+const VERIFICATION_FILE_UPLOAD_ENABLED = false;
+
+const getVerificationAssetName = asset => asset?.name || asset?.fileName || '';
+const isVerificationAssetImage = asset => String(asset?.mimeType || asset?.type || '').toLowerCase().startsWith('image/');
+const isUploadedVerificationAsset = asset => !!asset?.remoteUrl && !asset?.uploading;
+const createVerificationAssetRecord = ({
+  uri = '',
+  remoteUrl = '',
+  name = '',
+  mimeType = '',
+  size = null,
+  uploading = false,
+  error = '',
+} = {}) => ({
+  uri,
+  remoteUrl,
+  name,
+  mimeType,
+  size,
+  uploading,
+  error,
+});
+const isVerificationUploadSuccess = response => {
+  const code = Number(response?.code ?? response?.data?.code);
+  return code === 200 || code === 0;
+};
+const extractVerificationUploadPayload = response => {
+  const payload = response?.data;
+
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    !Array.isArray(payload) &&
+    payload.data !== undefined
+  ) {
+    return payload.data;
+  }
+
+  return payload;
+};
+const getVerificationResponseMessage = response => {
+  const candidates = [
+    response?.msg,
+    response?.message,
+    response?.data?.msg,
+    response?.data?.message,
+  ];
+
+  const matchedMessage = candidates.find(
+    candidate => typeof candidate === 'string' && candidate.trim()
+  );
+
+  return matchedMessage ? matchedMessage.trim() : '';
+};
+const stripUriQuery = value => String(value || '').split('?')[0];
+const getUriExtension = value => {
+  const normalizedValue = stripUriQuery(value);
+  const segments = normalizedValue.split('.');
+  return segments.length > 1 ? segments.pop().toLowerCase() : '';
+};
+const IMAGE_EXTENSION_TO_MIME = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  heif: 'image/heif',
+};
+const inferVerificationImageMimeType = asset => {
+  const directMimeType = String(asset?.mimeType || asset?.type || '').toLowerCase();
+  if (directMimeType.startsWith('image/')) {
+    return directMimeType;
+  }
+
+  const extensionMimeType = IMAGE_EXTENSION_TO_MIME[getUriExtension(asset?.fileName || asset?.name || asset?.uri)];
+  return extensionMimeType || 'image/jpeg';
+};
+const ensureFileNameHasExtension = (fileName, extension = 'jpg') => {
+  const normalizedFileName = String(fileName || '').trim();
+  if (!normalizedFileName) {
+    return `verification_${Date.now()}.${extension}`;
+  }
+
+  return /\.[a-z0-9]+$/i.test(normalizedFileName) ? normalizedFileName : `${normalizedFileName}.${extension}`;
+};
+const getVerificationLocalFileSize = async uri => {
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    return Number(blob?.size) || 0;
+  } catch (error) {
+    console.warn('Failed to inspect local verification image size:', error);
+    return 0;
+  }
+};
 
 let clipboardModule;
 let clipboardResolved = false;
+let documentPickerModule;
+let documentPickerResolved = false;
+let imageManipulatorModule;
+let imageManipulatorResolved = false;
 
 const getClipboardModule = () => {
   if (clipboardResolved) {
@@ -54,6 +166,42 @@ const getClipboardModule = () => {
   }
 
   return clipboardModule;
+};
+
+const getDocumentPickerModule = () => {
+  if (documentPickerResolved) {
+    return documentPickerModule;
+  }
+
+  documentPickerResolved = true;
+
+  try {
+    const requiredModule = require('expo-document-picker');
+    documentPickerModule = requiredModule?.default || requiredModule;
+  } catch (error) {
+    console.warn('Document picker module is not available in the current native build.', error);
+    documentPickerModule = null;
+  }
+
+  return documentPickerModule;
+};
+
+const getImageManipulatorModule = () => {
+  if (imageManipulatorResolved) {
+    return imageManipulatorModule;
+  }
+
+  imageManipulatorResolved = true;
+
+  try {
+    const requiredModule = require('expo-image-manipulator');
+    imageManipulatorModule = requiredModule?.default || requiredModule;
+  } catch (error) {
+    console.warn('Image manipulator module is not available in the current native build.', error);
+    imageManipulatorModule = null;
+  }
+
+  return imageManipulatorModule;
 };
 
 const copyTextSafely = async text => {
@@ -136,97 +284,6 @@ const extractMyAnswerRows = response => {
     rows: Array.isArray(rows) ? rows : [],
     total
   };
-};
-
-const extractWalletTransactionRows = response => {
-  const rawData = response?.data;
-  const payload = rawData?.data && typeof rawData?.data === 'object' ? rawData.data : rawData;
-
-  if (Array.isArray(payload)) {
-    return {
-      rows: payload,
-      total: payload.length
-    };
-  }
-
-  const rows = payload?.rows || payload?.list || payload?.records || payload?.items || response?.rows || [];
-  const total = Number(payload?.total ?? response?.total ?? payload?.count ?? payload?.totalCount ?? rows.length) || rows.length;
-
-  return {
-    rows: Array.isArray(rows) ? rows : [],
-    total
-  };
-};
-
-const normalizeWalletDirection = value => String(value ?? '').trim().toLowerCase();
-
-const normalizeWalletNumericValue = value => {
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue) ? numericValue : null;
-};
-
-const getWalletTransactionSignedAmount = item => {
-  const candidateValues = [
-    item?.amount,
-    item?.txnAmount,
-    item?.transactionAmount,
-    item?.pointsAmount,
-    item?.changeAmount,
-    item?.deltaAmount,
-    item?.balanceChange,
-    item?.points,
-    item?.value,
-  ];
-
-  for (const value of candidateValues) {
-    const normalizedValue = normalizeWalletNumericValue(value);
-    if (normalizedValue !== null) {
-      return normalizedValue;
-    }
-  }
-
-  return 0;
-};
-
-const resolveWalletTransactionBucket = item => {
-  const directionValues = [
-    item?.direction,
-    item?.txnDirection,
-    item?.flowDirection,
-    item?.changeDirection,
-    item?.debitCredit,
-  ];
-
-  for (const value of directionValues) {
-    const normalizedDirection = normalizeWalletDirection(value);
-    if (['in', 'income', 'credit', 'plus', 'add', 'increase'].includes(normalizedDirection)) {
-      return 'income';
-    }
-
-    if (['out', 'expense', 'debit', 'minus', 'deduct', 'decrease'].includes(normalizedDirection)) {
-      return 'expense';
-    }
-  }
-
-  return getWalletTransactionSignedAmount(item) < 0 ? 'expense' : 'income';
-};
-
-const summarizeWalletTransactions = rows => {
-  return rows.reduce((summary, item) => {
-    const bucket = resolveWalletTransactionBucket(item);
-    const amount = Math.abs(getWalletTransactionSignedAmount(item));
-
-    if (bucket === 'expense') {
-      summary.expense += amount;
-    } else {
-      summary.income += amount;
-    }
-
-    return summary;
-  }, {
-    income: 0,
-    expense: 0,
-  });
 };
 
 const formatBrowseHistoryTime = rawTime => {
@@ -327,7 +384,7 @@ export default function ProfileScreen({
     frozenBalance: 0,
     incomeAmount: 0,
     expenseAmount: 0,
-    currency: 'usd'
+    currency: WALLET_POINTS_DEFAULT_CURRENCY
   });
   const [showWalletNoticeModal, setShowWalletNoticeModal] = useState(false);
   const officialFundingUrl = React.useMemo(() => getOfficialWebsiteUrl() || 'https://problemvshero.com/', []);
@@ -479,7 +536,7 @@ export default function ProfileScreen({
         throw new Error(overviewResponse?.msg || 'Failed to load wallet overview');
       }
 
-      const overviewData = overviewResponse?.data || {};
+      const overviewData = normalizeWalletPointsOverview(overviewResponse?.data);
       let walletSummary = {
         income: 0,
         expense: 0
@@ -489,14 +546,15 @@ export default function ProfileScreen({
         const firstPage = extractWalletTransactionRows(transactionsResult.value);
         let transactionRows = [...firstPage.rows];
         let currentPage = 1;
+        let lastPageSize = firstPage.rows.length;
         const seenPageSignatures = new Set([
-          JSON.stringify(firstPage.rows.map(item => item?.id ?? item?.txnId ?? item?.bizId ?? item?.businessId ?? item?.createTime ?? item))
+          JSON.stringify(firstPage.rows.map(getWalletTransactionUniqueKey))
         ]);
 
         while (
           firstPage.total > transactionRows.length &&
           currentPage < WALLET_TXN_MAX_PAGES &&
-          firstPage.rows.length >= WALLET_TXN_PAGE_SIZE
+          lastPageSize >= WALLET_TXN_PAGE_SIZE
         ) {
           currentPage += 1;
           const nextResponse = await walletApi.getPointsTransactionList({
@@ -504,7 +562,7 @@ export default function ProfileScreen({
             pageSize: WALLET_TXN_PAGE_SIZE
           });
           const nextPage = extractWalletTransactionRows(nextResponse);
-          const nextSignature = JSON.stringify(nextPage.rows.map(item => item?.id ?? item?.txnId ?? item?.bizId ?? item?.businessId ?? item?.createTime ?? item));
+          const nextSignature = JSON.stringify(nextPage.rows.map(getWalletTransactionUniqueKey));
 
           if (!nextPage.rows.length || seenPageSignatures.has(nextSignature)) {
             break;
@@ -512,6 +570,7 @@ export default function ProfileScreen({
 
           seenPageSignatures.add(nextSignature);
           transactionRows = transactionRows.concat(nextPage.rows);
+          lastPageSize = nextPage.rows.length;
 
           if (nextPage.rows.length < WALLET_TXN_PAGE_SIZE) {
             break;
@@ -528,7 +587,7 @@ export default function ProfileScreen({
         frozenBalance: Number(overviewData?.frozenBalance) || 0,
         incomeAmount: walletSummary.income,
         expenseAmount: walletSummary.expense,
-        currency: overviewData?.currency || 'usd'
+        currency: overviewData?.currency || WALLET_POINTS_DEFAULT_CURRENCY
       });
     } catch (error) {
       console.log('Failed to load wallet balance:', error?.message || error);
@@ -618,6 +677,25 @@ export default function ProfileScreen({
     value: '',
     color: '#3b82f6'
   }], [draftsTotalCount, myTeamsCount, t]);
+  const superLikeQuickActions = React.useMemo(() => [{
+    key: 'purchase',
+    icon: 'sparkles',
+    iconColor: '#f59e0b',
+    iconBackground: '#fff7ed',
+    borderColor: '#fed7aa',
+    title: t('screens.settings.wallet.purchaseSuperLike'),
+    description: t('profile.superLikePurchaseDescription'),
+    screen: 'SuperLikePurchase'
+  }, {
+    key: 'history',
+    icon: 'time-outline',
+    iconColor: '#475569',
+    iconBackground: '#f8fafc',
+    borderColor: '#e2e8f0',
+    title: t('screens.settings.wallet.superLikeHistory'),
+    description: t('profile.superLikeHistoryDescription'),
+    screen: 'SuperLikeHistory'
+  }], [t]);
   const myQuestions = React.useMemo(() => [{
     id: 1,
     title: 'How to learn Python in three months?',
@@ -990,6 +1068,10 @@ export default function ProfileScreen({
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [verificationStep, setVerificationStep] = useState(0); // 0: 选择类型, 1: 填写信息, 2: 确认信息
   const [selectedVerificationType, setSelectedVerificationType] = useState(''); // 'personal' | 'enterprise' | 'government'
+  const [verificationImagePickerState, setVerificationImagePickerState] = useState({
+    visible: false,
+    field: null,
+  });
   const [verificationData, setVerificationData] = useState({
     personal: {
       name: '',
@@ -1035,6 +1117,123 @@ export default function ProfileScreen({
       contactEmail: '' // 联系邮箱
     }
   });
+  const updateVerificationData = updater => {
+    setVerificationData(previous => updater(previous));
+  };
+  const updateSelectedVerificationAsset = (field, asset) => {
+    updateVerificationData(previous => ({
+      ...previous,
+      [selectedVerificationType]: {
+        ...previous[selectedVerificationType],
+        [field]: asset,
+      },
+    }));
+  };
+  const updateVerificationAssetByType = (verificationKind, field, asset) => {
+    updateVerificationData(previous => ({
+      ...previous,
+      [verificationKind]: {
+        ...previous[verificationKind],
+        [field]: asset,
+      },
+    }));
+  };
+  const openVerificationImagePicker = field => {
+    setVerificationImagePickerState({
+      visible: true,
+      field,
+    });
+  };
+  const closeVerificationImagePicker = () => {
+    setVerificationImagePickerState(previous => ({
+      ...previous,
+      visible: false,
+    }));
+  };
+  const getVerificationAssetPreviewUri = asset => asset?.uri || asset?.remoteUrl || '';
+  const extractVerificationUploadUrl = response => {
+    const payload = extractVerificationUploadPayload(response);
+
+    if (typeof payload === 'string') {
+      return payload;
+    }
+
+    if (payload && typeof payload === 'object') {
+      return payload.url || payload.fileUrl || payload.link || payload.path || payload.data || '';
+    }
+
+    return '';
+  };
+  const normalizeVerificationImageAsset = asset => {
+    if (!asset?.uri) {
+      return null;
+    }
+
+    const mimeType = inferVerificationImageMimeType(asset);
+    const preferredExtension = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : mimeType.includes('heic') ? 'heic' : mimeType.includes('heif') ? 'heif' : 'jpg';
+    const fallbackName = ensureFileNameHasExtension(asset.fileName || asset.name, preferredExtension);
+
+    return {
+      uri: asset.uri,
+      name: fallbackName,
+      mimeType,
+      type: mimeType,
+      size: asset.fileSize ?? asset.file?.size ?? null,
+      width: asset.width ?? null,
+      height: asset.height ?? null,
+      source: asset.source || '',
+    };
+  };
+  const normalizeVerificationDocumentAsset = asset => {
+    if (!asset?.uri) {
+      return null;
+    }
+
+    const assetName = asset.name || `verification_${Date.now()}`;
+    const mimeType = asset.mimeType || asset.type || (assetName.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream');
+
+    return {
+      uri: asset.uri,
+      name: assetName,
+      mimeType,
+      type: mimeType,
+      size: asset.size ?? asset.file?.size ?? null,
+    };
+  };
+  const createPendingVerificationAsset = file => createVerificationAssetRecord({
+    uri: file.uri,
+    name: file.name,
+    mimeType: file.mimeType || file.type,
+    size: file.size,
+    uploading: true,
+    error: '',
+  });
+  const isVerificationUploadBlocked = React.useMemo(() => {
+    const directAssets = [
+      verificationData.personal.idFront,
+      verificationData.personal.idBack,
+      verificationData.enterprise.license,
+      verificationData.government.authorizerIdFront,
+      verificationData.government.authorizerIdBack,
+      verificationData.government.certificate,
+    ];
+
+    const qualificationAssets = verificationData.personal.qualifications.map(item => item.asset);
+    return [...directAssets, ...qualificationAssets].some(asset => asset?.uploading);
+  }, [verificationData]);
+  const hasVerificationUploadErrors = React.useMemo(() => {
+    const directAssets = [
+      verificationData.personal.idFront,
+      verificationData.personal.idBack,
+      verificationData.enterprise.license,
+      verificationData.government.authorizerIdFront,
+      verificationData.government.authorizerIdBack,
+      verificationData.government.certificate,
+    ];
+
+    const qualificationAssets = verificationData.personal.qualifications.map(item => item.asset);
+    return [...directAssets, ...qualificationAssets].some(asset => !!asset?.error);
+  }, [verificationData]);
 
   // 获取认证图标和文字信息
   const getVerificationInfo = () => {
@@ -1377,17 +1576,37 @@ export default function ProfileScreen({
       setVerificationStep(verificationStep - 1);
     }
   };
+  const showVerificationFileUploadPendingNotice = () => {
+    showAppAlert(t('common.confirm'), t('profile.verificationModal.fileUploadPendingNotice'));
+  };
   const handleVerificationSubmit = () => {
     // 验证数据
     const data = verificationData[selectedVerificationType];
+    if (isVerificationUploadBlocked) {
+      showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.uploadingInProgress'));
+      return;
+    }
+    if (hasVerificationUploadErrors) {
+      showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.uploadFailedRetry'));
+      return;
+    }
     if (selectedVerificationType === 'personal') {
       if (!data.idNumber) {
         showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.idNumberRequired'));
         return;
       }
+      if (!isUploadedVerificationAsset(data.idFront) || !isUploadedVerificationAsset(data.idBack)) {
+        showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.idPhotosRequired'));
+        return;
+      }
       // 专业资质认证改为可选，不再验证
       // 如果用户上传了资质，检查是否所有资质都填写了名称
       if (data.qualifications && data.qualifications.length > 0) {
+        const invalidQualification = data.qualifications.find(q => !isUploadedVerificationAsset(q.asset));
+        if (invalidQualification) {
+          showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.qualificationUploadIncomplete'));
+          return;
+        }
         const unnamedQualification = data.qualifications.find(q => !q.name || q.name.trim() === '');
         if (unnamedQualification) {
           showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.qualificationNameRequired'));
@@ -1399,7 +1618,11 @@ export default function ProfileScreen({
         showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.enterpriseInfoRequired'));
         return;
       }
-      if (!data.license) {
+      if (!VERIFICATION_FILE_UPLOAD_ENABLED) {
+        showVerificationFileUploadPendingNotice();
+        return;
+      }
+      if (!isUploadedVerificationAsset(data.license)) {
         showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.licenseRequired'));
         return;
       }
@@ -1433,8 +1656,16 @@ export default function ProfileScreen({
         showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.governmentInfoRequired'));
         return;
       }
-      if (!data.authorizerIdFront || !data.authorizerIdBack) {
+      if (!isUploadedVerificationAsset(data.authorizerIdFront) || !isUploadedVerificationAsset(data.authorizerIdBack)) {
         showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.authorizerIdRequired'));
+        return;
+      }
+      if (!VERIFICATION_FILE_UPLOAD_ENABLED) {
+        showVerificationFileUploadPendingNotice();
+        return;
+      }
+      if (!isUploadedVerificationAsset(data.certificate)) {
+        showAppAlert(t('common.confirm'), t('profile.verificationModal.validationErrors.certificateRequired'));
         return;
       }
       // 验证联系方式：邮箱或电话至少填写一项
@@ -1460,8 +1691,8 @@ export default function ProfileScreen({
       }
     }
 
-    // 提交认证申请
-    showAppAlert(t('profile.verificationModal.submitSuccess'), t('profile.verificationModal.submitSuccessMessage'), [{
+    // 当前仓库未提供认证申请提交接口，这里先保证上传链路真实可用。
+    showAppAlert(t('profile.verificationModal.submitReadyTitle'), t('profile.verificationModal.submitReadyMessage'), [{
       text: t('common.ok'),
       onPress: () => {
         setShowVerificationModal(false);
@@ -1470,32 +1701,369 @@ export default function ProfileScreen({
       }
     }]);
   };
+  const uploadVerificationAsset = async ({ file, onPending, onSuccess, onFailure }) => {
+    const pendingAsset = createPendingVerificationAsset(file);
+    onPending(pendingAsset);
+    let preparedFile = file;
+
+    try {
+      let preparedLocalSize = Number(file?.size) || 0;
+      if (isVerificationAssetImage({ mimeType: file.mimeType, type: file.type })) {
+        const originalMimeType = String(file.mimeType || file.type || '').toLowerCase();
+        const shouldNormalizeIosCameraImage =
+          Platform.OS === 'ios' && file.source === 'camera';
+        const shouldConvertToJpeg =
+          shouldNormalizeIosCameraImage ||
+          originalMimeType.includes('heic') ||
+          originalMimeType.includes('heif') ||
+          originalMimeType === 'image';
+
+        if (shouldConvertToJpeg) {
+          const ImageManipulator = getImageManipulatorModule();
+          const manipulateAsync = ImageManipulator?.manipulateAsync;
+          const SaveFormat = ImageManipulator?.SaveFormat;
+
+          if (typeof manipulateAsync === 'function' && SaveFormat?.JPEG) {
+            try {
+              const resizeActions = [];
+              const originalWidth = Number(file.width) || 0;
+              if (originalWidth > 1600) {
+                resizeActions.push({
+                  resize: {
+                    width: 1600,
+                  },
+                });
+              }
+
+              const manipulatedResult = await manipulateAsync(
+                file.uri,
+                resizeActions,
+                {
+                  compress: shouldNormalizeIosCameraImage ? 0.68 : 0.8,
+                  format: SaveFormat.JPEG,
+                }
+              );
+
+              let normalizedResult = manipulatedResult;
+              const normalizedSize = await getVerificationLocalFileSize(manipulatedResult?.uri || file.uri);
+
+              if (shouldNormalizeIosCameraImage && normalizedSize > 4.5 * 1024 * 1024) {
+                const secondaryActions = originalWidth > 1280 ? [{
+                  resize: {
+                    width: 1280,
+                  },
+                }] : [];
+                normalizedResult = await manipulateAsync(
+                  manipulatedResult?.uri || file.uri,
+                  secondaryActions,
+                  {
+                    compress: 0.52,
+                    format: SaveFormat.JPEG,
+                  }
+                );
+              }
+
+              preparedLocalSize = await getVerificationLocalFileSize(
+                normalizedResult?.uri || manipulatedResult?.uri || file.uri
+              );
+
+              preparedFile = {
+                ...file,
+                uri: normalizedResult?.uri || manipulatedResult?.uri || file.uri,
+                mimeType: 'image/jpeg',
+                type: 'image/jpeg',
+                name: ensureFileNameHasExtension(
+                  String(file.name || '').replace(/\.(heic|heif|png|webp)$/i, ''),
+                  'jpg'
+                ),
+                width: normalizedResult?.width || manipulatedResult?.width || file.width,
+                height: normalizedResult?.height || manipulatedResult?.height || file.height,
+                size: preparedLocalSize || file.size || null,
+              };
+            } catch (manipulateError) {
+              console.warn('Failed to normalize camera image format before upload:', manipulateError);
+              preparedFile = {
+                ...file,
+                mimeType: 'image/jpeg',
+                type: 'image/jpeg',
+                name: ensureFileNameHasExtension(
+                  String(file.name || '').replace(/\.(heic|heif|png|webp)$/i, ''),
+                  'jpg'
+                ),
+              };
+            }
+          } else {
+            preparedFile = {
+              ...file,
+              mimeType: 'image/jpeg',
+              type: 'image/jpeg',
+              name: ensureFileNameHasExtension(
+                String(file.name || '').replace(/\.(heic|heif|png|webp)$/i, ''),
+                'jpg'
+              ),
+            };
+          }
+        }
+      }
+
+      const uploadMethod = isVerificationAssetImage({ mimeType: preparedFile.mimeType, type: preparedFile.type }) ? uploadApi.uploadImage : uploadApi.uploadFile;
+      const result = await uploadMethod({
+        uri: preparedFile.uri,
+        name: preparedFile.name,
+        type: preparedFile.mimeType || preparedFile.type,
+      });
+      const responseMessage = getVerificationResponseMessage(result);
+
+      if (!isVerificationUploadSuccess(result)) {
+        throw new Error(responseMessage || t('profile.verificationModal.uploadFailed'));
+      }
+
+      const remoteUrl = extractVerificationUploadUrl(result);
+
+      if (!remoteUrl) {
+        const payload = extractVerificationUploadPayload(result);
+        let payloadHint = '';
+
+        if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+          payloadHint = Object.keys(payload).slice(0, 6).join(', ');
+        } else if (payload !== undefined && payload !== null && payload !== '') {
+          payloadHint = String(payload);
+        }
+
+        const invalidMessage = payloadHint
+          ? `${t('profile.verificationModal.invalidUploadResponse')} (${payloadHint})`
+          : t('profile.verificationModal.invalidUploadResponse');
+        throw new Error(responseMessage || invalidMessage);
+      }
+
+      onSuccess(createVerificationAssetRecord({
+        uri: preparedFile.uri || pendingAsset.uri,
+        remoteUrl,
+        name: preparedFile.name || pendingAsset.name,
+        mimeType: preparedFile.mimeType || preparedFile.type || pendingAsset.mimeType,
+        size: preparedFile.size ?? pendingAsset.size,
+        uploading: false,
+        error: '',
+      }));
+    } catch (error) {
+      const failedAsset = createVerificationAssetRecord({
+        ...pendingAsset,
+        uploading: false,
+        error: error?.message || t('profile.verificationModal.uploadFailed'),
+      });
+      onFailure(failedAsset);
+      showToast(failedAsset.error, 'error');
+    }
+  };
+  const pickVerificationImage = async source => {
+    if (source === 'album') {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (permission.status !== 'granted') {
+        showAppAlert(t('common.confirm'), t('profile.verificationModal.albumPermissionRequired'));
+        return null;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets?.length) {
+        return null;
+      }
+
+      return normalizeVerificationImageAsset({
+        ...result.assets[0],
+        source: 'album',
+      });
+    }
+
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (permission.status !== 'granted') {
+      showAppAlert(t('common.confirm'), t('profile.verificationModal.cameraPermissionRequired'));
+      return null;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.length) {
+      return null;
+    }
+
+    return normalizeVerificationImageAsset({
+      ...result.assets[0],
+      source: 'camera',
+    });
+  };
+  const pickVerificationDocument = async () => {
+    const DocumentPicker = getDocumentPickerModule();
+
+    if (!DocumentPicker?.getDocumentAsync) {
+      showAppAlert(
+        t('common.confirm'),
+        t('profile.verificationModal.documentPickerUnavailable')
+      );
+      return null;
+    }
+
+    const result = await DocumentPicker.getDocumentAsync({
+      type: VERIFICATION_FILE_TYPES,
+      multiple: false,
+      copyToCacheDirectory: true,
+    });
+
+    if (result.canceled || !result.assets?.length) {
+      return null;
+    }
+
+    return normalizeVerificationDocumentAsset(result.assets[0]);
+  };
+  const handleVerificationImagePicked = async (imageUri, details = {}) => {
+    const targetField = verificationImagePickerState.field;
+    const normalizedFile = normalizeVerificationImageAsset({
+      ...(details?.asset || {}),
+      uri: imageUri,
+      source: details?.source || '',
+    });
+
+    if (!targetField || !normalizedFile) {
+      setVerificationImagePickerState({
+        visible: false,
+        field: null,
+      });
+      return;
+    }
+
+    await uploadVerificationAsset({
+      file: normalizedFile,
+      onPending: asset => updateSelectedVerificationAsset(targetField, asset),
+      onSuccess: asset => updateSelectedVerificationAsset(targetField, asset),
+      onFailure: asset => updateSelectedVerificationAsset(targetField, asset),
+    });
+
+    setVerificationImagePickerState({
+      visible: false,
+      field: null,
+    });
+  };
+  const runVerificationPickerAction = callback => {
+    setTimeout(() => {
+      callback?.();
+    }, 260);
+  };
   const handleImageUpload = field => {
-    // 模拟图片上传
+    if (Platform.OS === 'android') {
+      openVerificationImagePicker(field);
+      return;
+    }
+
+    const startUpload = source => {
+      runVerificationPickerAction(async () => {
+        const file = await pickVerificationImage(source);
+        if (!file) {
+          return;
+        }
+
+        await uploadVerificationAsset({
+          file,
+          onPending: asset => updateSelectedVerificationAsset(field, asset),
+          onSuccess: asset => updateSelectedVerificationAsset(field, asset),
+          onFailure: asset => updateSelectedVerificationAsset(field, asset),
+        });
+      });
+    };
+
+    if (Platform.OS === 'ios') {
+      Alert.alert(t('profile.verificationModal.selectImage'), t('profile.verificationModal.selectImageSource'), [{
+        text: t('profile.verificationModal.camera'),
+        onPress: () => startUpload('camera')
+      }, {
+        text: t('profile.verificationModal.album'),
+        onPress: () => startUpload('album')
+      }, {
+        text: t('common.cancel'),
+        style: 'cancel'
+      }]);
+      return;
+    }
+
     showAppAlert(t('profile.verificationModal.selectImage'), t('profile.verificationModal.selectImageSource'), [{
       text: t('profile.verificationModal.album'),
-      onPress: () => {
-        const mockImageUrl = `https://images.unsplash.com/photo-${Math.floor(Math.random() * 1000000)}?w=800&h=600&fit=crop`;
-        setVerificationData({
-          ...verificationData,
-          [selectedVerificationType]: {
-            ...verificationData[selectedVerificationType],
-            [field]: mockImageUrl
-          }
-        });
-      }
+      onPress: () => startUpload('album')
     }, {
       text: t('profile.verificationModal.camera'),
-      onPress: () => {
-        const mockImageUrl = `https://images.unsplash.com/photo-${Math.floor(Math.random() * 1000000)}?w=800&h=600&fit=crop`;
-        setVerificationData({
-          ...verificationData,
-          [selectedVerificationType]: {
-            ...verificationData[selectedVerificationType],
-            [field]: mockImageUrl
-          }
+      onPress: () => startUpload('camera')
+    }, {
+      text: t('common.cancel'),
+      style: 'cancel'
+    }]);
+  };
+  const handleFileUpload = field => {
+    if (!VERIFICATION_FILE_UPLOAD_ENABLED) {
+      showVerificationFileUploadPendingNotice();
+      return;
+    }
+
+    const startImageUpload = source => {
+      runVerificationPickerAction(async () => {
+        const file = await pickVerificationImage(source);
+        if (!file) {
+          return;
+        }
+
+        await uploadVerificationAsset({
+          file,
+          onPending: asset => updateSelectedVerificationAsset(field, asset),
+          onSuccess: asset => updateSelectedVerificationAsset(field, asset),
+          onFailure: asset => updateSelectedVerificationAsset(field, asset),
         });
-      }
+      });
+    };
+    const startDocumentUpload = () => {
+      runVerificationPickerAction(async () => {
+        const file = await pickVerificationDocument();
+        if (!file) {
+          return;
+        }
+
+        await uploadVerificationAsset({
+          file,
+          onPending: asset => updateSelectedVerificationAsset(field, asset),
+          onSuccess: asset => updateSelectedVerificationAsset(field, asset),
+          onFailure: asset => updateSelectedVerificationAsset(field, asset),
+        });
+      });
+    };
+
+    if (Platform.OS === 'ios') {
+      Alert.alert(t('profile.verificationModal.selectFile'), t('profile.verificationModal.selectFileSource'), [{
+        text: t('profile.verificationModal.camera'),
+        onPress: () => startImageUpload('camera')
+      }, {
+        text: t('profile.verificationModal.album'),
+        onPress: () => startImageUpload('album')
+      }, {
+        text: t('profile.verificationModal.chooseFile'),
+        onPress: () => startDocumentUpload()
+      }, {
+        text: t('common.cancel'),
+        style: 'cancel'
+      }]);
+      return;
+    }
+
+    showAppAlert(t('profile.verificationModal.selectFile'), t('profile.verificationModal.selectFileSource'), [{
+      text: t('profile.verificationModal.album'),
+      onPress: () => startImageUpload('album')
+    }, {
+      text: t('profile.verificationModal.camera'),
+      onPress: () => startImageUpload('camera')
+    }, {
+      text: t('profile.verificationModal.chooseFile'),
+      onPress: () => startDocumentUpload()
     }, {
       text: t('common.cancel'),
       style: 'cancel'
@@ -1504,81 +2072,106 @@ export default function ProfileScreen({
 
   // 添加资质证书
   const addQualification = async () => {
-    showAppAlert(t('profile.verificationModal.selectImage'), t('profile.verificationModal.selectImageSource'), [{
-      text: t('profile.verificationModal.album'),
-      onPress: async () => {
-        try {
-          // 请求相册权限
-          const {
-            status
-          } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-          if (status !== 'granted') {
-            showAppAlert(t('common.confirm'), 'Media library permission is required to upload images.');
-            return;
-          }
+    if (!VERIFICATION_FILE_UPLOAD_ENABLED) {
+      showVerificationFileUploadPendingNotice();
+      return;
+    }
 
-          // 打开相册
-          const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [3, 2],
-            quality: 0.8
-          });
-          if (!result.canceled && result.assets && result.assets.length > 0) {
-            const newQualification = {
-              id: Date.now(),
-              name: '',
-              image: result.assets[0].uri
-            };
-            setVerificationData({
-              ...verificationData,
-              personal: {
-                ...verificationData.personal,
-                qualifications: [...verificationData.personal.qualifications, newQualification]
-              }
-            });
-          }
-        } catch (error) {
-          showAppAlert(t('common.confirm'), 'Image upload failed: ' + error.message);
+    const appendQualificationAndUpload = file => {
+      const qualificationId = Date.now();
+      const emptyQualification = {
+        id: qualificationId,
+        name: '',
+        asset: null,
+      };
+
+      updateVerificationData(previous => ({
+        ...previous,
+        personal: {
+          ...previous.personal,
+          qualifications: [...previous.personal.qualifications, emptyQualification],
+        },
+      }));
+
+      return uploadVerificationAsset({
+        file,
+        onPending: asset => updateVerificationData(previous => ({
+          ...previous,
+          personal: {
+            ...previous.personal,
+            qualifications: previous.personal.qualifications.map(item => item.id === qualificationId ? {
+              ...item,
+              asset,
+            } : item),
+          },
+        })),
+        onSuccess: asset => updateVerificationData(previous => ({
+          ...previous,
+          personal: {
+            ...previous.personal,
+            qualifications: previous.personal.qualifications.map(item => item.id === qualificationId ? {
+              ...item,
+              asset,
+            } : item),
+          },
+        })),
+        onFailure: asset => updateVerificationData(previous => ({
+          ...previous,
+          personal: {
+            ...previous.personal,
+            qualifications: previous.personal.qualifications.map(item => item.id === qualificationId ? {
+              ...item,
+              asset,
+            } : item),
+          },
+        })),
+      });
+    };
+    const startQualificationImageUpload = source => {
+      runVerificationPickerAction(async () => {
+        const file = await pickVerificationImage(source);
+        if (!file) {
+          return;
         }
-      }
+        await appendQualificationAndUpload(file);
+      });
+    };
+    const startQualificationDocumentUpload = () => {
+      runVerificationPickerAction(async () => {
+        const file = await pickVerificationDocument();
+        if (!file) {
+          return;
+        }
+        await appendQualificationAndUpload(file);
+      });
+    };
+
+    if (Platform.OS === 'ios') {
+      Alert.alert(t('profile.verificationModal.selectFile'), t('profile.verificationModal.selectFileSource'), [{
+        text: t('profile.verificationModal.camera'),
+        onPress: () => startQualificationImageUpload('camera')
+      }, {
+        text: t('profile.verificationModal.album'),
+        onPress: () => startQualificationImageUpload('album')
+      }, {
+        text: t('profile.verificationModal.chooseFile'),
+        onPress: () => startQualificationDocumentUpload()
+      }, {
+        text: t('common.cancel'),
+        style: 'cancel'
+      }]);
+      return;
+    }
+
+    showAppAlert(t('profile.verificationModal.selectFile'), t('profile.verificationModal.selectFileSource'), [{
+      text: t('profile.verificationModal.album'),
+      onPress: () => startQualificationImageUpload('album')
     }, {
       text: t('profile.verificationModal.camera'),
-      onPress: async () => {
-        try {
-          // 请求相机权限
-          const {
-            status
-          } = await ImagePicker.requestCameraPermissionsAsync();
-          if (status !== 'granted') {
-            showAppAlert(t('common.confirm'), 'Camera permission is required to take a photo.');
-            return;
-          }
-
-          // 打开相机
-          const result = await ImagePicker.launchCameraAsync({
-            allowsEditing: true,
-            aspect: [3, 2],
-            quality: 0.8
-          });
-          if (!result.canceled && result.assets && result.assets.length > 0) {
-            const newQualification = {
-              id: Date.now(),
-              name: '',
-              image: result.assets[0].uri
-            };
-            setVerificationData({
-              ...verificationData,
-              personal: {
-                ...verificationData.personal,
-                qualifications: [...verificationData.personal.qualifications, newQualification]
-              }
-            });
-          }
-        } catch (error) {
-          showAppAlert(t('common.confirm'), 'Taking photo failed: ' + error.message);
-        }
-      }
+      onPress: () => startQualificationImageUpload('camera')
+    }, {
+      text: t('profile.verificationModal.chooseFile'),
+      onPress: () => startQualificationDocumentUpload()
     }, {
       text: t('common.cancel'),
       style: 'cancel'
@@ -1594,38 +2187,113 @@ export default function ProfileScreen({
       text: t('common.delete'),
       style: 'destructive',
       onPress: () => {
-        setVerificationData({
-          ...verificationData,
+        updateVerificationData(previous => ({
+          ...previous,
           personal: {
-            ...verificationData.personal,
-            qualifications: verificationData.personal.qualifications.filter(q => q.id !== id)
+            ...previous.personal,
+            qualifications: previous.personal.qualifications.filter(q => q.id !== id)
           }
-        });
+        }));
       }
     }]);
   };
 
   // 更新资质证书名称
   const updateQualificationName = (id, name) => {
-    setVerificationData({
-      ...verificationData,
+    updateVerificationData(previous => ({
+      ...previous,
       personal: {
-        ...verificationData.personal,
-        qualifications: verificationData.personal.qualifications.map(q => q.id === id ? {
+        ...previous.personal,
+        qualifications: previous.personal.qualifications.map(q => q.id === id ? {
           ...q,
           name
         } : q)
       }
-    });
+    }));
   };
   const updateVerificationField = (field, value) => {
-    setVerificationData({
-      ...verificationData,
+    updateVerificationData(previous => ({
+      ...previous,
       [selectedVerificationType]: {
-        ...verificationData[selectedVerificationType],
+        ...previous[selectedVerificationType],
         [field]: value
       }
-    });
+    }));
+  };
+  const renderVerificationUploadStatus = asset => {
+    if (!asset) {
+      return null;
+    }
+
+    if (asset.uploading) {
+      return <View style={styles.verificationAssetStatusRow}>
+          <ActivityIndicator size="small" color="#2563eb" />
+          <Text style={styles.verificationAssetStatusText}>{t('profile.verificationModal.uploading')}</Text>
+        </View>;
+    }
+
+    if (asset.error) {
+      return <View style={styles.verificationAssetStatusRow}>
+          <Ionicons name="alert-circle" size={16} color="#ef4444" />
+          <Text style={[styles.verificationAssetStatusText, styles.verificationAssetStatusError]}>{asset.error}</Text>
+        </View>;
+    }
+
+    if (asset.remoteUrl) {
+      return <View style={styles.verificationAssetStatusRow}>
+          <Ionicons name="checkmark-circle" size={16} color="#16a34a" />
+          <Text style={[styles.verificationAssetStatusText, styles.verificationAssetStatusSuccess]}>{t('profile.verificationModal.uploadSuccess')}</Text>
+        </View>;
+    }
+
+    return null;
+  };
+  const renderVerificationUploadBox = ({ asset, onPress, large = false, mode = 'image', disabled = false }) => {
+    const boxStyle = large ? styles.uploadBoxLarge : styles.uploadBox;
+    const hasAsset = !!asset;
+    const placeholderIconColor = disabled ? '#cbd5e1' : '#d1d5db';
+
+    return <TouchableOpacity style={[boxStyle, disabled ? styles.uploadBoxDisabled : null, asset?.error ? styles.uploadBoxError : null]} onPress={onPress} disabled={asset?.uploading || disabled} activeOpacity={disabled ? 1 : 0.88}>
+        {hasAsset ? <View style={styles.verificationAssetContent}>
+            {isVerificationAssetImage(asset) ? <>
+                <Image source={{
+              uri: getVerificationAssetPreviewUri(asset)
+            }} style={styles.uploadedImage} />
+                {asset.uploading ? <View style={styles.verificationAssetOverlay}>
+                    <ActivityIndicator size="small" color="#fff" />
+                    <Text style={styles.verificationAssetOverlayText}>{t('profile.verificationModal.uploading')}</Text>
+                  </View> : null}
+                {asset.error ? <View style={[styles.verificationAssetOverlay, styles.verificationAssetOverlayError]}>
+                    <Ionicons name="alert-circle" size={18} color="#fff" />
+                    <Text style={styles.verificationAssetOverlayText}>{t('common.retry')}</Text>
+                  </View> : null}
+              </> : <View style={[styles.verificationFileCard, disabled ? styles.verificationFileCardDisabled : null]}>
+                <Ionicons name="document-text-outline" size={36} color={asset.error ? '#ef4444' : disabled ? '#94a3b8' : '#2563eb'} />
+                <Text style={[styles.verificationFileName, disabled ? styles.verificationFileNameDisabled : null]} numberOfLines={2}>{getVerificationAssetName(asset) || t('profile.verificationModal.selectedFile')}</Text>
+                <Text style={[styles.verificationFileMeta, disabled ? styles.verificationFileMetaDisabled : null]}>{asset.mimeType || t('profile.verificationModal.file')}</Text>
+                {renderVerificationUploadStatus(asset)}
+              </View>}
+          </View> : <View style={[styles.uploadPlaceholder, disabled ? styles.uploadPlaceholderDisabled : null]}>
+            <Ionicons name={mode === 'file' ? 'document-attach-outline' : 'camera-outline'} size={40} color={placeholderIconColor} />
+            <Text style={[styles.uploadPlaceholderText, disabled ? styles.uploadPlaceholderTextDisabled : null]}>{t(mode === 'file' ? 'profile.verificationModal.clickUploadFile' : 'profile.verificationModal.clickUpload')}</Text>
+          </View>}
+      </TouchableOpacity>;
+  };
+  const renderVerificationUploadActions = ({ asset, onReplace, onRemove, disabled = false }) => {
+    if (!asset || disabled) {
+      return null;
+    }
+
+    return <View style={styles.verificationAssetActions}>
+        <TouchableOpacity style={styles.verificationAssetActionBtn} onPress={onReplace} disabled={asset.uploading}>
+          <Ionicons name={asset.error ? 'refresh-outline' : 'cloud-upload-outline'} size={16} color="#2563eb" />
+          <Text style={styles.verificationAssetActionText}>{asset.error ? t('common.retry') : t('profile.verificationModal.replaceUpload')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.verificationAssetActionBtn} onPress={onRemove} disabled={asset.uploading}>
+          <Ionicons name="trash-outline" size={16} color="#ef4444" />
+          <Text style={[styles.verificationAssetActionText, styles.verificationAssetDeleteText]}>{t('common.delete')}</Text>
+        </TouchableOpacity>
+      </View>;
   };
   return <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -1788,6 +2456,54 @@ export default function ProfileScreen({
             </TouchableOpacity>
           </View>
         </View> */}
+
+        {/* 超级赞入口 */}
+        <View style={styles.superLikeHubCard}>
+          <View style={styles.superLikeHubHeader}>
+            <View style={styles.superLikeHubTitleWrap}>
+              <View style={styles.superLikeHubIconBadge}>
+                <Ionicons name="sparkles" size={16} color="#b45309" />
+              </View>
+              <View style={styles.superLikeHubTitleBlock}>
+                <Text style={styles.superLikeHubEyebrow}>{t('profile.superLike')}</Text>
+                <Text style={styles.superLikeHubTitle}>{t('profile.superLikeHubTitle')}</Text>
+              </View>
+            </View>
+            <SuperLikeBalance
+              size="medium"
+              showLabel={false}
+              onPress={() => navigation.navigate('SuperLikePurchase')}
+              style={styles.superLikeHubBalance}
+            />
+          </View>
+          <Text style={styles.superLikeHubSubtitle}>{t('profile.superLikeHubSubtitle')}</Text>
+          <View style={styles.superLikeHubTags}>
+            <View style={styles.superLikeHubTag}>
+              <Ionicons name="trending-up-outline" size={14} color="#b45309" />
+              <Text style={styles.superLikeHubTagText}>{t('profile.superLikeTagBoost')}</Text>
+            </View>
+            <View style={styles.superLikeHubTag}>
+              <Ionicons name="flash-outline" size={14} color="#b45309" />
+              <Text style={styles.superLikeHubTagText}>{t('profile.superLikeTagExposure')}</Text>
+            </View>
+          </View>
+          <View style={styles.superLikeActionList}>
+            {superLikeQuickActions.map(action => <TouchableOpacity key={action.key} style={[styles.superLikeActionItem, {
+            borderColor: action.borderColor
+          }]} onPress={() => navigation.navigate(action.screen)} activeOpacity={0.86}>
+                <View style={[styles.superLikeActionIconWrap, {
+              backgroundColor: action.iconBackground
+            }]}>
+                  <Ionicons name={action.icon} size={18} color={action.iconColor} />
+                </View>
+                <View style={styles.superLikeActionContent}>
+                  <Text style={styles.superLikeActionTitle}>{action.title}</Text>
+                  <Text style={styles.superLikeActionDescription}>{action.description}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#cbd5e1" />
+              </TouchableOpacity>)}
+          </View>
+        </View>
 
         {/* 功能菜单 */}
         <View style={styles.menuSection}>
@@ -2572,27 +3288,29 @@ export default function ProfileScreen({
                     {/* 证件正面 */}
                     <View style={styles.uploadItemWrapper}>
                       <Text style={styles.uploadLabel}>{t('profile.verificationModal.idFront')} <Text style={styles.required}>*</Text></Text>
-                      <TouchableOpacity style={styles.uploadBox} onPress={() => handleImageUpload('idFront')}>
-                        {verificationData.personal.idFront ? <Image source={{
-                      uri: verificationData.personal.idFront
-                    }} style={styles.uploadedImage} /> : <View style={styles.uploadPlaceholder}>
-                            <Ionicons name="camera-outline" size={40} color="#d1d5db" />
-                            <Text style={styles.uploadPlaceholderText}>{t('profile.verificationModal.clickUpload')}</Text>
-                          </View>}
-                      </TouchableOpacity>
+                      {renderVerificationUploadBox({
+                      asset: verificationData.personal.idFront,
+                      onPress: () => handleImageUpload('idFront')
+                    })}
+                      {renderVerificationUploadActions({
+                      asset: verificationData.personal.idFront,
+                      onReplace: () => handleImageUpload('idFront'),
+                      onRemove: () => updateVerificationAssetByType('personal', 'idFront', null)
+                    })}
                     </View>
 
                     {/* 证件反面 */}
                     <View style={styles.uploadItemWrapper}>
                       <Text style={styles.uploadLabel}>{t('profile.verificationModal.idBack')} <Text style={styles.required}>*</Text></Text>
-                      <TouchableOpacity style={styles.uploadBox} onPress={() => handleImageUpload('idBack')}>
-                        {verificationData.personal.idBack ? <Image source={{
-                      uri: verificationData.personal.idBack
-                    }} style={styles.uploadedImage} /> : <View style={styles.uploadPlaceholder}>
-                            <Ionicons name="camera-outline" size={40} color="#d1d5db" />
-                            <Text style={styles.uploadPlaceholderText}>{t('profile.verificationModal.clickUpload')}</Text>
-                          </View>}
-                      </TouchableOpacity>
+                      {renderVerificationUploadBox({
+                      asset: verificationData.personal.idBack,
+                      onPress: () => handleImageUpload('idBack')
+                    })}
+                      {renderVerificationUploadActions({
+                      asset: verificationData.personal.idBack,
+                      onReplace: () => handleImageUpload('idBack'),
+                      onRemove: () => updateVerificationAssetByType('personal', 'idBack', null)
+                    })}
                     </View>
                   </View>
 
@@ -2610,13 +3328,19 @@ export default function ProfileScreen({
                   <Text style={styles.qualificationDesc}>{t('profile.verificationModal.qualificationsDesc')}</Text>
                   
                   {/* 已上传的资质列表 */}
-                  {verificationData.personal.qualifications.map((qual, index) => <View key={qual.id} style={styles.qualificationItem}>
+                  {verificationData.personal.qualifications.map(qual => <View key={qual.id} style={styles.qualificationItem}>
                       <View style={styles.qualificationContent}>
-                        <Image source={{
-                    uri: qual.image
-                  }} style={styles.qualificationImage} />
+                        <View style={styles.qualificationPreview}>
+                          {qual.asset && isVerificationAssetImage(qual.asset) ? <Image source={{
+                        uri: getVerificationAssetPreviewUri(qual.asset)
+                      }} style={styles.qualificationImage} /> : <View style={styles.qualificationFileFallback}>
+                              <Ionicons name="document-text-outline" size={26} color={qual.asset?.error ? '#ef4444' : '#2563eb'} />
+                            </View>}
+                        </View>
                         <View style={styles.qualificationInfo}>
                           <TextInput style={styles.qualificationNameInput} placeholder={t('profile.verificationModal.qualificationName')} placeholderTextColor="#9ca3af" value={qual.name} onChangeText={text => updateQualificationName(qual.id, text)} />
+                          {qual.asset ? <Text style={styles.qualificationMeta} numberOfLines={1}>{getVerificationAssetName(qual.asset)}</Text> : null}
+                          {renderVerificationUploadStatus(qual.asset)}
                         </View>
                       </View>
                       <TouchableOpacity style={styles.qualificationDelete} onPress={() => removeQualification(qual.id)}>
@@ -2625,10 +3349,12 @@ export default function ProfileScreen({
                     </View>)}
 
                   {/* 添加资质按钮 */}
-                  <TouchableOpacity style={styles.addQualificationBtn} onPress={addQualification}>
+                  <TouchableOpacity style={[styles.addQualificationBtn, !VERIFICATION_FILE_UPLOAD_ENABLED ? styles.addQualificationBtnDisabled : null]} onPress={addQualification} disabled={!VERIFICATION_FILE_UPLOAD_ENABLED}>
                     <Ionicons name="add-circle-outline" size={24} color="#3b82f6" />
-                    <Text style={styles.addQualificationText}>{t('profile.verificationModal.addQualification')}</Text>
+                    <Text style={[styles.addQualificationText, !VERIFICATION_FILE_UPLOAD_ENABLED ? styles.addQualificationTextDisabled : null]}>{t('profile.verificationModal.addQualification')}</Text>
                   </TouchableOpacity>
+
+                  {!VERIFICATION_FILE_UPLOAD_ENABLED ? <Text style={styles.fileUploadPendingHint}>{t('profile.verificationModal.fileUploadPendingNotice')}</Text> : null}
 
                   <View style={styles.uploadTip}>
                     <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
@@ -2694,14 +3420,20 @@ export default function ProfileScreen({
                   
                   <View style={styles.uploadSingleWrapper}>
                     <Text style={styles.uploadLabel}>{t('profile.verificationModal.license')} <Text style={styles.required}>*</Text></Text>
-                    <TouchableOpacity style={styles.uploadBoxLarge} onPress={() => handleImageUpload('license')}>
-                      {verificationData.enterprise.license ? <Image source={{
-                    uri: verificationData.enterprise.license
-                  }} style={styles.uploadedImage} /> : <View style={styles.uploadPlaceholder}>
-                          <Ionicons name="camera-outline" size={40} color="#d1d5db" />
-                          <Text style={styles.uploadPlaceholderText}>{t('profile.verificationModal.clickUpload')}</Text>
-                        </View>}
-                    </TouchableOpacity>
+                    {renderVerificationUploadBox({
+                    asset: verificationData.enterprise.license,
+                    onPress: () => handleFileUpload('license'),
+                    large: true,
+                    mode: 'file',
+                    disabled: !VERIFICATION_FILE_UPLOAD_ENABLED
+                  })}
+                    {renderVerificationUploadActions({
+                    asset: verificationData.enterprise.license,
+                    onReplace: () => handleFileUpload('license'),
+                    onRemove: () => updateVerificationAssetByType('enterprise', 'license', null),
+                    disabled: !VERIFICATION_FILE_UPLOAD_ENABLED
+                  })}
+                    {!VERIFICATION_FILE_UPLOAD_ENABLED ? <Text style={styles.fileUploadPendingHint}>{t('profile.verificationModal.fileUploadPendingNotice')}</Text> : null}
                   </View>
 
                   <View style={styles.uploadTip}>
@@ -2745,27 +3477,29 @@ export default function ProfileScreen({
                     {/* 身份证正面 */}
                     <View style={styles.uploadItemWrapper}>
                       <Text style={styles.uploadLabel}>{t('profile.verificationModal.authorizerIdFront')}<Text style={styles.required}>*</Text></Text>
-                      <TouchableOpacity style={styles.uploadBox} onPress={() => handleImageUpload('authorizerIdFront')}>
-                        {verificationData.government.authorizerIdFront ? <Image source={{
-                      uri: verificationData.government.authorizerIdFront
-                    }} style={styles.uploadedImage} /> : <View style={styles.uploadPlaceholder}>
-                            <Ionicons name="camera-outline" size={40} color="#d1d5db" />
-                            <Text style={styles.uploadPlaceholderText}>{t('profile.verificationModal.clickUpload')}</Text>
-                          </View>}
-                      </TouchableOpacity>
+                      {renderVerificationUploadBox({
+                      asset: verificationData.government.authorizerIdFront,
+                      onPress: () => handleImageUpload('authorizerIdFront')
+                    })}
+                      {renderVerificationUploadActions({
+                      asset: verificationData.government.authorizerIdFront,
+                      onReplace: () => handleImageUpload('authorizerIdFront'),
+                      onRemove: () => updateVerificationAssetByType('government', 'authorizerIdFront', null)
+                    })}
                     </View>
 
                     {/* 身份证反面 */}
                     <View style={styles.uploadItemWrapper}>
                       <Text style={styles.uploadLabel}>{t('profile.verificationModal.authorizerIdBack')}<Text style={styles.required}>*</Text></Text>
-                      <TouchableOpacity style={styles.uploadBox} onPress={() => handleImageUpload('authorizerIdBack')}>
-                        {verificationData.government.authorizerIdBack ? <Image source={{
-                      uri: verificationData.government.authorizerIdBack
-                    }} style={styles.uploadedImage} /> : <View style={styles.uploadPlaceholder}>
-                            <Ionicons name="camera-outline" size={40} color="#d1d5db" />
-                            <Text style={styles.uploadPlaceholderText}>{t('profile.verificationModal.clickUpload')}</Text>
-                          </View>}
-                      </TouchableOpacity>
+                      {renderVerificationUploadBox({
+                      asset: verificationData.government.authorizerIdBack,
+                      onPress: () => handleImageUpload('authorizerIdBack')
+                    })}
+                      {renderVerificationUploadActions({
+                      asset: verificationData.government.authorizerIdBack,
+                      onReplace: () => handleImageUpload('authorizerIdBack'),
+                      onRemove: () => updateVerificationAssetByType('government', 'authorizerIdBack', null)
+                    })}
                     </View>
                   </View>
 
@@ -2805,14 +3539,20 @@ export default function ProfileScreen({
                   
                   <View style={styles.uploadSingleWrapper}>
                     <Text style={styles.uploadLabel}>{t('profile.verificationModal.certificate')} <Text style={styles.required}>*</Text></Text>
-                    <TouchableOpacity style={styles.uploadBoxLarge} onPress={() => handleImageUpload('certificate')}>
-                      {verificationData.government.certificate ? <Image source={{
-                    uri: verificationData.government.certificate
-                  }} style={styles.uploadedImage} /> : <View style={styles.uploadPlaceholder}>
-                          <Ionicons name="camera-outline" size={40} color="#d1d5db" />
-                          <Text style={styles.uploadPlaceholderText}>{t('profile.verificationModal.clickUpload')}</Text>
-                        </View>}
-                    </TouchableOpacity>
+                    {renderVerificationUploadBox({
+                    asset: verificationData.government.certificate,
+                    onPress: () => handleFileUpload('certificate'),
+                    large: true,
+                    mode: 'file',
+                    disabled: !VERIFICATION_FILE_UPLOAD_ENABLED
+                  })}
+                    {renderVerificationUploadActions({
+                    asset: verificationData.government.certificate,
+                    onReplace: () => handleFileUpload('certificate'),
+                    onRemove: () => updateVerificationAssetByType('government', 'certificate', null),
+                    disabled: !VERIFICATION_FILE_UPLOAD_ENABLED
+                  })}
+                    {!VERIFICATION_FILE_UPLOAD_ENABLED ? <Text style={styles.fileUploadPendingHint}>{t('profile.verificationModal.fileUploadPendingNotice')}</Text> : null}
                   </View>
 
                   <View style={styles.uploadTip}>
@@ -2829,12 +3569,20 @@ export default function ProfileScreen({
           }} />
           </ScrollView>
 
+          <ImagePickerSheet
+            visible={verificationImagePickerState.visible}
+            onClose={closeVerificationImagePicker}
+            onImageSelected={handleVerificationImagePicked}
+            title={t('profile.verificationModal.selectImage')}
+            renderInPlace
+          />
+
           {/* 底部按钮 */}
           {verificationStep > 0 && <View style={[styles.verificationFooter, {
           paddingBottom: bottomSafeInset
         }]}>
-              <TouchableOpacity style={styles.verificationSubmitBtn} onPress={handleVerificationSubmit}>
-                <Text style={styles.verificationSubmitText}>{t('profile.verificationModal.submit')}</Text>
+              <TouchableOpacity style={[styles.verificationSubmitBtn, isVerificationUploadBlocked ? styles.verificationSubmitBtnDisabled : null]} onPress={handleVerificationSubmit} disabled={isVerificationUploadBlocked}>
+                <Text style={styles.verificationSubmitText}>{isVerificationUploadBlocked ? t('profile.verificationModal.uploading') : t('profile.verificationModal.submit')}</Text>
               </TouchableOpacity>
             </View>}
           </View>
@@ -3095,7 +3843,8 @@ const styles = StyleSheet.create({
   walletStatLabel: {
     fontSize: scaleFont(11),
     color: '#9ca3af',
-    marginTop: 2
+    marginTop: 2,
+    textAlign: 'center'
   },
   walletNoticeUrlLabel: {
     fontSize: scaleFont(11),
@@ -3274,6 +4023,118 @@ const styles = StyleSheet.create({
   },
   superLikeBtnTextSecondary: {
     color: '#6b7280'
+  },
+  superLikeHubCard: {
+    marginHorizontal: 12,
+    marginTop: 12,
+    borderRadius: 18,
+    padding: 14,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb'
+  },
+  superLikeHubHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10
+  },
+  superLikeHubTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10
+  },
+  superLikeHubIconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#fff7ed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#fed7aa'
+  },
+  superLikeHubTitleBlock: {
+    flex: 1,
+    marginLeft: 10
+  },
+  superLikeHubEyebrow: {
+    fontSize: scaleFont(10),
+    fontWeight: '600',
+    color: '#9ca3af'
+  },
+  superLikeHubTitle: {
+    fontSize: scaleFont(16),
+    fontWeight: '600',
+    color: '#1f2937',
+    marginTop: 2
+  },
+  superLikeHubBalance: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e5e7eb'
+  },
+  superLikeHubSubtitle: {
+    fontSize: scaleFont(12),
+    lineHeight: 18,
+    color: '#6b7280'
+  },
+  superLikeHubTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 10
+  },
+  superLikeHubTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0'
+  },
+  superLikeHubTagText: {
+    fontSize: scaleFont(11),
+    fontWeight: '500',
+    color: '#64748b'
+  },
+  superLikeActionList: {
+    marginTop: 12,
+    gap: 8
+  },
+  superLikeActionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: '#fcfcfd',
+    borderWidth: 1
+  },
+  superLikeActionIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  superLikeActionContent: {
+    flex: 1,
+    marginLeft: 10,
+    marginRight: 10
+  },
+  superLikeActionTitle: {
+    fontSize: scaleFont(14),
+    fontWeight: '600',
+    color: '#1f2937'
+  },
+  superLikeActionDescription: {
+    fontSize: scaleFont(11),
+    lineHeight: 16,
+    color: '#6b7280',
+    marginTop: 2
   },
   menuSection: {
     backgroundColor: '#fff',
@@ -4016,19 +4877,123 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     overflow: 'hidden'
   },
+  uploadBoxError: {
+    borderColor: '#fecaca',
+    backgroundColor: '#fef2f2'
+  },
+  uploadBoxDisabled: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#dbe3ee'
+  },
   uploadPlaceholder: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center'
+  },
+  uploadPlaceholderDisabled: {
+    opacity: 0.72
   },
   uploadPlaceholderText: {
     fontSize: scaleFont(13),
     color: '#9ca3af',
     marginTop: 8
   },
+  uploadPlaceholderTextDisabled: {
+    color: '#94a3b8'
+  },
   uploadedImage: {
     width: '100%',
     height: '100%'
+  },
+  verificationAssetContent: {
+    flex: 1
+  },
+  verificationAssetOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6
+  },
+  verificationAssetOverlayError: {
+    backgroundColor: 'rgba(239, 68, 68, 0.85)'
+  },
+  verificationAssetOverlayText: {
+    color: '#fff',
+    fontSize: scaleFont(12),
+    fontWeight: '500'
+  },
+  verificationFileCard: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 18
+  },
+  verificationFileCardDisabled: {
+    opacity: 0.8
+  },
+  verificationFileName: {
+    marginTop: 10,
+    fontSize: scaleFont(13),
+    color: '#1f2937',
+    fontWeight: '600',
+    textAlign: 'center'
+  },
+  verificationFileNameDisabled: {
+    color: '#64748b'
+  },
+  verificationFileMeta: {
+    marginTop: 4,
+    fontSize: scaleFont(11),
+    color: '#64748b',
+    textAlign: 'center'
+  },
+  verificationFileMetaDisabled: {
+    color: '#94a3b8'
+  },
+  verificationAssetStatusRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6
+  },
+  verificationAssetStatusText: {
+    fontSize: scaleFont(11),
+    color: '#64748b',
+    textAlign: 'center'
+  },
+  verificationAssetStatusSuccess: {
+    color: '#15803d'
+  },
+  verificationAssetStatusError: {
+    color: '#dc2626'
+  },
+  verificationAssetActions: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  verificationAssetActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4
+  },
+  verificationAssetActionText: {
+    fontSize: scaleFont(12),
+    color: '#2563eb',
+    fontWeight: '500'
+  },
+  verificationAssetDeleteText: {
+    color: '#ef4444'
   },
   uploadTip: {
     flexDirection: 'row',
@@ -4069,7 +5034,7 @@ const styles = StyleSheet.create({
   },
   qualificationItem: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: '#f9fafb',
     borderRadius: 8,
     padding: 12,
@@ -4080,14 +5045,27 @@ const styles = StyleSheet.create({
   qualificationContent: {
     flex: 1,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 12
+  },
+  qualificationPreview: {
+    width: 80,
+    height: 60,
+    borderRadius: 6,
+    overflow: 'hidden',
+    backgroundColor: '#e5e7eb'
   },
   qualificationImage: {
     width: 80,
     height: 60,
     borderRadius: 6,
     backgroundColor: '#e5e7eb'
+  },
+  qualificationFileFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eff6ff'
   },
   qualificationInfo: {
     flex: 1
@@ -4101,8 +5079,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb'
   },
+  qualificationMeta: {
+    marginTop: 8,
+    fontSize: scaleFont(12),
+    color: '#64748b'
+  },
   qualificationDelete: {
-    padding: 8
+    paddingLeft: 8,
+    paddingTop: 4
   },
   addQualificationBtn: {
     flexDirection: 'row',
@@ -4116,10 +5100,23 @@ const styles = StyleSheet.create({
     borderColor: '#bfdbfe',
     borderStyle: 'dashed'
   },
+  addQualificationBtnDisabled: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#dbe3ee'
+  },
   addQualificationText: {
     fontSize: scaleFont(14),
     color: '#3b82f6',
     fontWeight: '500'
+  },
+  addQualificationTextDisabled: {
+    color: '#94a3b8'
+  },
+  fileUploadPendingHint: {
+    marginTop: 8,
+    fontSize: scaleFont(12),
+    color: '#94a3b8',
+    lineHeight: scaleFont(18)
   },
   sectionTitle: {
     fontSize: scaleFont(16),
@@ -4132,6 +5129,9 @@ const styles = StyleSheet.create({
   },
   required: {
     color: '#ef4444'
+  },
+  verificationSubmitBtnDisabled: {
+    opacity: 0.7
   },
   // 确认信息
   confirmContainer: {

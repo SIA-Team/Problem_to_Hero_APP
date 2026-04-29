@@ -89,6 +89,8 @@
     "payToViewSuccess": "已支付 ${amount}，现在可以查看完整内容。",
     "payToViewFailedTitle": "支付失败",
     "payToViewFailedMessage": "本次付费查看处理失败，请稍后重试。",
+    "payToViewUnavailableTitle": "暂不支持付费查看",
+    "payToViewUnavailableMessage": "当前版本还未接入真实的付费查看扣款能力，请等待后续版本开放。",
     "joinTeam": "加入团队",
     "joinTeamFeature": "加入团队功能开发中",
     "writeAnswer": "写回答",
@@ -337,6 +339,12 @@
     "withdrawAll": "全部提现",
     "withdrawableAmount": "可提现金额",
     "myFriends": "我的朋友",
+    "superLikeHubTitle": "让回答获得更多曝光",
+    "superLikeHubSubtitle": "使用超级赞，为优质回答争取更高排名和更多展示机会。",
+    "superLikeTagBoost": "排名加权",
+    "superLikeTagExposure": "提升曝光",
+    "superLikePurchaseDescription": "购买更多超级赞，随时用于任意回答。",
+    "superLikeHistoryDescription": "查看购买与使用记录，掌握消耗情况。",
     "youHaveFriends": "您有 {count} 位朋友",
     "likesStats": "您的内容共获得 {count} 个赞",
     "incomeDetails": "收入明细",
@@ -435,7 +443,7 @@
       "qualificationsDesc": "请上传您的专业资质证书（如：律师证、医师证、教师证等）",
       "qualificationName": "请输入资质名称（如：律师执业证）",
       "addQualification": "添加资质证书",
-      "qualificationTip": "支持上传律师证、医师证、教师证等专业资质证书",
+      "qualificationTip": "支持上传律师证、医师证、教师证等专业资质证书，支持图片或 PDF 文件",
       "enterpriseName": "企业名称",
       "enterpriseNamePlaceholder": "请输入企业全称",
       "registrationNumber": "注册号",
@@ -454,7 +462,7 @@
       "contactEmailPlaceholder": "请输入邮箱地址",
       "uploadLicense": "上传注册文件",
       "license": "注册文件",
-      "licenseTip": "请上传清晰的注册文件照片（如营业执照、组织机构代码证等），确保信息完整可见",
+      "licenseTip": "请上传清晰的注册文件，可选择图片或 PDF（如营业执照、组织机构代码证等），确保信息完整可见",
       "governmentName": "机构名称",
       "governmentNamePlaceholder": "请输入政府机构全称",
       "governmentId": "机构ID",
@@ -471,23 +479,42 @@
       "positionPlaceholder": "请输入授权人职位",
       "uploadCertificate": "上传官方文件",
       "certificate": "官方文件",
-      "certificateTip": "请上传加盖公章的官方文件，如：组织机构代码证、事业单位法人证书等",
+      "certificateTip": "请上传加盖公章的官方文件，支持图片或 PDF，如：组织机构代码证、事业单位法人证书等",
       "submit": "提交认证申请",
       "submitSuccess": "提交成功",
       "submitSuccessMessage": "您的认证申请已提交，我们将在1-3个工作日内完成审核，请耐心等待。",
+      "submitReadyTitle": "资料已准备完成",
+      "submitReadyMessage": "认证材料已经完成真实上传，当前版本尚未接入最终提交接口。后续接通后可直接提交审核。",
       "required": "*",
       "fillRequired": "请填写",
       "uploadRequired": "请上传",
       "selectImage": "上传图片",
       "selectImageSource": "请选择图片来源",
+      "selectFile": "上传文件",
+      "selectFileSource": "请选择上传方式",
       "camera": "相机",
       "album": "相册",
+      "chooseFile": "选择文件",
+      "clickUploadFile": "点击上传文件",
+      "uploading": "上传中...",
+      "uploadSuccess": "上传成功",
+      "uploadFailed": "上传失败，请重试",
+      "invalidUploadResponse": "上传成功但未拿到文件地址，请稍后重试",
+      "albumPermissionRequired": "需要相册权限才能选择图片",
+      "cameraPermissionRequired": "需要相机权限才能拍照",
+      "documentPickerUnavailable": "当前安装包还不支持系统文件选择，请先更新到包含文件上传能力的新版本；在此之前可继续使用图片上传。",
+      "fileUploadPendingNotice": "文件上传功能将在5月1日构建之后生效。",
+      "replaceUpload": "重新上传",
+      "selectedFile": "已选择文件",
+      "file": "文件",
       "deleteQualification": "确认删除",
       "deleteQualificationConfirm": "确定要删除这个资质证书吗？",
       "validationErrors": {
         "idNumberRequired": "请填写证件号码",
+        "idPhotosRequired": "请上传证件正反面照片",
         "qualificationsRequired": "请至少上传一个专业资质证书",
         "qualificationNameRequired": "请为所有资质证书填写名称",
+        "qualificationUploadIncomplete": "请等待资质文件上传完成，或删除失败的资质项后再提交",
         "enterpriseInfoRequired": "请填写完整的企业信息",
         "licenseRequired": "请上传注册文件",
         "contactPersonRequired": "请填写企业联系人",
@@ -495,7 +522,10 @@
         "phoneFormatError": "请输入正确的手机号码格式",
         "emailFormatError": "请输入正确的邮箱格式",
         "governmentInfoRequired": "请填写完整的机构信息",
-        "authorizerIdRequired": "请上传授权人身份证正反面"
+        "authorizerIdRequired": "请上传授权人身份证正反面",
+        "certificateRequired": "请上传官方文件",
+        "uploadingInProgress": "仍有材料正在上传，请等待上传完成后再提交",
+        "uploadFailedRetry": "有材料上传失败，请重试或删除后再提交"
       }
     },
     "contentTabs": {
@@ -1009,6 +1039,39 @@
         "submitVote": "提交投票",
         "cancel": "取消"
       },
+      "shareToFriendsModal": {
+        "title": "转发给本站用户",
+        "send": "发送",
+        "sending": "发送中...",
+        "searchPlaceholder": "搜索用户...",
+        "previewLabel": "转发预览",
+        "empty": {
+          "searchErrorTitle": "搜索用户失败",
+          "searchErrorHint": "请检查网络后重试搜索。",
+          "loadErrorTitle": "加载用户失败",
+          "loadErrorHint": "点击重试，重新加载用户列表。",
+          "noSearchResultsTitle": "没有匹配的用户",
+          "noSearchResultsHint": "请尝试其他昵称、用户名或用户 ID。",
+          "noFollowingTitle": "暂无可转发用户",
+          "noFollowingHint": "你关注的用户会显示在这里，可直接转发给他们。"
+        },
+        "toasts": {
+          "selectUser": "请选择至少一位用户",
+          "partialSuccess": "已成功发送给 {successCount} 位用户，{failedCount} 位发送失败"
+        },
+        "alerts": {
+          "successTitle": "转发成功",
+          "successMessage": "已转发给 {count} 位用户。",
+          "viewConversation": "查看私信",
+          "openMessages": "消息中心"
+        },
+        "errors": {
+          "loadFollowing": "暂时无法加载关注列表。",
+          "loadFollowingToast": "暂时无法加载关注列表，请稍后重试",
+          "searchUsers": "暂时无法搜索用户。",
+          "sendShare": "暂时无法发送站内转发，请稍后重试"
+        }
+      },
       "alerts": {
         "markAllReadTitle": "全部已读",
         "markAllReadMessage": "确定将所有消息标记为已读吗？",
@@ -1143,11 +1206,13 @@
     "addRewardScreen": {
       "title": "追加悬赏",
       "currentReward": {
-        "label": "当前悬赏",
+        "label": "当前悬赏金额",
         "contributors": "已有 {count} 人追加悬赏"
       },
+      "paymentBalanceLabel": "积分余额（用于支付）",
+      "paymentHint": "确认追加后将从积分余额中扣减，对外仍按悬赏金额展示。",
       "selectAmount": {
-        "title": "选择追加金额"
+        "title": "选择追加悬赏金额"
       },
       "customAmount": {
         "title": "或输入自定义金额",
@@ -1157,12 +1222,13 @@
         "text": "用户可对问题进行悬赏，以激励优质回答的产生。\n\n悬赏金额将根据平台规则，在问题解决后自动进行分配：\n- 被采纳的回答者将获得相应比例的奖励\n- 平台将收取一定比例的服务费用\n- 剩余奖励将根据采纳情况与贡献情况进行分配\n\n用户在进行悬赏后，将获得对应的采纳次数，可对满意的回答进行采纳。被采纳的回答将参与悬赏金额的分配。"
       },
         "insufficientBalance": {
-          "title": "钱包余额不足",
-          "message": "当前钱包余额为 {balance}，不足以支付本次追加悬赏 {amount}，是否前往充值？"
+          "title": "积分余额不足",
+          "message": "当前积分余额为 {balance}，不足以支付本次追加悬赏 {amount}，是否前往充值？"
         },
         "expenseRecordType": "追加悬赏",
         "deductionFailed": "扣减钱包余额失败，请稍后重试",
-      "confirmButton": "确认追加 ${amount}",
+        "submitUnavailable": "当前版本还未接入真实的追加悬赏扣款能力，请等待后续版本开放。",
+      "confirmButton": "确认追加悬赏 ${amount}",
       "cancelButton": "取消",
       "validation": {
         "hint": "提示",
@@ -1172,8 +1238,37 @@
       },
       "success": {
         "title": "追加成功",
-        "message": "成功追加 ${amount} 悬赏！",
+        "message": "成功追加 ${amount} 悬赏，已同步扣减积分余额。",
         "confirm": "确定"
+      }
+    },
+    "walletDetail": {
+      "loading": "加载中...",
+      "emptyTitle": "暂无记录",
+      "emptyHints": {
+        "default": "当前还没有积分流水",
+        "income": "当前还没有积分收入记录",
+        "expense": "当前还没有积分支出记录",
+        "recharge": "当前还没有充值记录"
+      },
+      "transactionTitles": {
+        "default": "积分流水",
+        "addReward": "追加悬赏"
+      },
+      "transactionTags": {
+        "income": "收入",
+        "expense": "支出",
+        "addReward": "追加悬赏"
+      },
+      "transactionTypes": {
+        "topup": "充值",
+        "reward": "打赏",
+        "adopt": "采纳奖励",
+        "paidView": "付费查看",
+        "withdraw": "提现",
+        "refund": "退款",
+        "bounty": "悬赏",
+        "superLike": "超级赞"
       }
     },
     "answerDetail": {
@@ -2336,7 +2431,8 @@
     },
     "superLikeBalance": {
       "label": "超级赞余额",
-      "unit": "次"
+      "unit": "次",
+      "available": "可用"
     },
     "useSuperLikeButton": {
       "button": "超级赞 x{count}",

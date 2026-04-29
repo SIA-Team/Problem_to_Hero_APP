@@ -61,6 +61,7 @@ export default function SuperLikeBalance({
           {loading ? '--' : balance}
         </Text>
         <Text style={[styles.unit, currentSize.label]}>{t('components.superLikeBalance.unit')}</Text>
+        <Text style={[styles.availableText, currentSize.label]}>{t('components.superLikeBalance.available')}</Text>
         {Boolean(onPress) && <Ionicons name="chevron-forward" size={currentSize.icon} color="#9ca3af" />}
       </View>
     </Container>;
@@ -117,6 +118,9 @@ const styles = StyleSheet.create({
     fontSize: 20
   },
   unit: {
+    color: '#92400e'
+  },
+  availableText: {
     color: '#92400e'
   }
 });

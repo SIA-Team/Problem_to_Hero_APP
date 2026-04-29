@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, InteractionManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -564,12 +564,16 @@ const allUsers = [
   },
 ];
 export default function MessagesScreen({
-  navigation
+  navigation,
+  route
 }) {
   const {
     t
   } = useTranslation();
   const isFocused = useIsFocused();
+  const contentScrollRef = useRef(null);
+  const privateSectionOffsetRef = useRef(0);
+  const lastHandledFocusRequestRef = useRef(null);
   const bottomSafeInset = useBottomSafeInset(16);
   const followingLoadRequestIdRef = React.useRef(0);
   const { respondedEmergencies, ignoredEmergencies, respondToEmergency, ignoreEmergency } = useEmergency();
@@ -1207,6 +1211,65 @@ export default function MessagesScreen({
   };
   const showMessageEmergencyFee = canViewEmergencyFee(selectedEmergencyDetail, currentUserId);
   const filteredUsers = filterFriendUsers(followingUsers, searchText);
+  const focusSection = route?.params?.focusSection;
+  const focusRequestId = route?.params?.focusRequestId;
+
+  const clearFocusRequest = React.useCallback(() => {
+    navigation.setParams?.({
+      focusSection: undefined,
+      focusRequestId: undefined
+    });
+  }, [navigation]);
+
+  const scrollToPrivateSection = React.useCallback((animated = true) => {
+    if (!isFocused || focusSection !== 'privateMessages' || !privateSectionOffsetRef.current) {
+      return;
+    }
+
+    const targetY = Math.max(privateSectionOffsetRef.current - 12, 0);
+    contentScrollRef.current?.scrollTo({
+      y: targetY,
+      animated
+    });
+    if (focusRequestId !== undefined && focusRequestId !== null) {
+      lastHandledFocusRequestRef.current = focusRequestId;
+    }
+    clearFocusRequest();
+  }, [clearFocusRequest, focusRequestId, focusSection, isFocused]);
+
+  const schedulePrivateSectionFocus = React.useCallback(() => {
+    if (!isFocused || focusSection !== 'privateMessages') {
+      return;
+    }
+
+    if (
+      focusRequestId !== undefined &&
+      focusRequestId !== null &&
+      lastHandledFocusRequestRef.current === focusRequestId
+    ) {
+      return;
+    }
+
+    const interactionTask = InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
+        scrollToPrivateSection(false);
+        setTimeout(() => {
+          scrollToPrivateSection(true);
+        }, 80);
+      });
+    });
+
+    return () => interactionTask.cancel();
+  }, [focusRequestId, focusSection, isFocused, scrollToPrivateSection]);
+
+  useEffect(() => {
+    if (!isFocused || focusSection !== 'privateMessages') {
+      return undefined;
+    }
+
+    return schedulePrivateSectionFocus();
+  }, [focusRequestId, focusSection, isFocused, privateLoading, privateConversations.length, schedulePrivateSectionFocus]);
+
   return <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{
@@ -1238,7 +1301,16 @@ export default function MessagesScreen({
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        ref={contentScrollRef}
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        onContentSizeChange={() => {
+          if (isFocused && focusSection === 'privateMessages') {
+            schedulePrivateSectionFocus();
+          }
+        }}
+      >
         {/* 椤堕儴蹇嵎鍏ュ彛 */}
         <View style={styles.quickSection}>
           <View style={styles.quickGrid}>
@@ -1454,7 +1526,15 @@ export default function MessagesScreen({
             </>}
         </View>)}
 
-        <View style={styles.privateSection}>
+        <View
+          style={styles.privateSection}
+          onLayout={event => {
+            privateSectionOffsetRef.current = event.nativeEvent.layout.y;
+            if (isFocused && focusSection === 'privateMessages') {
+              schedulePrivateSectionFocus();
+            }
+          }}
+        >
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
               <Text style={styles.sectionTitle}>{t('screens.messagesScreen.privateMessages.title')}</Text>

@@ -180,17 +180,25 @@ const MyChannelTagContent = ({
   isDeleteDisabled = false,
   isUnavailable = false,
   unavailableLabel = '',
+  isHighlighted = false,
 }) => (
   <View
     style={[
       styles.myChannelTag,
       isEditMode ? styles.myChannelTagEditMode : styles.myChannelTagViewMode,
+      isHighlighted ? styles.myChannelTagHighlighted : null,
       isUnavailable ? styles.myChannelTagUnavailable : null,
       isUnavailable && isEditMode ? styles.myChannelTagUnavailableEditMode : null,
       isUnavailable && !isEditMode ? styles.myChannelTagUnavailableViewMode : null,
     ]}
   >
-    <Text style={[styles.myChannelText, isUnavailable ? styles.myChannelTextUnavailable : null]}>
+    <Text
+      style={[
+        styles.myChannelText,
+        isHighlighted ? styles.myChannelTextHighlighted : null,
+        isUnavailable ? styles.myChannelTextUnavailable : null,
+      ]}
+    >
       {channel}
     </Text>
     {isUnavailable ? (
@@ -226,8 +234,10 @@ const ShakingChannelTag = ({
   setTagRef,
   isUnavailable,
   unavailableLabel,
+  isHighlighted = false,
 }) => {
   const shakeAnim = useRef(new Animated.Value(0)).current;
+  const highlightAnim = useRef(new Animated.Value(0)).current;
   const shakeAnimationRef = useRef(null);
   
   useEffect(() => {
@@ -280,24 +290,74 @@ const ShakingChannelTag = ({
       });
     };
   }, [isEditMode]);
+
+  useEffect(() => {
+    highlightAnim.stopAnimation();
+
+    if (isHighlighted) {
+      Animated.sequence([
+        Animated.timing(highlightAnim, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+        Animated.timing(highlightAnim, {
+          toValue: 0.55,
+          duration: 320,
+          useNativeDriver: true,
+        }),
+        Animated.timing(highlightAnim, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+      ]).start();
+      return undefined;
+    }
+
+    highlightAnim.setValue(0);
+    return undefined;
+  }, [highlightAnim, isHighlighted]);
   
   const rotate = shakeAnim.interpolate({
     inputRange: [-1, 1],
     outputRange: ['-2deg', '2deg']
   });
+  const highlightScale = highlightAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.03]
+  });
+  const highlightOpacity = highlightAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1]
+  });
   const wrapperStyle = isDragging ? styles.myChannelTagDraggingPlaceholder : null;
-  const animatedTransform = isEditMode ? [{
-    rotate
-  }] : [];
+  const animatedTransform = [
+    {
+      scale: highlightScale
+    },
+    ...(isEditMode ? [{
+      rotate
+    }] : [])
+  ];
   
   return (
     <Animated.View
       ref={node => setTagRef(channelKey, node)}
       collapsable={false}
-      style={{
+      style={[{
         transform: animatedTransform,
         opacity: isDragging ? 0 : 1,
-      }}
+      }, isHighlighted ? {
+        shadowColor: '#ef4444',
+        shadowOffset: {
+          width: 0,
+          height: 6
+        },
+        shadowOpacity: 0.18,
+        shadowRadius: 14,
+        elevation: 5
+      } : null]}
     >
       <TouchableOpacity
         activeOpacity={1}
@@ -306,13 +366,19 @@ const ShakingChannelTag = ({
         onLongPress={onLongPress}
         style={[styles.myChannelTagWrapper, wrapperStyle]}
       >
-        <MyChannelTagContent
-          channel={channel}
-          isEditMode={isEditMode}
-          onDelete={onDelete}
-          isUnavailable={isUnavailable}
-          unavailableLabel={unavailableLabel}
-        />
+        <View>
+          <MyChannelTagContent
+            channel={channel}
+            isEditMode={isEditMode}
+            onDelete={onDelete}
+            isUnavailable={isUnavailable}
+            unavailableLabel={unavailableLabel}
+            isHighlighted={isHighlighted}
+          />
+          {isHighlighted ? <Animated.View pointerEvents="none" style={[styles.myChannelTagHighlightRing, {
+        opacity: highlightOpacity
+      }]} /> : null}
+        </View>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -476,6 +542,37 @@ const isLocalOnlyChannel = channel =>
 const getRenderableChannelKey = (channel, index) =>
   getChannelIdentityKey(channel) || getChannelDisplayName(channel) || String(index);
 
+const resolveCreatedChannelRenderableKey = (channels, createdChannel) => {
+  const channelItems = Array.isArray(channels) ? channels : [];
+  const createdChannelId = String(createdChannel?.id ?? '').trim();
+  const createdChannelName = String(createdChannel?.name ?? '').trim();
+
+  const matchedIndex = channelItems.findIndex(channel => {
+    if (!channel || typeof channel !== 'object') {
+      return false;
+    }
+
+    const targetKey = String(channel?.targetKey ?? '').trim();
+    const channelName = getChannelDisplayName(channel);
+
+    if (createdChannelId && targetKey === createdChannelId) {
+      return true;
+    }
+
+    if (createdChannelName && channelName === createdChannelName) {
+      return true;
+    }
+
+    return false;
+  });
+
+  if (matchedIndex < 0) {
+    return '';
+  }
+
+  return getRenderableChannelKey(channelItems[matchedIndex], matchedIndex);
+};
+
 const applyDraftChannelChanges = (baseChannels, persistedChannels, draftChannels) => {
   const persistedKeySet = new Set(
     persistedChannels.map(channel => getChannelIdentityKey(channel)).filter(Boolean)
@@ -586,6 +683,7 @@ export default function ChannelManageScreen({
   const myChannelTagRefs = useRef(new Map());
   const myChannelTagLayoutsRef = useRef(new Map());
   const scrollViewRef = useRef(null);
+  const comboHighlightTimeoutRef = useRef(null);
   const comboCreatorRef = useRef(null);
   const regionSearchRef = useRef(null);
   const comboActionsRef = useRef(null);
@@ -603,6 +701,7 @@ export default function ChannelManageScreen({
     pageY: 0,
   });
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [highlightedMyChannelKey, setHighlightedMyChannelKey] = useState('');
 
   // 缁勫悎棰戦亾鍒涘缓
   const [showComboCreator, setShowComboCreator] = useState(true);
@@ -668,6 +767,31 @@ export default function ChannelManageScreen({
 
   const reloadMyCreatedCombinedChannels = React.useCallback(async () => {
     return fetchMyCreatedCombinedChannels();
+  }, []);
+
+  const focusMyChannelsSection = React.useCallback((channelKey = '') => {
+    if (comboHighlightTimeoutRef.current) {
+      clearTimeout(comboHighlightTimeoutRef.current);
+      comboHighlightTimeoutRef.current = null;
+    }
+
+    setHighlightedMyChannelKey(channelKey);
+
+    InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
+        scrollViewRef.current?.scrollTo({
+          y: 0,
+          animated: true
+        });
+      });
+    });
+
+    if (channelKey) {
+      comboHighlightTimeoutRef.current = setTimeout(() => {
+        setHighlightedMyChannelKey(currentKey => currentKey === channelKey ? '' : currentKey);
+        comboHighlightTimeoutRef.current = null;
+      }, 2600);
+    }
   }, []);
 
   useEffect(() => {
@@ -853,6 +977,13 @@ export default function ChannelManageScreen({
       subscription.remove();
     };
   }, [loadChannelCatalog]);
+
+  useEffect(() => () => {
+    if (comboHighlightTimeoutRef.current) {
+      clearTimeout(comboHighlightTimeoutRef.current);
+      comboHighlightTimeoutRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     if (!hasBootstrappedInitialDataRef.current) {
@@ -1885,7 +2016,7 @@ export default function ChannelManageScreen({
     setIsCreatingCombo(true);
 
     try {
-      await createCombinedChannel({
+      const createdResult = await createCombinedChannel({
         name: autoGeneratedName,
         regionId: selectedRegionId,
         locationText,
@@ -1919,6 +2050,14 @@ export default function ChannelManageScreen({
         category: null
       });
       setShowComboCreator(false);
+      focusMyChannelsSection(
+        subscribedResult.status === 'fulfilled'
+          ? resolveCreatedChannelRenderableKey(
+            subscribedResult.value,
+            createdResult?.createdChannel
+          )
+          : ''
+      );
       showAppAlert(t('common.ok'), t('channelManage.createSuccess'));
     } catch (error) {
       showAppAlert(t('common.ok'), error?.message || t('common.retry'));
@@ -2234,6 +2373,7 @@ export default function ChannelManageScreen({
                 index={index}
                 isDragging={draggingChannelKey === getRenderableChannelKey(channel, index)}
                 isEditMode={isEditMode}
+                isHighlighted={highlightedMyChannelKey === getRenderableChannelKey(channel, index)}
                 isUnavailable={isChannelUnavailable(channel)}
                 unavailableLabel={t('channelManage.channelUnavailable')}
                 onDelete={() => toggleChannel(channel)}
@@ -2704,6 +2844,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#e5e7eb',
     borderRadius: 6
   },
+  myChannelTagHighlighted: {
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#f87171'
+  },
   myChannelTagViewMode: {
     paddingHorizontal: 14
   },
@@ -2727,8 +2872,18 @@ const styles = StyleSheet.create({
     color: '#374151',
     fontWeight: '400'
   },
+  myChannelTextHighlighted: {
+    color: '#b91c1c',
+    fontWeight: '600'
+  },
   myChannelTextUnavailable: {
     color: '#9ca3af'
+  },
+  myChannelTagHighlightRing: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: 'rgba(239, 68, 68, 0.35)'
   },
   myChannelStatusBadge: {
     position: 'absolute',

@@ -5,11 +5,12 @@ import {
   View,
   Text,
   Share,
+  Pressable,
   TouchableOpacity,
   StyleSheet,
   Animated,
   Dimensions,
-  TouchableWithoutFeedback,
+  Platform,
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -88,10 +89,12 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
   const [slideAnim] = React.useState(new Animated.Value(SCREEN_HEIGHT));
   const [backdropOpacity] = React.useState(new Animated.Value(0));
   const [pendingPlatform, setPendingPlatform] = React.useState(null);
+  const [deferredAction, setDeferredAction] = React.useState(null);
   const [showFriendsModal, setShowFriendsModal] = React.useState(false);
   const [showTwitterEditor, setShowTwitterEditor] = React.useState(false);
   const [twitterDraftText, setTwitterDraftText] = React.useState('');
   const [currentInviteUsername, setCurrentInviteUsername] = React.useState('');
+  const isClosingRef = React.useRef(false);
 
   React.useEffect(() => {
     if (!visible) {
@@ -170,10 +173,24 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
     shareData?.twitterUsername,
   ]);
 
-  const openTwitterEditor = () => {
-    setTwitterDraftText(buildUnifiedShareText());
-    setShowTwitterEditor(true);
-  };
+  React.useEffect(() => {
+    if (visible || !deferredAction) {
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      if (deferredAction === 'friends') {
+        setShowFriendsModal(true);
+      } else if (deferredAction === 'twitter') {
+        setTwitterDraftText(buildUnifiedShareText());
+        setShowTwitterEditor(true);
+      }
+
+      setDeferredAction(null);
+    }, 260);
+
+    return () => clearTimeout(timer);
+  }, [buildUnifiedShareText, deferredAction, visible]);
 
   const handleTwitterShare = async (customShareText) => {
     setPendingPlatform('twitter');
@@ -197,7 +214,6 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
       }
 
       setShowTwitterEditor(false);
-      handleClose();
     } catch (error) {
       console.error('Failed to share via twitter:', error);
       showToast('Unable to open Twitter', 'error');
@@ -208,34 +224,41 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
 
   React.useEffect(() => {
     if (visible) {
-      Animated.timing(backdropOpacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-      
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-    } else {
+      backdropOpacity.setValue(0);
+      slideAnim.setValue(SCREEN_HEIGHT);
       Animated.parallel([
         Animated.timing(backdropOpacity, {
-          toValue: 0,
+          toValue: 1,
           duration: 200,
           useNativeDriver: true,
         }),
         Animated.timing(slideAnim, {
-          toValue: SCREEN_HEIGHT,
-          duration: 200,
+          toValue: 0,
+          duration: 250,
           useNativeDriver: true,
         }),
       ]).start();
+      isClosingRef.current = false;
+      return;
     }
-  }, [visible]);
 
-  const handleClose = () => {
+    backdropOpacity.setValue(0);
+    slideAnim.setValue(SCREEN_HEIGHT);
+    isClosingRef.current = false;
+  }, [backdropOpacity, slideAnim, visible]);
+
+  const handleClose = React.useCallback(() => {
+    if (isClosingRef.current) {
+      return;
+    }
+
+    isClosingRef.current = true;
+
+    if (Platform.OS === 'ios') {
+      onClose?.();
+      return;
+    }
+
     Animated.parallel([
       Animated.timing(backdropOpacity, {
         toValue: 0,
@@ -248,9 +271,10 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
         useNativeDriver: true,
       }),
     ]).start(() => {
-      onClose();
+      isClosingRef.current = false;
+      onClose?.();
     });
-  };
+  }, [backdropOpacity, onClose, slideAnim]);
 
   const handleShare = async (platform) => {
     if (pendingPlatform) {
@@ -261,8 +285,8 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
 
     try {
       if (platform === 'friends') {
+        setDeferredAction('friends');
         handleClose();
-        setShowFriendsModal(true);
         return;
       }
 
@@ -288,7 +312,8 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
       }
 
       if (platform === 'twitter') {
-        openTwitterEditor();
+        setDeferredAction('twitter');
+        handleClose();
         return;
       }
 
@@ -313,62 +338,59 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
         onRequestClose={handleClose}
         statusBarTranslucent
       >
-        <TouchableWithoutFeedback onPress={handleClose}>
-          <Animated.View style={[styles.overlay, { opacity: backdropOpacity }]}>
-            <TouchableWithoutFeedback>
-              <Animated.View
-                style={[
-                  styles.container,
-                  {
-                    transform: [{ translateY: slideAnim }],
-                    paddingBottom: bottomSafeInset,
-                  },
-                ]}
+        <Animated.View style={[styles.overlay, { opacity: backdropOpacity }]}>
+          <Pressable style={styles.backdrop} onPress={handleClose} />
+          <Animated.View
+            style={[
+              styles.container,
+              {
+                transform: [{ translateY: slideAnim }],
+                paddingBottom: bottomSafeInset,
+              },
+            ]}
+          >
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>Share to</Text>
+              <TouchableOpacity
+                onPress={handleClose}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={styles.closeButton}
               >
-                <View style={styles.header}>
-                  <Text style={styles.headerTitle}>Share to</Text>
-                  <TouchableOpacity
-                    onPress={handleClose}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    style={styles.closeButton}
-                  >
-                    <Ionicons name="close" size={24} color="#9CA3AF" />
-                  </TouchableOpacity>
-                </View>
+                <Ionicons name="close" size={24} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
 
-                <ScrollView
-                  showsVerticalScrollIndicator={false}
-                  bounces={false}
-                >
-                  <View style={styles.section}>
-                    <View style={styles.optionsGrid}>
-                      {shareOptions.map(option => (
-                        <TouchableOpacity
-                          key={option.id}
-                          style={styles.optionItem}
-                          onPress={() => handleShare(option.id)}
-                          activeOpacity={0.7}
-                          disabled={pendingPlatform !== null}
-                        >
-                          <View
-                            style={[
-                              styles.optionIcon,
-                              { backgroundColor: option.color + '15' },
-                              pendingPlatform === option.id && styles.optionIconPending,
-                            ]}
-                          >
-                            <Ionicons name={option.icon} size={28} color={option.color} />
-                          </View>
-                          <Text style={styles.optionText}>{option.name}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                </ScrollView>
-              </Animated.View>
-            </TouchableWithoutFeedback>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
+              <View style={styles.section}>
+                <View style={styles.optionsGrid}>
+                  {shareOptions.map(option => (
+                    <TouchableOpacity
+                      key={option.id}
+                      style={styles.optionItem}
+                      onPress={() => handleShare(option.id)}
+                      activeOpacity={0.7}
+                      disabled={pendingPlatform !== null}
+                    >
+                      <View
+                        style={[
+                          styles.optionIcon,
+                          { backgroundColor: option.color + '15' },
+                          pendingPlatform === option.id && styles.optionIconPending,
+                        ]}
+                      >
+                        <Ionicons name={option.icon} size={28} color={option.color} />
+                      </View>
+                      <Text style={styles.optionText}>{option.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </ScrollView>
           </Animated.View>
-        </TouchableWithoutFeedback>
+        </Animated.View>
       </Modal>
 
       <ShareToFriendsModal
@@ -396,8 +418,11 @@ export default function ShareModal({ visible, onClose, shareData = {}, onShare }
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: modalTokens.overlay.backgroundColor,
+    backgroundColor: modalTokens.overlay,
     justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
   },
   container: {
     backgroundColor: '#FFFFFF',

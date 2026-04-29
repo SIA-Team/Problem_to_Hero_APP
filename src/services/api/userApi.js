@@ -457,17 +457,6 @@ const userApi = {
     return apiClient.get(API_ENDPOINTS.USER.MY_FOLLOWING, { params: normalizedParams });
   },
 
-  getWalletBalance: async () => {
-    // Wallet balance API is disabled for now; return local placeholder data.
-    return {
-      code: 200,
-      msg: 'wallet balance api disabled',
-      data: {
-        balance: 0,
-        currency: 'usd',
-      },
-    };
-  },
 
   /**
    * 获取消息通知设置

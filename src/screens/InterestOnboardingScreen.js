@@ -80,6 +80,20 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
     return level1Categories.filter((item) => normalizeText(item.name).includes(keyword));
   }, [level1Categories, level1Search]);
 
+  const level1Rows = useMemo(() => {
+    const rows = [];
+
+    for (let index = 0; index < filteredLevel1Categories.length; index += 2) {
+      rows.push({
+        key: `row-${filteredLevel1Categories[index]?.id || index}`,
+        left: filteredLevel1Categories[index] || null,
+        right: filteredLevel1Categories[index + 1] || null,
+      });
+    }
+
+    return rows;
+  }, [filteredLevel1Categories]);
+
   const activeLevel2List = useMemo(() => {
     if (!activeLevel1Id) return [];
 
@@ -210,6 +224,10 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
   };
 
   const renderLevel1Card = ({ item }) => {
+    if (!item) {
+      return <View style={styles.level1CardPlaceholder} />;
+    }
+
     const selected = selectedLevel1Ids.includes(item.id);
 
     return (
@@ -227,6 +245,115 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
       </TouchableOpacity>
     );
   };
+
+  const renderLevel1Row = ({ item }) => (
+    <View style={styles.level1Row}>
+      {renderLevel1Card({ item: item.left })}
+      {renderLevel1Card({ item: item.right })}
+    </View>
+  );
+
+  const renderBodyHeader = () => (
+    <>
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Search major categories"
+        placeholderTextColor="#9ca3af"
+        value={level1Search}
+        onChangeText={setLevel1Search}
+      />
+
+      <View style={styles.selectedSummaryBox}>
+        <Text style={styles.selectedSummaryText}>Selected {selectedLevel1Ids.length} major categories</Text>
+      </View>
+    </>
+  );
+
+  const renderBodyFooter = () => (
+    <>
+      <Text style={styles.sectionTitle}>Subcategories</Text>
+      <ScrollView
+        horizontal
+        style={styles.level1TabsScroll}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.level1Tabs}
+        keyboardShouldPersistTaps="handled"
+      >
+        {level1Categories.map((item) => {
+          const active = item.id === activeLevel1Id;
+          const selected = selectedLevel1Ids.includes(item.id);
+          return (
+            <TouchableOpacity
+              key={item.id}
+              style={[styles.level1Tab, active && styles.level1TabActive, selected && styles.level1TabSelected]}
+              onPress={() => handleSwitchActiveLevel1(item.id)}
+            >
+              <Text style={[styles.level1TabText, active && styles.level1TabTextActive]}>{item.name}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Search subcategories"
+        placeholderTextColor="#9ca3af"
+        value={level2Search}
+        onChangeText={setLevel2Search}
+      />
+
+      <View style={styles.selectedSummaryBox}>
+        <Text style={styles.selectedSummaryText}>
+          Selected {selectedLevel2List.length} subcategories
+        </Text>
+      </View>
+
+      {selectedLevel2List.length > 0 ? (
+        <View style={styles.selectedLevel2Chips}>
+          {selectedLevel2List.map((item) => (
+            <TouchableOpacity
+              key={item.id}
+              style={styles.selectedLevel2Chip}
+              onPress={() => handleToggleLevel2(item)}
+            >
+              <Text style={styles.selectedLevel2ChipText}>{item.name}</Text>
+              <Ionicons name="close" size={14} color="#ef4444" />
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+
+      {activeLevel1Id && loadingLevel2Map[activeLevel1Id] ? (
+        <View style={styles.loadingBoxSmall}>
+          <ActivityIndicator size="small" color="#ef4444" />
+          <Text style={styles.loadingTextSmall}>Loading subcategories...</Text>
+        </View>
+      ) : null}
+
+      <View style={styles.level2ListContent}>
+        {activeLevel2List.map((item) => {
+          const selected = Boolean(selectedLevel2Map[String(item.id)]);
+          return (
+            <TouchableOpacity
+              key={item.id}
+              style={[styles.level2Chip, selected && styles.level2ChipSelected]}
+              onPress={() => handleToggleLevel2(item)}
+            >
+              <Text style={[styles.level2ChipText, selected && styles.level2ChipTextSelected]}>{item.name}</Text>
+            </TouchableOpacity>
+          );
+        })}
+
+        {!activeLevel1Id ? (
+          <Text style={styles.emptyText}>No major categories available.</Text>
+        ) : null}
+
+        {activeLevel1Id && !loadingLevel2Map[activeLevel1Id] && activeLevel2List.length === 0 ? (
+          <Text style={styles.emptyText}>No subcategories found.</Text>
+        ) : null}
+      </View>
+    </>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -246,115 +373,23 @@ export default function InterestOnboardingScreen({ userId, onComplete, onSkip })
       ) : null}
 
       {!loadingLevel1 ? (
-        <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search major categories"
-            placeholderTextColor="#9ca3af"
-            value={level1Search}
-            onChangeText={setLevel1Search}
-          />
-
-          <View style={styles.selectedSummaryBox}>
-            <Text style={styles.selectedSummaryText}>Selected {selectedLevel1Ids.length} major categories</Text>
-          </View>
-
-          <View style={styles.level1List}>
-            {filteredLevel1Categories.map((item, index) => {
-              if (index % 2 === 0) {
-                const nextItem = filteredLevel1Categories[index + 1];
-                return (
-                  <View key={`row-${item.id}`} style={styles.level1Row}>
-                    {renderLevel1Card({ item })}
-                    {nextItem ? renderLevel1Card({ item: nextItem }) : <View style={{ width: '48.4%' }} />}
-                  </View>
-                );
-              }
-              return null;
-            })}
-          </View>
-
-          <Text style={styles.sectionTitle}>Subcategories</Text>
-          <ScrollView
-            horizontal
-            style={styles.level1TabsScroll}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.level1Tabs}
-          >
-            {level1Categories.map((item) => {
-              const active = item.id === activeLevel1Id;
-              const selected = selectedLevel1Ids.includes(item.id);
-              return (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[styles.level1Tab, active && styles.level1TabActive, selected && styles.level1TabSelected]}
-                  onPress={() => handleSwitchActiveLevel1(item.id)}
-                >
-                  <Text style={[styles.level1TabText, active && styles.level1TabTextActive]}>{item.name}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search subcategories"
-            placeholderTextColor="#9ca3af"
-            value={level2Search}
-            onChangeText={setLevel2Search}
-          />
-
-          <View style={styles.selectedSummaryBox}>
-            <Text style={styles.selectedSummaryText}>
-              Selected {selectedLevel2List.length} subcategories
-            </Text>
-          </View>
-
-          {selectedLevel2List.length > 0 ? (
-            <View style={styles.selectedLevel2Chips}>
-              {selectedLevel2List.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.selectedLevel2Chip}
-                  onPress={() => handleToggleLevel2(item)}
-                >
-                  <Text style={styles.selectedLevel2ChipText}>{item.name}</Text>
-                  <Ionicons name="close" size={14} color="#ef4444" />
-                </TouchableOpacity>
-              ))}
-            </View>
-          ) : null}
-
-          {activeLevel1Id && loadingLevel2Map[activeLevel1Id] ? (
-            <View style={styles.loadingBoxSmall}>
-              <ActivityIndicator size="small" color="#ef4444" />
-              <Text style={styles.loadingTextSmall}>Loading subcategories...</Text>
-            </View>
-          ) : null}
-
-          <View style={styles.level2ListContent}>
-            {activeLevel2List.map((item) => {
-              const selected = Boolean(selectedLevel2Map[String(item.id)]);
-              return (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[styles.level2Chip, selected && styles.level2ChipSelected]}
-                  onPress={() => handleToggleLevel2(item)}
-                >
-                  <Text style={[styles.level2ChipText, selected && styles.level2ChipTextSelected]}>{item.name}</Text>
-                </TouchableOpacity>
-              );
-            })}
-
-            {!activeLevel1Id ? (
-              <Text style={styles.emptyText}>No major categories available.</Text>
-            ) : null}
-
-            {activeLevel1Id && !loadingLevel2Map[activeLevel1Id] && activeLevel2List.length === 0 ? (
-              <Text style={styles.emptyText}>No subcategories found.</Text>
-            ) : null}
-          </View>
-        </ScrollView>
+        <FlatList
+          style={styles.body}
+          contentContainerStyle={styles.bodyContent}
+          data={level1Rows}
+          renderItem={renderLevel1Row}
+          keyExtractor={(item) => item.key}
+          ListHeaderComponent={renderBodyHeader}
+          ListFooterComponent={renderBodyFooter}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          updateCellsBatchingPeriod={50}
+          windowSize={5}
+          removeClippedSubviews
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+        />
       ) : null}
 
       <View style={styles.footer}>
@@ -427,6 +462,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
   },
+  bodyContent: {
+    paddingBottom: 12,
+  },
   searchInput: {
     height: 44,
     borderRadius: 12,
@@ -448,9 +486,6 @@ const styles = StyleSheet.create({
     color: '#991b1b',
     fontSize: 13,
     fontWeight: '600',
-  },
-  level1List: {
-    paddingBottom: 6,
   },
   level1Row: {
     flexDirection: 'row',
@@ -474,6 +509,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     minHeight: 84,
     justifyContent: 'space-between',
+  },
+  level1CardPlaceholder: {
+    width: '48.4%',
   },
   level1CardSelected: {
     borderColor: '#ef4444',

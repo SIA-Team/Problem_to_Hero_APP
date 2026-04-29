@@ -50,8 +50,8 @@ const uploadApi = {
     const formData = new FormData();
     formData.append('file', {
       uri: file.uri,
-      name: file.name,
-      type: file.type,
+      name: file.name || `file_${Date.now()}`,
+      type: file.type || 'application/octet-stream',
     });
 
     return apiClient.post(API_ENDPOINTS.UPLOAD.FILE, formData, {
