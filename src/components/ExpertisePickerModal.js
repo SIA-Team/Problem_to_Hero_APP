@@ -3,14 +3,16 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
+  Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import questionCategoryService from '../services/questionCategoryService';
 import { modalTokens } from './modalTokens';
@@ -59,6 +61,13 @@ export default function ExpertisePickerModal({
   onClose,
   onConfirm,
 }) {
+  const insets = useSafeAreaInsets();
+  const initialTopInset = initialWindowMetrics?.insets?.top ?? 0;
+  const topSafeInset = Math.max(
+    insets.top || 0,
+    initialTopInset,
+    Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0
+  );
   const [loadingLevel1, setLoadingLevel1] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -409,9 +418,12 @@ export default function ExpertisePickerModal({
       animationType="slide"
       transparent={false}
       onRequestClose={onClose}
+      presentationStyle="fullScreen"
+      statusBarTranslucent
+      navigationBarTranslucent
     >
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={styles.header}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
+        <View style={[styles.header, { paddingTop: topSafeInset + 8 }]}>
           <TouchableOpacity onPress={onClose} disabled={submitting}>
             <Text style={styles.headerCancel}>取消</Text>
           </TouchableOpacity>
@@ -551,10 +563,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   header: {
-    height: 56,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e5e7eb',
     paddingHorizontal: 16,
+    paddingBottom: 10,
+    minHeight: 64,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

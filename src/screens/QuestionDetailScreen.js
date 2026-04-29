@@ -43,6 +43,10 @@ import {
   setQuestionDetailListCaches,
 } from '../services/questionDetailCache';
 import {
+  getQuestionLocalRewardState,
+  mergeQuestionWithLocalRewardState,
+} from '../services/localRewardState';
+import {
   applyQuestionInteractionSnapshot,
   buildQuestionInteractionSnapshot,
   getQuestionInteractionSnapshotAsync,
@@ -465,25 +469,7 @@ export default function QuestionDetailScreen({
     avatarSeed: 'user3',
     showHot: false
   }], [t]);
-  const rewardContributorsList = React.useMemo(() => [{
-    id: 1,
-    name: t('screens.questionDetail.samples.rewardContributors.first.name'),
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user1',
-    amount: 20,
-    time: t('screens.questionDetail.samples.rewardContributors.first.time')
-  }, {
-    id: 2,
-    name: t('screens.questionDetail.samples.rewardContributors.second.name'),
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=answer1',
-    amount: 15,
-    time: t('screens.questionDetail.samples.rewardContributors.second.time')
-  }, {
-    id: 3,
-    name: t('screens.questionDetail.samples.rewardContributors.third.name'),
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=answer2',
-    amount: 15,
-    time: t('screens.questionDetail.samples.rewardContributors.third.time')
-  }], [t]);
+  const fallbackRewardContributorsList = React.useMemo(() => [], []);
   const expertsList = React.useMemo(() => [{
     id: 1,
     name: t('screens.questionDetail.samples.experts.first.name'),
@@ -1390,14 +1376,109 @@ export default function QuestionDetailScreen({
 
   // 增加悬赏相关状态
   const [showAddRewardModal, setShowAddRewardModal] = useState(false);
-  const [rewardContributors, setRewardContributors] = useState(3); // 追加悬赏的人数
+  const [rewardContributors, setRewardContributors] = useState(0); // 追加悬赏的人数
   const [addRewardAmount, setAddRewardAmount] = useState('');
   const [selectedAddRewardAmount, setSelectedAddRewardAmount] = useState(null);
   const [showRewardContributorsModal, setShowRewardContributorsModal] = useState(false); // 显示追加悬赏人员名单
+  const [manualRewardContributors, setManualRewardContributors] = useState([]);
+  const rewardContributorQuestionIdRef = React.useRef(null);
+  const rewardContributorsList = React.useMemo(
+    () => [...manualRewardContributors, ...fallbackRewardContributorsList],
+    [fallbackRewardContributorsList, manualRewardContributors]
+  );
 
   // 当前悬赏金额 - 从问题数据中获取
   const currentReward = questionData ? centsToAmount(questionData.bountyAmount || 0) : 0;
   const rewardAmountDisplayText = formatAmount(currentReward);
+  useEffect(() => {
+    const currentQuestionId = String(
+      questionData?.questionId ?? questionData?.id ?? route?.params?.id ?? ''
+    ).trim();
+
+    if (!currentQuestionId) {
+      return;
+    }
+
+    const nextContributorCount = Number(
+      questionData?.rewardContributorCount ?? questionData?.rewardContributorUserIds?.length ?? 0
+    );
+
+    if (!Number.isFinite(nextContributorCount) || nextContributorCount < 0) {
+      return;
+    }
+
+    let isActive = true;
+
+    const hydrateLocalRewardState = async () => {
+      const localRewardState = await getQuestionLocalRewardState(currentQuestionId);
+      if (!isActive) {
+        return;
+      }
+
+      const hasLocalRewardState =
+        Number(localRewardState.totalAddedAmount || 0) > 0 ||
+        localRewardState.contributors.length > 0;
+      const mergedQuestion = hasLocalRewardState
+        ? mergeQuestionWithLocalRewardState(questionData, localRewardState)
+        : questionData;
+      const mergedContributorCount = Number(
+        mergedQuestion?.rewardContributorCount ?? nextContributorCount
+      );
+
+      if (rewardContributorQuestionIdRef.current !== currentQuestionId) {
+        rewardContributorQuestionIdRef.current = currentQuestionId;
+      }
+
+      setRewardContributors(
+        Number.isFinite(mergedContributorCount) && mergedContributorCount >= 0
+          ? mergedContributorCount
+          : nextContributorCount
+      );
+      setManualRewardContributors(localRewardState.contributors);
+
+      if (
+        hasLocalRewardState &&
+        mergedQuestion &&
+        (
+          Number(mergedQuestion.bountyAmount ?? 0) !== Number(questionData?.bountyAmount ?? 0) ||
+          Number(mergedQuestion.rewardContributorCount ?? 0) !==
+            Number(questionData?.rewardContributorCount ?? 0)
+        )
+      ) {
+        setQuestionData(prevQuestion => {
+          if (!prevQuestion) {
+            return prevQuestion;
+          }
+
+          return mergeQuestionWithLocalRewardState(prevQuestion, localRewardState);
+        });
+      }
+    };
+
+    hydrateLocalRewardState().catch(error => {
+      console.warn('Failed to hydrate local reward state:', error);
+      if (!isActive) {
+        return;
+      }
+
+      if (rewardContributorQuestionIdRef.current !== currentQuestionId) {
+        rewardContributorQuestionIdRef.current = currentQuestionId;
+      }
+      setRewardContributors(nextContributorCount);
+      setManualRewardContributors([]);
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [
+    questionData?.id,
+    questionData?.questionId,
+    questionData?.bountyAmount,
+    questionData?.rewardContributorCount,
+    questionData?.rewardContributorUserIds,
+    route?.params?.id,
+  ]);
   const syncCommunitySolveVoteSummary = React.useCallback(summaryResponse => {
     const normalizedSummary = summaryResponse?.code === 200 ? normalizeCommunitySolveVoteSummary(summaryResponse.data) : normalizeCommunitySolveVoteSummary(null);
     setCommunitySolveVoteSummary(normalizedSummary);
@@ -2068,6 +2149,24 @@ export default function QuestionDetailScreen({
       question.rewardUsers,
       question.bountyUsers
     );
+    const rewardContributorCountCandidates = [
+      question.rewardContributorCount,
+      question.rewardContributorsCount,
+      question.bountyContributorCount,
+      question.bountyContributorsCount,
+      question.contributorCount,
+      question.contributorsCount,
+      question.rewardContributors,
+      question.contributors,
+    ];
+    const normalizedRewardContributorCountCandidate = rewardContributorCountCandidates
+      .map(value => Number(value))
+      .find(value => Number.isFinite(value) && value >= 0);
+    const normalizedRewardContributorCount = Number.isFinite(
+      normalizedRewardContributorCountCandidate
+    )
+      ? normalizedRewardContributorCountCandidate
+      : normalizedRewardContributorUserIds.length;
     const normalizedDisplayType = normalizedPayViewAmount > 0 ? 'paid' : normalizedRawType === 1 || normalizedRawType === '1' || normalizedRawType === 'reward' ? normalizedBountyAmount > 0 ? 'reward' : 'free' : normalizedRawType === 2 || normalizedRawType === '2' || normalizedRawType === 'targeted' ? 'targeted' : 'free';
     const normalizedReward = normalizedBountyAmount > 0 ? centsToAmount(normalizedBountyAmount) : 0;
     return {
@@ -2121,7 +2220,11 @@ export default function QuestionDetailScreen({
       isResolved: question.isResolved ?? question.resolved ?? normalizedStatus === 2,
       canAdoptAnswer: normalizedQuestionCanAdopt,
       canAcceptAnswer: normalizedQuestionCanAdopt,
-      rewardContributorUserIds: normalizedRewardContributorUserIds
+      rewardContributorCount: normalizedRewardContributorCount,
+      rewardContributorUserIds: normalizedRewardContributorUserIds,
+      __baseBountyAmount: normalizedBountyAmount,
+      __baseRewardContributorCount: normalizedRewardContributorCount,
+      __baseRewardContributorUserIds: normalizedRewardContributorUserIds,
     };
   };
   const normalizeCommunitySolveVoteSummary = summary => {
@@ -2934,22 +3037,18 @@ export default function QuestionDetailScreen({
       return;
     }
 
-    const totalReward = Number(addedRewardResult.totalReward);
     const nextRewardContributors = Number(addedRewardResult.rewardContributors);
+    const localRewardState = addedRewardResult.localRewardState;
 
-    if (Number.isFinite(totalReward) && totalReward >= 0) {
-      const normalizedTotalReward = Math.round(totalReward * 100) / 100;
+    if (localRewardState) {
       setQuestionData(prevQuestion => {
         if (!prevQuestion) {
           return prevQuestion;
         }
 
-        return {
-          ...prevQuestion,
-          bountyAmount: Math.round(normalizedTotalReward * 100),
-          reward: normalizedTotalReward,
-        };
+        return mergeQuestionWithLocalRewardState(prevQuestion, localRewardState);
       });
+      setManualRewardContributors(Array.isArray(localRewardState.contributors) ? localRewardState.contributors : []);
     }
 
     if (Number.isFinite(nextRewardContributors) && nextRewardContributors >= 0) {
@@ -7107,25 +7206,16 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
 
   // 处理追加悬赏
   const handleAddReward = () => {
-    const amount = selectedAddRewardAmount || parseFloat(addRewardAmount);
-    if (!amount || amount <= 0) {
-      alert('请输入有效的悬赏金额');
-      return;
-    }
-    if (amount < 5) {
-      alert('最低追加金额为 $5');
-      return;
-    }
-    if (amount > 1000) {
-      alert('单次追加金额不能超过 $1000');
-      return;
-    }
-    setCurrentReward(currentReward + amount);
-    setRewardContributors(rewardContributors + 1);
-    alert(`成功追加 $${amount} 悬赏！`);
     setShowAddRewardModal(false);
     setAddRewardAmount('');
     setSelectedAddRewardAmount(null);
+    navigation.navigate('AddReward', {
+      currentReward,
+      rewardContributors,
+      questionId: route?.params?.id ?? questionData?.id ?? questionData?.questionId ?? '',
+      questionTitle: questionData?.title ?? '',
+      sourceRouteKey: route.key,
+    });
   };
 
   // 处理购买超级赞
@@ -7547,6 +7637,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <TouchableOpacity style={styles.addRewardBtn} onPress={() => navigation.navigate('AddReward', {
                 currentReward,
                 rewardContributors,
+                questionId: route?.params?.id ?? questionData?.id ?? questionData?.questionId ?? '',
+                questionTitle: questionData?.title ?? '',
                 sourceRouteKey: route.key
               })}>
                 <Ionicons name="add-circle-outline" size={16} color="#f65b51" />
@@ -7569,7 +7661,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               {/* 追加人数 */}
               <TouchableOpacity style={styles.rewardContributorsRow} onPress={() => navigation.navigate('Contributors', {
                 currentReward,
-                rewardContributors
+                rewardContributors,
+                rewardContributorsList
               })}>
                 <View style={styles.rewardStatHeader}>
                   <Ionicons name="people-outline" size={14} color="#2563eb" />
@@ -9800,7 +9893,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             </View>
 
             <ScrollView style={styles.contributorsList} showsVerticalScrollIndicator={false}>
-              {rewardContributorsList.map((contributor, index) => <View key={contributor.id} style={styles.contributorItem}>
+              {rewardContributorsList.length > 0 ? rewardContributorsList.map((contributor, index) => <View key={contributor.id} style={styles.contributorItem}>
                   <View style={styles.contributorRank}>
                     <Text style={styles.contributorRankText}>#{index + 1}</Text>
                   </View>
@@ -9813,7 +9906,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     <Ionicons name="add" size={12} color="#ef4444" />
                     <Text style={styles.contributorAmountText}>{formatAmount(contributor.amount)}</Text>
                   </View>
-                </View>)}
+                </View>) : <Text style={styles.contributorsEmptyText}>{t('common.noData')}</Text>}
             </ScrollView>
 
             <TouchableOpacity style={styles.contributorsCloseBtn} onPress={() => setShowRewardContributorsModal(false)}>
@@ -13688,6 +13781,13 @@ const styles = StyleSheet.create({
   contributorsList: {
     maxHeight: 300,
     paddingHorizontal: 20
+  },
+  contributorsEmptyText: {
+    paddingTop: 36,
+    paddingBottom: 12,
+    textAlign: 'center',
+    fontSize: scaleFont(14),
+    color: '#94a3b8'
   },
   contributorItem: {
     flexDirection: 'row',

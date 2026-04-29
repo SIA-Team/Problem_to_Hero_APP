@@ -1,23 +1,26 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView } from 'react-native';
 import { CommonActions, useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
 import userApi from '../services/api/userApi';
+import walletApi from '../services/api/walletApi';
+import { recordQuestionLocalRewardContribution } from '../services/localRewardState';
 import { openOfficialRechargePage } from '../utils/externalLinks';
-import { applyMockRecharge, applyMockWalletExpense, getWalletBalanceWithMock } from '../utils/walletMock';
 import { REWARD_MIN_AMOUNT } from '../constants/reward';
 import {
   formatAmount,
   parseRewardAmountToCents,
   sanitizeAmountInput,
 } from '../utils/rewardAmount';
+import {
+  normalizeWalletPointsOverview,
+  WALLET_POINTS_DEFAULT_CURRENCY,
+} from '../utils/walletPoints';
 
 import { scaleFont } from '../utils/responsive';
-
-const MOCK_RECHARGE_RETURN_AMOUNT = 100;
 
 export default function AddRewardScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -25,24 +28,24 @@ export default function AddRewardScreen({ navigation, route }) {
   const {
     currentReward = 50,
     rewardContributors = 3,
+    questionId = '',
+    questionTitle = '',
+    sourceRouteKey = '',
     userId: routeUserId = '',
     username: routeUsername = '',
-    sourceRouteKey = '',
   } = route?.params || {};
   
   const [addRewardAmount, setAddRewardAmount] = useState('');
   const [selectedAddRewardAmount, setSelectedAddRewardAmount] = useState(null);
   const [walletData, setWalletData] = useState({
     balance: 0,
-    currency: 'usd',
+    currency: WALLET_POINTS_DEFAULT_CURRENCY,
   });
+  const [submitting, setSubmitting] = useState(false);
   const [userProfile, setUserProfile] = useState({
     userId: routeUserId,
     username: routeUsername,
   });
-  const pendingRechargeSimulationRef = useRef(false);
-  const appStateRef = useRef(AppState.currentState);
-  const handleRechargeReturnRef = useRef(async () => {});
 
   const getCurrencySymbol = useCallback(currency => {
     switch (String(currency || 'usd').toLowerCase()) {
@@ -68,22 +71,13 @@ export default function AddRewardScreen({ navigation, route }) {
   }, [getCurrencySymbol, walletData.currency]);
 
   const loadWalletBalance = useCallback(async () => {
-    const fallbackWalletBalance = await getWalletBalanceWithMock(0);
-
-    setWalletData(prev => ({
-      balance: fallbackWalletBalance.balance,
-      currency: prev?.currency || 'usd',
-    }));
-
     try {
-      const response = await userApi.getWalletBalance();
+      const response = await walletApi.getPointsOverview();
       if (response.code === 0 || response.code === 200) {
-        const nextCurrency = response?.data?.currency || 'usd';
-        const walletBalance = await getWalletBalanceWithMock(response?.data?.balance);
-
+        const overview = normalizeWalletPointsOverview(response?.data);
         setWalletData({
-          balance: walletBalance.balance,
-          currency: nextCurrency,
+          balance: overview.balance,
+          currency: overview.currency || WALLET_POINTS_DEFAULT_CURRENCY,
         });
       }
     } catch (error) {
@@ -109,32 +103,6 @@ export default function AddRewardScreen({ navigation, route }) {
     }
   }, [routeUserId, routeUsername]);
 
-  const handleMockRecharge = useCallback(async amount => {
-    const numericAmount = Number(amount);
-
-    await applyMockRecharge({
-      amount: numericAmount,
-      currency: walletData.currency,
-    });
-
-    setWalletData(prev => ({
-      ...prev,
-      balance: (Number(prev.balance) || 0) + (Number.isFinite(numericAmount) ? numericAmount : 0),
-    }));
-
-    await loadWalletBalance();
-    showAppAlert(
-      t('profile.rechargeSuccess'),
-      `${t('profile.rechargeSuccess')} ${formatMoney(numericAmount, walletData.currency)} (${t('profile.mockRechargeTag')})`
-    );
-  }, [formatMoney, loadWalletBalance, t, walletData.currency]);
-
-  useEffect(() => {
-    handleRechargeReturnRef.current = async () => {
-      await handleMockRecharge(MOCK_RECHARGE_RETURN_AMOUNT);
-    };
-  }, [handleMockRecharge]);
-
   useEffect(() => {
     loadWalletBalance();
     loadUserProfile();
@@ -144,27 +112,6 @@ export default function AddRewardScreen({ navigation, route }) {
     loadWalletBalance();
   }, [loadWalletBalance]));
 
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', nextAppState => {
-      const isReturningToForeground =
-        appStateRef.current.match(/inactive|background/) &&
-        nextAppState === 'active';
-
-      if (isReturningToForeground && pendingRechargeSimulationRef.current) {
-        pendingRechargeSimulationRef.current = false;
-        handleRechargeReturnRef.current().catch(error => {
-          console.error('Failed to simulate recharge after returning to AddRewardScreen:', error);
-        });
-      }
-
-      appStateRef.current = nextAppState;
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
   const handleRecharge = useCallback(async () => {
     const result = await openOfficialRechargePage({
       userId: routeUserId || userProfile.userId,
@@ -173,7 +120,6 @@ export default function AddRewardScreen({ navigation, route }) {
     });
 
     if (result.ok) {
-      pendingRechargeSimulationRef.current = true;
       return;
     }
 
@@ -186,7 +132,24 @@ export default function AddRewardScreen({ navigation, route }) {
     );
   }, [routeUserId, routeUsername, t, userProfile.userId, userProfile.username]);
 
+  const syncRewardResultToSource = useCallback(addedRewardResult => {
+    if (!sourceRouteKey) {
+      return;
+    }
+
+    navigation.dispatch({
+      ...CommonActions.setParams({
+        addedRewardResult,
+      }),
+      source: sourceRouteKey,
+    });
+  }, [navigation, sourceRouteKey]);
+
   const handleAddReward = async () => {
+    if (submitting) {
+      return;
+    }
+
     const amountInCents =
       selectedAddRewardAmount !== null
         ? Math.round(Number(selectedAddRewardAmount) * 100)
@@ -232,53 +195,80 @@ export default function AddRewardScreen({ navigation, route }) {
     }
 
     try {
-      await applyMockWalletExpense({
-        amount,
+      setSubmitting(true);
+
+      const rewardTitlePrefix = t('screens.addRewardScreen.expenseRecordType');
+      const rewardRemark = questionTitle
+        ? `${rewardTitlePrefix} - ${questionTitle}`
+        : rewardTitlePrefix;
+      const consumeResponse = await walletApi.consumePoints(amount, {
+        sourceType: 'BOUNTY',
+        remark: rewardRemark,
+        refId: questionId || null,
+        refType: 'QUESTION',
         currency: walletData.currency,
-        type: t('screens.addRewardScreen.expenseRecordType'),
       });
 
-      setWalletData(prev => ({
-        ...prev,
-        balance: Math.max(0, (Number(prev.balance) || 0) - amount),
-      }));
+      if (consumeResponse?.code !== 0 && consumeResponse?.code !== 200) {
+        throw new Error(
+          consumeResponse?.msg || t('screens.addRewardScreen.deductionFailed')
+        );
+      }
 
-      await loadWalletBalance();
+      const nextBalance = Number(consumeResponse?.data?.balance);
+      if (Number.isFinite(nextBalance)) {
+        setWalletData(prev => ({
+          ...prev,
+          balance: nextBalance,
+        }));
+      }
+
+      const normalizedAmount = Math.round(amount * 100) / 100;
+      const localRewardState = await recordQuestionLocalRewardContribution(questionId, {
+        amount: normalizedAmount,
+        contributor: {
+          id: `local-reward-${Date.now()}`,
+          userId: routeUserId || userProfile.userId || null,
+          name: routeUsername || userProfile.username || 'Me',
+          avatar: null,
+          amount: normalizedAmount,
+          time: t('home.justNow'),
+        },
+      });
+      const addedRewardResult = {
+        questionId,
+        addedAmount: normalizedAmount,
+        totalReward: Math.round((currentReward + normalizedAmount) * 100) / 100,
+        rewardContributors: Math.max(Number(rewardContributors) || 0, 0) + Number(localRewardState.contributorCountDelta || 0),
+        contributorUserId: routeUserId || userProfile.userId || null,
+        contributor: localRewardState.contributors[0] || null,
+        localRewardState,
+      };
+
+      syncRewardResultToSource(addedRewardResult);
+
+      showAppAlert(
+        t('screens.addRewardScreen.success.title'),
+        t('screens.addRewardScreen.success.message').replace(
+          '${amount}',
+          formatAmount(normalizedAmount)
+        ),
+        [
+          {
+            text: t('screens.addRewardScreen.success.confirm'),
+            onPress: () => navigation.goBack(),
+          },
+        ]
+      );
     } catch (error) {
-      console.error('Failed to deduct wallet balance for add reward:', error);
-      showAppAlert(t('screens.addRewardScreen.validation.hint'), t('screens.addRewardScreen.deductionFailed'));
-      return;
+      console.error('Add reward submit failed:', error);
+      showAppAlert(
+        t('screens.addRewardScreen.validation.hint'),
+        error?.message || t('screens.addRewardScreen.deductionFailed')
+      );
+    } finally {
+      setSubmitting(false);
     }
-
-    showAppAlert(
-      t('screens.addRewardScreen.success.title'),
-      t('screens.addRewardScreen.success.message').replace('${amount}', formatAmount(amount)),
-      [
-        {
-          text: t('screens.addRewardScreen.success.confirm'),
-          onPress: () => {
-            const nextTotalReward = Math.round((Number(currentReward) + Number(amount)) * 100) / 100;
-            const addedRewardResult = {
-              totalReward: nextTotalReward,
-              rewardContributors: rewardContributors + 1,
-              addedAmount: amount,
-            };
-
-            if (sourceRouteKey) {
-              navigation.dispatch({
-                ...CommonActions.setParams({
-                  addedRewardResult,
-                }),
-                source: sourceRouteKey,
-                target: navigation.getState()?.key,
-              });
-            }
-
-            navigation.goBack();
-          }
-        }
-      ]
-    );
   };
 
   return (
@@ -313,6 +303,12 @@ export default function AddRewardScreen({ navigation, route }) {
             </Text>
           </View>
         </View>
+
+        <View style={styles.walletSummaryCard}>
+          <Text style={styles.walletSummaryLabel}>{t('screens.addRewardScreen.paymentBalanceLabel')}</Text>
+          <Text style={styles.walletSummaryValue}>{formatMoney(walletData.balance)}</Text>
+        </View>
+        <Text style={styles.walletSummaryHint}>{t('screens.addRewardScreen.paymentHint')}</Text>
 
         {/* 快速选择金额 */}
         <Text style={styles.sectionTitle}>{t('screens.addRewardScreen.selectAmount.title')}</Text>
@@ -366,14 +362,14 @@ export default function AddRewardScreen({ navigation, route }) {
         <TouchableOpacity
           style={[
             styles.confirmBtn,
-            (!selectedAddRewardAmount && !addRewardAmount) && styles.confirmBtnDisabled
+            ((!selectedAddRewardAmount && !addRewardAmount) || submitting) && styles.confirmBtnDisabled
           ]}
           onPress={() => {
             handleAddReward().catch(error => {
               console.error('Add reward submit failed:', error);
             });
           }}
-          disabled={!selectedAddRewardAmount && !addRewardAmount}
+          disabled={(!selectedAddRewardAmount && !addRewardAmount) || submitting}
         >
           <Text style={styles.confirmBtnText}>
             {t('screens.addRewardScreen.confirmButton').replace('${amount}', formatAmount(selectedAddRewardAmount ?? addRewardAmount ?? 0))}
@@ -439,6 +435,35 @@ const styles = StyleSheet.create({
     color: '#10b981' // 翠绿色金额
   },
   currentRewardDesc: { fontSize: scaleFont(12), color: '#065f46' },
+  walletSummaryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 24,
+  },
+  walletSummaryLabel: {
+    fontSize: scaleFont(14),
+    color: '#1d4ed8',
+    fontWeight: '500',
+  },
+  walletSummaryValue: {
+    fontSize: scaleFont(16),
+    color: '#1e40af',
+    fontWeight: '700',
+  },
+  walletSummaryHint: {
+    marginTop: -14,
+    marginBottom: 24,
+    fontSize: scaleFont(12),
+    color: '#64748b',
+    lineHeight: scaleFont(18),
+  },
   sectionTitle: { 
     fontSize: scaleFont(15), 
     fontWeight: '600', 

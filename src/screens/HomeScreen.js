@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { AppState, InteractionManager, View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, Dimensions, TextInput, FlatList, Platform, ActivityIndicator, RefreshControl, KeyboardAvoidingView } from 'react-native';
+import { InteractionManager, View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, Dimensions, TextInput, FlatList, Platform, ActivityIndicator, RefreshControl, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
@@ -27,11 +27,10 @@ import { getLastLocationLevel } from '../utils/locationFormatter';
 import { shouldRequirePaidQuestionAccess } from '../utils/questionAccessRules';
 import { openOfficialRechargePage } from '../utils/externalLinks';
 import { buildCombinedChannelResolvedDisplayName, getChannelDisplayName } from '../utils/combinedChannelDisplay';
-import { applyMockRecharge, applyMockWalletExpense, getWalletBalanceWithMock } from '../utils/walletMock';
-import { markQuestionAsPaid } from '../utils/paidQuestionAccess';
 import { navigateToPublicProfile, resolvePublicUserId } from '../utils/publicProfileNavigation';
 import questionApi from '../services/api/questionApi';
 import userApi from '../services/api/userApi';
+import walletApi from '../services/api/walletApi';
 import { getBlockedUserIds, subscribeBlockedUsers } from '../services/blacklistState';
 import { fetchHomeChannelItems } from '../services/channelHomeService';
 import { fetchChannelCatalog } from '../services/channelCatalogService';
@@ -41,11 +40,14 @@ import {
   publishQuestionInteractionSync,
   subscribeQuestionInteractionSync,
 } from '../services/questionInteractionSync';
+import {
+  normalizeWalletPointsOverview,
+  WALLET_POINTS_DEFAULT_CURRENCY,
+} from '../utils/walletPoints';
 
 import { scaleFont } from '../utils/responsive';
 const { width: screenWidth } = Dimensions.get('window');
 const INITIAL_CREDENTIALS_NOTICE_STORAGE_KEY = '@initial_credentials_notice';
-const MOCK_RECHARGE_RETURN_AMOUNT = 100;
 const HOME_WALLET_REFRESH_DEBOUNCE_MS = 15000;
 const HERO_RANK_TABS = [
   { key: 'adopted', label: '被采纳' },
@@ -452,15 +454,12 @@ export default function HomeScreen({ navigation }) {
   const [isUnlockingPaidQuestion, setIsUnlockingPaidQuestion] = useState(false);
   const [walletData, setWalletData] = useState({
     balance: 0,
-    currency: 'usd',
+    currency: WALLET_POINTS_DEFAULT_CURRENCY,
   });
   const [currentUserProfile, setCurrentUserProfile] = useState({
     userId: '',
     username: '',
   });
-  const pendingRechargeSimulationRef = useRef(false);
-  const appStateRef = useRef(AppState.currentState);
-  const handleRechargeReturnRef = useRef(async () => {});
   const lastWalletRefreshAtRef = useRef(0);
   const walletRefreshTaskRef = useRef(null);
   const [showInitialCredentialsModal, setShowInitialCredentialsModal] = useState(false);
@@ -1289,28 +1288,19 @@ export default function HomeScreen({ navigation }) {
       return;
     }
 
-    const fallbackWalletBalance = await getWalletBalanceWithMock(0);
-
-    setWalletData(prev => ({
-      balance: fallbackWalletBalance.balance,
-      currency: prev?.currency || 'usd',
-    }));
-
     try {
-      const response = await userApi.getWalletBalance();
+      const response = await walletApi.getPointsOverview();
 
       if (response.code === 0 || response.code === 200) {
-        const nextCurrency = response?.data?.currency || 'usd';
-        const walletBalance = await getWalletBalanceWithMock(response?.data?.balance);
-
+        const overview = normalizeWalletPointsOverview(response?.data);
         setWalletData({
-          balance: walletBalance.balance,
-          currency: nextCurrency,
+          balance: overview.balance,
+          currency: overview.currency || WALLET_POINTS_DEFAULT_CURRENCY,
         });
       }
     } catch (error) {
       if (__DEV__) {
-        console.log('HomeScreen wallet balance fallback applied:', error?.message || error);
+        console.log('HomeScreen wallet balance load failed:', error?.message || error);
       }
     } finally {
       lastWalletRefreshAtRef.current = Date.now();
@@ -1332,26 +1322,6 @@ export default function HomeScreen({ navigation }) {
       }
     }
   }, []);
-
-  const handleMockRecharge = useCallback(async amount => {
-    const numericAmount = Number(amount);
-
-    await applyMockRecharge({
-      amount: numericAmount,
-      currency: walletData.currency,
-    });
-
-    setWalletData(prev => ({
-      ...prev,
-      balance: (Number(prev.balance) || 0) + (Number.isFinite(numericAmount) ? numericAmount : 0),
-    }));
-
-    await loadWalletBalance({ forceRefresh: true });
-    showAppAlert(
-      t('profile.rechargeSuccess'),
-      `${t('profile.rechargeSuccess')} $${numericAmount.toFixed(2)} (${t('profile.mockRechargeTag')})`
-    );
-  }, [loadWalletBalance, t, walletData.currency]);
 
   const closePaidAlertModal = useCallback(() => {
     setShowPaidAlertModal(false);
@@ -1384,12 +1354,6 @@ export default function HomeScreen({ navigation }) {
   }, [formatPaidAmount]);
 
   useEffect(() => {
-    handleRechargeReturnRef.current = async () => {
-      await handleMockRecharge(MOCK_RECHARGE_RETURN_AMOUNT);
-    };
-  }, [handleMockRecharge]);
-
-  useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
       loadCurrentUserProfile();
     });
@@ -1411,27 +1375,6 @@ export default function HomeScreen({ navigation }) {
     };
   }, [loadWalletBalance]));
 
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', nextAppState => {
-      const isReturningToForeground =
-        appStateRef.current.match(/inactive|background/) &&
-        nextAppState === 'active';
-
-      if (isReturningToForeground && pendingRechargeSimulationRef.current) {
-        pendingRechargeSimulationRef.current = false;
-        handleRechargeReturnRef.current().catch(error => {
-          console.error('Failed to simulate recharge after returning to HomeScreen:', error);
-        });
-      }
-
-      appStateRef.current = nextAppState;
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
   const handleRechargeForPaidQuestion = useCallback(async () => {
     const result = await openOfficialRechargePage({
       userId: currentUserProfile.userId,
@@ -1440,7 +1383,6 @@ export default function HomeScreen({ navigation }) {
     });
 
     if (result?.ok) {
-      pendingRechargeSimulationRef.current = true;
       return;
     }
 
@@ -1482,17 +1424,14 @@ export default function HomeScreen({ navigation }) {
     setIsUnlockingPaidQuestion(true);
 
     let walletBalance = 0;
-    let walletCurrency = 'usd';
 
     try {
-      const response = await userApi.getWalletBalance();
-      const walletInfo = await getWalletBalanceWithMock(response?.data?.balance);
-      walletBalance = Number(walletInfo?.balance) || 0;
-      walletCurrency = String(response?.data?.currency || 'usd').toLowerCase();
+      const response = await walletApi.getPointsOverview();
+      const overview = normalizeWalletPointsOverview(response?.data);
+      walletBalance = Number(overview?.balance) || 0;
     } catch (error) {
       console.error('Failed to load wallet balance for paid question unlock:', error);
-      const fallbackWalletInfo = await getWalletBalanceWithMock(0);
-      walletBalance = Number(fallbackWalletInfo?.balance) || 0;
+      walletBalance = 0;
     }
 
     if (walletBalance < amount) {
@@ -1520,41 +1459,8 @@ export default function HomeScreen({ navigation }) {
       return;
     }
 
-    try {
-      await applyMockWalletExpense({
-        amount,
-        currency: walletCurrency,
-        type: '付费查看',
-      });
-      await markQuestionAsPaid({
-        questionId: selectedPaidQuestion.id,
-        paidAmount: amount,
-      });
-
-      setQuestionList(prev =>
-        prev.map(item =>
-          item?.id === selectedPaidQuestion.id
-            ? { ...item, isPaid: true }
-            : item
-        )
-      );
-
-      const unlockedQuestion = {
-        ...selectedPaidQuestion,
-        isPaid: true,
-      };
-
-      closePaidAlertModal();
-      showToast(
-        t('home.payToViewSuccess').replace('{amount}', formatPaidAmount(amount)),
-        'success'
-      );
-      navigateToQuestionDetail(unlockedQuestion, pendingPaidQuestionRouteParams);
-    } catch (error) {
-      console.error('Failed to unlock paid question:', error);
-      setIsUnlockingPaidQuestion(false);
-      showAppAlert(t('home.payToViewFailedTitle'), t('home.payToViewFailedMessage'));
-    }
+    setIsUnlockingPaidQuestion(false);
+    showAppAlert(t('home.payToViewUnavailableTitle'), t('home.payToViewUnavailableMessage'));
   }, [
     closePaidAlertModal,
     formatPaidAmount,
@@ -1563,7 +1469,6 @@ export default function HomeScreen({ navigation }) {
     navigateToQuestionDetail,
     pendingPaidQuestionRouteParams,
     selectedPaidQuestion,
-    setQuestionList,
     t,
   ]);
 

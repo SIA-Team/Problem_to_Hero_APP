@@ -89,6 +89,8 @@
     "payToViewSuccess": "Paid ${amount}. You can now view the full content.",
     "payToViewFailedTitle": "Payment failed",
     "payToViewFailedMessage": "We couldn't complete this paid view. Please try again later.",
+    "payToViewUnavailableTitle": "Paid view unavailable",
+    "payToViewUnavailableMessage": "This version has not connected the real paid-view deduction flow yet. Please wait for a later release.",
     "joinTeam": "Join Team",
     "joinTeamFeature": "Join team feature coming soon",
     "writeAnswer": "Write Answer",
@@ -337,6 +339,12 @@
     "withdrawAll": "Withdraw All",
     "withdrawableAmount": "Withdrawable Amount",
     "myFriends": "My Friends",
+    "superLikeHubTitle": "Boost your answers",
+    "superLikeHubSubtitle": "Use Super Likes to give strong answers better ranking and more exposure.",
+    "superLikeTagBoost": "Ranking boost",
+    "superLikeTagExposure": "More exposure",
+    "superLikePurchaseDescription": "Buy more Super Likes and use them on any answer.",
+    "superLikeHistoryDescription": "Review your purchase and usage records.",
     "youHaveFriends": "You have {count} friends",
     "likesStats": "Your content has received {count} likes",
     "incomeDetails": "Income Details",
@@ -435,7 +443,7 @@
       "qualificationsDesc": "Please upload your professional qualification certificates (e.g., lawyer license, medical license, teacher certificate, etc.)",
       "qualificationName": "Enter qualification name (e.g., Lawyer License)",
       "addQualification": "Add Qualification",
-      "qualificationTip": "Supports uploading lawyer license, medical license, teacher certificate and other professional qualifications",
+      "qualificationTip": "Supports lawyer licenses, medical licenses, teacher certificates, and other professional qualifications in image or PDF format",
       "enterpriseName": "Enterprise Name",
       "enterpriseNamePlaceholder": "Enter full enterprise name",
       "registrationNumber": "Registration Number",
@@ -454,7 +462,7 @@
       "contactEmailPlaceholder": "Enter email address",
       "uploadLicense": "Upload Registration Documents",
       "license": "Registration Document",
-      "licenseTip": "Please upload clear registration document photos (such as business license, organization code certificate, etc.), ensure information is complete and visible",
+      "licenseTip": "Please upload clear registration documents in image or PDF format (such as business license, organization code certificate, etc.), ensuring all information is complete and visible",
       "governmentName": "Organization Name",
       "governmentNamePlaceholder": "Enter full government organization name",
       "governmentId": "Organization ID",
@@ -471,23 +479,42 @@
       "positionPlaceholder": "Enter authorizer position",
       "uploadCertificate": "Upload Official Documents",
       "certificate": "Official Document",
-      "certificateTip": "Please upload official documents with official seal, such as: organization code certificate, public institution legal person certificate, etc.",
+      "certificateTip": "Please upload official documents with an official seal in image or PDF format, such as an organization code certificate or public institution legal person certificate",
       "submit": "Submit Verification",
       "submitSuccess": "Submitted Successfully",
       "submitSuccessMessage": "Your verification application has been submitted. We will complete the review within 1-3 business days. Please wait patiently.",
+      "submitReadyTitle": "Materials are ready",
+      "submitReadyMessage": "All verification materials have been uploaded successfully. The final verification submission API is not connected in this build yet.",
       "required": "*",
       "fillRequired": "Please fill in",
       "uploadRequired": "Please upload",
       "selectImage": "Upload Image",
       "selectImageSource": "Select image source",
+      "selectFile": "Upload File",
+      "selectFileSource": "Choose an upload method",
       "camera": "Camera",
       "album": "Album",
+      "chooseFile": "Choose File",
+      "clickUploadFile": "Tap to upload file",
+      "uploading": "Uploading...",
+      "uploadSuccess": "Uploaded successfully",
+      "uploadFailed": "Upload failed. Please try again.",
+      "invalidUploadResponse": "The upload finished, but no file URL was returned. Please try again.",
+      "albumPermissionRequired": "Photo library permission is required to select images.",
+      "cameraPermissionRequired": "Camera permission is required to take photos.",
+      "documentPickerUnavailable": "This installed build does not include the system file picker yet. Please update to a newer build to upload files. Image upload still works.",
+      "fileUploadPendingNotice": "File upload will be enabled in builds created after May 1.",
+      "replaceUpload": "Replace",
+      "selectedFile": "Selected file",
+      "file": "File",
       "deleteQualification": "Confirm Delete",
       "deleteQualificationConfirm": "Are you sure you want to delete this qualification certificate?",
       "validationErrors": {
         "idNumberRequired": "Please fill in ID number",
+        "idPhotosRequired": "Please upload the front and back ID photos",
         "qualificationsRequired": "Please upload at least one professional qualification certificate",
         "qualificationNameRequired": "Please fill in names for all qualification certificates",
+        "qualificationUploadIncomplete": "Wait for qualification uploads to finish, or remove the failed item before submitting",
         "enterpriseInfoRequired": "Please fill in complete enterprise information",
         "licenseRequired": "Please upload registration document",
         "contactPersonRequired": "Please fill in contact person",
@@ -495,7 +522,10 @@
         "phoneFormatError": "Please enter correct phone number format",
         "emailFormatError": "Please enter correct email format",
         "governmentInfoRequired": "Please fill in complete organization information",
-        "authorizerIdRequired": "Please upload authorizer's ID card front and back"
+        "authorizerIdRequired": "Please upload the authorizer's ID card front and back",
+        "certificateRequired": "Please upload the official document",
+        "uploadingInProgress": "Some materials are still uploading. Please wait before submitting.",
+        "uploadFailedRetry": "Some uploads failed. Please retry or remove them before submitting."
       }
     },
     "contentTabs": {
@@ -936,6 +966,39 @@
         "submitVote": "Submit Vote",
         "cancel": "Cancel"
       },
+      "shareToFriendsModal": {
+        "title": "Share to Local Users",
+        "send": "Send",
+        "sending": "Sending...",
+        "searchPlaceholder": "Search users...",
+        "previewLabel": "Share Preview",
+        "empty": {
+          "searchErrorTitle": "Unable to search users",
+          "searchErrorHint": "Please check your connection and try again.",
+          "loadErrorTitle": "Unable to load users",
+          "loadErrorHint": "Tap retry to load the user list again.",
+          "noSearchResultsTitle": "No matching users",
+          "noSearchResultsHint": "Try a different nickname, username, or user ID.",
+          "noFollowingTitle": "No users available to share",
+          "noFollowingHint": "Users you follow will appear here and can be shared to directly."
+        },
+        "toasts": {
+          "selectUser": "Please select at least one user",
+          "partialSuccess": "Sent to {successCount} user(s), {failedCount} failed"
+        },
+        "alerts": {
+          "successTitle": "Shared successfully",
+          "successMessage": "Shared with {count} user(s).",
+          "viewConversation": "Open Chat",
+          "openMessages": "Messages"
+        },
+        "errors": {
+          "loadFollowing": "Unable to load your following list right now.",
+          "loadFollowingToast": "Unable to load your following list. Please try again later.",
+          "searchUsers": "Unable to search users right now.",
+          "sendShare": "Unable to send this share right now. Please try again later."
+        }
+      },
       "alerts": {
         "markAllReadTitle": "Mark All Read",
         "markAllReadMessage": "Are you sure you want to mark all messages as read?",
@@ -1070,11 +1133,13 @@
     "addRewardScreen": {
       "title": "Add Reward",
       "currentReward": {
-        "label": "Current Reward",
+        "label": "Current Reward Amount",
         "contributors": "{count} contributors have added rewards"
       },
+      "paymentBalanceLabel": "Points Balance (used for payment)",
+      "paymentHint": "Confirming will deduct from your points balance while the question still displays the public reward amount.",
       "selectAmount": {
-        "title": "Select Amount to Add"
+        "title": "Select Reward Amount to Add"
       },
       "customAmount": {
         "title": "Or enter custom amount",
@@ -1084,12 +1149,13 @@
         "text": "Users can add rewards to encourage high-quality answers.\n\nAfter the question is resolved, the reward amount will be automatically distributed according to platform rules:\n- Accepted answerers receive a corresponding share of the reward\n- The platform charges a certain service fee\n- The remaining reward is distributed based on acceptance and contribution\n\nAfter adding a reward, users receive corresponding acceptance quotas and can accept satisfactory answers. Accepted answers participate in reward distribution."
       },
         "insufficientBalance": {
-          "title": "Insufficient Wallet Balance",
-          "message": "Your current wallet balance is {balance}, which is not enough to cover this added reward of {amount}. Would you like to recharge now?"
+          "title": "Insufficient Points Balance",
+          "message": "Your current points balance is {balance}, which is not enough to cover this added reward of {amount}. Would you like to recharge now?"
         },
         "expenseRecordType": "Add Reward",
         "deductionFailed": "Failed to deduct wallet balance. Please try again later.",
-      "confirmButton": "Confirm Add ${amount}",
+        "submitUnavailable": "This version has not connected the real add-reward deduction flow yet. Please wait for a later release.",
+      "confirmButton": "Confirm Add Reward ${amount}",
       "cancelButton": "Cancel",
       "validation": {
         "hint": "Hint",
@@ -1099,8 +1165,37 @@
       },
       "success": {
         "title": "Success",
-        "message": "Successfully added ${amount} reward!",
+        "message": "Successfully added ${amount} reward and deducted the matching points balance.",
         "confirm": "OK"
+      }
+    },
+    "walletDetail": {
+      "loading": "Loading...",
+      "emptyTitle": "No records yet",
+      "emptyHints": {
+        "default": "There are no points transactions yet.",
+        "income": "There are no points income records yet.",
+        "expense": "There are no points expense records yet.",
+        "recharge": "There are no recharge records yet."
+      },
+      "transactionTitles": {
+        "default": "Points Transaction",
+        "addReward": "Add Reward"
+      },
+      "transactionTags": {
+        "income": "Income",
+        "expense": "Expense",
+        "addReward": "Add Reward"
+      },
+      "transactionTypes": {
+        "topup": "Recharge",
+        "reward": "Reward",
+        "adopt": "Adoption Reward",
+        "paidView": "Paid View",
+        "withdraw": "Withdraw",
+        "refund": "Refund",
+        "bounty": "Bounty",
+        "superLike": "Super Like"
       }
     },
     "answerDetail": {
@@ -2336,7 +2431,8 @@
     },
     "superLikeBalance": {
       "label": "Super Like Balance",
-      "unit": "credits"
+      "unit": "credits",
+      "available": "available"
     },
     "useSuperLikeButton": {
       "button": "Super Like x{count}",

@@ -130,7 +130,10 @@ export default function ImagePickerSheet({
         });
 
         if (!result.canceled && result.assets && result.assets.length > 0) {
-          onImageSelected?.(result.assets[0].uri);
+          onImageSelected?.(result.assets[0].uri, {
+            source: 'camera',
+            asset: result.assets[0],
+          });
         }
       } catch (error) {
         console.error('拍照失败:', error);
@@ -156,7 +159,10 @@ export default function ImagePickerSheet({
         });
 
         if (!result.canceled && result.assets && result.assets.length > 0) {
-          onImageSelected?.(result.assets[0].uri);
+          onImageSelected?.(result.assets[0].uri, {
+            source: 'album',
+            asset: result.assets[0],
+          });
         }
       } catch (error) {
         console.error('选择图片失败:', error);

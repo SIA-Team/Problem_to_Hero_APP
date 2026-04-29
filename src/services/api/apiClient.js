@@ -11,46 +11,24 @@ const shouldPrintVerboseApiLogs = () => (
   globalThis?.__ENABLE_VERBOSE_API_LOGS__ === true
 );
 
-// 澶勭悊 token 杩囨湡鐨勭粺涓€鍑芥暟
+let hasShownTokenExpiredToast = false;
+
+// Token expired handling
 const handleTokenExpired = async () => {
   try {
-    // 鑾峰彇鐢ㄦ埛淇℃伅鐢ㄤ簬鏄剧ず
-    const userInfo = await AsyncStorage.getItem('userInfo');
-    let username = '';
-
-    if (userInfo) {
-      try {
-        const user = JSON.parse(userInfo);
-        username = user.username || '';
-      } catch (e) {
-        console.error('瑙ｆ瀽鐢ㄦ埛淇℃伅澶辫触:', e);
-      }
-    }
-
-    // 娓呴櫎璁よ瘉淇℃伅
     await AsyncStorage.multiRemove(['authToken', 'refreshToken', 'userInfo']);
 
-    // 鏄剧ず鐧诲綍杩囨湡鎻愮ず锛屽寘鍚敤鎴峰悕淇℃伅
-    const { showAppAlert } = require('../../utils/appAlert');
+    if (!hasShownTokenExpiredToast) {
+      hasShownTokenExpiredToast = true;
+      showToast('\u767b\u5f55\u72b6\u6001\u5df2\u8fc7\u671f\uff0c\u8bf7\u91cd\u65b0\u767b\u5f55', 'error');
+      setTimeout(() => {
+        hasShownTokenExpiredToast = false;
+      }, 3000);
+    }
 
-    const message = username
-      ? `登录已过期，请重新登录\n\n用户名：${username}\n默认密码：12345678`
-      : '登录已过期，请重新登录';
-
-    showAppAlert(
-      '鐧诲綍杩囨湡',
-      message,
-      [{
-        text: '纭畾',
-        onPress: () => {
-          // 鐢ㄦ埛鐐瑰嚮纭畾鍚庢墠缁х画鎵ц
-        }
-      }]
-    );
-
-    console.log('馃毆 Token expired, user logged out');
+    console.log('Token expired, user logged out');
   } catch (error) {
-    console.error('鉂?澶勭悊鐧诲綍杩囨湡澶辫触:', error);
+    console.error('Failed to process token expiration:', error);
   }
 };
 
