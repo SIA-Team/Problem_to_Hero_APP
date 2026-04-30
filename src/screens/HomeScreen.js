@@ -280,7 +280,7 @@ export default function HomeScreen({ navigation }) {
         return homeChannelItems;
       });
     } catch (error) {
-      console.error('Failed to load home channel tabs:', error);
+      console.warn('Failed to load home channel tabs:', error);
       setComboTabItems(prevItems => (prevItems.length === 0 ? prevItems : []));
     }
   }, []);
@@ -320,7 +320,7 @@ export default function HomeScreen({ navigation }) {
           setComboCategoryDisplayNames(uniqueSortedNames);
         }
       } catch (error) {
-        console.error('Failed to load combo category display names:', error);
+        console.warn('Failed to load combo category display names:', error);
         if (isMounted) {
           setComboCategoryDisplayNames([]);
         }
@@ -380,7 +380,7 @@ export default function HomeScreen({ navigation }) {
     };
 
     resolveComboTabDisplayNames().catch((error) => {
-      console.error('Failed to resolve home combo tab display names:', error);
+      console.warn('Failed to resolve home combo tab display names:', error);
     });
 
     return () => {

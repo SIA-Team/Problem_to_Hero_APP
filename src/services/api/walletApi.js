@@ -94,6 +94,22 @@ const saveLocalWalletLedger = async ledger => {
   return normalizedLedger;
 };
 
+const getPointsOverviewBaseResponse = async () => (
+  !API_ENDPOINTS.WALLET.POINTS_OVERVIEW
+    ? {
+      code: 200,
+      msg: WALLET_API_PLACEHOLDER_MESSAGE,
+      data: {
+        balance: 0,
+        withdrawableBalance: 0,
+        lockedBalance: 0,
+        frozenBalance: 0,
+        currency: WALLET_POINTS_DEFAULT_CURRENCY,
+      },
+    }
+    : await apiClient.get(API_ENDPOINTS.WALLET.POINTS_OVERVIEW)
+);
+
 const applyLocalLedgerToOverviewResponse = async response => {
   const ledger = await loadLocalWalletLedger();
   const normalizedOverview = normalizeWalletServerOverview(response?.data);
@@ -150,20 +166,7 @@ const applyLocalLedgerToTransactionResponse = async (response, params = {}) => {
 
 const walletApi = {
   async getPointsOverview() {
-    const baseResponse = !API_ENDPOINTS.WALLET.POINTS_OVERVIEW
-      ? {
-        code: 200,
-        msg: WALLET_API_PLACEHOLDER_MESSAGE,
-        data: {
-          balance: 0,
-          withdrawableBalance: 0,
-          lockedBalance: 0,
-          frozenBalance: 0,
-          currency: WALLET_POINTS_DEFAULT_CURRENCY,
-        },
-      }
-      : await apiClient.get(API_ENDPOINTS.WALLET.POINTS_OVERVIEW);
-
+    const baseResponse = await getPointsOverviewBaseResponse();
     return applyLocalLedgerToOverviewResponse(baseResponse);
   },
 
@@ -226,6 +229,65 @@ const walletApi = {
       data: {
         balance: Math.max(0, roundWalletPointsAmount(currentBalance - normalizedAmount)),
         currency: overviewResponse?.data?.currency || WALLET_POINTS_DEFAULT_CURRENCY,
+        ledger: nextLedger,
+        transaction,
+      },
+    };
+  },
+
+  async syncServerPointsDebit(amount, options = {}) {
+    const normalizedAmount = roundWalletPointsAmount(amount);
+    const hasBalanceAfter = options.balanceAfter !== undefined && options.balanceAfter !== null;
+    const normalizedBalanceAfter = hasBalanceAfter
+      ? Math.max(0, roundWalletPointsAmount(options.balanceAfter))
+      : null;
+
+    if (!(normalizedAmount > 0) && normalizedBalanceAfter === null) {
+      return {
+        code: 400,
+        msg: 'invalid wallet sync payload',
+      };
+    }
+
+    const baseResponse = await getPointsOverviewBaseResponse();
+    const overview = normalizeWalletServerOverview(baseResponse?.data);
+    const currentServerBalance = roundWalletPointsAmount(overview?.balance);
+    const ledger = await loadLocalWalletLedger();
+    const transaction = normalizedAmount > 0
+      ? normalizeLocalWalletTransaction({
+        txnNo: options.txnNo,
+        amount: normalizedAmount,
+        direction: 'DEBIT',
+        sourceType: options.sourceType || 'BOUNTY',
+        remark: options.remark,
+        refId: options.refId,
+        refType: options.refType || 'QUESTION',
+        createTime: options.createTime || new Date().toISOString(),
+        currency: options.currency || overview?.currency,
+      })
+      : null;
+    const nextTransactions = transaction
+      ? [
+        transaction,
+        ...ledger.transactions.filter(item => item.txnNo !== transaction.txnNo),
+      ]
+      : ledger.transactions;
+    const nextLedger = await saveLocalWalletLedger({
+      balanceDelta: normalizedBalanceAfter === null
+        ? ledger.balanceDelta
+        : roundWalletPointsAmount(normalizedBalanceAfter - currentServerBalance),
+      transactions: nextTransactions,
+    });
+    const nextBalance = normalizedBalanceAfter === null
+      ? Math.max(0, roundWalletPointsAmount(currentServerBalance + nextLedger.balanceDelta))
+      : normalizedBalanceAfter;
+
+    return {
+      code: 200,
+      msg: 'ok',
+      data: {
+        balance: nextBalance,
+        currency: overview?.currency || WALLET_POINTS_DEFAULT_CURRENCY,
         ledger: nextLedger,
         transaction,
       },
