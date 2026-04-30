@@ -17,7 +17,6 @@ import PublicProfileHeader from '../components/PublicProfileHeader';
 import ContentTabs from '../components/ContentTabs';
 import QuestionListItem from '../components/QuestionListItem';
 import AnswerListItem from '../components/AnswerListItem';
-import FavoriteListItem from '../components/FavoriteListItem';
 import UserContentSearchModal from '../components/UserContentSearchModal';
 import PublicProfileHero from '../components/PublicProfileHero';
 import userApi from '../services/api/userApi';
@@ -27,25 +26,28 @@ import { getFollowState, setFollowState } from '../services/followState';
 import {
   refreshMyFollowingCount,
 } from '../services/myFollowingCountState';
+import {
+  isPublicProfileAnswersEndpointPendingError,
+  loadProfileAnswersPage,
+} from '../services/profileAnswers';
 import UserCacheService from '../services/UserCacheService';
 import { showAppAlert } from '../utils/appAlert';
 import { showToast } from '../utils/toast';
 import { invalidateBlacklistRelatedCaches } from '../utils/blacklistContent';
 
 import { scaleFont } from '../utils/responsive';
+const PROFILE_ANSWER_PAGE_SIZE = 10;
 const EMPTY_TAB_PAGES = {
   questions: 1,
   answers: 1,
-  favorites: 1,
 };
 
 const EMPTY_HAS_MORE = {
   questions: false,
   answers: false,
-  favorites: false,
 };
 
-const FALLBACK_LOADED_TABS = new Set(['questions', 'answers', 'favorites']);
+const FALLBACK_LOADED_TABS = new Set(['questions', 'answers']);
 
 const resolveProfilePayload = response => {
   if (!response || typeof response !== 'object') {
@@ -345,8 +347,8 @@ export default function PublicProfileScreen({ navigation, route }) {
   const [activeTab, setActiveTab] = useState('questions');
   const [questionsData, setQuestionsData] = useState([]);
   const [answersData, setAnswersData] = useState([]);
-  const [favoritesData, setFavoritesData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isTabLoading, setIsTabLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadedTabs, setLoadedTabs] = useState(new Set());
   const [tabPages, setTabPages] = useState(EMPTY_TAB_PAGES);
@@ -359,6 +361,7 @@ export default function PublicProfileScreen({ navigation, route }) {
   const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [isRouteFallbackActive, setIsRouteFallbackActive] = useState(false);
+  const [answersEmptyMessage, setAnswersEmptyMessage] = useState('');
 
   const isOwnProfile = useMemo(
     () => String(currentUserId || '') !== '' && String(currentUserId) === String(userId),
@@ -461,7 +464,8 @@ export default function PublicProfileScreen({ navigation, route }) {
       setIsFollowing(nextIsFollowing);
       setQuestionsData([]);
       setAnswersData([]);
-      setFavoritesData([]);
+      setAnswersEmptyMessage('');
+      setIsTabLoading(false);
       setIsBlacklisted(nextIsBlacklisted);
       setIsRouteFallbackActive(false);
       setLoadedTabs(new Set());
@@ -474,7 +478,8 @@ export default function PublicProfileScreen({ navigation, route }) {
         setIsFollowing(false);
         setQuestionsData([]);
         setAnswersData([]);
-        setFavoritesData([]);
+        setAnswersEmptyMessage('');
+        setIsTabLoading(false);
         setIsBlacklisted(false);
         setIsRouteFallbackActive(true);
         setLoadedTabs(new Set(FALLBACK_LOADED_TABS));
@@ -486,6 +491,7 @@ export default function PublicProfileScreen({ navigation, route }) {
       setError(err?.message || '加载失败');
     } finally {
       setIsLoading(false);
+      setIsTabLoading(false);
       setIsLoadingMore(false);
     }
   };
@@ -581,7 +587,7 @@ export default function PublicProfileScreen({ navigation, route }) {
                 setIsBlacklisted(true);
                 setQuestionsData([]);
                 setAnswersData([]);
-                setFavoritesData([]);
+                setAnswersEmptyMessage('');
                 setLoadedTabs(new Set());
                 setTabHasMore(EMPTY_HAS_MORE);
                 showToast(response?.msg || '已加入黑名单', 'success');
@@ -766,6 +772,59 @@ export default function PublicProfileScreen({ navigation, route }) {
     try {
       if (page > 1) {
         setIsLoadingMore(true);
+      } else {
+        setIsTabLoading(true);
+      }
+
+      if (tab === 'answers') {
+        try {
+          const {
+            rows = [],
+            total = 0,
+          } = await loadProfileAnswersPage({
+            isOwnProfile,
+            userId: String(userData?.userId || userId || ''),
+            pageNum: page,
+            pageSize: PROFILE_ANSWER_PAGE_SIZE,
+          });
+
+          const nextAnswers = page === 1 ? rows : [...answersData, ...rows];
+          setAnswersData(nextAnswers);
+          setAnswersEmptyMessage('');
+          setTabPages(prev => ({
+            ...prev,
+            [tab]: page,
+          }));
+          setTabHasMore(prev => ({
+            ...prev,
+            [tab]: nextAnswers.length < total,
+          }));
+          setLoadedTabs(prev => new Set([...prev, tab]));
+        } catch (loadAnswersError) {
+          if (isPublicProfileAnswersEndpointPendingError(loadAnswersError)) {
+            if (page === 1) {
+              setAnswersData([]);
+            }
+            setAnswersEmptyMessage(t('profile.publicProfileAnswersUnavailable'));
+            setTabPages(prev => ({
+              ...prev,
+              [tab]: 1,
+            }));
+            setTabHasMore(prev => ({
+              ...prev,
+              [tab]: false,
+            }));
+            setLoadedTabs(prev => new Set([...prev, tab]));
+            return;
+          }
+
+          throw loadAnswersError;
+        } finally {
+          setIsTabLoading(false);
+          setIsLoadingMore(false);
+        }
+
+        return;
       }
 
       setTimeout(() => {
@@ -820,33 +879,10 @@ export default function PublicProfileScreen({ navigation, route }) {
               commentsCount: 15,
             },
           ];
-        } else if (tab === 'favorites') {
-          mockData = [
-            {
-              id: `f${page}-1`,
-              type: 'favorite',
-              title: '如何高效学习一门新技能？',
-              author: '学习达人',
-              favoriteType: 'question',
-              createdAt: new Date(Date.now() - 172800000).toISOString(),
-            },
-            {
-              id: `f${page}-2`,
-              type: 'favorite',
-              title: '关于职场新人如何快速成长的回答',
-              author: '职场导师',
-              favoriteType: 'answer',
-              createdAt: new Date(Date.now() - 604800000).toISOString(),
-            },
-          ];
         }
 
         if (tab === 'questions') {
           setQuestionsData(prev => (page === 1 ? mockData : [...prev, ...mockData]));
-        } else if (tab === 'answers') {
-          setAnswersData(prev => (page === 1 ? mockData : [...prev, ...mockData]));
-        } else if (tab === 'favorites') {
-          setFavoritesData(prev => (page === 1 ? mockData : [...prev, ...mockData]));
         }
 
         setTabPages(prev => ({
@@ -858,10 +894,12 @@ export default function PublicProfileScreen({ navigation, route }) {
           [tab]: page < 3,
         }));
         setLoadedTabs(prev => new Set([...prev, tab]));
+        setIsTabLoading(false);
         setIsLoadingMore(false);
       }, 0);
     } catch (loadError) {
       console.error('Load public profile content failed:', loadError);
+      setIsTabLoading(false);
       setIsLoadingMore(false);
     }
   };
@@ -902,12 +940,15 @@ export default function PublicProfileScreen({ navigation, route }) {
         return questionsData;
       case 'answers':
         return answersData;
-      case 'favorites':
-        return favoritesData;
       default:
         return [];
     }
   };
+
+  const currentEmptyMessage =
+    activeTab === 'answers' && answersEmptyMessage
+      ? answersEmptyMessage
+      : t('profile.noContent');
 
   if (isLoading) {
     return (
@@ -971,10 +1012,6 @@ export default function PublicProfileScreen({ navigation, route }) {
             return <AnswerListItem item={item} onPress={handleContentPress} />;
           }
 
-          if (activeTab === 'favorites') {
-            return <FavoriteListItem item={item} onPress={handleContentPress} />;
-          }
-
           return null;
         }}
         keyExtractor={item => String(item.id)}
@@ -1004,9 +1041,14 @@ export default function PublicProfileScreen({ navigation, route }) {
           </>
         )}
         ListEmptyComponent={() => (
-          isBlacklisted ? null : (
+          isBlacklisted ? null : isTabLoading ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>{t('profile.noContent')}</Text>
+              <ActivityIndicator size="small" color="#ef4444" />
+              <Text style={styles.loadingText}>{t('common.loading')}</Text>
+            </View>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>{currentEmptyMessage}</Text>
             </View>
           )
         )}

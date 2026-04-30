@@ -167,8 +167,11 @@ export const API_ENDPOINTS = {
     LIST: buildApiPath(SERVICES.ACTIVITY, '/app/activity/list'),
     CENTER_LIST: buildApiPath(SERVICES.ACTIVITY, '/app/activity/center/list'),
     CREATE: buildApiPath(SERVICES.ACTIVITY, '/app/activity/create'),
-    DETAIL: '/activities/:id',
-    JOIN: '/activities/:id/join',
+    MY_ACTIVITIES: buildApiPath(SERVICES.ACTIVITY, '/app/activity/my-activities'),
+    MY_TEAMS: buildApiPath(SERVICES.ACTIVITY, '/app/activity/my-teams'),
+    DETAIL: buildApiPath(SERVICES.ACTIVITY, '/app/activity/detail/:id'),
+    JOIN: buildApiPath(SERVICES.ACTIVITY, '/app/activity/:id/join'),
+    CANCEL: buildApiPath(SERVICES.ACTIVITY, '/app/activity/:id/cancel'),
     PARTICIPANTS: '/activities/:id/participants',
   },
   

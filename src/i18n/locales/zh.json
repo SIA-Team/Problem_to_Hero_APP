@@ -376,6 +376,7 @@
     "sendMessage": "发私信",
     "userNotFound": "用户不存在",
     "noContent": "暂无内容",
+    "publicProfileAnswersUnavailable": "该用户的公开回答列表暂不可用",
     "tabs": {
       "all": "全部",
       "articles": "文章",
@@ -2037,6 +2038,7 @@
         "timeRequired": "请选择活动时间",
         "endTimeInvalid": "结束时间不能早于开始时间",
         "locationRequired": "线下活动需要填写活动地址",
+        "questionRequired": "当前问题信息缺失，暂时无法发起活动",
         "teamRequired": "请选择发起团队"
       },
       "success": {

@@ -1,3 +1,5 @@
+import { API_ENDPOINTS } from '../config/api';
+import { getApiServerUrl } from '../config/env';
 import { formatDate } from './timeFormatter';
 
 const ENDED_STATUS_PATTERNS = [
@@ -17,9 +19,135 @@ const ACTIVE_STATUS_PATTERNS = [
   /open/i,
   /registering/i,
 ];
+const JOINED_STATUS_PATTERNS = [
+  /\u5df2\u53c2\u4e0e/,
+  /\u5df2\u53c2\u52a0/,
+  /\u62a5\u540d\u6210\u529f/,
+  /joined/i,
+  /participated?/i,
+  /registered?/i,
+  /success/i,
+  /approved/i,
+];
 
 const ONLINE_TYPE_PATTERN = /\u7ebf\u4e0a|online/i;
 const OFFLINE_TYPE_PATTERN = /\u7ebf\u4e0b|offline/i;
+const ABSOLUTE_IMAGE_URL_PATTERN = /^(https?:\/\/|data:image\/|file:\/\/|content:\/\/|asset:\/\/)/i;
+const LEGACY_ACTIVITY_IMAGE_HOSTS = new Set([
+  '123.144.149.59:30560',
+]);
+
+const pickFirstNonEmptyString = values =>
+  values.find(value => typeof value === 'string' && value.trim())?.trim() || '';
+
+const getActivityImageServerUrl = () =>
+  String(getApiServerUrl(API_ENDPOINTS.UPLOAD.IMAGE) || '').replace(/\/+$/, '');
+
+const getUrlOrigin = value => {
+  try {
+    return new URL(value).origin;
+  } catch (error) {
+    return '';
+  }
+};
+
+const normalizeActivityImageUrl = rawUrl => {
+  const normalizedUrl = String(rawUrl || '').trim();
+  if (!normalizedUrl) {
+    return '';
+  }
+
+  if (ABSOLUTE_IMAGE_URL_PATTERN.test(normalizedUrl)) {
+    try {
+      const parsedUrl = new URL(normalizedUrl);
+      if (LEGACY_ACTIVITY_IMAGE_HOSTS.has(parsedUrl.host)) {
+        const imageServerOrigin = getUrlOrigin(getActivityImageServerUrl());
+        if (imageServerOrigin) {
+          return `${imageServerOrigin}${parsedUrl.pathname}${parsedUrl.search}`;
+        }
+      }
+    } catch (error) {
+      // Keep the original absolute URL when parsing fails.
+    }
+
+    return normalizedUrl;
+  }
+
+  const imageServerUrl = getActivityImageServerUrl();
+
+  if (normalizedUrl.startsWith('//')) {
+    const protocol = imageServerUrl.startsWith('https://') ? 'https:' : 'http:';
+    return `${protocol}${normalizedUrl}`;
+  }
+
+  if (!imageServerUrl) {
+    return normalizedUrl;
+  }
+
+  const normalizedPath = normalizedUrl.startsWith('/')
+    ? normalizedUrl
+    : `/${normalizedUrl.replace(/^\/+/, '')}`;
+
+  return `${imageServerUrl}${normalizedPath}`;
+};
+
+const extractActivityImageStrings = value => {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap(extractActivityImageStrings);
+  }
+
+  if (typeof value === 'string') {
+    const normalizedValue = value.trim();
+    if (!normalizedValue) {
+      return [];
+    }
+
+    if (
+      (normalizedValue.startsWith('[') && normalizedValue.endsWith(']')) ||
+      (normalizedValue.startsWith('{') && normalizedValue.endsWith('}'))
+    ) {
+      try {
+        const parsedValue = JSON.parse(normalizedValue);
+        const parsedImages = extractActivityImageStrings(parsedValue);
+        if (parsedImages.length > 0) {
+          return parsedImages;
+        }
+      } catch (error) {
+        // Fall back to treating the raw string as the image value.
+      }
+    }
+
+    return [normalizeActivityImageUrl(normalizedValue)].filter(Boolean);
+  }
+
+  if (typeof value === 'object') {
+    const directImageUrl = pickFirstNonEmptyString([
+      value.url,
+      value.imageUrl,
+      value.fileUrl,
+      value.link,
+      value.path,
+      value.coverImage,
+      value.cover,
+      value.thumbnail,
+    ]);
+
+    if (directImageUrl) {
+      return [normalizeActivityImageUrl(directImageUrl)].filter(Boolean);
+    }
+
+    return [
+      ...extractActivityImageStrings(value.images),
+      ...extractActivityImageStrings(value.imageUrls),
+    ];
+  }
+
+  return [];
+};
 
 const toFiniteNumber = value => {
   const numberValue = Number(value);
@@ -74,6 +202,183 @@ const normalizeTags = tags =>
         .filter(Boolean)
     : [];
 
+const parseBooleanLike = value => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    if (Number.isFinite(value) && value > 0) {
+      return true;
+    }
+
+    if (value === 0) {
+      return false;
+    }
+  }
+
+  if (typeof value === 'string') {
+    const normalizedValue = value.trim().toLowerCase();
+
+    if (/^-?\d+(\.\d+)?$/.test(normalizedValue)) {
+      const numericValue = Number(normalizedValue);
+
+      if (Number.isFinite(numericValue) && numericValue > 0) {
+        return true;
+      }
+
+      if (numericValue === 0) {
+        return false;
+      }
+    }
+
+    if (['true', '1', 'yes', 'y'].includes(normalizedValue)) {
+      return true;
+    }
+
+    if (['false', '0', 'no', 'n'].includes(normalizedValue)) {
+      return false;
+    }
+  }
+
+  return null;
+};
+
+const normalizeIdentityToken = value => String(value ?? '').trim();
+
+const pickFirstIdentityToken = values =>
+  values
+    .map(normalizeIdentityToken)
+    .find(Boolean) || '';
+
+const getActivityOwnerNameCandidates = activity =>
+  [
+    activity?.sponsor?.name,
+    activity?.sponsorName,
+    activity?.creatorName,
+    activity?.createByName,
+    activity?.create_by_name,
+    activity?.createBy,
+    activity?.create_by,
+    activity?.publisherName,
+    activity?.authorName,
+    activity?.userName,
+    activity?.userNickname,
+    activity?.nickName,
+    activity?.nickname,
+    activity?.organizer,
+    activity?.organizerName,
+  ]
+    .map(value => String(value ?? '').trim())
+    .filter(Boolean);
+
+export const getActivityOwnerUserId = activity =>
+  pickFirstIdentityToken([
+    activity?.sponsor?.id,
+    activity?.sponsor?.userId,
+    activity?.sponsor?.appUserId,
+    activity?.sponsorId,
+    activity?.ownerUserId,
+    activity?.creatorUserId,
+    activity?.creatorId,
+    activity?.creator_id,
+    activity?.publisherId,
+    activity?.publisher_id,
+    activity?.authorId,
+    activity?.author_id,
+    activity?.appUserId,
+    activity?.userId,
+    activity?.user_id,
+    activity?.uid,
+  ]);
+
+export const isActivityOwnedByCurrentUser = (
+  activity,
+  { currentUserId = '', currentUserIds = [], currentUserNames = [] } = {}
+) => {
+  const normalizedCurrentUserIds = Array.from(
+    new Set(
+      [
+        currentUserId,
+        ...(Array.isArray(currentUserIds) ? currentUserIds : []),
+      ]
+        .map(normalizeIdentityToken)
+        .filter(Boolean)
+    )
+  );
+  const ownerUserId = getActivityOwnerUserId(activity);
+
+  if (ownerUserId && normalizedCurrentUserIds.includes(ownerUserId)) {
+    return true;
+  }
+
+  const normalizedCurrentUserNames = Array.isArray(currentUserNames)
+    ? Array.from(
+        new Set(
+          currentUserNames
+            .map(value => String(value ?? '').trim())
+            .filter(Boolean)
+        )
+      )
+    : [];
+
+  if (normalizedCurrentUserNames.length === 0) {
+    return false;
+  }
+
+  return getActivityOwnerNameCandidates(activity).some(ownerName =>
+    normalizedCurrentUserNames.includes(ownerName)
+  );
+};
+
+export const isActivityJoined = activity => {
+  const isJoinedValue = parseBooleanLike(activity?.isJoined);
+  if (isJoinedValue === true) {
+    return true;
+  }
+
+  const legacyJoinedValue = parseBooleanLike(activity?.joined);
+  if (legacyJoinedValue === true) {
+    return true;
+  }
+
+  if (isJoinedValue === false || legacyJoinedValue === false) {
+    return false;
+  }
+
+  const joinStatusValue = activity?.joinStatus;
+  const parsedJoinStatusNumber = Number(joinStatusValue);
+  if (Number.isFinite(parsedJoinStatusNumber) && parsedJoinStatusNumber > 0) {
+    return true;
+  }
+
+  const normalizedJoinStatus = String(joinStatusValue || '').trim();
+  if (
+    normalizedJoinStatus &&
+    JOINED_STATUS_PATTERNS.some(pattern => pattern.test(normalizedJoinStatus))
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
+const isActivityResponsePayload = value =>
+  Boolean(value) &&
+  typeof value === 'object' &&
+  !Array.isArray(value) &&
+  (
+    value.id !== undefined ||
+    value.isJoined !== undefined ||
+    value.joined !== undefined ||
+    value.joinCount !== undefined ||
+    value.participants !== undefined ||
+    value.currentParticipants !== undefined ||
+    value.progress !== undefined ||
+    value.status !== undefined ||
+    value.statusName !== undefined
+  );
+
 export const formatActivityDate = value => {
   const parsedDate = parseDateValue(value);
 
@@ -85,21 +390,29 @@ export const formatActivityDate = value => {
 };
 
 export const getActivityImages = activity => {
-  const coverCandidates = [activity?.coverImage, activity?.image, activity?.cover];
-  const arrayCandidates = [activity?.images, activity?.imageUrls];
+  const coverCandidates = [
+    activity?.coverImage,
+    activity?.image,
+    activity?.cover,
+    activity?.imageUrl,
+    activity?.coverUrl,
+    activity?.coverImg,
+    activity?.poster,
+    activity?.posterUrl,
+    activity?.thumbnail,
+  ];
+  const arrayCandidates = [
+    activity?.images,
+    activity?.imageUrls,
+    activity?.bannerImages,
+    activity?.gallery,
+  ];
 
-  const images = arrayCandidates
-    .filter(Array.isArray)
-    .flat()
-    .filter(image => typeof image === 'string' && image.trim())
-    .map(image => image.trim());
+  const normalizedImages = [...coverCandidates, ...arrayCandidates]
+    .flatMap(extractActivityImageStrings)
+    .filter(Boolean);
 
-  const coverImage = coverCandidates.find(image => typeof image === 'string' && image.trim());
-  if (coverImage && !images.includes(coverImage)) {
-    return [coverImage, ...images];
-  }
-
-  return images.length > 0 ? images : coverImage ? [coverImage] : [];
+  return Array.from(new Set(normalizedImages));
 };
 
 const inferActivityType = activity => {
@@ -172,6 +485,15 @@ const inferOrganizerType = activity => {
     return activity.organizerType;
   }
 
+  const sponsorType = Number(activity?.sponsorType);
+  if (sponsorType === 2) {
+    return 'team';
+  }
+
+  if (sponsorType === 1) {
+    return 'personal';
+  }
+
   if (activity?.isOfficial) {
     return 'platform';
   }
@@ -193,10 +515,20 @@ export const normalizeActivityItem = (activity, index = 0) => {
   const currentParticipants = toFiniteNumber(
     activity.currentParticipants ?? activity.joinCount ?? activity.participants
   );
-  const organizer = activity?.sponsor?.name || activity?.organizer || activity?.organizerName || '';
+  const sponsorType = Number(activity?.sponsorType);
+  const sponsorName = activity?.sponsor?.name || activity?.sponsorName || '';
+  const sponsorAvatar = normalizeActivityImageUrl(activity?.sponsor?.avatar || activity?.sponsorAvatar || '');
+  const teamName = activity?.teamName || '';
+  const teamAvatar = normalizeActivityImageUrl(activity?.teamAvatar || '');
+  const organizer = sponsorType === 2
+    ? teamName || sponsorName || activity?.organizer || activity?.organizerName || ''
+    : sponsorName || activity?.organizer || activity?.organizerName || '';
   const type = inferActivityType(activity);
   const status = inferActivityStatus(activity);
   const rawStatusCode = Number(activity?.status ?? activity?.activityStatus);
+  const normalizedSponsor = activity?.sponsor && typeof activity.sponsor === 'object'
+    ? activity.sponsor
+    : {};
 
   return {
     ...activity,
@@ -219,8 +551,23 @@ export const normalizeActivityItem = (activity, index = 0) => {
     statusCode: Number.isFinite(rawStatusCode) ? rawStatusCode : null,
     statusKey: status,
     statusName: activity.statusName || '',
-    joined: Boolean(activity.isJoined ?? activity.joined),
-    isJoined: Boolean(activity.isJoined ?? activity.joined),
+    joined: isActivityJoined(activity),
+    isJoined: isActivityJoined(activity),
+    joinStatus: activity.joinStatus ?? null,
+    sponsor: {
+      ...normalizedSponsor,
+      id: normalizedSponsor.id ?? activity?.sponsorId ?? null,
+      name: sponsorName,
+      avatar: sponsorAvatar,
+    },
+    sponsorId: normalizedSponsor.id ?? activity?.sponsorId ?? null,
+    sponsorName,
+    sponsorAvatar,
+    sponsorType: Number.isFinite(sponsorType) ? sponsorType : activity?.sponsorType,
+    sponsorTypeName: activity?.sponsorTypeName || '',
+    teamId: activity?.teamId ?? null,
+    teamName,
+    teamAvatar,
     organizer,
     organizerName: organizer,
     organizerType: inferOrganizerType(activity),
@@ -242,63 +589,6 @@ export const normalizeActivityList = activities =>
         .filter(Boolean)
     : [];
 
-const sortByOriginalIndex = (left, right) => (left.originalIndex || 0) - (right.originalIndex || 0);
-
-export const getActivitiesByTab = (activities, tabKey) => {
-  const list = Array.isArray(activities) ? [...activities] : [];
-
-  switch (tabKey) {
-    case 'hot':
-      return list
-        .filter(activity => activity.status !== 'ended')
-        .sort(
-          (left, right) =>
-            right.participants - left.participants ||
-            getTimestamp(right.startTimeRaw) - getTimestamp(left.startTimeRaw) ||
-            sortByOriginalIndex(left, right)
-        );
-    case 'new':
-      return list
-        .filter(activity => activity.status !== 'ended')
-        .sort(
-          (left, right) =>
-            getTimestamp(right.startTimeRaw) - getTimestamp(left.startTimeRaw) ||
-            toFiniteNumber(right.id) - toFiniteNumber(left.id) ||
-            sortByOriginalIndex(left, right)
-        );
-    case 'ended':
-      return list
-        .filter(activity => activity.status === 'ended')
-        .sort(
-          (left, right) =>
-            getTimestamp(right.endTimeRaw) - getTimestamp(left.endTimeRaw) ||
-            sortByOriginalIndex(left, right)
-        );
-    case 'mine':
-      return list
-        .filter(activity => activity.joined)
-        .sort((left, right) => {
-          if (left.status !== right.status) {
-            return left.status === 'ended' ? 1 : -1;
-          }
-
-          return (
-            getTimestamp(left.endTimeRaw) - getTimestamp(right.endTimeRaw) ||
-            sortByOriginalIndex(left, right)
-          );
-        });
-    case 'all':
-    default:
-      return list.sort((left, right) => {
-        if (left.status !== right.status) {
-          return left.status === 'ended' ? 1 : -1;
-        }
-
-        return sortByOriginalIndex(left, right);
-      });
-  }
-};
-
 export const getJoinedActivityState = activity => {
   const normalizedActivity = normalizeActivityItem(activity);
   if (!normalizedActivity || normalizedActivity.joined) {
@@ -318,6 +608,74 @@ export const getJoinedActivityState = activity => {
   };
 };
 
+export const getKnownJoinedActivityState = activity => {
+  const normalizedActivity = normalizeActivityItem(activity);
+  if (!normalizedActivity) {
+    return null;
+  }
+
+  return {
+    ...normalizedActivity,
+    joined: true,
+    isJoined: true,
+    joinStatus: normalizedActivity.joinStatus ?? 1,
+  };
+};
+
+export const getJoinedActivityStateFromResponse = (activity, responsePayload) => {
+  const normalizedActivity = normalizeActivityItem(activity);
+  if (!normalizedActivity) {
+    return null;
+  }
+
+  const responseActivity = [
+    responsePayload?.activity,
+    responsePayload?.item,
+    responsePayload?.record,
+    responsePayload?.result,
+    responsePayload,
+  ].find(isActivityResponsePayload);
+
+  if (!responseActivity) {
+    return null;
+  }
+
+  return normalizeActivityItem({
+    ...normalizedActivity,
+    ...responseActivity,
+    joined: responseActivity.joined ?? responseActivity.isJoined ?? true,
+    isJoined: responseActivity.isJoined ?? responseActivity.joined ?? true,
+    joinStatus: responseActivity.joinStatus ?? normalizedActivity.joinStatus ?? 1,
+  });
+};
+
+export const getQuitActivityStateFromResponse = (activity, responsePayload) => {
+  const normalizedActivity = normalizeActivityItem(activity);
+  if (!normalizedActivity) {
+    return null;
+  }
+
+  const responseActivity = [
+    responsePayload?.activity,
+    responsePayload?.item,
+    responsePayload?.record,
+    responsePayload?.result,
+    responsePayload,
+  ].find(isActivityResponsePayload);
+
+  if (!responseActivity) {
+    return null;
+  }
+
+  return normalizeActivityItem({
+    ...normalizedActivity,
+    ...responseActivity,
+    joined: responseActivity.joined ?? responseActivity.isJoined ?? false,
+    isJoined: responseActivity.isJoined ?? responseActivity.joined ?? false,
+    joinStatus: responseActivity.joinStatus ?? 0,
+  });
+};
+
 export const getQuitActivityState = activity => {
   const normalizedActivity = normalizeActivityItem(activity);
   if (!normalizedActivity || !normalizedActivity.joined) {
@@ -331,6 +689,7 @@ export const getQuitActivityState = activity => {
     ...normalizedActivity,
     joined: false,
     isJoined: false,
+    joinStatus: 0,
     participants,
     joinCount: participants,
     currentParticipants,

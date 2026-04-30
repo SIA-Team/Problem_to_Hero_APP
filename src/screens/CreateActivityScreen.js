@@ -1,455 +1,529 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, TextInput } from 'react-native';
+import React from 'react';
+import { Keyboard, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import ImagePickerSheet from '../components/ImagePickerSheet';
+import { API_ENDPOINTS } from '../config/api';
+import { getApiServerUrl } from '../config/env';
 import { useTranslation } from '../i18n/withTranslation';
+import ActivityCreationForm from '../components/ActivityCreationForm';
 import DateTimePickerModal from '../components/DateTimePickerModal';
 import KeyboardDismissView from '../components/KeyboardDismissView';
+import useKeyboardVisibility from '../hooks/useKeyboardVisibility';
+import uploadApi from '../services/api/uploadApi';
+import useCreateActivityForm from '../hooks/useCreateActivityForm';
 import { showAppAlert } from '../utils/appAlert';
+import { showToast } from '../utils/toast';
 import { scaleFont } from '../utils/responsive';
-import activityApi from '../services/api/activityApi';
-import teamApi from '../services/api/teamApi';
-import { isVisibleMyTeam, normalizeMyTeam } from '../utils/teamTransforms';
+import { buildActivityFormCopy } from '../utils/createActivityShared';
 
-const parseActivityDateTime = value => {
-  if (!value) {
-    return null;
+let imageManipulatorModule = null;
+let imageManipulatorResolved = false;
+
+const getImageManipulatorModule = () => {
+  if (imageManipulatorResolved) {
+    return imageManipulatorModule;
   }
 
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) {
-    return null;
+  imageManipulatorResolved = true;
+
+  try {
+    const requiredModule = require('expo-image-manipulator');
+    imageManipulatorModule = requiredModule?.default || requiredModule;
+  } catch (error) {
+    console.warn('Image manipulator module is not available in the current native build.', error);
+    imageManipulatorModule = null;
   }
 
-  const [, year, month, day] = match;
-  return new Date(Number(year), Number(month) - 1, Number(day), 0, 0, 0, 0);
+  return imageManipulatorModule;
 };
 
-const formatActivityApiDateTime = (value, boundary = 'start') => {
-  const parsedDate = parseActivityDateTime(value);
-  if (!parsedDate) {
+const resolveUploadImageMimeType = (uri = '', asset = null) => {
+  const directMimeType = String(asset?.mimeType || asset?.type || '').trim().toLowerCase();
+  if (directMimeType.startsWith('image/')) {
+    return directMimeType;
+  }
+
+  const normalizedUri = String(uri || '').split('?')[0].toLowerCase();
+  if (normalizedUri.endsWith('.png')) {
+    return 'image/png';
+  }
+  if (normalizedUri.endsWith('.webp')) {
+    return 'image/webp';
+  }
+  if (normalizedUri.endsWith('.gif')) {
+    return 'image/gif';
+  }
+
+  return 'image/jpeg';
+};
+
+const getLocalImageSize = async uri => {
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    return Number(blob?.size) || 0;
+  } catch (error) {
+    console.warn('Failed to inspect local image size before upload:', error);
+    return 0;
+  }
+};
+
+const ensureFileNameHasExtension = (fileName, extension = 'jpg') => {
+  const normalizedFileName = String(fileName || '').trim();
+  if (!normalizedFileName) {
+    return `activity_${Date.now()}.${extension}`;
+  }
+
+  return /\.[a-z0-9]+$/i.test(normalizedFileName)
+    ? normalizedFileName
+    : `${normalizedFileName}.${extension}`;
+};
+
+const prepareActivityImageForUpload = async (imageUri, asset = {}) => {
+  const originalMimeType = resolveUploadImageMimeType(imageUri, asset);
+  const originalName =
+    String(asset?.fileName || asset?.name || '').trim() ||
+    imageUri.split('/').pop() ||
+    `activity_${Date.now()}.jpg`;
+
+  const ImageManipulator = getImageManipulatorModule();
+  const manipulateAsync = ImageManipulator?.manipulateAsync;
+  const SaveFormat = ImageManipulator?.SaveFormat;
+
+  if (typeof manipulateAsync !== 'function' || !SaveFormat?.JPEG) {
+    return {
+      uri: imageUri,
+      name: originalName,
+      type: originalMimeType,
+      size: await getLocalImageSize(imageUri),
+    };
+  }
+
+  const originalWidth = Number(asset?.width) || 0;
+  const resizeActions = [];
+
+  if (originalWidth > 1600) {
+    resizeActions.push({
+      resize: {
+        width: 1600,
+      },
+    });
+  }
+
+  const firstPass = await manipulateAsync(imageUri, resizeActions, {
+    compress: 0.78,
+    format: SaveFormat.JPEG,
+  });
+
+  let preparedResult = firstPass;
+  let preparedSize = await getLocalImageSize(firstPass?.uri || imageUri);
+
+  if (preparedSize > 4.5 * 1024 * 1024) {
+    const secondPassActions = (Number(firstPass?.width) || originalWidth) > 1280
+      ? [
+          {
+            resize: {
+              width: 1280,
+            },
+          },
+        ]
+      : [];
+
+    preparedResult = await manipulateAsync(firstPass?.uri || imageUri, secondPassActions, {
+      compress: 0.55,
+      format: SaveFormat.JPEG,
+    });
+    preparedSize = await getLocalImageSize(preparedResult?.uri || firstPass?.uri || imageUri);
+  }
+
+  return {
+    uri: preparedResult?.uri || firstPass?.uri || imageUri,
+    name: ensureFileNameHasExtension(
+      originalName.replace(/\.(heic|heif|png|webp)$/i, ''),
+      'jpg'
+    ),
+    type: 'image/jpeg',
+    size: preparedSize,
+  };
+};
+
+const pickFirstNonEmptyString = values =>
+  values.find(value => typeof value === 'string' && value.trim())?.trim() || '';
+
+const getImageUploadServerUrl = () =>
+  String(getApiServerUrl(API_ENDPOINTS.UPLOAD.IMAGE) || '').replace(/\/+$/, '');
+
+const normalizeUploadedImageUrl = rawUrl => {
+  const normalizedUrl = String(rawUrl || '').trim();
+  if (!normalizedUrl) {
     return '';
   }
 
-  const year = parsedDate.getFullYear();
-  const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
-  const day = String(parsedDate.getDate()).padStart(2, '0');
-  const time = boundary === 'end' ? '23:59:59' : '00:00:00';
+  if (/^https?:\/\//i.test(normalizedUrl) || /^data:image\//i.test(normalizedUrl)) {
+    return normalizedUrl;
+  }
 
-  return `${year}-${month}-${day}T${time}`;
+  const imageUploadServerUrl = getImageUploadServerUrl();
+
+  if (normalizedUrl.startsWith('//')) {
+    const protocol = imageUploadServerUrl.startsWith('https://') ? 'https:' : 'http:';
+    return `${protocol}${normalizedUrl}`;
+  }
+
+  if (!imageUploadServerUrl) {
+    return normalizedUrl;
+  }
+
+  const normalizedPath = normalizedUrl.startsWith('/')
+    ? normalizedUrl
+    : `/${normalizedUrl.replace(/^\/+/, '')}`;
+
+  return `${imageUploadServerUrl}${normalizedPath}`;
 };
 
-const toPositiveInt = value => {
-  const normalizedValue = Number(value);
-  return Number.isInteger(normalizedValue) && normalizedValue > 0 ? normalizedValue : undefined;
+const extractUploadedImageUrl = response => {
+  const payloadCandidates = [
+    response?.data,
+    response?.data?.data,
+    response?.data?.result,
+    response?.result,
+    response,
+  ].filter(Boolean);
+
+  for (let index = 0; index < payloadCandidates.length; index += 1) {
+    const payload = payloadCandidates[index];
+
+    if (typeof payload === 'string' && payload.trim()) {
+      return normalizeUploadedImageUrl(payload);
+    }
+
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      const directUrl = pickFirstNonEmptyString([
+        payload.url,
+        payload.imageUrl,
+        payload.fileUrl,
+        payload.link,
+        payload.path,
+        typeof payload.data === 'string' ? payload.data : '',
+      ]);
+
+      if (directUrl) {
+        return normalizeUploadedImageUrl(directUrl);
+      }
+
+      if (payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)) {
+        const nestedUrl = pickFirstNonEmptyString([
+          payload.data.url,
+          payload.data.imageUrl,
+          payload.data.fileUrl,
+          payload.data.link,
+          payload.data.path,
+        ]);
+
+        if (nestedUrl) {
+          return normalizeUploadedImageUrl(nestedUrl);
+        }
+      }
+    }
+  }
+
+  return '';
 };
 
 export default function CreateActivityScreen({ navigation, route }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const teamId = route?.params?.teamId;
-  const teamName = route?.params?.teamName;
+  const formScrollRef = React.useRef(null);
+  const focusedFieldRef = React.useRef(null);
+  const routeTeamId = route?.params?.teamId ?? null;
+  const routeTeamName = route?.params?.teamName ?? '';
   const questionId = route?.params?.questionId;
   const onActivityCreated = route?.params?.onActivityCreated;
-  const [showTeamSelector, setShowTeamSelector] = useState(false);
-  const [activeTimeField, setActiveTimeField] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [myTeams, setMyTeams] = useState([]);
-  const [newActivity, setNewActivity] = useState({
-    title: '',
-    desc: '',
-    type: 'online',
-    startTime: '',
-    endTime: '',
-    address: '',
-    image: '',
-    images: [],
-    contact: '',
-    organizerType: teamId ? 'team' : 'personal',
-    teamId: teamId || null,
-    teamName: teamName || '',
+  const keyboardVisible = useKeyboardVisibility(true);
+  const [showImagePicker, setShowImagePicker] = React.useState(false);
+  const [uploadingImages, setUploadingImages] = React.useState(false);
+  const [uploadedImagePreviews, setUploadedImagePreviews] = React.useState([]);
+  const copy = React.useMemo(() => buildActivityFormCopy(t, 'page'), [t]);
+  const {
+    activeTimeField,
+    closeTeamSelector,
+    form,
+    handleOrganizerTypeChange,
+    handleSelectDateTime,
+    handleSelectTeam,
+    openTeamSelector,
+    removeImage,
+    setActiveTimeField,
+    showTeamSelector,
+    submitActivity,
+    submitting,
+    teams,
+    updateField,
+  } = useCreateActivityForm({
+    copy,
+    questionId,
+    lockedTeamId: routeTeamId,
+    lockedTeamName: routeTeamName,
   });
+  const displayForm = React.useMemo(
+    () => ({
+      ...form,
+      images: form.images.map((imageUrl, index) => uploadedImagePreviews[index] || imageUrl),
+    }),
+    [form, uploadedImagePreviews]
+  );
 
-  useEffect(() => {
-    if (teamId) {
-      return undefined;
-    }
-
-    let isMounted = true;
-
-    const loadMyTeams = async () => {
-      try {
-        const response = await teamApi.getMyTeams();
-        const isSuccess = response?.code === 0 || response?.code === 200;
-
-        if (!isSuccess) {
-          throw new Error(response?.msg || t('publish.toasts.serverError'));
-        }
-
-        const teamList = Array.isArray(response?.data) ? response.data : [];
-        const normalizedTeams = teamList
-          .map(team => normalizeMyTeam(team))
-          .filter(isVisibleMyTeam);
-
-        if (isMounted) {
-          setMyTeams(normalizedTeams);
-        }
-      } catch (error) {
-        console.error('Failed to load teams for activity creation:', error);
-        if (isMounted) {
-          setMyTeams([]);
-        }
+  React.useEffect(() => {
+    setUploadedImagePreviews(current => {
+      if (form.images.length === 0) {
+        return current.length > 0 ? [] : current;
       }
-    };
 
-    void loadMyTeams();
+      if (current.length <= form.images.length) {
+        return current;
+      }
 
-    return () => {
-      isMounted = false;
-    };
-  }, [t, teamId]);
-
-  const updateNewActivity = updates => {
-    setNewActivity(current => ({
-      ...current,
-      ...updates,
-    }));
-  };
-
-  const handleSelectDateTime = (field, value) => {
-    if (!field) {
-      return;
-    }
-
-    updateNewActivity({
-      [field]: value,
+      return current.slice(0, form.images.length);
     });
-  };
+  }, [form.images.length]);
 
-  const handleCreateActivity = async () => {
-    if (submitting) {
-      return;
-    }
-
-    if (!newActivity.title.trim()) {
-      showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.titleRequired'));
-      return;
-    }
-
-    if (!newActivity.desc.trim()) {
-      showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.descriptionRequired'));
-      return;
-    }
-
-    if (!newActivity.startTime || !newActivity.endTime) {
-      showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.timeRequired'));
-      return;
-    }
-
-    const startDate = parseActivityDateTime(newActivity.startTime);
-    const endDate = parseActivityDateTime(newActivity.endTime);
-
-    if (!startDate || !endDate || endDate < startDate) {
-      showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.endTimeInvalid'));
-      return;
-    }
-
-    if (newActivity.type === 'offline' && !newActivity.address.trim()) {
-      showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.locationRequired'));
-      return;
-    }
-
-    if (newActivity.organizerType === 'team' && !newActivity.teamName) {
-      showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.validation.teamRequired'));
-      return;
-    }
-
+  const handleSubmit = React.useCallback(async () => {
     try {
-      setSubmitting(true);
-
-      const requestPayload = {
-        title: newActivity.title.trim(),
-        description: newActivity.desc.trim(),
-        coverImage: newActivity.images[0] || '',
-        images: newActivity.images,
-        activeStartTime: formatActivityApiDateTime(newActivity.startTime, 'start'),
-        activeEndTime: formatActivityApiDateTime(newActivity.endTime, 'end'),
-        location: newActivity.type === 'offline' ? newActivity.address.trim() : '',
-        activeType: newActivity.type === 'offline' ? 2 : 1,
-        sponsorType: newActivity.organizerType === 'team' ? 2 : 1,
-        teamId: newActivity.organizerType === 'team' ? toPositiveInt(newActivity.teamId) : undefined,
-        questionId: toPositiveInt(questionId),
-        activeData: newActivity.contact.trim()
-          ? JSON.stringify({
-              contact: newActivity.contact.trim(),
-            })
-          : '',
-      };
-
-      const response = await activityApi.createActivity(requestPayload);
-      const isSuccess = response?.code === 0 || response?.code === 200;
-
-      if (!isSuccess || !response?.data) {
-        throw new Error(response?.msg || t('publish.toasts.publishFailed'));
+      const createdActivity = await submitActivity();
+      if (!createdActivity) {
+        return;
       }
 
-      showAppAlert(t('screens.createActivity.success.title'), t('screens.createActivity.success.message'), [{
-        text: t('screens.createActivity.success.confirm'),
-        onPress: () => {
-          if (typeof onActivityCreated === 'function') {
-            onActivityCreated(response.data);
-          }
-          navigation.goBack();
+      showAppAlert(copy.successTitle, copy.successMessage, [
+        {
+          text: copy.successConfirm,
+          onPress: () => {
+            if (typeof onActivityCreated === 'function') {
+              onActivityCreated(createdActivity);
+            }
+            navigation.goBack();
+          },
         },
-      }]);
+      ]);
     } catch (error) {
       console.error('Failed to create activity:', error);
-      showAppAlert(
-        t('screens.createActivity.validation.hint'),
-        error?.message || t('publish.toasts.publishFailed')
-      );
-    } finally {
-      setSubmitting(false);
+      showAppAlert(copy.validationHint, error?.message || copy.successMessage);
     }
-  };
+  }, [copy, navigation, onActivityCreated, submitActivity]);
 
-  const addActivityImage = () => {
-    if (newActivity.images.length < 9) {
-      setNewActivity({
-        ...newActivity,
-        images: [...newActivity.images, `https://images.unsplash.com/photo-${Math.floor(Math.random() * 1000000)}?w=800&h=600&fit=crop`],
-      });
-    } else {
-      showAppAlert(t('screens.createActivity.validation.hint'), t('screens.createActivity.images.maxLimit'));
-    }
-  };
-
-  const removeActivityImage = index => {
-    setNewActivity({
-      ...newActivity,
-      images: newActivity.images.filter((_, i) => i !== index),
-    });
-  };
-
-  const handleSelectTeam = team => {
-    updateNewActivity({
-      organizerType: 'team',
-      teamId: team.id,
-      teamName: team.name,
-    });
-    setShowTeamSelector(false);
-  };
-
-  const handleOrganizerTypeChange = type => {
-    if (type === 'team' && !teamId) {
-      updateNewActivity({
-        organizerType: 'team',
-      });
-      setShowTeamSelector(true);
+  const scrollAndroidBottomFieldIntoView = React.useCallback(() => {
+    if (Platform.OS !== 'android') {
       return;
     }
 
-    updateNewActivity({
-      organizerType: type,
-      teamId: null,
-      teamName: '',
+    const currentField = focusedFieldRef.current;
+    if (!['contact', 'location'].includes(currentField)) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      formScrollRef.current?.scrollToEnd?.({ animated: true });
     });
-  };
+  }, []);
 
-  const headerSafeAreaStyle = {
-    paddingTop: insets.top + 8,
-  };
+  React.useEffect(() => {
+    if (!keyboardVisible) {
+      return;
+    }
 
-  return <SafeAreaView style={styles.container} edges={['bottom']}>
+    scrollAndroidBottomFieldIntoView();
+    const settleTimer = setTimeout(scrollAndroidBottomFieldIntoView, 180);
+
+    return () => {
+      clearTimeout(settleTimer);
+    };
+  }, [keyboardVisible, scrollAndroidBottomFieldIntoView]);
+
+  const handleOpenImagePicker = React.useCallback(() => {
+    if (uploadingImages) {
+      showToast('图片上传中，请稍候', 'info');
+      return;
+    }
+
+    if (form.images.length >= 9) {
+      showToast(copy.validationImagesMaxLimit, 'warning');
+      return;
+    }
+
+    setShowImagePicker(true);
+  }, [copy.validationImagesMaxLimit, form.images.length, uploadingImages]);
+
+  const handleActivityImageSelected = React.useCallback(
+    async (imageUri, meta = {}) => {
+      if (!imageUri) {
+        return;
+      }
+
+      if (form.images.length >= 9) {
+        showToast(copy.validationImagesMaxLimit, 'warning');
+        return;
+      }
+
+      try {
+        setUploadingImages(true);
+        showToast('图片上传中...', 'info');
+
+        const asset = meta?.asset || {};
+        const preparedFile = await prepareActivityImageForUpload(imageUri, asset);
+
+        const response = await uploadApi.uploadImage({
+          uri: preparedFile.uri,
+          name: preparedFile.name,
+          type: preparedFile.type,
+        });
+
+        const code = Number(response?.code ?? response?.data?.code);
+        const uploadedUrl = extractUploadedImageUrl(response);
+        const previewUri = preparedFile.uri || imageUri;
+
+        if ((code !== 0 && code !== 200) || !uploadedUrl) {
+          throw new Error(
+            response?.msg ||
+              response?.message ||
+              response?.data?.msg ||
+              response?.data?.message ||
+              '图片上传失败'
+          );
+        }
+
+        setUploadedImagePreviews(current => [...current, previewUri]);
+        updateField('images', [...form.images, uploadedUrl]);
+        showToast('图片上传成功', 'success');
+      } catch (error) {
+        console.error('Failed to upload activity image:', error);
+        showToast(error?.message || '图片上传失败，请稍后重试', 'error');
+      } finally {
+        setUploadingImages(false);
+        setShowImagePicker(false);
+      }
+    },
+    [copy.validationImagesMaxLimit, form.images, updateField]
+  );
+
+  const handleRemoveImage = React.useCallback(
+    index => {
+      setUploadedImagePreviews(current => current.filter((_, imageIndex) => imageIndex !== index));
+      removeImage(index);
+    },
+    [removeImage]
+  );
+
+  return (
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <KeyboardDismissView>
-      <View style={styles.screenContent}>
-      <View style={[styles.header, headerSafeAreaStyle]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn} hitSlop={{
-        top: 15,
-        bottom: 15,
-        left: 15,
-        right: 15
-      }} activeOpacity={0.7}>
-          <Ionicons name="close" size={26} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('screens.createActivity.title')}</Text>
-        <TouchableOpacity onPress={handleCreateActivity} style={styles.submitBtn} hitSlop={{
-        top: 15,
-        bottom: 15,
-        left: 15,
-        right: 15
-      }} activeOpacity={0.7} disabled={submitting}>
-          <Text style={styles.submitText}>{t('screens.createActivity.publish')}</Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
-        style={styles.content}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
-      >
-        {!teamId && <>
-            <Text style={styles.inputLabel}>{t('screens.createActivity.organizerType.label')} <Text style={styles.required}>{t('screens.createActivity.organizerType.required')}</Text></Text>
-            <View style={styles.organizerSelector}>
-              <TouchableOpacity style={[styles.organizerOption, newActivity.organizerType === 'personal' && styles.organizerOptionActive]} onPress={() => handleOrganizerTypeChange('personal')}>
-                <Ionicons name="person" size={20} color={newActivity.organizerType === 'personal' ? '#fff' : '#666'} />
-                <Text style={[styles.organizerOptionText, newActivity.organizerType === 'personal' && styles.organizerOptionTextActive]}>{t('screens.createActivity.organizerType.personal')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.organizerOption, newActivity.organizerType === 'team' && styles.organizerOptionActive]} onPress={() => handleOrganizerTypeChange('team')}>
-                <Ionicons name="people" size={20} color={newActivity.organizerType === 'team' ? '#fff' : '#666'} />
-                <Text style={[styles.organizerOptionText, newActivity.organizerType === 'team' && styles.organizerOptionTextActive]}>{t('screens.createActivity.organizerType.team')}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {Boolean(newActivity.organizerType === 'team' && newActivity.teamName) && <TouchableOpacity style={styles.selectedTeamBanner} onPress={() => setShowTeamSelector(true)}>
-                <View style={styles.selectedTeamInfo}>
-                  <Ionicons name="people" size={18} color="#8b5cf6" />
-                  <Text style={styles.selectedTeamName}>{newActivity.teamName}</Text>
-                </View>
-                <View style={styles.changeTeamBtn}>
-                  <Text style={styles.changeTeamText}>{t('screens.createActivity.selectedTeam.change')}</Text>
-                  <Ionicons name="chevron-forward" size={16} color="#8b5cf6" />
-                </View>
-              </TouchableOpacity>}
-
-            {newActivity.organizerType === 'team' && !newActivity.teamName && <TouchableOpacity style={styles.selectTeamPrompt} onPress={() => setShowTeamSelector(true)}>
-                <Ionicons name="add-circle-outline" size={20} color="#8b5cf6" />
-                <Text style={styles.selectTeamPromptText}>{t('screens.createActivity.selectedTeam.select')}</Text>
-              </TouchableOpacity>}
-          </>}
-
-        {Boolean(teamId && teamName) && <>
-            <Text style={styles.inputLabel}>{t('screens.createActivity.organizerType.label')}</Text>
-            <View style={styles.fixedOrganizerBanner}>
-              <Ionicons name="people" size={20} color="#8b5cf6" />
-              <Text style={styles.fixedOrganizerText}>{teamName}</Text>
-              <View style={styles.fixedOrganizerBadge}>
-                <Text style={styles.fixedOrganizerBadgeText}>{t('screens.createActivity.organizerType.teamBadge')}</Text>
-              </View>
-            </View>
-          </>}
-
-        <Text style={styles.inputLabel}>{t('screens.createActivity.activityType.label')}</Text>
-        <View style={styles.typeSelector}>
-          <TouchableOpacity style={[styles.typeOption, newActivity.type === 'online' && styles.typeOptionActive]} onPress={() => updateNewActivity({
-          type: 'online'
-        })}>
-            <Ionicons name="globe-outline" size={20} color={newActivity.type === 'online' ? '#fff' : '#666'} />
-            <Text style={[styles.typeOptionText, newActivity.type === 'online' && styles.typeOptionTextActive]}>{t('screens.createActivity.activityType.online')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.typeOption, newActivity.type === 'offline' && styles.typeOptionActive]} onPress={() => updateNewActivity({
-          type: 'offline'
-        })}>
-            <Ionicons name="location-outline" size={20} color={newActivity.type === 'offline' ? '#fff' : '#666'} />
-            <Text style={[styles.typeOptionText, newActivity.type === 'offline' && styles.typeOptionTextActive]}>{t('screens.createActivity.activityType.offline')}</Text>
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.inputLabel}>{t('screens.createActivity.activityTitle.label')} <Text style={styles.required}>{t('screens.createActivity.activityTitle.required')}</Text></Text>
-        <TextInput style={styles.input} placeholder={t('screens.createActivity.activityTitle.placeholder')} value={newActivity.title} onChangeText={text => updateNewActivity({
-        title: text
-      })} maxLength={50} />
-
-        <Text style={styles.inputLabel}>{t('screens.createActivity.description.label')} <Text style={styles.required}>{t('screens.createActivity.description.required')}</Text></Text>
-        <TextInput style={[styles.input, styles.textArea]} placeholder={t('screens.createActivity.description.placeholder')} value={newActivity.desc} onChangeText={text => updateNewActivity({
-        desc: text
-      })} multiline maxLength={500} />
-
-        <Text style={styles.inputLabel}>{t('screens.createActivity.time.label')} <Text style={styles.required}>{t('screens.createActivity.time.required')}</Text></Text>
-        <View style={styles.timeContainer}>
-          <View style={styles.timeInputWrapper}>
-            <Text style={styles.timeInputLabel}>{t('screens.createActivity.time.startDate')}</Text>
-            <TouchableOpacity style={styles.timePickerButton} activeOpacity={0.75} onPress={() => setActiveTimeField('startTime')}>
-              <Text style={[styles.timePickerValue, !newActivity.startTime && styles.timePickerPlaceholder]}>
-                {newActivity.startTime || t('screens.createActivity.time.startPlaceholder')}
-              </Text>
-              <Ionicons name="calendar-outline" size={18} color="#9ca3af" />
+        <View style={styles.screenContent}>
+          <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              style={styles.closeBtn}
+              hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="close" size={26} color="#333" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>{t('screens.createActivity.title')}</Text>
+            <TouchableOpacity
+              onPress={handleSubmit}
+              style={styles.submitBtn}
+              hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+              activeOpacity={0.7}
+              disabled={submitting}
+            >
+              <Text style={styles.submitText}>{t('screens.createActivity.publish')}</Text>
             </TouchableOpacity>
           </View>
-          <View style={styles.timeSeparatorWrapper}>
-            <Text style={styles.timeSeparator}>{t('screens.createActivity.time.to')}</Text>
-          </View>
-          <View style={styles.timeInputWrapper}>
-            <Text style={styles.timeInputLabel}>{t('screens.createActivity.time.endDate')}</Text>
-            <TouchableOpacity style={styles.timePickerButton} activeOpacity={0.75} onPress={() => setActiveTimeField('endTime')}>
-              <Text style={[styles.timePickerValue, !newActivity.endTime && styles.timePickerPlaceholder]}>
-                {newActivity.endTime || t('screens.createActivity.time.endPlaceholder')}
-              </Text>
-              <Ionicons name="calendar-outline" size={18} color="#9ca3af" />
-            </TouchableOpacity>
-          </View>
+
+          <KeyboardAwareScrollView
+            innerRef={ref => {
+              formScrollRef.current = ref;
+            }}
+            style={styles.formScrollView}
+            contentContainerStyle={styles.formContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            contentInsetAdjustmentBehavior="automatic"
+            enableOnAndroid
+            enableAutomaticScroll
+            extraScrollHeight={Platform.OS === 'ios' ? 12 : 24}
+            extraHeight={Platform.OS === 'android' ? 140 : 0}
+            keyboardOpeningTime={0}
+          >
+            <ActivityCreationForm
+              copy={copy}
+              form={displayForm}
+              lockedTeamId={routeTeamId}
+              lockedTeamName={routeTeamName}
+              bottomSpacerHeight={insets.bottom + (Platform.OS === 'android' && keyboardVisible ? 120 : 16)}
+              onFieldFocus={fieldName => {
+                focusedFieldRef.current = fieldName;
+
+                if (Platform.OS === 'android' && ['contact', 'location'].includes(fieldName)) {
+                  setTimeout(scrollAndroidBottomFieldIntoView, 60);
+                  setTimeout(scrollAndroidBottomFieldIntoView, 220);
+                }
+              }}
+              onAddImage={handleOpenImagePicker}
+              onFieldChange={updateField}
+              onOpenTeamSelector={openTeamSelector}
+              onOpenTimeField={fieldName => {
+                Keyboard.dismiss();
+                setTimeout(() => setActiveTimeField(fieldName), 40);
+              }}
+              onOrganizerTypeChange={handleOrganizerTypeChange}
+              onRemoveImage={handleRemoveImage}
+              onSelectTeam={handleSelectTeam}
+              showTeamSelector={showTeamSelector}
+              teams={teams}
+              onCloseTeamSelector={closeTeamSelector}
+              timeInputMode="picker"
+            />
+          </KeyboardAwareScrollView>
+
+          <DateTimePickerModal
+            visible={Boolean(activeTimeField)}
+            onClose={() => setActiveTimeField(null)}
+            currentDateTime={activeTimeField ? form[activeTimeField] : ''}
+            onSelect={value => handleSelectDateTime(activeTimeField, value)}
+            title={activeTimeField === 'endTime' ? copy.timePickerEndTitle : copy.timePickerStartTitle}
+            cancelText={copy.timePickerCancel}
+            confirmText={copy.timePickerConfirm}
+          />
+
+          <ImagePickerSheet
+            visible={showImagePicker}
+            onClose={() => setShowImagePicker(false)}
+            onImageSelected={handleActivityImageSelected}
+            title={copy.imagesAdd}
+          />
         </View>
-
-        {newActivity.type === 'offline' && <>
-            <Text style={styles.inputLabel}>{t('screens.createActivity.location.label')} <Text style={styles.required}>{t('screens.createActivity.location.required')}</Text></Text>
-            <TextInput style={styles.input} placeholder={t('screens.createActivity.location.placeholder')} value={newActivity.address} onChangeText={text => updateNewActivity({
-          address: text
-        })} />
-          </>}
-
-        <Text style={styles.inputLabel}>{t('screens.createActivity.images.label')}</Text>
-        <View style={styles.imageGrid}>
-          {newActivity.images.map((img, idx) => <View key={idx} style={styles.imageItem}>
-              <Image source={{
-            uri: img
-          }} style={styles.uploadedImage} />
-              <TouchableOpacity style={styles.removeImage} onPress={() => removeActivityImage(idx)}>
-                <Ionicons name="close-circle" size={20} color="#ef4444" />
-              </TouchableOpacity>
-            </View>)}
-          {newActivity.images.length < 9 && <TouchableOpacity style={styles.addImageBtn} onPress={addActivityImage}>
-              <Ionicons name="add" size={24} color="#9ca3af" />
-              <Text style={styles.addImageText}>{t('screens.createActivity.images.add')}</Text>
-            </TouchableOpacity>}
-        </View>
-
-        <Text style={styles.inputLabel}>{t('screens.createActivity.contact.label')}</Text>
-        <TextInput style={styles.input} placeholder={t('screens.createActivity.contact.placeholder')} value={newActivity.contact} onChangeText={text => updateNewActivity({
-        contact: text
-      })} />
-        
-        <View style={{
-        height: insets.bottom + 20
-      }} />
-      </ScrollView>
-
-      {Boolean(showTeamSelector) && <View style={styles.teamSelectorOverlay}>
-          <View style={styles.teamSelectorModal}>
-            <View style={styles.teamSelectorHeader}>
-              <Text style={styles.teamSelectorTitle}>{t('screens.createActivity.teamSelector.title')}</Text>
-              <TouchableOpacity onPress={() => setShowTeamSelector(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.teamSelectorList}>
-              {myTeams.map(team => <TouchableOpacity key={team.id} style={[styles.teamSelectorItem, newActivity.teamId === team.id && styles.teamSelectorItemActive]} onPress={() => handleSelectTeam(team)}>
-                  <View style={styles.teamSelectorItemLeft}>
-                    <View style={styles.teamSelectorIcon}>
-                      <Ionicons name="people" size={20} color="#8b5cf6" />
-                    </View>
-                    <View style={styles.teamSelectorInfo}>
-                      <Text style={styles.teamSelectorName}>{team.name}</Text>
-                      <Text style={styles.teamSelectorMembers}>{team.members}{t('screens.createActivity.teamSelector.members')}</Text>
-                    </View>
-                  </View>
-                  {newActivity.teamId === team.id && <Ionicons name="checkmark-circle" size={24} color="#8b5cf6" />}
-                </TouchableOpacity>)}
-            </ScrollView>
-          </View>
-        </View>}
-      <DateTimePickerModal visible={Boolean(activeTimeField)} onClose={() => setActiveTimeField(null)} currentDateTime={activeTimeField ? newActivity[activeTimeField] : ''} onSelect={value => handleSelectDateTime(activeTimeField, value)} title={activeTimeField === 'endTime' ? t('screens.createActivity.time.picker.endTitle') : t('screens.createActivity.time.picker.startTitle')} cancelText={t('screens.createActivity.time.picker.cancel')} confirmText={t('screens.createActivity.time.picker.confirm')} />
-      </View>
       </KeyboardDismissView>
-    </SafeAreaView>;
+    </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff'
+    backgroundColor: '#fff',
   },
   screenContent: {
-    flex: 1
+    flex: 1,
+  },
+  formScrollView: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  formContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
   header: {
     flexDirection: 'row',
@@ -457,14 +531,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6'
+    borderBottomColor: '#f3f4f6',
   },
   closeBtn: {
     padding: 8,
     width: 56,
     minHeight: 44,
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
   },
   headerTitle: {
     fontSize: scaleFont(17),
@@ -472,343 +546,18 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     flex: 1,
     textAlign: 'center',
-    paddingHorizontal: 8
+    paddingHorizontal: 8,
   },
   submitBtn: {
     padding: 8,
     minWidth: 56,
     minHeight: 44,
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
   },
   submitText: {
     fontSize: scaleFont(16),
     color: '#ef4444',
-    fontWeight: '600'
-  },
-  content: {
-    flex: 1,
-    padding: 16
-  },
-  inputLabel: {
-    fontSize: scaleFont(14),
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 8,
-    marginTop: 16
-  },
-  required: {
-    color: '#ef4444'
-  },
-  input: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: scaleFont(14),
-    borderWidth: 1,
-    borderColor: '#e5e7eb'
-  },
-  textArea: {
-    height: 120,
-    textAlignVertical: 'top'
-  },
-  organizerSelector: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 8
-  },
-  organizerOption: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    gap: 6
-  },
-  organizerOptionActive: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#3b82f6'
-  },
-  organizerOptionText: {
-    fontSize: scaleFont(14),
-    color: '#666'
-  },
-  organizerOptionTextActive: {
-    color: '#fff'
-  },
-  fixedOrganizerBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f5f3ff',
-    borderWidth: 1,
-    borderColor: '#e9d5ff',
-    borderRadius: 8,
-    padding: 12,
-    gap: 8,
-    marginBottom: 8
-  },
-  fixedOrganizerText: {
-    flex: 1,
-    fontSize: scaleFont(15),
-    color: '#6b21a8',
-    fontWeight: '500'
-  },
-  fixedOrganizerBadge: {
-    backgroundColor: '#8b5cf6',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10
-  },
-  fixedOrganizerBadgeText: {
-    fontSize: scaleFont(11),
-    color: '#fff',
-    fontWeight: '600'
-  },
-  selectedTeamBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#f5f3ff',
-    borderWidth: 1,
-    borderColor: '#e9d5ff',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8
-  },
-  selectedTeamInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1
-  },
-  selectedTeamName: {
-    fontSize: scaleFont(14),
-    color: '#6b21a8',
-    fontWeight: '500'
-  },
-  changeTeamBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4
-  },
-  changeTeamText: {
-    fontSize: scaleFont(13),
-    color: '#8b5cf6',
-    fontWeight: '500'
-  },
-  selectTeamPrompt: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e9d5ff',
-    borderRadius: 8,
-    padding: 12,
-    gap: 8,
-    marginBottom: 8,
-    borderStyle: 'dashed'
-  },
-  selectTeamPromptText: {
-    fontSize: scaleFont(14),
-    color: '#8b5cf6',
-    fontWeight: '500'
-  },
-  teamSelectorOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end'
-  },
-  teamSelectorModal: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '70%'
-  },
-  teamSelectorHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6'
-  },
-  teamSelectorTitle: {
-    fontSize: scaleFont(17),
     fontWeight: '600',
-    color: '#1f2937'
   },
-  teamSelectorList: {
-    paddingHorizontal: 16,
-    paddingVertical: 8
-  },
-  teamSelectorItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 8,
-    backgroundColor: '#f9fafb'
-  },
-  teamSelectorItemActive: {
-    backgroundColor: '#f5f3ff',
-    borderWidth: 1,
-    borderColor: '#e9d5ff'
-  },
-  teamSelectorItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1
-  },
-  teamSelectorIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#f5f3ff',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  teamSelectorInfo: {
-    flex: 1
-  },
-  teamSelectorName: {
-    fontSize: scaleFont(15),
-    fontWeight: '500',
-    color: '#1f2937',
-    marginBottom: 2
-  },
-  teamSelectorMembers: {
-    fontSize: scaleFont(12),
-    color: '#9ca3af'
-  },
-  typeSelector: {
-    flexDirection: 'row',
-    gap: 12
-  },
-  typeOption: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    gap: 6
-  },
-  typeOptionActive: {
-    backgroundColor: '#ef4444',
-    borderColor: '#ef4444'
-  },
-  typeOptionText: {
-    fontSize: scaleFont(14),
-    color: '#666'
-  },
-  typeOptionTextActive: {
-    color: '#fff'
-  },
-  timeRow: {
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  timeContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8
-  },
-  timeInputWrapper: {
-    flex: 1
-  },
-  timeInputLabel: {
-    fontSize: scaleFont(12),
-    color: '#6b7280',
-    marginBottom: 6
-  },
-  timeInputField: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: scaleFont(14),
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    color: '#1f2937'
-  },
-  timePickerButton: {
-    minHeight: 46,
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8
-  },
-  timePickerValue: {
-    flex: 1,
-    fontSize: scaleFont(14),
-    color: '#1f2937'
-  },
-  timePickerPlaceholder: {
-    color: '#9ca3af'
-  },
-  timeSeparatorWrapper: {
-    paddingBottom: 12
-  },
-  timeSeparator: {
-    fontSize: scaleFont(14),
-    color: '#6b7280',
-    fontWeight: '500'
-  },
-  imageGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8
-  },
-  imageItem: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    backgroundColor: '#e5e7eb',
-    position: 'relative',
-    overflow: 'hidden'
-  },
-  uploadedImage: {
-    width: '100%',
-    height: '100%'
-  },
-  removeImage: {
-    position: 'absolute',
-    top: -8,
-    right: -8,
-    zIndex: 10
-  },
-  addImageBtn: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: '#d1d5db',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  addImageText: {
-    fontSize: scaleFont(10),
-    color: '#9ca3af',
-    marginTop: 4
-  }
 });

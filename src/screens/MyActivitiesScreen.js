@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -10,90 +10,178 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { createMyActivitiesData } from '../data/profileMenuMockData';
+import { useTranslation } from '../i18n/withTranslation';
+import activityApi from '../services/api/activityApi';
 import { showToast } from '../utils/toast';
-
+import { normalizeActivityList } from '../utils/activityUtils';
 import { scaleFont } from '../utils/responsive';
-/*
-const MOCK_ACTIVITIES = [
-  {
-    id: 1,
-    title: 'Python 7 天打卡挑战',
-    organizer: '编程成长营',
-    cover: 'https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1200&q=80',
-    status: '进行中',
-    participants: 128,
-    reward: '$88',
-    joinedAt: '今天加入',
-  },
-  {
-    id: 2,
-    title: '前端项目实战训练',
-    organizer: '前端研究社',
-    cover: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1200&q=80',
-    status: '进行中',
-    participants: 86,
-    reward: '$120',
-    joinedAt: '昨天加入',
-  },
-  {
-    id: 3,
-    title: '算法刷题冲刺营',
-    organizer: '算法共学组',
-    cover: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80',
-    status: '已结束',
-    participants: 203,
-    reward: '$66',
-    joinedAt: '3 天前加入',
-  },
-];
-*/
 
-export default function MyActivitiesScreen({ navigation }) {
+const extractMyActivityRows = response => {
+  if (Array.isArray(response?.data)) {
+    return response.data;
+  }
+
+  if (Array.isArray(response?.rows)) {
+    return response.rows;
+  }
+
+  const rawData = response?.data;
+  const payload =
+    rawData && typeof rawData === 'object' && !Array.isArray(rawData) && rawData.data !== undefined
+      ? rawData.data
+      : rawData && typeof rawData === 'object' && !Array.isArray(rawData)
+        ? rawData
+        : response;
+  const rows = payload?.rows || payload?.list || payload?.records || payload?.items || [];
+
+  return Array.isArray(rows) ? rows : [];
+};
+
+const isSuccessfulMyActivitiesResponse = response =>
+  response?.code === 200 || response?.code === 0 || Array.isArray(response?.data);
+
+export default function MyActivitiesScreen({ navigation, route }) {
+  const { t } = useTranslation();
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState('joined');
+  const routeType = Number(route?.params?.type);
+  const type = routeType === 1 || routeType === 2 ? routeType : undefined;
 
-  useEffect(() => {
-    loadActivities();
-  }, []);
-
-  const loadActivities = async () => {
+  const loadActivities = useCallback(async ({ showLoading = true } = {}) => {
     try {
-      setLoading(true);
-      setActivities(createMyActivitiesData());
+      if (showLoading) {
+        setLoading(true);
+      }
+
+      const response = await activityApi.getMyActivities(type ? { type } : {});
+
+      if (!isSuccessfulMyActivitiesResponse(response)) {
+        throw new Error(response?.msg || '\u52a0\u8f7d\u6211\u7684\u6d3b\u52a8\u5931\u8d25');
+      }
+
+      const rows = extractMyActivityRows(response);
+      setActivities(normalizeActivityList(rows));
     } catch (error) {
-      console.error('加载我的活动失败:', error);
-      showToast('加载失败，请重试', 'error');
+      console.error('Failed to load my activities:', error);
+      showToast(
+        error?.message || '\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5',
+        'error'
+      );
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
-  };
+  }, [type]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadActivities();
+    }, [loadActivities])
+  );
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadActivities();
-    setRefreshing(false);
+
+    try {
+      await loadActivities({ showLoading: false });
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleOpenActivity = activity => {
     navigation.navigate('ActivityDetail', {
-      activity: {
-        id: activity.id,
-        title: activity.title,
-        organizerName: activity.organizer,
-        image: activity.cover,
-        participants: activity.participants,
-        reward: activity.reward,
-        status: activity.status === '进行中' ? 'active' : 'ended',
-        joined: true,
-      },
+      activity,
     });
   };
 
   const handleCreateActivity = () => {
     navigation.navigate('CreateActivity');
+  };
+
+  const handleFilterPress = filterKey => {
+    const matchedOption = filterOptions.find(item => item.key === filterKey);
+
+    if (!matchedOption?.count) {
+      return;
+    }
+
+    setSelectedFilter(filterKey);
+  };
+
+  const summary = useMemo(() => {
+    const endedCount = activities.filter(item => item.status === 'ended').length;
+
+    return {
+      joinedCount: activities.length,
+      ongoingCount: activities.length - endedCount,
+      endedCount,
+    };
+  }, [activities]);
+
+  const filteredActivities = useMemo(() => {
+    if (selectedFilter === 'ongoing') {
+      return activities.filter(item => item.status === 'active');
+    }
+
+    if (selectedFilter === 'ended') {
+      return activities.filter(item => item.status === 'ended');
+    }
+
+    return activities;
+  }, [activities, selectedFilter]);
+
+  const filterOptions = useMemo(() => ([
+    {
+      key: 'joined',
+      label: t('screens.activity.actions.joined'),
+      count: summary.joinedCount,
+    },
+    {
+      key: 'ongoing',
+      label: t('activity.ongoing'),
+      count: summary.ongoingCount,
+    },
+    {
+      key: 'ended',
+      label: t('activity.ended'),
+      count: summary.endedCount,
+    },
+  ]), [summary.endedCount, summary.joinedCount, summary.ongoingCount, t]);
+
+  useEffect(() => {
+    if (!summary.joinedCount) {
+      setSelectedFilter('joined');
+      return;
+    }
+
+    const currentOption = filterOptions.find(item => item.key === selectedFilter);
+
+    if (currentOption?.count) {
+      return;
+    }
+
+    const nextAvailableOption = filterOptions.find(item => item.count > 0);
+    setSelectedFilter(nextAvailableOption?.key || 'joined');
+  }, [filterOptions, selectedFilter, summary.joinedCount]);
+
+  const getStatusLabel = activity => {
+    if (activity?.status === 'ended') {
+      return t('activity.ended');
+    }
+
+    if (activity?.status === 'active') {
+      return t('activity.ongoing');
+    }
+
+    return activity?.isJoined
+      ? t('screens.activity.actions.joined')
+      : t('activity.ongoing');
   };
 
   if (loading) {
@@ -103,7 +191,7 @@ export default function MyActivitiesScreen({ navigation }) {
           <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
             <Ionicons name="arrow-back" size={24} color="#1f2937" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>我的活动</Text>
+          <Text style={styles.headerTitle}>{t('screens.activity.myActivities')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.loadingContainer}>
@@ -119,10 +207,10 @@ export default function MyActivitiesScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>我的活动</Text>
+        <Text style={styles.headerTitle}>{t('screens.activity.myActivities')}</Text>
         <TouchableOpacity style={styles.createBtn} onPress={handleCreateActivity} activeOpacity={0.85}>
           <Ionicons name="add" size={16} color="#fff" />
-          <Text style={styles.createBtnText}>创建</Text>
+          <Text style={styles.createBtnText}>{t('screens.activity.create')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -138,64 +226,93 @@ export default function MyActivitiesScreen({ navigation }) {
         }
       >
         <View style={styles.summaryCard}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{activities.length}</Text>
-            <Text style={styles.summaryLabel}>已参加</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{activities.filter(item => item.status === '进行中').length}</Text>
-            <Text style={styles.summaryLabel}>进行中</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{activities.filter(item => item.status === '已结束').length}</Text>
-            <Text style={styles.summaryLabel}>已结束</Text>
-          </View>
+          {filterOptions.map((item, index) => {
+            const isSelected = selectedFilter === item.key;
+            const isDisabled = item.count === 0;
+
+            return (
+              <React.Fragment key={item.key}>
+                <TouchableOpacity
+                  style={[
+                    styles.summaryItem,
+                    isSelected && styles.summaryItemActive,
+                    isDisabled && styles.summaryItemDisabled,
+                  ]}
+                  activeOpacity={isDisabled ? 1 : 0.85}
+                  onPress={() => handleFilterPress(item.key)}
+                >
+                  <Text style={[styles.summaryValue, isSelected && styles.summaryValueActive]}>
+                    {item.count}
+                  </Text>
+                  <Text style={[styles.summaryLabel, isSelected && styles.summaryLabelActive]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+                {index < filterOptions.length - 1 ? <View style={styles.summaryDivider} /> : null}
+              </React.Fragment>
+            );
+          })}
         </View>
 
-        {activities.length === 0 ? (
+        {filteredActivities.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="calendar-outline" size={64} color="#d1d5db" />
-            <Text style={styles.emptyText}>你还没有参加任何活动</Text>
-            <Text style={styles.emptyHint}>去发现一些感兴趣的活动吧</Text>
+            <Text style={styles.emptyText}>{t('screens.activity.empty')}</Text>
+            <Text style={styles.emptyHint}>
+              {'\u53bb\u53d1\u73b0\u4e00\u4e9b\u611f\u5174\u8da3\u7684\u6d3b\u52a8\u5427'}
+            </Text>
           </View>
         ) : (
-          activities.map(activity => (
+          filteredActivities.map(activity => (
             <TouchableOpacity
               key={activity.id}
               style={styles.card}
               onPress={() => handleOpenActivity(activity)}
               activeOpacity={0.9}
             >
-              <Image source={{ uri: activity.cover }} style={styles.cover} />
+              {activity.image || activity.coverImage ? (
+                <Image source={{ uri: activity.image || activity.coverImage }} style={styles.cover} />
+              ) : (
+                <View style={[styles.cover, styles.coverPlaceholder]}>
+                  <Ionicons name="image-outline" size={30} color="#cbd5e1" />
+                </View>
+              )}
+
               <View style={styles.cardBody}>
                 <View style={styles.cardTopRow}>
                   <Text style={styles.cardTitle} numberOfLines={1}>
                     {activity.title}
                   </Text>
-                  <View style={[styles.statusBadge, activity.status === '已结束' && styles.statusBadgeEnded]}>
-                    <Text style={[styles.statusText, activity.status === '已结束' && styles.statusTextEnded]}>
-                      {activity.status}
+                  <View style={[styles.statusBadge, activity.status === 'ended' && styles.statusBadgeEnded]}>
+                    <Text style={[styles.statusText, activity.status === 'ended' && styles.statusTextEnded]}>
+                      {getStatusLabel(activity)}
                     </Text>
                   </View>
                 </View>
 
-                <Text style={styles.organizerText}>{activity.organizer}</Text>
+                <Text style={styles.organizerText} numberOfLines={1}>
+                  {activity.organizer || activity.typeName || activity.description || ''}
+                </Text>
 
                 <View style={styles.metaRow}>
                   <View style={styles.metaItem}>
                     <Ionicons name="people-outline" size={14} color="#9ca3af" />
-                    <Text style={styles.metaText}>{activity.participants} 人</Text>
+                    <Text style={styles.metaText}>{`${activity.participants || 0}\u4eba`}</Text>
                   </View>
-                  <View style={styles.metaItem}>
-                    <Ionicons name="cash-outline" size={14} color="#9ca3af" />
-                    <Text style={styles.metaText}>{activity.reward}</Text>
-                  </View>
-                  <View style={styles.metaItem}>
-                    <Ionicons name="time-outline" size={14} color="#9ca3af" />
-                    <Text style={styles.metaText}>{activity.joinedAt}</Text>
-                  </View>
+
+                  {activity.reward ? (
+                    <View style={styles.metaItem}>
+                      <Ionicons name="cash-outline" size={14} color="#9ca3af" />
+                      <Text style={styles.metaText}>{activity.reward}</Text>
+                    </View>
+                  ) : null}
+
+                  {activity.startTime ? (
+                    <View style={styles.metaItem}>
+                      <Ionicons name="time-outline" size={14} color="#9ca3af" />
+                      <Text style={styles.metaText}>{activity.startTime}</Text>
+                    </View>
+                  ) : null}
                 </View>
               </View>
             </TouchableOpacity>
@@ -264,16 +381,33 @@ const styles = StyleSheet.create({
   summaryItem: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 8,
+    paddingVertical: 10,
+    borderRadius: 16,
+  },
+  summaryItemActive: {
+    backgroundColor: '#fff1f2',
+  },
+  summaryItemDisabled: {
+    opacity: 0.6,
   },
   summaryValue: {
     fontSize: scaleFont(24),
     fontWeight: '700',
     color: '#1f2937',
   },
+  summaryValueActive: {
+    color: '#ef4444',
+  },
   summaryLabel: {
     marginTop: 6,
     fontSize: scaleFont(13),
     color: '#9ca3af',
+  },
+  summaryLabelActive: {
+    color: '#ef4444',
+    fontWeight: '600',
   },
   summaryDivider: {
     width: 1,
@@ -290,6 +424,10 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 146,
     backgroundColor: '#e5e7eb',
+  },
+  coverPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cardBody: {
     padding: 14,

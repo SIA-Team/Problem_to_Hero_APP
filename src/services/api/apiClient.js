@@ -56,12 +56,12 @@ apiClient.interceptors.request.use(
         // 浣跨敤澶氭湇鍔″櫒閰嶇疆鑾峰彇姝ｇ‘鐨勬湇鍔″櫒鍦板潃
         const serverUrl = getApiServerUrl(config.url);
         config.baseURL = serverUrl;
-        if (__DEV__) {
+        if (shouldPrintVerboseApiLogs()) {
           console.log(`馃寪 鎺ュ彛 ${config.url} 浣跨敤鏈嶅姟鍣? ${serverUrl}`);
         }
       } else {
         // 浣跨敤璇锋眰涓寚瀹氱殑 baseURL
-        if (__DEV__) {
+        if (shouldPrintVerboseApiLogs()) {
           console.log(`馃幆 鎺ュ彛 ${config.url} 浣跨敤鑷畾涔夋湇鍔″櫒: ${config.baseURL}`);
         }
       }
@@ -72,7 +72,7 @@ apiClient.interceptors.request.use(
 
       const token = await AsyncStorage.getItem('authToken');
 
-      if (__DEV__) {
+      if (shouldPrintVerboseApiLogs()) {
         console.log('\n馃攳 璇锋眰鎷︽埅鍣?- 璇诲彇 token:');
         console.log('   Token 瀛樺湪:', !!token);
         if (token) {
@@ -83,17 +83,17 @@ apiClient.interceptors.request.use(
 
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
-        if (__DEV__) {
+        if (shouldPrintVerboseApiLogs()) {
           console.log('已添加 Authorization 请求头');
         }
       } else {
-        if (__DEV__) {
+        if (shouldPrintVerboseApiLogs()) {
           console.log('Token 不存在，未添加 Authorization 请求头');
         }
       }
 
       // 鎵撳嵃璇锋眰淇℃伅锛堝紑鍙戠幆澧冿級
-      if (__DEV__) {
+      if (shouldPrintVerboseApiLogs()) {
         console.log('\n馃摛 API Request:');
         console.log('   Method:', config.method?.toUpperCase());
         console.log('   URL:', config.url);
@@ -174,7 +174,7 @@ apiClient.interceptors.response.use(
     }
 
     // 鎵撳嵃閿欒淇℃伅
-    if (__DEV__) {
+    if (shouldPrintVerboseApiLogs()) {
       console.log('鈿狅笍 API Error:', {
         url: error.config?.url,
         status: error.response?.status,
@@ -233,6 +233,10 @@ const getErrorMessage = (error) => {
 
     if (data?.message) {
       return data.message;
+    }
+
+    if (data?.msg) {
+      return data.msg;
     }
 
     switch (status) {

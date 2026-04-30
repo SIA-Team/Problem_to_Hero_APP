@@ -1,5 +1,5 @@
 import apiClient from './apiClient';
-import { API_ENDPOINTS } from '../../config/api';
+import { API_ENDPOINTS, replaceUrlParams } from '../../config/api';
 
 const buildActivityCenterListParams = params => {
   const requestParams = {};
@@ -11,8 +11,26 @@ const buildActivityCenterListParams = params => {
     requestParams.type = Number(params.type);
   }
 
+  if (params?.status !== undefined && params?.status !== null && params.status !== '') {
+    requestParams.status = Number(params.status);
+  }
+
   if (typeof params?.keyword === 'string' && params.keyword.trim()) {
     requestParams.keyword = params.keyword.trim();
+  }
+
+  return requestParams;
+};
+
+const buildMyActivitiesParams = params => {
+  const requestParams = {};
+
+  if (params?.type !== undefined && params?.type !== null && params.type !== '') {
+    const normalizedType = Number(params.type);
+
+    if (normalizedType === 1 || normalizedType === 2) {
+      requestParams.type = normalizedType;
+    }
   }
 
   return requestParams;
@@ -33,6 +51,18 @@ const normalizeOptionalNumber = value => {
 
   const normalizedValue = Number(value);
   return Number.isFinite(normalizedValue) ? normalizedValue : undefined;
+};
+
+const normalizeRequiredActivityId = id => {
+  const normalizedId = Number(id);
+
+  if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
+    const invalidActivityError = new Error('活动ID无效');
+    invalidActivityError.code = 'INVALID_ACTIVITY_ID';
+    throw invalidActivityError;
+  }
+
+  return normalizedId;
 };
 
 const buildCreateActivityPayload = payload => {
@@ -91,8 +121,44 @@ const activityApi = {
     apiClient.get(API_ENDPOINTS.ACTIVITY.CENTER_LIST, {
       params: buildActivityCenterListParams(params),
     }),
+  getMyActivities: (params = {}) =>
+    apiClient.get(API_ENDPOINTS.ACTIVITY.MY_ACTIVITIES, {
+      params: buildMyActivitiesParams(params),
+    }),
+  getActivityDetail: (id) => {
+    const normalizedId = normalizeRequiredActivityId(id);
+    const url = replaceUrlParams(API_ENDPOINTS.ACTIVITY.DETAIL, {
+      id: String(normalizedId),
+    });
+
+    return apiClient.get(url);
+  },
+  getMyActivityTeams: () =>
+    apiClient.get(API_ENDPOINTS.ACTIVITY.MY_TEAMS),
   createActivity: (payload = {}) =>
     apiClient.post(API_ENDPOINTS.ACTIVITY.CREATE, buildCreateActivityPayload(payload)),
+  joinActivity: (id) => {
+    const normalizedId = normalizeRequiredActivityId(id);
+    const url = replaceUrlParams(API_ENDPOINTS.ACTIVITY.JOIN, {
+      id: String(normalizedId),
+    });
+
+    return apiClient.post(url, {
+      id: normalizedId,
+    });
+  },
+  cancelActivity: (id) => {
+    const normalizedId = normalizeRequiredActivityId(id);
+    const url = replaceUrlParams(API_ENDPOINTS.ACTIVITY.CANCEL, {
+      id: String(normalizedId),
+    });
+
+    return apiClient.delete(url, {
+      data: {
+        id: normalizedId,
+      },
+    });
+  },
 };
 
 export default activityApi;

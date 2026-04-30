@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, FlatList, TouchableOpacity, Pressable, Image, TextInput, StyleSheet, Modal, Alert, RefreshControl, ActivityIndicator, Animated, Platform, Keyboard, KeyboardAvoidingView, Dimensions, InteractionManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SafeAreaView, useSafeAreaInsets, initialWindowMetrics } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Avatar from '../components/Avatar';
@@ -16,7 +16,6 @@ import CommentBottomSheet, {
 import ComposerModalScaffold from '../components/ComposerModalScaffold';
 import IdentitySelector from '../components/IdentitySelector';
 import ImagePickerSheet from '../components/ImagePickerSheet';
-import KeyboardDismissView from '../components/KeyboardDismissView';
 import MentionSuggestionsPanel from '../components/MentionSuggestionsPanel';
 import ModalSafeAreaView from '../components/ModalSafeAreaView';
 import TwemojiPickerSheet from '../components/TwemojiPickerSheet';
@@ -73,7 +72,6 @@ import useMentionComposer from '../hooks/useMentionComposer';
 import { DEFAULT_MENTION_SEARCH_LIMIT } from '../utils/mentionComposer';
 import {
   resolveComposerInputScrollTarget,
-  resolveComposerTopInset,
   resolveComposerScrollPadding,
 } from '../utils/composerLayout';
 import { insertTextAtSelection } from '../utils/emojiInsert';
@@ -639,19 +637,6 @@ export default function QuestionDetailScreen({
   const [supplementInputTop, setSupplementInputTop] = useState(0);
   const [supplementPendingToolbarAction, setSupplementPendingToolbarAction] = useState(null);
   const [supplementComposerAlert, setSupplementComposerAlert] = useState(null);
-  const [showActivityModal, setShowActivityModal] = useState(false);
-  const [activityForm, setActivityForm] = useState({
-    title: '',
-    description: '',
-    startTime: '',
-    endTime: '',
-    location: '',
-    maxParticipants: '',
-    contact: '',
-    activityType: 'online',
-    organizerType: 'personal',
-    images: []
-  });
   const [commentLiked, setCommentLiked] = useState({});
   const [commentLikeLoading, setCommentLikeLoading] = useState({});
   const [commentCollected, setCommentCollected] = useState({});
@@ -784,12 +769,6 @@ export default function QuestionDetailScreen({
 
   // 获取安全区域
   const insets = useSafeAreaInsets();
-  const initialTopInset = initialWindowMetrics?.insets?.top ?? 0;
-  const activityModalTopInset = resolveComposerTopInset({
-    platform: Platform.OS,
-    topInset: insets.top,
-    initialTopInset,
-  });
   const bottomSafeInset = useBottomSafeInset(20);
   const supplementKeyboardVisible = useKeyboardVisibility(showSupplementModal);
   const windowHeight = Dimensions.get('window').height;
@@ -2247,55 +2226,6 @@ export default function QuestionDetailScreen({
     }
     return Math.round(solvedCount / totalCount * 100);
   };
-  const handleCreateActivity = () => {
-    if (!activityForm.title.trim()) {
-      alert('请输入活动标题');
-      return;
-    }
-    if (!activityForm.description.trim()) {
-      alert('请输入活动内容');
-      return;
-    }
-    if (!activityForm.startTime || !activityForm.endTime) {
-      alert('请选择活动时间');
-      return;
-    }
-    if (activityForm.activityType === 'offline' && !activityForm.location.trim()) {
-      alert('线下活动请填写活动地址');
-      return;
-    }
-    alert('活动创建成功！');
-    setShowActivityModal(false);
-    setActivityForm({
-      title: '',
-      description: '',
-      startTime: '',
-      endTime: '',
-      location: '',
-      maxParticipants: '',
-      contact: '',
-      activityType: 'online',
-      organizerType: 'personal',
-      images: []
-    });
-  };
-  const addActivityImage = () => {
-    if (activityForm.images.length < 9) {
-      setActivityForm({
-        ...activityForm,
-        images: [...activityForm.images, `https://images.unsplash.com/photo-${Math.floor(Math.random() * 1000000)}?w=800&h=600&fit=crop`]
-      });
-    } else {
-      alert('最多只能上传9张图片');
-    }
-  };
-  const removeActivityImage = index => {
-    setActivityForm({
-      ...activityForm,
-      images: activityForm.images.filter((_, i) => i !== index)
-    });
-  };
-
   // 时间格式化函数 - 使用工具函数
   // 已从 ../utils/timeFormatter 导入
   
@@ -9492,168 +9422,6 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         />
       </CommentBottomSheet>
 
-      {/* 发起活动弹窗 */}
-      <Modal visible={showActivityModal} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent>
-        <KeyboardAvoidingView
-          style={styles.modalKeyboardView}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <KeyboardDismissView>
-            <SafeAreaView style={styles.activityModal} edges={['bottom']}>
-          <View style={[styles.activityModalHeader, { paddingTop: activityModalTopInset + 8 }]}>
-            <TouchableOpacity onPress={() => setShowActivityModal(false)} style={styles.activityCloseBtn}>
-              <Ionicons name="close" size={26} color="#333" />
-            </TouchableOpacity>
-            <View style={styles.activityHeaderCenter}>
-              <Text style={styles.activityModalTitle}>{t('screens.questionActivityList.modal.createTitle')}</Text>
-            </View>
-            <TouchableOpacity style={[styles.activityPublishBtn, !activityForm.title.trim() && styles.activityPublishBtnDisabled]} onPress={handleCreateActivity} disabled={!activityForm.title.trim()}>
-              <Text style={[styles.activityPublishText, !activityForm.title.trim() && styles.activityPublishTextDisabled]}>{t('screens.questionActivityList.modal.publish')}</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.activityFormArea} contentContainerStyle={[styles.activityFormContent, {
-          paddingBottom: bottomSafeInset + 28
-        }]} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
-            {/* 绑定问题显示 */}
-            <View style={styles.boundQuestionCard}>
-              <View style={styles.boundQuestionHeader}>
-                <Ionicons name="link" size={16} color="#22c55e" />
-                <Text style={styles.boundQuestionLabel}>{t('screens.questionActivityList.modal.boundQuestion')}</Text>
-              </View>
-              <Text style={styles.boundQuestionText} numberOfLines={2}>{currentQuestion.title}</Text>
-            </View>
-
-            {/* 发起身份选择 */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.organizerType.label')} <Text style={styles.required}>{t('screens.questionActivityList.modal.organizerType.required')}</Text></Text>
-              <View style={styles.organizerSelector}>
-                <TouchableOpacity style={[styles.organizerOption, activityForm.organizerType === 'personal' && styles.organizerOptionActive]} onPress={() => setActivityForm({
-                ...activityForm,
-                organizerType: 'personal'
-              })}>
-                  <Ionicons name="person" size={20} color={activityForm.organizerType === 'personal' ? '#fff' : '#666'} />
-                  <Text style={[styles.organizerOptionText, activityForm.organizerType === 'personal' && styles.organizerOptionTextActive]}>{t('screens.questionActivityList.modal.organizerType.personal')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.organizerOption, activityForm.organizerType === 'team' && styles.organizerOptionActive]} onPress={() => setActivityForm({
-                ...activityForm,
-                organizerType: 'team'
-              })}>
-                  <Ionicons name="people" size={20} color={activityForm.organizerType === 'team' ? '#fff' : '#666'} />
-                  <Text style={[styles.organizerOptionText, activityForm.organizerType === 'team' && styles.organizerOptionTextActive]}>{t('screens.questionActivityList.modal.organizerType.team')}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* 活动类型选择 */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.activityType.label')}</Text>
-              <View style={styles.activityTypeSelector}>
-                <TouchableOpacity style={[styles.activityTypeSelectorBtn, activityForm.activityType === 'online' && styles.activityTypeSelectorBtnActive]} onPress={() => setActivityForm({
-                ...activityForm,
-                activityType: 'online'
-              })}>
-                  <Ionicons name="globe-outline" size={20} color={activityForm.activityType === 'online' ? '#fff' : '#666'} />
-                  <Text style={[styles.activityTypeSelectorText, activityForm.activityType === 'online' && styles.activityTypeSelectorTextActive]}>{t('screens.questionActivityList.modal.activityType.online')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.activityTypeSelectorBtn, activityForm.activityType === 'offline' && styles.activityTypeSelectorBtnActive]} onPress={() => setActivityForm({
-                ...activityForm,
-                activityType: 'offline'
-              })}>
-                  <Ionicons name="location-outline" size={20} color={activityForm.activityType === 'offline' ? '#fff' : '#666'} />
-                  <Text style={[styles.activityTypeSelectorText, activityForm.activityType === 'offline' && styles.activityTypeSelectorTextActive]}>{t('screens.questionActivityList.modal.activityType.offline')}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.title.label')} <Text style={styles.required}>{t('screens.questionActivityList.modal.title.required')}</Text></Text>
-              <TextInput style={styles.formInput} placeholder={t('screens.questionActivityList.modal.title.placeholder')} placeholderTextColor="#bbb" value={activityForm.title} onChangeText={text => setActivityForm({
-              ...activityForm,
-              title: text
-            })} maxLength={50} />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.description.label')} <Text style={styles.required}>{t('screens.questionActivityList.modal.title.required')}</Text></Text>
-              <TextInput style={[styles.formInput, styles.formTextarea]} placeholder={t('screens.questionActivityList.modal.description.placeholder')} placeholderTextColor="#bbb" value={activityForm.description} onChangeText={text => setActivityForm({
-              ...activityForm,
-              description: text
-            })} multiline textAlignVertical="top" maxLength={500} />
-            </View>
-
-            {/* 活动时间 */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.time.label')} <Text style={styles.required}>{t('screens.questionActivityList.modal.title.required')}</Text></Text>
-              <View style={styles.timeContainer}>
-                <View style={styles.timeInputWrapper}>
-                  <Text style={styles.timeInputLabel}>{t('screens.questionActivityList.modal.time.startDate')}</Text>
-                  <TextInput style={styles.timeInputField} placeholder={t('screens.questionActivityList.modal.time.startPlaceholder')} placeholderTextColor="#9ca3af" value={activityForm.startTime} onChangeText={text => setActivityForm({
-                  ...activityForm,
-                  startTime: text
-                })} />
-                </View>
-                <View style={styles.timeSeparatorWrapper}>
-                  <Text style={styles.timeSeparator}>{t('screens.questionActivityList.modal.time.to')}</Text>
-                </View>
-                <View style={styles.timeInputWrapper}>
-                  <Text style={styles.timeInputLabel}>{t('screens.questionActivityList.modal.time.endDate')}</Text>
-                  <TextInput style={styles.timeInputField} placeholder={t('screens.questionActivityList.modal.time.endPlaceholder')} placeholderTextColor="#9ca3af" value={activityForm.endTime} onChangeText={text => setActivityForm({
-                  ...activityForm,
-                  endTime: text
-                })} />
-                </View>
-              </View>
-            </View>
-
-            {/* 活动地址 - 仅线下活动显示 */}
-            {activityForm.activityType === 'offline' && <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>
-                  {t('screens.questionActivityList.modal.location.label')} <Text style={styles.required}>{t('screens.questionActivityList.modal.location.required')}</Text>
-                </Text>
-                <TextInput style={styles.formInput} placeholder={t('screens.questionActivityList.modal.location.placeholder')} placeholderTextColor="#bbb" value={activityForm.location} onChangeText={text => setActivityForm({
-              ...activityForm,
-              location: text
-            })} />
-              </View>}
-
-            {/* 活动图片 */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.images.label')}（{t('screens.questionActivityList.modal.images.maxLimit')}）</Text>
-              <View style={styles.imageGrid}>
-                {activityForm.images.map((img, idx) => <View key={idx} style={styles.imageItem}>
-                    <Image source={{
-                  uri: img
-                }} style={styles.uploadedImage} />
-                    <TouchableOpacity style={styles.removeImage} onPress={() => removeActivityImage(idx)}>
-                      <Ionicons name="close-circle" size={20} color="#ef4444" />
-                    </TouchableOpacity>
-                  </View>)}
-                {activityForm.images.length < 9 && <TouchableOpacity style={styles.addImageBtn} onPress={addActivityImage}>
-                    <Ionicons name="add" size={24} color="#9ca3af" />
-                    <Text style={styles.addImageText}>{t('screens.questionActivityList.modal.images.add')}</Text>
-                  </TouchableOpacity>}
-              </View>
-            </View>
-
-            {/* 联系方式 */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.contact.label')}</Text>
-              <TextInput style={styles.formInput} placeholder={t('screens.questionActivityList.modal.contact.placeholder')} placeholderTextColor="#bbb" value={activityForm.contact} onChangeText={text => setActivityForm({
-              ...activityForm,
-              contact: text
-            })} />
-            </View>
-
-            <View style={{
-            height: 40
-          }} />
-          </ScrollView>
-            </SafeAreaView>
-          </KeyboardDismissView>
-        </KeyboardAvoidingView>
-      </Modal>
-
       <SupplementAnswerModal
         visible={showSupplementAnswerModal}
         onClose={() => {
@@ -12659,6 +12427,38 @@ const styles = StyleSheet.create({
   organizerOptionTextActive: {
     color: '#fff'
   },
+  selectedTeamBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f5f3ff',
+    borderWidth: 1,
+    borderColor: '#e9d5ff',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8
+  },
+  selectedTeamInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1
+  },
+  selectedTeamName: {
+    fontSize: scaleFont(14),
+    color: '#6b21a8',
+    fontWeight: '500'
+  },
+  changeTeamBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4
+  },
+  changeTeamText: {
+    fontSize: scaleFont(13),
+    color: '#8b5cf6',
+    fontWeight: '500'
+  },
   timeRow: {
     flexDirection: 'row',
     alignItems: 'center'
@@ -12730,6 +12530,114 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(10),
     color: '#9ca3af',
     marginTop: 4
+  },
+  teamSelectorOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end'
+  },
+  teamSelectorBackdrop: {
+    flex: 1
+  },
+  teamSelectorSafeArea: {
+    justifyContent: 'flex-end'
+  },
+  teamSelectorModal: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    height: '70%',
+    minHeight: 320
+  },
+  teamSelectorHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: '#e5e7eb',
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 4
+  },
+  teamSelectorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  teamSelectorTitle: {
+    fontSize: scaleFont(17),
+    fontWeight: '600',
+    color: '#1f2937'
+  },
+  teamSelectorList: {
+    flex: 1
+  },
+  teamSelectorListContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 24,
+    flexGrow: 1
+  },
+  teamSelectorItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: '#f9fafb'
+  },
+  teamSelectorItemActive: {
+    backgroundColor: '#f5f3ff',
+    borderWidth: 1,
+    borderColor: '#e9d5ff'
+  },
+  teamSelectorItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1
+  },
+  teamSelectorIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#f5f3ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden'
+  },
+  teamSelectorAvatar: {
+    width: '100%',
+    height: '100%'
+  },
+  teamSelectorInfo: {
+    flex: 1
+  },
+  teamSelectorName: {
+    fontSize: scaleFont(15),
+    fontWeight: '500',
+    color: '#1f2937',
+    marginBottom: 2
+  },
+  teamSelectorMembers: {
+    fontSize: scaleFont(12),
+    color: '#9ca3af'
+  },
+  teamSelectorEmptyState: {
+    flex: 1,
+    minHeight: 180,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12
+  },
+  teamSelectorEmptyText: {
+    fontSize: scaleFont(14),
+    color: '#9ca3af'
   },
   // 举报弹窗样式
   reportModal: {

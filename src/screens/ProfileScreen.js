@@ -13,14 +13,15 @@ import { modalTokens } from '../components/modalTokens';
 import { useTranslation } from '../i18n/withTranslation';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import UserCacheService from '../services/UserCacheService';
-import { DEFAULT_MY_ACTIVITIES, DEFAULT_MY_GROUPS } from '../data/profileMenuMockData';
+import { DEFAULT_MY_GROUPS } from '../data/profileMenuMockData';
 import authApi from '../services/api/authApi';
+import activityApi from '../services/api/activityApi';
 import teamApi from '../services/api/teamApi';
 import userApi from '../services/api/userApi';
 import walletApi from '../services/api/walletApi';
-import answerApi from '../services/api/answerApi';
 import questionApi from '../services/api/questionApi';
 import uploadApi from '../services/api/uploadApi';
+import { loadOwnProfileAnswersPage } from '../services/profileAnswers';
 import { showAppAlert } from '../utils/appAlert';
 import { getOfficialWebsiteUrl } from '../utils/externalLinks';
 import { resolveComposerTopInset } from '../utils/composerLayout';
@@ -266,7 +267,7 @@ const extractDraftRowsAndTotal = response => {
   };
 };
 
-const extractMyAnswerRows = response => {
+const extractMyActivitiesRowsAndTotal = response => {
   const rawData = response?.data;
   const payload = rawData?.data && typeof rawData?.data === 'object' ? rawData.data : rawData;
 
@@ -310,34 +311,6 @@ const normalizeBrowseHistoryItem = item => {
     targetId,
     title: String(title || ''),
     author: String(author || ''),
-    time: formatBrowseHistoryTime(rawTime)
-  };
-};
-
-const normalizeMyAnswerItem = item => {
-  const id = getFirstNonEmptyValue(item?.answerId, item?.id, item?.contentId, item?.targetId);
-  const questionId = getFirstNonEmptyValue(item?.questionId, item?.problemId, item?.targetQuestionId);
-  const questionTitle = getFirstNonEmptyValue(item?.questionTitle, item?.title, item?.problemTitle, item?.targetTitle, '');
-  const content = getFirstNonEmptyValue(item?.content, item?.answerContent, item?.summary, item?.description, '');
-  const rawTime = getFirstNonEmptyValue(item?.answerTime, item?.createTime, item?.createdAt, item?.updateTime, item?.updatedAt, item?.publishTime);
-
-  return {
-    ...item,
-    id,
-    questionId,
-    questionTitle: String(questionTitle || ''),
-    content: String(content || ''),
-    likes: normalizeProfileCount(item?.likeCount, item?.likesCount, item?.likeNum, item?.likes),
-    comments: normalizeProfileCount(item?.commentCount, item?.commentsCount, item?.commentNum, item?.replyCount, item?.comments),
-    shares: normalizeProfileCount(item?.shareCount, item?.sharesCount, item?.shareNum, item?.shares, item?.forwardCount),
-    collects: normalizeProfileCount(item?.collectCount, item?.collects, item?.bookmarkCount, item?.bookmarks, item?.favoriteCount),
-    dislikes: normalizeProfileCount(item?.dislikeCount, item?.dislikesCount, item?.dislikeNum, item?.dislikes),
-    adopted: Boolean(
-      item?.adopted ??
-      item?.isAdopted ??
-      item?.accepted ??
-      item?.isAccepted
-    ),
     time: formatBrowseHistoryTime(rawTime)
   };
 };
@@ -438,6 +411,7 @@ export default function ProfileScreen({
   });
   const [draftsTotalCount, setDraftsTotalCount] = useState(0);
   const [myTeamsCount, setMyTeamsCount] = useState(0);
+  const [myActivitiesCount, setMyActivitiesCount] = useState(0);
 
   // 加载用户信息
   const loadUserProfile = React.useCallback(async () => {
@@ -616,11 +590,29 @@ export default function ProfileScreen({
     }
   }, []);
 
+  const loadMyActivitiesCount = React.useCallback(async () => {
+    try {
+      const response = await activityApi.getMyActivities();
+      const isSuccess = response?.code === 0 || response?.code === 200 || Array.isArray(response?.data);
+
+      if (!isSuccess) {
+        throw new Error(response?.msg || 'Failed to fetch my activities');
+      }
+
+      const { total } = extractMyActivitiesRowsAndTotal(response);
+      setMyActivitiesCount(total);
+    } catch (error) {
+      console.log('Failed to load my activities count:', error?.message || error);
+      setMyActivitiesCount(0);
+    }
+  }, []);
+
   useEffect(() => {
     loadUserProfile();
     loadWalletBalance();
     loadMyTeamsCount();
-  }, [loadMyTeamsCount, loadUserProfile, loadWalletBalance]);
+    loadMyActivitiesCount();
+  }, [loadMyActivitiesCount, loadMyTeamsCount, loadUserProfile, loadWalletBalance]);
 
   // 每次页面获得焦点时重新加载（从设置页面返回时会触发）
   useFocusEffect(React.useCallback(() => {
@@ -628,7 +620,8 @@ export default function ProfileScreen({
     loadUserProfile();
     loadWalletBalance();
     loadMyTeamsCount();
-  }, [loadMyTeamsCount, loadUserProfile, loadWalletBalance]));
+    loadMyActivitiesCount();
+  }, [loadMyActivitiesCount, loadMyTeamsCount, loadUserProfile, loadWalletBalance]));
   const stats = React.useMemo(() => [{
     label: t('profile.likes'),
     value: formatNumber(userProfile.likeCount),
@@ -664,7 +657,7 @@ export default function ProfileScreen({
   }, {
     icon: 'calendar',
     label: t('profile.myActivities'),
-    value: String(DEFAULT_MY_ACTIVITIES.length),
+    value: String(myActivitiesCount),
     color: '#ef4444'
   }, {
     icon: 'eye',
@@ -676,7 +669,7 @@ export default function ProfileScreen({
     label: t('profile.verification'),
     value: '',
     color: '#3b82f6'
-  }], [draftsTotalCount, myTeamsCount, t]);
+  }], [draftsTotalCount, myActivitiesCount, myTeamsCount, t]);
   const superLikeQuickActions = React.useMemo(() => [{
     key: 'purchase',
     icon: 'sparkles',
@@ -960,34 +953,27 @@ export default function ProfileScreen({
       setAnswersLoading(true);
       setAnswersError('');
       const pageNum = isLoadMore ? answersPageNum + 1 : 1;
-      const response = await answerApi.getMyAnswers({
+      const {
+        rows: normalizedRows = [],
+        total = 0
+      } = await loadOwnProfileAnswersPage({
         pageNum,
         pageSize: ANSWERS_PAGE_SIZE
       });
 
-      if (response.code === 200 || response.code === 0) {
-        const {
-          rows = [],
-          total = 0
-        } = extractMyAnswerRows(response);
-        const normalizedRows = rows.map(normalizeMyAnswerItem).filter(item => item?.id);
-
-        if (isLoadMore) {
-          const nextList = [...answersList, ...normalizedRows];
-          setAnswersList(nextList);
-          setAnswersPageNum(pageNum);
-          setAnswersHasMore(nextList.length < total);
-        } else {
-          setAnswersList(normalizedRows);
-          setAnswersPageNum(1);
-          setAnswersHasMore(normalizedRows.length < total);
-        }
-
-        setAnswersLoaded(true);
-        return;
+      if (isLoadMore) {
+        const nextList = [...answersList, ...normalizedRows];
+        setAnswersList(nextList);
+        setAnswersPageNum(pageNum);
+        setAnswersHasMore(nextList.length < total);
+      } else {
+        setAnswersList(normalizedRows);
+        setAnswersPageNum(1);
+        setAnswersHasMore(normalizedRows.length < total);
       }
 
-      throw new Error(response?.msg || '获取我的回答失败');
+      setAnswersLoaded(true);
+      return;
     } catch (error) {
       console.error('获取我的回答列表失败:', error);
       setAnswersError(error?.message || '获取我的回答失败');

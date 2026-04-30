@@ -1,23 +1,214 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets, initialWindowMetrics } from 'react-native-safe-area-context';
+import React, { useEffect } from 'react';
+import { Image, Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView, initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import ActivityCreationForm from '../components/ActivityCreationForm';
+import AppAlertContainer from '../components/AppAlertContainer';
+import DateTimePickerModal from '../components/DateTimePickerModal';
+import ImagePickerSheet from '../components/ImagePickerSheet';
 import KeyboardDismissView from '../components/KeyboardDismissView';
 import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
+import uploadApi from '../services/api/uploadApi';
+import useCreateActivityForm from '../hooks/useCreateActivityForm';
 import { showToast } from '../utils/toast';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import { resolveComposerTopInset } from '../utils/composerLayout';
-
 import { scaleFont } from '../utils/responsive';
+import { buildActivityFormCopy } from '../utils/createActivityShared';
+
 const activitiesData = [
   { id: 1, title: 'Python学习交流会', type: '线上活动', date: '2026-01-20', time: '19:00-21:00', location: '腾讯会议', participants: 45, maxParticipants: 100, organizer: '张三丰', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user1', status: '报名中', description: '本次活动将邀请多位Python专家分享学习经验和实战技巧,适合零基础和有一定基础的学习者参加。' },
   { id: 2, title: 'Python实战项目分享', type: '线下活动', date: '2026-01-25', time: '14:00-17:00', location: '北京市海淀区中关村创业大街', participants: 28, maxParticipants: 50, organizer: 'Python老司机', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=answer1', status: '报名中', description: '分享真实的Python项目开发经验,包括数据分析、Web开发等多个方向。' },
   { id: 3, title: '数据分析入门讲座', type: '线上活动', date: '2026-01-18', time: '20:00-21:30', location: 'Zoom会议', participants: 120, maxParticipants: 200, organizer: '数据分析师小王', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=answer2', status: '即将开始', description: '从零开始学习数据分析,掌握Python数据分析的核心技能。' },
 ];
 
+let imageManipulatorModule = null;
+let imageManipulatorResolved = false;
+
+const getImageManipulatorModule = () => {
+  if (imageManipulatorResolved) {
+    return imageManipulatorModule;
+  }
+
+  imageManipulatorResolved = true;
+
+  try {
+    const requiredModule = require('expo-image-manipulator');
+    imageManipulatorModule = requiredModule?.default || requiredModule;
+  } catch (error) {
+    console.warn('Image manipulator module is not available in the current native build.', error);
+    imageManipulatorModule = null;
+  }
+
+  return imageManipulatorModule;
+};
+
+const pickFirstNonEmptyString = values =>
+  values.find(value => typeof value === 'string' && value.trim())?.trim() || '';
+
+const resolveUploadImageMimeType = (uri = '', asset = null) => {
+  const directMimeType = String(asset?.mimeType || asset?.type || '').trim().toLowerCase();
+  if (directMimeType.startsWith('image/')) {
+    return directMimeType;
+  }
+
+  const normalizedUri = String(uri || '').split('?')[0].toLowerCase();
+  if (normalizedUri.endsWith('.png')) {
+    return 'image/png';
+  }
+  if (normalizedUri.endsWith('.webp')) {
+    return 'image/webp';
+  }
+  if (normalizedUri.endsWith('.gif')) {
+    return 'image/gif';
+  }
+
+  return 'image/jpeg';
+};
+
+const getLocalImageSize = async uri => {
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    return Number(blob?.size) || 0;
+  } catch (error) {
+    console.warn('Failed to inspect local image size before upload:', error);
+    return 0;
+  }
+};
+
+const ensureFileNameHasExtension = (fileName, extension = 'jpg') => {
+  const normalizedFileName = String(fileName || '').trim();
+  if (!normalizedFileName) {
+    return `activity_${Date.now()}.${extension}`;
+  }
+
+  return /\.[a-z0-9]+$/i.test(normalizedFileName)
+    ? normalizedFileName
+    : `${normalizedFileName}.${extension}`;
+};
+
+const prepareActivityImageForUpload = async (imageUri, asset = {}) => {
+  const originalMimeType = resolveUploadImageMimeType(imageUri, asset);
+  const originalName =
+    String(asset?.fileName || asset?.name || '').trim() ||
+    imageUri.split('/').pop() ||
+    `activity_${Date.now()}.jpg`;
+
+  const ImageManipulator = getImageManipulatorModule();
+  const manipulateAsync = ImageManipulator?.manipulateAsync;
+  const SaveFormat = ImageManipulator?.SaveFormat;
+
+  if (typeof manipulateAsync !== 'function' || !SaveFormat?.JPEG) {
+    return {
+      uri: imageUri,
+      name: originalName,
+      type: originalMimeType,
+      size: await getLocalImageSize(imageUri),
+    };
+  }
+
+  const originalWidth = Number(asset?.width) || 0;
+  const resizeActions = [];
+
+  if (originalWidth > 1600) {
+    resizeActions.push({
+      resize: {
+        width: 1600,
+      },
+    });
+  }
+
+  const firstPass = await manipulateAsync(imageUri, resizeActions, {
+    compress: 0.78,
+    format: SaveFormat.JPEG,
+  });
+
+  let preparedResult = firstPass;
+  let preparedSize = await getLocalImageSize(firstPass?.uri || imageUri);
+
+  if (preparedSize > 4.5 * 1024 * 1024) {
+    const secondPassActions = (Number(firstPass?.width) || originalWidth) > 1280
+      ? [
+          {
+            resize: {
+              width: 1280,
+            },
+          },
+        ]
+      : [];
+
+    preparedResult = await manipulateAsync(firstPass?.uri || imageUri, secondPassActions, {
+      compress: 0.55,
+      format: SaveFormat.JPEG,
+    });
+    preparedSize = await getLocalImageSize(preparedResult?.uri || firstPass?.uri || imageUri);
+  }
+
+  return {
+    uri: preparedResult?.uri || firstPass?.uri || imageUri,
+    name: ensureFileNameHasExtension(
+      originalName.replace(/\.(heic|heif|png|webp)$/i, ''),
+      'jpg'
+    ),
+    type: 'image/jpeg',
+    size: preparedSize,
+  };
+};
+
+const extractUploadedImageUrl = response => {
+  const payloadCandidates = [
+    response?.data,
+    response?.data?.data,
+    response?.data?.result,
+    response?.result,
+    response,
+  ].filter(Boolean);
+
+  for (let index = 0; index < payloadCandidates.length; index += 1) {
+    const payload = payloadCandidates[index];
+
+    if (typeof payload === 'string' && payload.trim()) {
+      return payload.trim();
+    }
+
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      const directUrl = pickFirstNonEmptyString([
+        payload.url,
+        payload.imageUrl,
+        payload.fileUrl,
+        payload.link,
+        payload.path,
+        typeof payload.data === 'string' ? payload.data : '',
+      ]);
+
+      if (directUrl) {
+        return directUrl;
+      }
+
+      if (payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)) {
+        const nestedUrl = pickFirstNonEmptyString([
+          payload.data.url,
+          payload.data.imageUrl,
+          payload.data.fileUrl,
+          payload.data.link,
+          payload.data.path,
+        ]);
+
+        if (nestedUrl) {
+          return nestedUrl;
+        }
+      }
+    }
+  }
+
+  return '';
+};
+
 export default function QuestionActivityListScreen({ navigation, route }) {
   const { t } = useTranslation();
+  const activityAlertRef = React.useRef(null);
   const { questionId, questionTitle } = route?.params || {};
   const insets = useSafeAreaInsets();
   const initialTopInset = initialWindowMetrics?.insets?.top ?? 0;
@@ -27,22 +218,54 @@ export default function QuestionActivityListScreen({ navigation, route }) {
     initialTopInset,
   });
   const bottomSafeInset = useBottomSafeInset(20);
-  const [joinedActivities, setJoinedActivities] = useState({});
-  const [showActivityModal, setShowActivityModal] = useState(false);
-  const [activityForm, setActivityForm] = useState({ 
-    title: '', 
-    description: '', 
-    startTime: '', 
-    endTime: '', 
-    location: '', 
-    maxParticipants: '', 
-    activityType: 'online',
-    organizerType: 'personal',
-    images: []
+  const [joinedActivities, setJoinedActivities] = React.useState({});
+  const [showActivityModal, setShowActivityModal] = React.useState(false);
+  const [showImagePicker, setShowImagePicker] = React.useState(false);
+  const [uploadingImages, setUploadingImages] = React.useState(false);
+  const [uploadedImagePreviews, setUploadedImagePreviews] = React.useState([]);
+  const copy = React.useMemo(() => buildActivityFormCopy(t, 'modal'), [t]);
+  const {
+    activeTimeField,
+    closeTeamSelector,
+    form,
+    handleOrganizerTypeChange,
+    handleSelectDateTime,
+    handleSelectTeam,
+    openTeamSelector,
+    removeImage,
+    resetForm,
+    setActiveTimeField,
+    showTeamSelector,
+    submitActivity,
+    submitting,
+    teams,
+    updateField,
+  } = useCreateActivityForm({
+    copy,
+    questionId,
+    requireQuestionId: true,
+    visible: showActivityModal,
   });
+  const displayForm = React.useMemo(
+    () => ({
+      ...form,
+      images: form.images.map((imageUrl, index) => uploadedImagePreviews[index] || imageUrl),
+    }),
+    [form, uploadedImagePreviews]
+  );
 
-  const handleJoinActivity = (activityId) => {
-    setJoinedActivities({ ...joinedActivities, [activityId]: !joinedActivities[activityId] });
+  const showActivityAlert = React.useCallback((title, message, buttons = [], options = {}) => {
+    if (activityAlertRef.current?.showAlert) {
+      activityAlertRef.current.showAlert(title, message, buttons, options);
+    }
+  }, []);
+
+  const handleJoinActivity = activityId => {
+    setJoinedActivities(current => ({
+      ...current,
+      [activityId]: !current[activityId],
+    }));
+
     if (!joinedActivities[activityId]) {
       showToast(t('screens.questionActivityList.joinSuccess'), 'success');
     } else {
@@ -50,55 +273,45 @@ export default function QuestionActivityListScreen({ navigation, route }) {
     }
   };
 
-  const handleCreateActivity = () => {
-    if (!activityForm.title.trim()) {
-      showToast(t('screens.questionActivityList.modal.validation.titleRequired'), 'warning');
-      return;
-    }
-    if (!activityForm.description.trim()) {
-      showToast(t('screens.questionActivityList.modal.validation.descriptionRequired'), 'warning');
-      return;
-    }
-    if (!activityForm.startTime || !activityForm.endTime) {
-      showToast(t('screens.questionActivityList.modal.validation.timeRequired'), 'warning');
-      return;
-    }
-    if (activityForm.activityType === 'offline' && !activityForm.location.trim()) {
-      showToast(t('screens.questionActivityList.modal.validation.locationRequired'), 'warning');
-      return;
-    }
-    showToast(t('screens.questionActivityList.modal.createSuccess'), 'success');
-    setShowActivityModal(false);
-    setActivityForm({ 
-      title: '', 
-      description: '', 
-      startTime: '', 
-      endTime: '', 
-      location: '', 
-      maxParticipants: '', 
-      activityType: 'online',
-      organizerType: 'personal',
-      images: []
-    });
-  };
+  const handleSubmitActivity = React.useCallback(async () => {
+    try {
+      const createdActivity = await submitActivity();
+      if (!createdActivity) {
+        return;
+      }
 
-  const addActivityImage = () => {
-    if (activityForm.images.length < 9) {
-      setActivityForm({
-        ...activityForm,
-        images: [...activityForm.images, `https://images.unsplash.com/photo-${Math.floor(Math.random() * 1000000)}?w=800&h=600&fit=crop`]
-      });
-    } else {
-      showToast(t('screens.questionActivityList.modal.images.maxLimit'), 'warning');
+      showActivityAlert(copy.successTitle, copy.successMessage, [
+        {
+          text: copy.successConfirm,
+          onPress: () => {
+            resetForm();
+            setUploadedImagePreviews([]);
+            setActiveTimeField(null);
+            setShowImagePicker(false);
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                setShowActivityModal(false);
+              });
+            });
+          },
+        },
+      ]);
+    } catch (error) {
+      console.error('Failed to create activity from question activity list:', error);
+      showActivityAlert(copy.validationHint, error?.message || copy.successMessage, [
+        { text: copy.successConfirm },
+      ]);
     }
-  };
-
-  const removeActivityImage = (index) => {
-    setActivityForm({
-      ...activityForm,
-      images: activityForm.images.filter((_, i) => i !== index)
-    });
-  };
+  }, [
+    copy.successConfirm,
+    copy.successMessage,
+    copy.successTitle,
+    copy.validationHint,
+    resetForm,
+    setActiveTimeField,
+    showActivityAlert,
+    submitActivity,
+  ]);
 
   useEffect(() => {
     if (!route?.params?.openCreateModal) {
@@ -107,15 +320,103 @@ export default function QuestionActivityListScreen({ navigation, route }) {
 
     setShowActivityModal(true);
     navigation.setParams({
-      openCreateModal: undefined
+      openCreateModal: undefined,
     });
   }, [navigation, route?.params?.openCreateModal]);
+
+  useEffect(() => {
+    setUploadedImagePreviews(current => {
+      if (form.images.length === 0) {
+        return current.length > 0 ? [] : current;
+      }
+
+      if (current.length <= form.images.length) {
+        return current;
+      }
+
+      return current.slice(0, form.images.length);
+    });
+  }, [form.images.length]);
+
+  const handleOpenImagePicker = React.useCallback(() => {
+    if (uploadingImages) {
+      showToast('图片上传中，请稍候', 'info');
+      return;
+    }
+
+    if (form.images.length >= 9) {
+      showToast(copy.validationImagesMaxLimit, 'warning');
+      return;
+    }
+
+    setShowImagePicker(true);
+  }, [copy.validationImagesMaxLimit, form.images.length, uploadingImages]);
+
+  const handleActivityImageSelected = React.useCallback(
+    async (imageUri, meta = {}) => {
+      if (!imageUri) {
+        return;
+      }
+
+      if (form.images.length >= 9) {
+        showToast(copy.validationImagesMaxLimit, 'warning');
+        return;
+      }
+
+      try {
+        setUploadingImages(true);
+        showToast('图片上传中...', 'info');
+
+        const asset = meta?.asset || {};
+        const preparedFile = await prepareActivityImageForUpload(imageUri, asset);
+
+        const response = await uploadApi.uploadImage({
+          uri: preparedFile.uri,
+          name: preparedFile.name,
+          type: preparedFile.type,
+        });
+
+        const code = Number(response?.code ?? response?.data?.code);
+        const uploadedUrl = extractUploadedImageUrl(response);
+        const previewUri = preparedFile.uri || imageUri;
+
+        if ((code !== 0 && code !== 200) || !uploadedUrl) {
+          throw new Error(
+            response?.msg ||
+              response?.message ||
+              response?.data?.msg ||
+              response?.data?.message ||
+              '图片上传失败'
+          );
+        }
+
+        setUploadedImagePreviews(current => [...current, previewUri]);
+        updateField('images', [...form.images, uploadedUrl]);
+        showToast('图片上传成功', 'success');
+      } catch (error) {
+        console.error('Failed to upload activity image from question flow:', error);
+        showToast(error?.message || '图片上传失败，请稍后重试', 'error');
+      } finally {
+        setUploadingImages(false);
+        setShowImagePicker(false);
+      }
+    },
+    [copy.validationImagesMaxLimit, form.images, updateField]
+  );
+
+  const handleRemoveImage = React.useCallback(
+    index => {
+      setUploadedImagePreviews(current => current.filter((_, imageIndex) => imageIndex !== index));
+      removeImage(index);
+    },
+    [removeImage]
+  );
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity 
-          onPress={() => navigation.goBack()} 
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
           style={styles.backBtn}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           activeOpacity={0.7}
@@ -124,10 +425,12 @@ export default function QuestionActivityListScreen({ navigation, route }) {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t('screens.questionActivityList.title')}</Text>
-          <Text style={styles.headerSubtitle} numberOfLines={1}>{questionTitle}</Text>
+          <Text style={styles.headerSubtitle} numberOfLines={1}>
+            {questionTitle}
+          </Text>
         </View>
-        <TouchableOpacity 
-          style={styles.publishBtn} 
+        <TouchableOpacity
+          style={styles.publishBtn}
           onPress={() => setShowActivityModal(true)}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           activeOpacity={0.7}
@@ -154,7 +457,7 @@ export default function QuestionActivityListScreen({ navigation, route }) {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{activitiesData.reduce((sum, a) => sum + a.participants, 0)}</Text>
+            <Text style={styles.statNumber}>{activitiesData.reduce((sum, activity) => sum + activity.participants, 0)}</Text>
             <Text style={styles.statLabel}>{t('screens.questionActivityList.stats.totalParticipants')}</Text>
           </View>
         </View>
@@ -169,40 +472,50 @@ export default function QuestionActivityListScreen({ navigation, route }) {
           </View>
 
           {activitiesData.map(activity => (
-            <TouchableOpacity 
-              key={activity.id} 
-              style={styles.activityCard}
-              activeOpacity={0.7}
-            >
+            <TouchableOpacity key={activity.id} style={styles.activityCard} activeOpacity={0.7}>
               <View style={styles.activityHeader}>
                 <View style={styles.activityTypeTag}>
-                  <Ionicons 
-                    name={activity.type === '线上活动' ? 'videocam' : 'location'} 
-                    size={12} 
-                    color={activity.type === '线上活动' ? '#3b82f6' : '#22c55e'} 
+                  <Ionicons
+                    name={activity.type === '线上活动' ? 'videocam' : 'location'}
+                    size={12}
+                    color={activity.type === '线上活动' ? '#3b82f6' : '#22c55e'}
                   />
                   <Text style={[styles.activityTypeText, { color: activity.type === '线上活动' ? '#3b82f6' : '#22c55e' }]}>
-                    {activity.type === '线上活动' ? t('screens.questionActivityList.activityType.online') : t('screens.questionActivityList.activityType.offline')}
+                    {activity.type === '线上活动'
+                      ? t('screens.questionActivityList.activityType.online')
+                      : t('screens.questionActivityList.activityType.offline')}
                   </Text>
                 </View>
                 <View style={[styles.activityStatusTag, activity.status === '即将开始' && styles.activityStatusTagUrgent]}>
                   <Text style={[styles.activityStatusText, activity.status === '即将开始' && styles.activityStatusTextUrgent]}>
-                    {activity.status === '报名中' ? t('screens.questionActivityList.status.enrolling') : t('screens.questionActivityList.status.starting')}
+                    {activity.status === '报名中'
+                      ? t('screens.questionActivityList.status.enrolling')
+                      : t('screens.questionActivityList.status.starting')}
                   </Text>
                 </View>
               </View>
 
               <Text style={styles.activityTitle}>{activity.title}</Text>
-              <Text style={styles.activityDescription} numberOfLines={2}>{activity.description}</Text>
+              <Text style={styles.activityDescription} numberOfLines={2}>
+                {activity.description}
+              </Text>
 
               <View style={styles.activityInfo}>
                 <View style={styles.activityInfoRow}>
                   <Ionicons name="calendar-outline" size={14} color="#9ca3af" />
-                  <Text style={styles.activityInfoText}>{activity.date} {activity.time}</Text>
+                  <Text style={styles.activityInfoText}>
+                    {activity.date} {activity.time}
+                  </Text>
                 </View>
                 <View style={styles.activityInfoRow}>
-                  <Ionicons name={activity.type === '线上活动' ? 'videocam-outline' : 'location-outline'} size={14} color="#9ca3af" />
-                  <Text style={styles.activityInfoText} numberOfLines={1}>{activity.location}</Text>
+                  <Ionicons
+                    name={activity.type === '线上活动' ? 'videocam-outline' : 'location-outline'}
+                    size={14}
+                    color="#9ca3af"
+                  />
+                  <Text style={styles.activityInfoText} numberOfLines={1}>
+                    {activity.location}
+                  </Text>
                 </View>
               </View>
 
@@ -217,16 +530,18 @@ export default function QuestionActivityListScreen({ navigation, route }) {
                 <View style={styles.activityActions}>
                   <View style={styles.participantsInfo}>
                     <Ionicons name="people" size={14} color="#6b7280" />
-                    <Text style={styles.participantsText}>{activity.participants}/{activity.maxParticipants}</Text>
+                    <Text style={styles.participantsText}>
+                      {activity.participants}/{activity.maxParticipants}
+                    </Text>
                   </View>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[styles.joinBtn, joinedActivities[activity.id] && styles.joinBtnActive]}
                     onPress={() => handleJoinActivity(activity.id)}
                   >
-                    <Ionicons 
-                      name={joinedActivities[activity.id] ? "checkmark-circle" : "add-circle-outline"} 
-                      size={16} 
-                      color={joinedActivities[activity.id] ? "#22c55e" : "#fff"} 
+                    <Ionicons
+                      name={joinedActivities[activity.id] ? 'checkmark-circle' : 'add-circle-outline'}
+                      size={16}
+                      color={joinedActivities[activity.id] ? '#22c55e' : '#fff'}
                     />
                     <Text style={[styles.joinBtnText, joinedActivities[activity.id] && styles.joinBtnTextActive]}>
                       {joinedActivities[activity.id] ? t('screens.questionActivityList.joined') : t('screens.questionActivityList.join')}
@@ -241,196 +556,74 @@ export default function QuestionActivityListScreen({ navigation, route }) {
         <View style={styles.emptySpace} />
       </ScrollView>
 
-      {/* 发起活动弹窗 */}
       <Modal visible={showActivityModal} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent>
         <KeyboardAvoidingView style={styles.modalKeyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <KeyboardDismissView>
-        <SafeAreaView style={styles.activityModal} edges={['bottom']}>
-          <View style={[styles.activityModalHeader, { paddingTop: activityModalTopInset + 8 }]}>
-            <TouchableOpacity onPress={() => setShowActivityModal(false)} style={styles.activityCloseBtn}>
-              <Ionicons name="close" size={26} color="#333" />
-            </TouchableOpacity>
-            <View style={styles.activityHeaderCenter}>
-              <Text style={styles.activityModalTitle}>{t('screens.questionActivityList.modal.createTitle')}</Text>
-            </View>
-            <TouchableOpacity 
-              style={[styles.activityPublishBtn, !activityForm.title.trim() && styles.activityPublishBtnDisabled]}
-              onPress={handleCreateActivity}
-              disabled={!activityForm.title.trim()}
-            >
-              <Text style={[styles.activityPublishText, !activityForm.title.trim() && styles.activityPublishTextDisabled]}>{t('screens.questionActivityList.modal.publish')}</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* 绑定问题显示 */}
-          <View style={styles.boundQuestionCard}>
-            <View style={styles.boundQuestionHeader}>
-              <Ionicons name="link" size={16} color="#22c55e" />
-              <Text style={styles.boundQuestionLabel}>{t('screens.questionActivityList.modal.boundQuestion')}</Text>
-            </View>
-            <Text style={styles.boundQuestionText} numberOfLines={2}>{questionTitle}</Text>
-          </View>
-
-          <ScrollView
-            style={styles.activityFormArea}
-            contentContainerStyle={[styles.activityFormContent, { paddingBottom: bottomSafeInset + 28 }]}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-          >
-            {/* 发起身份选择 */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.organizerType.label')} <Text style={styles.required}>{t('screens.questionActivityList.modal.organizerType.required')}</Text></Text>
-              <View style={styles.organizerSelector}>
-                <TouchableOpacity 
-                  style={[styles.organizerOption, activityForm.organizerType === 'personal' && styles.organizerOptionActive]}
-                  onPress={() => setActivityForm({...activityForm, organizerType: 'personal'})}
-                >
-                  <Ionicons name="person" size={20} color={activityForm.organizerType === 'personal' ? '#fff' : '#666'} />
-                  <Text style={[styles.organizerOptionText, activityForm.organizerType === 'personal' && styles.organizerOptionTextActive]}>{t('screens.questionActivityList.modal.organizerType.personal')}</Text>
+          <KeyboardDismissView>
+            <SafeAreaView style={styles.activityModal} edges={['bottom']}>
+              <View style={[styles.activityModalHeader, { paddingTop: activityModalTopInset + 8 }]}>
+                <TouchableOpacity onPress={() => setShowActivityModal(false)} style={styles.activityCloseBtn}>
+                  <Ionicons name="close" size={26} color="#333" />
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.organizerOption, activityForm.organizerType === 'team' && styles.organizerOptionActive]}
-                  onPress={() => setActivityForm({...activityForm, organizerType: 'team'})}
+                <View style={styles.activityHeaderCenter}>
+                  <Text style={styles.activityModalTitle}>{t('screens.questionActivityList.modal.createTitle')}</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.activityPublishBtn, (!form.title.trim() || submitting) && styles.activityPublishBtnDisabled]}
+                  onPress={handleSubmitActivity}
+                  disabled={!form.title.trim() || submitting}
                 >
-                  <Ionicons name="people" size={20} color={activityForm.organizerType === 'team' ? '#fff' : '#666'} />
-                  <Text style={[styles.organizerOptionText, activityForm.organizerType === 'team' && styles.organizerOptionTextActive]}>{t('screens.questionActivityList.modal.organizerType.team')}</Text>
+                  <Text style={styles.activityPublishText}>{t('screens.questionActivityList.modal.publish')}</Text>
                 </TouchableOpacity>
               </View>
-            </View>
 
-            {/* 活动类型选择 */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.activityType.label')}</Text>
-              <View style={styles.activityTypeSelector}>
-                <TouchableOpacity 
-                  style={[styles.activityTypeSelectorBtn, activityForm.activityType === 'online' && styles.activityTypeSelectorBtnActive]}
-                  onPress={() => setActivityForm({...activityForm, activityType: 'online'})}
-                >
-                  <Ionicons name="globe-outline" size={20} color={activityForm.activityType === 'online' ? '#fff' : '#666'} />
-                  <Text style={[styles.activityTypeSelectorText, activityForm.activityType === 'online' && styles.activityTypeSelectorTextActive]}>{t('screens.questionActivityList.modal.activityType.online')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.activityTypeSelectorBtn, activityForm.activityType === 'offline' && styles.activityTypeSelectorBtnActive]}
-                  onPress={() => setActivityForm({...activityForm, activityType: 'offline'})}
-                >
-                  <Ionicons name="location-outline" size={20} color={activityForm.activityType === 'offline' ? '#fff' : '#666'} />
-                  <Text style={[styles.activityTypeSelectorText, activityForm.activityType === 'offline' && styles.activityTypeSelectorTextActive]}>{t('screens.questionActivityList.modal.activityType.offline')}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.title.label')} <Text style={styles.required}>{t('screens.questionActivityList.modal.title.required')}</Text></Text>
-              <TextInput
-                style={styles.formInput}
-                placeholder={t('screens.questionActivityList.modal.title.placeholder')}
-                placeholderTextColor="#bbb"
-                value={activityForm.title}
-                onChangeText={(text) => setActivityForm({...activityForm, title: text})}
-                maxLength={50}
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.description.label')} <Text style={styles.required}>{t('screens.questionActivityList.modal.description.required')}</Text></Text>
-              <TextInput
-                style={[styles.formInput, styles.formTextarea]}
-                placeholder={t('screens.questionActivityList.modal.description.placeholder')}
-                placeholderTextColor="#bbb"
-                value={activityForm.description}
-                onChangeText={(text) => setActivityForm({...activityForm, description: text})}
-                multiline
-                textAlignVertical="top"
-                maxLength={500}
-              />
-            </View>
-
-            {/* 活动时间 */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.time.label')} <Text style={styles.required}>{t('screens.questionActivityList.modal.time.required')}</Text></Text>
-              <View style={styles.timeContainer}>
-                <View style={styles.timeInputWrapper}>
-                  <Text style={styles.timeInputLabel}>{t('screens.questionActivityList.modal.time.startDate')}</Text>
-                  <TextInput
-                    style={styles.timeInputField}
-                    placeholder={t('screens.questionActivityList.modal.time.startPlaceholder')}
-                    placeholderTextColor="#9ca3af"
-                    value={activityForm.startTime}
-                    onChangeText={(text) => setActivityForm({...activityForm, startTime: text})}
-                  />
-                </View>
-                <View style={styles.timeSeparatorWrapper}>
-                  <Text style={styles.timeSeparator}>{t('screens.questionActivityList.modal.time.to')}</Text>
-                </View>
-                <View style={styles.timeInputWrapper}>
-                  <Text style={styles.timeInputLabel}>{t('screens.questionActivityList.modal.time.endDate')}</Text>
-                  <TextInput
-                    style={styles.timeInputField}
-                    placeholder={t('screens.questionActivityList.modal.time.endPlaceholder')}
-                    placeholderTextColor="#9ca3af"
-                    value={activityForm.endTime}
-                    onChangeText={(text) => setActivityForm({...activityForm, endTime: text})}
-                  />
-                </View>
-              </View>
-            </View>
-
-            {/* 活动地址 - 仅线下活动显示 */}
-            {activityForm.activityType === 'offline' && (
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>
-                  {t('screens.questionActivityList.modal.location.label')} <Text style={styles.required}>{t('screens.questionActivityList.modal.location.required')}</Text>
-                </Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder={t('screens.questionActivityList.modal.location.placeholder')}
-                  placeholderTextColor="#bbb"
-                  value={activityForm.location}
-                  onChangeText={(text) => setActivityForm({...activityForm, location: text})}
+              <ScrollView
+                style={styles.activityFormArea}
+                contentContainerStyle={[styles.activityFormContent, { paddingBottom: bottomSafeInset + 28 }]}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="interactive"
+              >
+                <ActivityCreationForm
+                  copy={{ ...copy, boundQuestionLabel: t('screens.questionActivityList.modal.boundQuestion') }}
+                  form={displayForm}
+                  boundQuestionTitle={questionTitle}
+                  bottomSpacerHeight={bottomSafeInset + 16}
+                  onAddImage={handleOpenImagePicker}
+                  onFieldChange={updateField}
+                  onOpenTimeField={fieldName => {
+                    Keyboard.dismiss();
+                    setTimeout(() => setActiveTimeField(fieldName), 40);
+                  }}
+                  onOpenTeamSelector={openTeamSelector}
+                  onOrganizerTypeChange={handleOrganizerTypeChange}
+                  onRemoveImage={handleRemoveImage}
+                  onSelectTeam={handleSelectTeam}
+                  showTeamSelector={showTeamSelector}
+                  teams={teams}
+                  onCloseTeamSelector={closeTeamSelector}
+                  timeInputMode="picker"
                 />
-              </View>
-            )}
+              </ScrollView>
 
-            {/* 活动图片 */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.images.label')}</Text>
-              <View style={styles.imageGrid}>
-                {activityForm.images.map((img, idx) => (
-                  <View key={idx} style={styles.imageItem}>
-                    <Image source={{ uri: img }} style={styles.uploadedImage} />
-                    <TouchableOpacity 
-                      style={styles.removeImage} 
-                      onPress={() => removeActivityImage(idx)}
-                    >
-                      <Ionicons name="close-circle" size={20} color="#ef4444" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-                {activityForm.images.length < 9 && (
-                  <TouchableOpacity style={styles.addImageBtn} onPress={addActivityImage}>
-                    <Ionicons name="add" size={24} color="#9ca3af" />
-                    <Text style={styles.addImageText}>{t('screens.questionActivityList.modal.images.add')}</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-
-            {/* 联系方式 */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>{t('screens.questionActivityList.modal.contact.label')}</Text>
-              <TextInput
-                style={styles.formInput}
-                placeholder={t('screens.questionActivityList.modal.contact.placeholder')}
-                placeholderTextColor="#bbb"
-                value={activityForm.contact}
-                onChangeText={(text) => setActivityForm({...activityForm, contact: text})}
+              <DateTimePickerModal
+                visible={Boolean(activeTimeField)}
+                onClose={() => setActiveTimeField(null)}
+                currentDateTime={activeTimeField ? form[activeTimeField] : ''}
+                onSelect={value => handleSelectDateTime(activeTimeField, value)}
+                title={activeTimeField === 'endTime' ? copy.timePickerEndTitle : copy.timePickerStartTitle}
+                cancelText={copy.timePickerCancel}
+                confirmText={copy.timePickerConfirm}
               />
-            </View>
 
-            <View style={{ height: bottomSafeInset + 16 }} />
-          </ScrollView>
-        </SafeAreaView>
-        </KeyboardDismissView>
+              <ImagePickerSheet
+                visible={showImagePicker}
+                onClose={() => setShowImagePicker(false)}
+                onImageSelected={handleActivityImageSelected}
+                title={copy.imagesAdd}
+              />
+
+              <AppAlertContainer ref={activityAlertRef} />
+            </SafeAreaView>
+          </KeyboardDismissView>
         </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
@@ -484,7 +677,6 @@ const styles = StyleSheet.create({
   joinBtnText: { fontSize: scaleFont(13), color: '#fff', fontWeight: '500' },
   joinBtnTextActive: { color: '#22c55e' },
   emptySpace: { height: 20 },
-  // 发起活动弹窗样式
   modalKeyboardView: { flex: 1 },
   activityModal: { flex: 1, backgroundColor: modalTokens.surface },
   activityModalHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: modalTokens.border },
@@ -494,44 +686,6 @@ const styles = StyleSheet.create({
   activityPublishBtn: { minWidth: 56, backgroundColor: modalTokens.danger, paddingHorizontal: modalTokens.actionPaddingX, paddingVertical: modalTokens.actionPaddingY, borderRadius: modalTokens.actionRadius, alignItems: 'center', justifyContent: 'center' },
   activityPublishBtnDisabled: { backgroundColor: modalTokens.dangerSoft },
   activityPublishText: { fontSize: scaleFont(14), color: '#fff', fontWeight: '600' },
-  activityPublishTextDisabled: { color: '#fff' },
-  boundQuestionCard: { backgroundColor: '#f0fdf4', padding: 12, marginHorizontal: 16, marginTop: 12, borderRadius: 8, borderLeftWidth: 3, borderLeftColor: '#22c55e' },
-  boundQuestionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-  boundQuestionLabel: { fontSize: scaleFont(12), fontWeight: '500', color: '#22c55e' },
-  boundQuestionText: { fontSize: scaleFont(14), color: '#374151', lineHeight: scaleFont(20) },
   activityFormArea: { flex: 1, padding: 16, backgroundColor: modalTokens.surface },
   activityFormContent: { flexGrow: 1 },
-  formGroup: { marginBottom: 16 },
-  formLabel: { fontSize: scaleFont(14), fontWeight: '500', color: '#374151', marginBottom: 8 },
-  formInput: { backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, fontSize: scaleFont(15), color: modalTokens.textPrimary },
-  formTextarea: { minHeight: 100, textAlignVertical: 'top' },
-  formRow: { flexDirection: 'row', alignItems: 'center' },
-  formSelectBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12 },
-  formSelectText: { fontSize: scaleFont(15), color: modalTokens.textSecondary, flex: 1 },
-  formInputWithIcon: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: modalTokens.surfaceSoft, borderWidth: 1, borderColor: modalTokens.border, borderRadius: 8, paddingHorizontal: 12 },
-  formInputInner: { flex: 1, paddingVertical: 12, fontSize: scaleFont(15), color: modalTokens.textPrimary },
-  activityTypeSelector: { flexDirection: 'row', gap: 12 },
-  activityTypeSelectorBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: modalTokens.border, backgroundColor: modalTokens.surfaceSoft, gap: 8 },
-  activityTypeSelectorBtnActive: { backgroundColor: '#ef4444', borderColor: '#ef4444' },
-  activityTypeSelectorText: { fontSize: scaleFont(14), color: modalTokens.textSecondary, fontWeight: '500' },
-  activityTypeSelectorTextActive: { color: '#fff' },
-  required: { color: '#ef4444' },
-  organizerSelector: { flexDirection: 'row', gap: 12 },
-  organizerOption: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: modalTokens.border, gap: 6 },
-  organizerOptionActive: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
-  organizerOptionText: { fontSize: scaleFont(14), color: modalTokens.textSecondary },
-  organizerOptionTextActive: { color: '#fff' },
-  timeRow: { flexDirection: 'row', alignItems: 'center' },
-  timeContainer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-  timeInputWrapper: { flex: 1 },
-  timeInputLabel: { fontSize: scaleFont(12), color: modalTokens.textSecondary, marginBottom: 6 },
-  timeInputField: { backgroundColor: modalTokens.surfaceSoft, borderRadius: 8, padding: 12, fontSize: scaleFont(14), borderWidth: 1, borderColor: modalTokens.border, color: modalTokens.textPrimary },
-  timeSeparatorWrapper: { paddingBottom: 12 },
-  timeSeparator: { fontSize: scaleFont(14), color: modalTokens.textSecondary, fontWeight: '500' },
-  imageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  imageItem: { width: 80, height: 80, borderRadius: 8, backgroundColor: '#e5e7eb', position: 'relative', overflow: 'hidden' },
-  uploadedImage: { width: '100%', height: '100%' },
-  removeImage: { position: 'absolute', top: -8, right: -8, zIndex: 10 },
-  addImageBtn: { width: 80, height: 80, borderRadius: 8, borderWidth: 2, borderStyle: 'dashed', borderColor: '#d1d5db', justifyContent: 'center', alignItems: 'center' },
-  addImageText: { fontSize: scaleFont(10), color: '#9ca3af', marginTop: 4 },
 });

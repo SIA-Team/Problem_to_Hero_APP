@@ -21,11 +21,15 @@ import { useOptimizedQuestions } from '../hooks/useOptimizedQuestions';
 import { showToast } from '../utils/toast';
 import { showAppAlert } from '../utils/appAlert';
 import { buildTwitterShareText, openTwitterShare } from '../utils/shareService';
-import { formatAmount } from '../utils/rewardAmount';
 import { formatTime } from '../utils/timeFormatter';
 import { getLastLocationLevel } from '../utils/locationFormatter';
 import { shouldRequirePaidQuestionAccess } from '../utils/questionAccessRules';
 import { openOfficialRechargePage } from '../utils/externalLinks';
+import {
+  formatCompactRewardPoints,
+  isChineseLocale,
+  resolveRewardPointsFromItem,
+} from '../utils/rewardPointsDisplay';
 import { buildCombinedChannelResolvedDisplayName, getChannelDisplayName } from '../utils/combinedChannelDisplay';
 import { navigateToPublicProfile, resolvePublicUserId } from '../utils/publicProfileNavigation';
 import questionApi from '../services/api/questionApi';
@@ -1805,6 +1809,9 @@ export default function HomeScreen({ navigation }) {
             const isDisliked = getQuestionDislikeState(item.id);
             const isLikeDisabled = !isLiked && isDisliked;
             const requiresPaidView = item.requiresPaidView ?? shouldRequirePaidQuestionAccess(item);
+            const rewardPoints = resolveRewardPointsFromItem(item);
+            const hasRewardPoints = rewardPoints > 0;
+            const rewardPointsValue = `${formatCompactRewardPoints(rewardPoints, { locale: i18n?.locale })}${isChineseLocale(i18n?.locale) ? '积分' : ' pts'}`;
             const isFirstItem = index === 0;
             const isLastItem = index === displayQuestionList.length - 1;
             return (
@@ -1820,48 +1827,43 @@ export default function HomeScreen({ navigation }) {
                   <View style={styles.questionTitleWrapper}>
                     {/* 实际显示的文本 */}
                     <View style={styles.titleContainer}>
-                      <Text
-                        style={styles.questionTitle}
-                        numberOfLines={3}
-                        onTextLayout={(e) => {
-                          if (measuredTitleIdsRef.current.has(item.id)) {
-                            return;
-                          }
-
-                          measuredTitleIdsRef.current.add(item.id);
-                          const lineCount = e.nativeEvent.lines.length;
-
-                          if (lineCount > 3) {
-                            setTitleLineCount(prev => prev[item.id] === lineCount ? prev : ({ ...prev, [item.id]: lineCount }));
-                            setNeedsExpand(prev => prev[item.id] ? prev : ({ ...prev, [item.id]: true }));
-                          }
-                        }}
-                      >
-                        {(item.type === 'reward' && item.reward) || (item.type === 'targeted' && item.reward) || requiresPaidView ? (
-                          <>
-                            {item.type === 'reward' && item.reward && (
-                              <Text style={styles.rewardTagInline}> {formatAmount(item.reward)} </Text>
-                            )}
-                            {item.type === 'targeted' && (
-                              <>
-                                {item.reward && item.reward > 0 ? (
-                                  <Text style={styles.targetedTagInline}> {formatAmount(item.reward)} </Text>
-                                ) : (
-                                <Text style={styles.targetedTagInline}> {t('home.targeted')} </Text>
-                              )}
-                            </>
-                          )}
-                            {requiresPaidView && (
-                              <Text style={styles.paidTagInline}> </Text>
-                            )}
-                            {'  '}
-                          </>
-                        ) : null}
-                        {item.title}
-                        {item.status === 2 && (
-                          <Text style={styles.solvedTagInline}> {t('home.solved')}</Text>
+                      <View style={styles.questionTitleRow}>
+                        {((item.type === 'reward' || item.type === 'targeted') && hasRewardPoints) && (
+                          <View style={styles.rewardTitleCard}>
+                            <View style={styles.rewardTitleCardIconWrap}>
+                              <Ionicons name="sparkles-outline" size={11} color="#b45309" />
+                            </View>
+                            <Text style={styles.rewardTitleCardText} numberOfLines={1}>
+                              {t('home.reward')} {rewardPointsValue}
+                            </Text>
+                          </View>
                         )}
-                      </Text>
+                        <Text
+                          style={styles.questionTitle}
+                          numberOfLines={3}
+                          onTextLayout={(e) => {
+                            if (measuredTitleIdsRef.current.has(item.id)) {
+                              return;
+                            }
+
+                            measuredTitleIdsRef.current.add(item.id);
+                            const lineCount = e.nativeEvent.lines.length;
+
+                            if (lineCount > 3) {
+                              setTitleLineCount(prev => prev[item.id] === lineCount ? prev : ({ ...prev, [item.id]: lineCount }));
+                              setNeedsExpand(prev => prev[item.id] ? prev : ({ ...prev, [item.id]: true }));
+                            }
+                          }}
+                        >
+                          {item.title}
+                          {item.type === 'targeted' && (
+                            <Text style={styles.targetedInlineBadge}>  {t('home.targeted')}  </Text>
+                          )}
+                          {item.status === 2 && (
+                            <Text style={styles.solvedInlineBadge}>  {t('home.solved')}  </Text>
+                          )}
+                        </Text>
+                      </View>
                     </View>
                     
                     {/* 全文按钮 */}
@@ -2394,6 +2396,10 @@ const styles = StyleSheet.create({
   questionTitleWrapper: {
     marginBottom: 12,
   },
+  questionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
   cardHeader: {
     marginTop: 0
   },
@@ -2462,27 +2468,61 @@ const styles = StyleSheet.create({
   headerActionText: { fontSize: scaleFont(12), color: '#666666', marginLeft: 4 },
   headerActionTextDisabled: { color: '#d1d5db' },
   headerMoreBtn: { padding: 2, marginLeft: 16 },
-  rewardTagInline: { 
-    backgroundColor: 'transparent', 
-    paddingHorizontal: 0, 
-    paddingVertical: 0, 
-    borderRadius: 0,
-    fontSize: scaleFont(19), 
-    color: '#ef4444', 
-    fontWeight: '600',
-    includeFontPadding: false,
-    lineHeight: scaleFont(22),
+  rewardTitleCard: {
+    maxWidth: 128,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginRight: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#f4d27d',
+    backgroundColor: '#fff8e2',
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 1,
   },
-  targetedTagInline: { 
-    backgroundColor: 'transparent', 
-    paddingHorizontal: 0, 
-    paddingVertical: 0, 
-    borderRadius: 0,
-    fontSize: scaleFont(19), 
-    color: '#8b5cf6', 
+  rewardTitleCardIconWrap: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#fde68a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
+  rewardTitleCardText: {
+    fontSize: scaleFont(11),
+    color: '#92400e',
+    fontWeight: '700',
+    lineHeight: scaleFont(15),
+    includeFontPadding: false,
+    flexShrink: 1,
+  },
+  targetedInlineBadge: {
+    backgroundColor: '#f5f3ff',
+    borderWidth: 1,
+    borderColor: '#ddd6fe',
+    borderRadius: 999,
+    fontSize: scaleFont(11),
+    color: '#7c3aed',
     fontWeight: '600',
     includeFontPadding: false,
-    lineHeight: scaleFont(22),
+    lineHeight: scaleFont(18),
+  },
+  solvedInlineBadge: {
+    backgroundColor: '#ecfdf3',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    borderRadius: 999,
+    fontSize: scaleFont(11),
+    color: '#15803d',
+    fontWeight: '600',
+    includeFontPadding: false,
+    lineHeight: scaleFont(18),
   },
   paidTagInline: { 
     backgroundColor: 'transparent', 
@@ -2513,11 +2553,12 @@ const styles = StyleSheet.create({
   paidViewPrice: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   paidViewPriceText: { fontSize: scaleFont(16), color: '#f59e0b', fontWeight: '700' },
   questionTitle: {
+    flex: 1,
     fontSize: scaleFont(16),
-    lineHeight: scaleFont(22),
-    fontWeight: '400',
+    lineHeight: scaleFont(24),
+    fontWeight: '500',
     color: '#1a1a1a',
-    letterSpacing: -0.2,
+    letterSpacing: -0.15,
     fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
     textAlign: 'left',
   },

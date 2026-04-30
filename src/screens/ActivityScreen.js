@@ -12,18 +12,30 @@ import {
   RefreshControl,
   TextInput,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
 import { showAppAlert } from '../utils/appAlert';
 import { scaleFont } from '../utils/responsive';
 import activityApi from '../services/api/activityApi';
 import {
+  applyActivityJoinOverrides,
+  loadActivityJoinOverrides,
+  markActivityJoinedOverride,
+  removeActivityJoinedOverride,
+} from '../utils/activityJoinState';
+import {
   getActivityImages,
-  getActivitiesByTab,
-  getJoinedActivityState,
+  getActivityOwnerUserId,
+  getKnownJoinedActivityState,
+  getJoinedActivityStateFromResponse,
   getQuitActivityState,
+  getQuitActivityStateFromResponse,
+  isActivityOwnedByCurrentUser,
+  isActivityJoined,
   normalizeActivityItem,
   normalizeActivityList,
 } from '../utils/activityUtils';
@@ -32,11 +44,74 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const ACTIVITY_INTERNAL_ERROR_PATTERN =
   /SQLSyntaxErrorException|Error querying database|bad SQL grammar|doesn't exist|app_active/i;
+const ACTIVITY_ALREADY_JOINED_PATTERN = /已[参与参]加|您以参与该活动|already\s*(joined|participated?)/i;
 const DEFAULT_ACTIVITY_TAB = 'all';
 const ACTIVITY_CACHE_TTL = 60 * 1000;
 const ACTIVITY_TABS = ['all', 'hot', 'new', 'ended', 'my', 'history'];
+const ACTIVITY_DEBUG_TITLE = '\u7167\u7247\u662f\u5426\u6b63\u5e38';
+const ACTIVITY_DEBUG_KEYWORDS = ['\u7167\u7247', '\u6b63\u5e38'];
+const ACTIVITY_CANCEL_LABEL = '\u53d6\u6d88\u62a5\u540d';
+const ACTIVITY_CANCELLING_LABEL = '\u53d6\u6d88\u4e2d...';
+const ACTIVITY_OWNER_BADGE_LABEL = '\u53d1\u8d77\u4eba';
+
+const normalizeIdentityValue = value => String(value ?? '').trim();
+
+const getCurrentUserIdCandidates = userInfo =>
+  Array.from(
+    new Set(
+      [
+        userInfo?.userId,
+        userInfo?.appUserId,
+        userInfo?.app_user_id,
+        userInfo?.id,
+        userInfo?.uid,
+        userInfo?.user?.id,
+        userInfo?.userBaseInfo?.userId,
+        userInfo?.userBaseInfo?.appUserId,
+        userInfo?.userBaseInfo?.id,
+        userInfo?.userBaseInfo?.uid,
+      ]
+        .map(normalizeIdentityValue)
+        .filter(Boolean)
+    )
+  );
+
+const isActivitySponsorMatchedToCurrentUser = (activity, currentUserIds = []) => {
+  const sponsorId = normalizeIdentityValue(activity?.sponsor?.id ?? activity?.sponsorId);
+  if (!sponsorId || !Array.isArray(currentUserIds)) {
+    return false;
+  }
+
+  return currentUserIds.map(normalizeIdentityValue).includes(sponsorId);
+};
+
+const shouldResolveActivityOwnerBeforeAction = (activity, currentUserIds = [], currentUserNames = []) => {
+  const hasCurrentUserIdentity = currentUserIds.length > 0 || currentUserNames.length > 0;
+  if (!hasCurrentUserIdentity || !isActivityJoined(activity)) {
+    return false;
+  }
+
+  const hasOwnerId = Boolean(getActivityOwnerUserId(activity));
+  const hasOwnerName = Boolean(
+    String(activity?.sponsorName || activity?.organizerName || activity?.organizer || '').trim()
+  );
+
+  return !hasOwnerId || !hasOwnerName;
+};
 
 const normalizeKeyword = value => (typeof value === 'string' ? value.trim() : '');
+const isAlreadyJoinedActivityMessage = value => {
+  const normalizedValue = String(value || '').trim();
+
+  return (
+    ACTIVITY_ALREADY_JOINED_PATTERN.test(normalizedValue) ||
+    normalizedValue.includes('\u5df2\u53c2\u4e0e') ||
+    normalizedValue.includes('\u5df2\u53c2\u52a0') ||
+    normalizedValue.includes('\u60a8\u5df2\u53c2\u4e0e\u8be5\u6d3b\u52a8')
+  );
+};
+const getJoinFeedbackMessage = (error, fallbackMessage = '') =>
+  getRequestErrorMessage(error, fallbackMessage);
 
 const normalizeActivityTab = value => {
   const normalizedValue = String(value || '').trim();
@@ -70,9 +145,33 @@ const buildActivityCacheKey = params =>
 
 const getTabFromActivityCacheKey = cacheKey => String(cacheKey || '').split('|')[0] || DEFAULT_ACTIVITY_TAB;
 
+const getObjectKeysPreview = value => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return [];
+  }
+
+  return Object.keys(value).slice(0, 20);
+};
+
 const extractActivityRowsFromResponse = response => {
   if (Array.isArray(response?.rows)) {
     return response.rows;
+  }
+
+  if (Array.isArray(response?.data?.rows)) {
+    return response.data.rows;
+  }
+
+  if (Array.isArray(response?.data?.list)) {
+    return response.data.list;
+  }
+
+  if (Array.isArray(response?.data?.records)) {
+    return response.data.records;
+  }
+
+  if (Array.isArray(response?.data?.items)) {
+    return response.data.items;
   }
 
   if (Array.isArray(response)) {
@@ -90,15 +189,187 @@ const extractActivityRowsFromResponse = response => {
   return candidates.find(Array.isArray) || [];
 };
 
-const createActivityCacheEntry = response => {
-  const rows = normalizeActivityList(extractActivityRowsFromResponse(response));
-  const total = Number(response?.total);
+const createActivityCacheEntry = (response, joinedOverrideMap = {}) => {
+  const rawRows = extractActivityRowsFromResponse(response);
+  const rows = normalizeActivityList(applyActivityJoinOverrides(rawRows, joinedOverrideMap));
+  const total = Number(
+    response?.total ??
+    response?.data?.total ??
+    response?.data?.count ??
+    response?.data?.recordsTotal
+  );
 
   return {
+    rawRows,
     rows,
     total: Number.isFinite(total) ? total : rows.length,
     fetchedAt: Date.now(),
   };
+};
+
+const logActivityResponseShape = ({ params, response }) => {
+  const topLevelKeys = getObjectKeysPreview(response);
+  const dataKeys = getObjectKeysPreview(response?.data);
+  const resultKeys = getObjectKeysPreview(response?.result);
+  const pageKeys = getObjectKeysPreview(response?.page);
+
+  console.log('[ActivityDebug] response meta =');
+  console.log(
+    JSON.stringify(
+      {
+        query: params,
+        code: response?.code,
+        msg: response?.msg ?? response?.message ?? null,
+        topLevelKeys,
+        dataKeys,
+        resultKeys,
+        pageKeys,
+        dataType: Array.isArray(response?.data) ? 'array' : typeof response?.data,
+        rowsLength: Array.isArray(response?.rows) ? response.rows.length : null,
+        dataRowsLength: Array.isArray(response?.data?.rows) ? response.data.rows.length : null,
+        dataListLength: Array.isArray(response?.data?.list) ? response.data.list.length : null,
+        dataRecordsLength: Array.isArray(response?.data?.records) ? response.data.records.length : null,
+        dataItemsLength: Array.isArray(response?.data?.items) ? response.data.items.length : null,
+        dataArrayLength: Array.isArray(response?.data) ? response.data.length : null,
+      },
+      null,
+      2
+    )
+  );
+};
+
+const logActivityDebugSnapshot = ({
+  stage,
+  params,
+  cacheKey,
+  rawRows = [],
+  rows = [],
+}) => {
+  const rawPreviewRows = Array.isArray(rawRows)
+    ? rawRows.slice(0, 8).map(item => ({
+        id: item?.id,
+        title: item?.title,
+        isJoined: item?.isJoined,
+        joinStatus: item?.joinStatus,
+        joined: item?.joined,
+        coverImage: item?.coverImage,
+        image: item?.image,
+        imageUrl: item?.imageUrl,
+        imageUrls: item?.imageUrls,
+        images: item?.images,
+      }))
+    : [];
+  const normalizedPreviewRows = Array.isArray(rows)
+    ? rows.slice(0, 8).map(item => ({
+        id: item?.id,
+        title: item?.title,
+        isJoined: item?.isJoined,
+        joinStatus: item?.joinStatus,
+        joined: item?.joined,
+        image: item?.image,
+        coverImage: item?.coverImage,
+        images: item?.images,
+      }))
+    : [];
+  const matchedRawRows = Array.isArray(rawRows)
+    ? rawRows.filter(item => {
+        const title = String(item?.title || '').trim();
+        return (
+          title === ACTIVITY_DEBUG_TITLE ||
+          ACTIVITY_DEBUG_KEYWORDS.some(keyword => title.includes(keyword))
+        );
+      })
+    : [];
+  const matchedRows = Array.isArray(rows)
+    ? rows.filter(item => {
+        const title = String(item?.title || '').trim();
+        return (
+          title === ACTIVITY_DEBUG_TITLE ||
+          ACTIVITY_DEBUG_KEYWORDS.some(keyword => title.includes(keyword))
+        );
+      })
+    : [];
+  const matchedRawRow = Array.isArray(rawRows)
+    ? matchedRawRows[0] || null
+    : null;
+  const matchedRow = Array.isArray(rows)
+    ? matchedRows[0] || null
+    : null;
+
+  console.log(`[ActivityDebug] stage=${stage}`);
+  console.log('[ActivityDebug] query=', params);
+  console.log('[ActivityDebug] cacheKey=', cacheKey);
+  console.log('[ActivityDebug] rawRowCount=', Array.isArray(rawRows) ? rawRows.length : 0);
+  console.log('[ActivityDebug] normalizedRowCount=', Array.isArray(rows) ? rows.length : 0);
+  console.log('[ActivityDebug] raw preview rows =');
+  console.log(JSON.stringify(rawPreviewRows, null, 2));
+  console.log('[ActivityDebug] normalized preview rows =');
+  console.log(JSON.stringify(normalizedPreviewRows, null, 2));
+  console.log(
+    '[ActivityDebug] raw matched titles =',
+    matchedRawRows.map(item => item?.title)
+  );
+  console.log(
+    '[ActivityDebug] normalized matched titles =',
+    matchedRows.map(item => item?.title)
+  );
+
+  if (matchedRawRow) {
+    console.log(`[ActivityDebug] matched raw activity "${ACTIVITY_DEBUG_TITLE}" =`);
+    console.log(
+      JSON.stringify(
+        {
+          id: matchedRawRow?.id,
+          title: matchedRawRow?.title,
+          coverImage: matchedRawRow?.coverImage,
+          image: matchedRawRow?.image,
+          imageUrl: matchedRawRow?.imageUrl,
+          imageUrls: matchedRawRow?.imageUrls,
+          images: matchedRawRow?.images,
+          cover: matchedRawRow?.cover,
+          coverUrl: matchedRawRow?.coverUrl,
+          coverImg: matchedRawRow?.coverImg,
+          poster: matchedRawRow?.poster,
+          posterUrl: matchedRawRow?.posterUrl,
+          thumbnail: matchedRawRow?.thumbnail,
+          bannerImages: matchedRawRow?.bannerImages,
+          gallery: matchedRawRow?.gallery,
+        },
+        null,
+        2
+      )
+    );
+  } else {
+    console.log(`[ActivityDebug] raw activity "${ACTIVITY_DEBUG_TITLE}" not found in this response`);
+  }
+
+  if (matchedRow) {
+    console.log(`[ActivityDebug] matched normalized activity "${ACTIVITY_DEBUG_TITLE}" =`);
+    console.log(
+      JSON.stringify(
+        {
+          id: matchedRow?.id,
+          title: matchedRow?.title,
+          image: matchedRow?.image,
+          coverImage: matchedRow?.coverImage,
+          images: matchedRow?.images,
+        },
+        null,
+        2
+      )
+    );
+  } else {
+    console.log(`[ActivityDebug] normalized activity "${ACTIVITY_DEBUG_TITLE}" not found in this response`);
+  }
+};
+
+const shouldDebugActivityItem = activity => {
+  const title = String(activity?.title || '').trim();
+  if (!title) {
+    return false;
+  }
+
+  return title === ACTIVITY_DEBUG_TITLE || ACTIVITY_DEBUG_KEYWORDS.some(keyword => title.includes(keyword));
 };
 
 const isActivityCacheFresh = cacheEntry =>
@@ -118,7 +389,7 @@ const getRequestErrorMessage = (error, fallbackMessage) => {
     candidates.find(candidate => typeof candidate === 'string' && candidate.trim()) || fallbackMessage;
 
   if (ACTIVITY_INTERNAL_ERROR_PATTERN.test(resolvedMessage)) {
-    return '活动数据服务暂时不可用，请稍后重试';
+    return '\u6d3b\u52a8\u6570\u636e\u670d\u52a1\u6682\u65f6\u4e0d\u53ef\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5';
   }
 
   return resolvedMessage;
@@ -156,7 +427,9 @@ export default function ActivityScreen({ navigation, route }) {
   const viewerScrollRef = useRef(null);
   const activityCacheRef = useRef(new Map());
   const activityRequestRef = useRef(new Map());
+  const activityOwnerRequestRef = useRef(new Set());
   const activeQueryKeyRef = useRef('');
+  const activityJoinOverridesRef = useRef({});
   const isFromProfile = Boolean(route?.params?.fromProfile);
   const parsedRouteType = Number(route?.params?.type);
   const selectedType = parsedRouteType === 1 || parsedRouteType === 2 ? parsedRouteType : null;
@@ -171,6 +444,10 @@ export default function ActivityScreen({ navigation, route }) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [searchInputValue, setSearchInputValue] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [joiningActivityIds, setJoiningActivityIds] = useState([]);
+  const [currentUserId, setCurrentUserId] = useState('');
+  const [currentUserIds, setCurrentUserIds] = useState([]);
+  const [currentUserNames, setCurrentUserNames] = useState([]);
 
   const currentTabKey = isFromProfile ? 'my' : activeTabKey;
 
@@ -216,7 +493,22 @@ export default function ActivityScreen({ navigation, route }) {
         throw new Error(response?.msg || t('common.serverError'));
       }
 
-      const nextCacheEntry = createActivityCacheEntry(response);
+      logActivityResponseShape({
+        params: normalizedParams,
+        response,
+      });
+
+      const nextCacheEntry = createActivityCacheEntry(
+        response,
+        activityJoinOverridesRef.current
+      );
+      logActivityDebugSnapshot({
+        stage: 'network',
+        params: normalizedParams,
+        cacheKey,
+        rawRows: nextCacheEntry.rawRows,
+        rows: nextCacheEntry.rows,
+      });
       activityCacheRef.current.set(cacheKey, nextCacheEntry);
       return nextCacheEntry;
     })();
@@ -240,6 +532,13 @@ export default function ActivityScreen({ navigation, route }) {
     activeQueryKeyRef.current = cacheKey;
 
     if (cachedEntry) {
+      logActivityDebugSnapshot({
+        stage: 'cache',
+        params,
+        cacheKey,
+        rawRows: cachedEntry.rawRows,
+        rows: cachedEntry.rows,
+      });
       setActivities(cachedEntry.rows);
       setErrorMessage('');
       setLoading(false);
@@ -263,6 +562,13 @@ export default function ActivityScreen({ navigation, route }) {
       });
 
       if (activeQueryKeyRef.current === cacheKey) {
+        logActivityDebugSnapshot({
+          stage: 'apply',
+          params,
+          cacheKey,
+          rawRows: nextCacheEntry.rawRows,
+          rows: nextCacheEntry.rows,
+        });
         setActivities(nextCacheEntry.rows);
         setErrorMessage('');
       }
@@ -279,8 +585,103 @@ export default function ActivityScreen({ navigation, route }) {
   }, [buildCurrentActivityParams, requestActivityQuery, t]);
 
   useEffect(() => {
-    void loadActivities();
+    let isMounted = true;
+
+    const loadCurrentUserIdentity = async () => {
+      try {
+        const [userInfoRaw, currentUsername] = await Promise.all([
+          AsyncStorage.getItem('userInfo'),
+          AsyncStorage.getItem('currentUsername'),
+        ]);
+
+        const nextNames = [];
+        let nextUserIds = [];
+
+        if (userInfoRaw) {
+          try {
+            const userInfo = JSON.parse(userInfoRaw);
+            nextUserIds = getCurrentUserIdCandidates(userInfo);
+            nextNames.push(
+              userInfo?.username,
+              userInfo?.nickName,
+              userInfo?.nickname,
+              userInfo?.userName,
+              userInfo?.name
+            );
+          } catch (parseError) {
+            console.warn('Failed to parse current user info for activity ownership:', parseError);
+          }
+        }
+
+        nextNames.push(currentUsername);
+
+        if (!isMounted) {
+          return;
+        }
+
+        const uniqueCurrentUserNames = Array.from(
+          new Set(
+            nextNames
+              .map(item => String(item ?? '').trim())
+              .filter(Boolean)
+          )
+        );
+
+        setCurrentUserId(nextUserIds[0] || '');
+        setCurrentUserIds(nextUserIds);
+        setCurrentUserNames(uniqueCurrentUserNames);
+
+        return {
+          currentUserId: nextUserIds[0] || '',
+          currentUserIds: nextUserIds,
+          currentUserNames: uniqueCurrentUserNames,
+        };
+      } catch (storageError) {
+        if (!isMounted) {
+          return {
+            currentUserId: '',
+            currentUserIds: [],
+            currentUserNames: [],
+          };
+        }
+
+        console.warn('Failed to load current user identity for activity ownership:', storageError);
+        setCurrentUserId('');
+        setCurrentUserIds([]);
+        setCurrentUserNames([]);
+
+        return {
+          currentUserId: '',
+          currentUserIds: [],
+          currentUserNames: [],
+        };
+      }
+    };
+
+    const initializeActivityState = async () => {
+      const nextOverrides = await loadActivityJoinOverrides();
+      await loadCurrentUserIdentity();
+
+      if (!isMounted) {
+        return;
+      }
+
+      activityJoinOverridesRef.current = nextOverrides;
+      await loadActivities();
+    };
+
+    void initializeActivityState();
+
+    return () => {
+      isMounted = false;
+    };
   }, [loadActivities]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadActivities({ force: true, silent: true });
+    }, [loadActivities])
+  );
 
   useEffect(() => {
     if (!showImageViewer) {
@@ -348,6 +749,71 @@ export default function ActivityScreen({ navigation, route }) {
     invalidateActivityTabs(['my']);
   }, [invalidateActivityTabs, mutateActivityCaches]);
 
+  useEffect(() => {
+    const hasCurrentUserIdentity = currentUserIds.length > 0 || currentUserNames.length > 0;
+    if (!hasCurrentUserIdentity || activities.length === 0) {
+      return;
+    }
+
+    const candidates = activities.filter(activity => {
+      if (!activity?.id || activityOwnerRequestRef.current.has(String(activity.id))) {
+        return false;
+      }
+
+      if (isActivityOwnedByCurrentUser(activity, {
+        currentUserId,
+        currentUserIds,
+        currentUserNames,
+      }) || isActivitySponsorMatchedToCurrentUser(activity, currentUserIds)) {
+        return false;
+      }
+
+      return shouldResolveActivityOwnerBeforeAction(activity, currentUserIds, currentUserNames);
+    });
+
+    if (candidates.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    candidates.forEach(activity => {
+      const activityId = String(activity.id);
+      activityOwnerRequestRef.current.add(activityId);
+
+      void activityApi.getActivityDetail(activity.id)
+        .then(response => {
+          if (cancelled || Number(response?.code) !== 200) {
+            return;
+          }
+
+          const detailPayload = response?.data || response?.result || response;
+          const normalizedDetail = normalizeActivityItem({
+            ...activity,
+            ...(detailPayload || {}),
+            id: detailPayload?.id ?? activity.id,
+          });
+
+          if (normalizedDetail) {
+            handleActivityChange(normalizedDetail);
+          }
+        })
+        .catch(error => {
+          console.warn('Failed to resolve activity owner for list item:', error);
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activities,
+    currentUserId,
+    currentUserIds,
+    currentUserNames,
+    handleActivityChange,
+  ]);
+
   const openImageViewer = (images, initialIndex = 0) => {
     if (!Array.isArray(images) || images.length === 0) {
       return;
@@ -362,37 +828,39 @@ export default function ActivityScreen({ navigation, route }) {
     openImageViewer(getActivityImages(activity), 0);
   };
 
-  const handleOpenActivityDetail = activity => {
+  const handleOpenActivityDetail = async activity => {
+    const previewImage = getActivityImages(activity)[0];
+
+    if (previewImage) {
+      await Promise.race([
+        Image.prefetch(previewImage).catch(() => false),
+        new Promise(resolve => setTimeout(resolve, 120)),
+      ]);
+    }
+
     navigation.navigate('ActivityDetail', {
       activity,
       onActivityChange: handleActivityChange,
     });
   };
 
-  const handleJoinMutation = useCallback((activityId, transformer) => {
-    mutateActivityCaches((activityList, tabKey) =>
-      activityList.reduce((result, activity) => {
-        if (activity.id !== activityId) {
-          result.push(activity);
-          return result;
-        }
+  const updateJoiningActivityState = useCallback((activityId, isJoining) => {
+    const normalizedActivityId = String(activityId || '');
 
-        const nextActivity = transformer(activity);
-        if (!nextActivity) {
-          return result;
-        }
+    setJoiningActivityIds(currentIds => {
+      if (!normalizedActivityId) {
+        return currentIds;
+      }
 
-        if (tabKey === 'my' && !nextActivity.joined) {
-          return result;
-        }
+      if (isJoining) {
+        return currentIds.includes(normalizedActivityId)
+          ? currentIds
+          : [...currentIds, normalizedActivityId];
+      }
 
-        result.push(nextActivity);
-        return result;
-      }, [])
-    );
-
-    invalidateActivityTabs(['my']);
-  }, [invalidateActivityTabs, mutateActivityCaches]);
+      return currentIds.filter(currentId => currentId !== normalizedActivityId);
+    });
+  }, []);
 
   const handleActivityCreated = useCallback((createdActivity) => {
     const normalizedCreatedActivity = normalizeActivityItem(createdActivity);
@@ -400,47 +868,127 @@ export default function ActivityScreen({ navigation, route }) {
     activityCacheRef.current = new Map();
     activeQueryKeyRef.current = '';
 
-    if (!normalizedCreatedActivity || searchKeyword || currentTabKey === 'history') {
-      void loadActivities({ force: true });
-      return;
+    if (normalizedCreatedActivity) {
+      setErrorMessage('');
     }
 
-    setActivities(currentActivities =>
-      getActivitiesByTab(
-        [
-          normalizedCreatedActivity,
-          ...currentActivities.filter(activity => activity.id !== normalizedCreatedActivity.id),
-        ],
-        currentTabKey
-      )
-    );
-    setErrorMessage('');
-  }, [currentTabKey, loadActivities, searchKeyword]);
+    void loadActivities({ force: true });
+  }, [loadActivities]);
 
-  const handleJoinActivity = id => {
+  const handleJoinActivity = useCallback(async id => {
     const targetActivity = activities.find(activity => activity.id === id);
-    if (!targetActivity) {
+    const normalizedActivityId = String(id || '');
+    const hasJoined = isActivityJoined(targetActivity);
+    const isOwnedByCurrentUser = isActivityOwnedByCurrentUser(targetActivity, {
+      currentUserId,
+      currentUserIds,
+      currentUserNames,
+    }) || isActivitySponsorMatchedToCurrentUser(targetActivity, currentUserIds);
+
+    if (
+      !targetActivity ||
+      isOwnedByCurrentUser ||
+      targetActivity.status === 'ended' ||
+      joiningActivityIds.includes(normalizedActivityId)
+    ) {
       return;
     }
 
-    if (targetActivity.joined) {
+    if (hasJoined) {
       showAppAlert(t('common.ok'), t('screens.activity.actions.quitConfirm'), [
         {
           text: t('common.cancel'),
           style: 'cancel',
         },
         {
-          text: t('common.confirm'),
-          onPress: () => {
-            handleJoinMutation(id, activity => getQuitActivityState(activity));
+          text: ACTIVITY_CANCEL_LABEL,
+          onPress: async () => {
+            updateJoiningActivityState(id, true);
+
+            try {
+              const response = await activityApi.cancelActivity(id);
+
+              if (Number(response?.code) !== 200) {
+                throw new Error(response?.msg || t('common.serverError'));
+              }
+
+              activityJoinOverridesRef.current = await removeActivityJoinedOverride(id);
+
+              const cancelledActivity =
+                getQuitActivityStateFromResponse(targetActivity, response?.data) ||
+                getQuitActivityState(targetActivity);
+
+              if (cancelledActivity) {
+                handleActivityChange(cancelledActivity);
+                return;
+              }
+
+              activityCacheRef.current = new Map();
+              await loadActivities({ force: true, silent: true });
+            } catch (error) {
+              const feedbackMessage = getJoinFeedbackMessage(error, t('common.serverError'));
+              showAppAlert(t('common.ok'), feedbackMessage);
+            } finally {
+              updateJoiningActivityState(id, false);
+            }
           },
         },
       ]);
       return;
     }
 
-    handleJoinMutation(id, activity => getJoinedActivityState(activity));
-  };
+    updateJoiningActivityState(id, true);
+
+    try {
+      const response = await activityApi.joinActivity(id);
+
+      if (Number(response?.code) !== 200 && !isAlreadyJoinedActivityMessage(response?.msg)) {
+        throw new Error(response?.msg || t('common.serverError'));
+      }
+
+      activityJoinOverridesRef.current = await markActivityJoinedOverride(id);
+
+      const joinedActivity =
+        getJoinedActivityStateFromResponse(targetActivity, response?.data) ||
+        getKnownJoinedActivityState(targetActivity);
+      invalidateActivityTabs(['my']);
+
+      if (joinedActivity) {
+        handleActivityChange(joinedActivity);
+        return;
+      }
+
+      activityCacheRef.current = new Map();
+      await loadActivities({ force: true, silent: true });
+    } catch (error) {
+      const feedbackMessage = getJoinFeedbackMessage(error, t('common.serverError'));
+
+      if (isAlreadyJoinedActivityMessage(feedbackMessage)) {
+        activityJoinOverridesRef.current = await markActivityJoinedOverride(id);
+        const joinedActivity = getKnownJoinedActivityState(targetActivity);
+        if (joinedActivity) {
+          invalidateActivityTabs(['my']);
+          handleActivityChange(joinedActivity);
+          return;
+        }
+      }
+
+      showAppAlert(t('common.ok'), feedbackMessage);
+    } finally {
+      updateJoiningActivityState(id, false);
+    }
+  }, [
+    activities,
+    currentUserId,
+    currentUserIds,
+    currentUserNames,
+    handleActivityChange,
+    invalidateActivityTabs,
+    joiningActivityIds,
+    loadActivities,
+    t,
+    updateJoiningActivityState,
+  ]);
 
   const handleSubmitSearch = () => {
     const normalizedKeyword = normalizeKeyword(searchInputValue);
@@ -598,6 +1146,18 @@ export default function ActivityScreen({ navigation, route }) {
         {activities.length > 0
           ? activities.map(item => {
               const itemImages = getActivityImages(item);
+              const displayImageUri = item.image || item.coverImage || itemImages[0] || '';
+              const hasJoined = isActivityJoined(item);
+              const isOwnedByCurrentUser = isActivityOwnedByCurrentUser(item, {
+                currentUserId,
+                currentUserIds,
+                currentUserNames,
+              }) || isActivitySponsorMatchedToCurrentUser(item, currentUserIds);
+              const isResolvingOwnerBeforeAction = shouldResolveActivityOwnerBeforeAction(
+                item,
+                currentUserIds,
+                currentUserNames
+              );
               const tagLabel =
                 item.tags?.[0] ||
                 (item.status === 'ended'
@@ -614,8 +1174,34 @@ export default function ActivityScreen({ navigation, route }) {
                     onPress={() => handleImagePress(item)}
                     activeOpacity={0.92}
                   >
-                    {item.image ? (
-                      <Image source={{ uri: item.image }} style={styles.activityImage} />
+                    {displayImageUri ? (
+                      <Image
+                        source={{ uri: displayImageUri }}
+                        style={styles.activityImage}
+                        onLoad={() => {
+                          if (shouldDebugActivityItem(item)) {
+                            console.log('[ActivityImageDebug] image loaded', {
+                              id: item.id,
+                              title: item.title,
+                              displayImageUri,
+                              image: item.image,
+                              coverImage: item.coverImage,
+                              itemImages,
+                            });
+                          }
+                        }}
+                        onError={event => {
+                          console.log('[ActivityImageDebug] image failed to load', {
+                            id: item.id,
+                            title: item.title,
+                            displayImageUri,
+                            image: item.image,
+                            coverImage: item.coverImage,
+                            itemImages,
+                            error: event?.nativeEvent,
+                          });
+                        }}
+                      />
                     ) : (
                       <View style={styles.imagePlaceholder}>
                         <Ionicons name="image-outline" size={28} color="#cbd5e1" />
@@ -705,16 +1291,23 @@ export default function ActivityScreen({ navigation, route }) {
                             size={14}
                             color={getOrganizerColor(item.organizerType)}
                           />
-                          <Text
-                            style={[
-                              styles.metaText,
-                              { color: getOrganizerColor(item.organizerType) },
-                            ]}
-                          >
-                            {item.organizerType === 'platform'
-                              ? t('screens.activity.organizer.platform')
-                              : item.organizer}
-                          </Text>
+                          <View style={styles.organizerMetaContent}>
+                            <Text
+                              style={[
+                                styles.metaText,
+                                { color: getOrganizerColor(item.organizerType) },
+                              ]}
+                            >
+                              {item.organizerType === 'platform'
+                                ? t('screens.activity.organizer.platform')
+                                : item.organizer}
+                            </Text>
+                            {isOwnedByCurrentUser ? (
+                              <View style={styles.ownerBadge}>
+                                <Text style={styles.ownerBadgeText}>{ACTIVITY_OWNER_BADGE_LABEL}</Text>
+                              </View>
+                            ) : null}
+                          </View>
                         </View>
 
                         <View style={styles.metaItem}>
@@ -741,23 +1334,32 @@ export default function ActivityScreen({ navigation, route }) {
                       ) : null}
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={[
-                        styles.joinBtn,
-                        item.joined && styles.joinedBtn,
-                        item.status === 'ended' && styles.endedBtn,
-                      ]}
-                      onPress={() => item.status !== 'ended' && handleJoinActivity(item.id)}
-                      disabled={item.status === 'ended'}
-                    >
-                      <Text style={[styles.joinBtnText, item.joined && styles.joinedBtnText]}>
-                        {item.status === 'ended'
-                          ? t('screens.activity.actions.ended')
-                          : item.joined
-                            ? t('screens.activity.actions.joined')
-                            : t('screens.activity.actions.join')}
-                      </Text>
-                    </TouchableOpacity>
+                    {isOwnedByCurrentUser || isResolvingOwnerBeforeAction ? null : (
+                      <TouchableOpacity
+                        disabled={
+                          item.status === 'ended' ||
+                          joiningActivityIds.includes(String(item.id))
+                        }
+                        style={[
+                          styles.joinBtn,
+                          hasJoined && styles.joinedBtn,
+                          item.status === 'ended' && styles.endedBtn,
+                        ]}
+                        onPress={() => handleJoinActivity(item.id)}
+                      >
+                        <Text style={[styles.joinBtnText, hasJoined && styles.joinedBtnText]}>
+                          {item.status === 'ended'
+                            ? t('screens.activity.actions.ended')
+                            : hasJoined
+                              ? (joiningActivityIds.includes(String(item.id))
+                                ? ACTIVITY_CANCELLING_LABEL
+                                : ACTIVITY_CANCEL_LABEL)
+                              : joiningActivityIds.includes(String(item.id))
+                                ? t('common.loading')
+                                : t('screens.activity.actions.join')}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               );
@@ -1068,9 +1670,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
+  organizerMetaContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
   metaText: {
     fontSize: scaleFont(12),
     color: '#9ca3af',
+  },
+  ownerBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: '#fff1f2',
+    borderWidth: 1,
+    borderColor: '#fecdd3',
+  },
+  ownerBadgeText: {
+    color: '#e11d48',
+    fontSize: scaleFont(10),
+    fontWeight: '700',
   },
   progressRow: {
     flexDirection: 'row',
@@ -1190,3 +1811,4 @@ const styles = StyleSheet.create({
     width: 20,
   },
 });
+

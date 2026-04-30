@@ -376,6 +376,7 @@
     "sendMessage": "Send Message",
     "userNotFound": "User not found",
     "noContent": "No content yet",
+    "publicProfileAnswersUnavailable": "This user's public answers list is not available yet",
     "tabs": {
       "all": "All",
       "articles": "Articles",
@@ -1772,6 +1773,7 @@
         "timeRequired": "Please select activity time",
         "endTimeInvalid": "End time cannot be earlier than start time",
         "locationRequired": "Offline activity requires location",
+        "questionRequired": "Question information is missing. Unable to create the activity right now.",
         "teamRequired": "Please select a team"
       },
       "success": {

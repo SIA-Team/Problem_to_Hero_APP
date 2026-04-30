@@ -5,7 +5,7 @@ import { useTranslation } from '../i18n/useTranslation';
 
 /**
  * 内容标签栏组件
- * 包含：提问、回答、收藏三个标签
+ * 包含：提问、回答两个标签
  * 右侧：搜索图标
  */
 export default function ContentTabs({ activeTab, onTabChange, onSearchPress }) {
@@ -14,7 +14,6 @@ export default function ContentTabs({ activeTab, onTabChange, onSearchPress }) {
   const tabs = [
     { key: 'questions', label: '提问' },
     { key: 'answers', label: '回答' },
-    { key: 'favorites', label: '收藏' },
   ];
 
   return (

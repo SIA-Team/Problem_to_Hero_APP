@@ -3,14 +3,20 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { formatTime } from '../utils/timeFormatter';
-import { formatAmount } from '../utils/rewardAmount';
+import {
+  formatCompactRewardPoints,
+  isChineseLocale,
+  resolveRewardPointsFromItem,
+} from '../utils/rewardPointsDisplay';
 
 import { scaleFont } from '../utils/responsive';
 /**
  * 提问列表项组件
  */
 export default function QuestionListItem({ item, onPress }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const rewardPoints = resolveRewardPointsFromItem(item);
+  const rewardPointsValue = `${formatCompactRewardPoints(rewardPoints, { locale: i18n?.locale })}${isChineseLocale(i18n?.locale) ? '积分' : ' pts'}`;
 
   return (
     <TouchableOpacity 
@@ -21,20 +27,27 @@ export default function QuestionListItem({ item, onPress }) {
       <View style={styles.header}>
         <Text style={styles.time}>{formatTime(item.createdAt)}</Text>
       </View>
-      
-      <Text style={styles.title}>
-        {item.questionType === 'reward' && (
-          <Text style={styles.rewardTag}>
-            <Text style={styles.rewardTagText}>{formatAmount(item.reward)}</Text>
-          </Text>
+
+      <View style={styles.titleRow}>
+        {item.questionType === 'reward' && rewardPoints > 0 && (
+          <View style={styles.rewardCard}>
+            <View style={styles.rewardCardIconWrap}>
+              <Ionicons name="sparkles-outline" size={11} color="#b45309" />
+            </View>
+            <Text style={styles.rewardCardText} numberOfLines={1}>
+              {t('home.reward')} {rewardPointsValue}
+            </Text>
+          </View>
         )}
-        {item.solved && (
-          <Text style={styles.solvedTag}>
-            <Text style={styles.solvedTagText}>{t('components.questionListItem.solved')}</Text>
-          </Text>
-        )}
-        {' '}{item.title}
-      </Text>
+        <Text style={styles.title}>
+          {item.title}
+          {item.solved && (
+            <Text style={styles.solvedTagText}>
+              {'  '}{t('components.questionListItem.solved')}{'  '}
+            </Text>
+          )}
+        </Text>
+      </View>
       
       <View style={styles.stats}>
         <View style={styles.statItem}>
@@ -69,33 +82,56 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(12),
     color: '#9ca3af',
   },
-  title: {
-    fontSize: scaleFont(15),
-    lineHeight: scaleFont(22),
-    color: '#1f2937',
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     marginBottom: 8,
   },
-  rewardTag: {
-    backgroundColor: '#fef3c7',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+  title: {
+    flex: 1,
+    fontSize: scaleFont(15),
+    lineHeight: scaleFont(23),
+    color: '#1f2937',
+    fontWeight: '500',
   },
-  rewardTagText: {
-    fontSize: scaleFont(12),
-    color: '#f59e0b',
-    fontWeight: '600',
+  rewardCard: {
+    maxWidth: 124,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginRight: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#f4d27d',
+    backgroundColor: '#fff8e2',
   },
-  solvedTag: {
-    backgroundColor: '#d1fae5',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+  rewardCardIconWrap: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#fde68a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
+  rewardCardText: {
+    fontSize: scaleFont(11),
+    color: '#92400e',
+    fontWeight: '700',
+    lineHeight: scaleFont(15),
+    includeFontPadding: false,
+    flexShrink: 1,
   },
   solvedTagText: {
-    fontSize: scaleFont(12),
-    color: '#10b981',
+    backgroundColor: '#ecfdf3',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    borderRadius: 999,
+    fontSize: scaleFont(11),
+    color: '#15803d',
     fontWeight: '600',
+    lineHeight: scaleFont(18),
   },
   stats: {
     flexDirection: 'row',
