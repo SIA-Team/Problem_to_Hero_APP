@@ -20,6 +20,14 @@ const toSafeNumber = (value, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const isTruthyFlag = (value) => {
+  if (value === true) return true;
+  if (value === false || value === null || value === undefined) return false;
+
+  const normalizedValue = String(value).trim().toLowerCase();
+  return normalizedValue === '1' || normalizedValue === 'true' || normalizedValue === 'yes';
+};
+
 const extractEmergencyListRows = (response) => {
   const data = response?.data;
   const candidates = [
@@ -96,6 +104,125 @@ const sanitizeDisplayText = (value, fallback = '') => {
   return trimmed;
 };
 
+const inferEmergencyCompleted = (item = {}) => {
+  if (
+    isTruthyFlag(item?.isCompleted) ||
+    isTruthyFlag(item?.completed) ||
+    isTruthyFlag(item?.isResolved) ||
+    isTruthyFlag(item?.resolved) ||
+    isTruthyFlag(item?.finished) ||
+    isTruthyFlag(item?.closed)
+  ) {
+    return true;
+  }
+
+  const rescuerCount = Math.max(0, toSafeNumber(item?.rescuerCount ?? item?.neededHelperCount));
+  const respondedCount = Math.max(0, toSafeNumber(item?.respondedCount ?? item?.responseCount ?? item?.responderCount));
+  return rescuerCount > 0 && respondedCount >= rescuerCount;
+};
+
+const resolveBackendEmergencyState = (item = {}) => {
+  if (
+    isTruthyFlag(item?.isIgnored) ||
+    isTruthyFlag(item?.ignored) ||
+    isTruthyFlag(item?.ignoreFlag)
+  ) {
+    return 'ignored';
+  }
+
+  if (inferEmergencyCompleted(item)) {
+    return 'completed';
+  }
+
+  const statusCandidates = [
+    item?.currentUserStatus,
+    item?.userStatus,
+    item?.helpStatus,
+    item?.emergencyStatus,
+    item?.rescueStatus,
+    item?.status,
+  ];
+
+  for (const candidate of statusCandidates) {
+    const normalizedValue = String(candidate || '').trim().toLowerCase();
+    if (!normalizedValue) {
+      continue;
+    }
+
+    if (
+      normalizedValue.includes('ignore') ||
+      normalizedValue.includes('ignored') ||
+      normalizedValue.includes('已忽略')
+    ) {
+      return 'ignored';
+    }
+
+    if (
+      normalizedValue.includes('complete') ||
+      normalizedValue.includes('completed') ||
+      normalizedValue.includes('finish') ||
+      normalizedValue.includes('finished') ||
+      normalizedValue.includes('resolve') ||
+      normalizedValue.includes('resolved') ||
+      normalizedValue.includes('close') ||
+      normalizedValue.includes('closed') ||
+      normalizedValue.includes('done') ||
+      normalizedValue.includes('已完成') ||
+      normalizedValue.includes('已解决')
+    ) {
+      return 'completed';
+    }
+
+    if (
+      normalizedValue.includes('responding') ||
+      normalizedValue.includes('pending') ||
+      normalizedValue.includes('active') ||
+      normalizedValue.includes('open') ||
+      normalizedValue.includes('processing') ||
+      normalizedValue.includes('救援中') ||
+      normalizedValue.includes('响应中')
+    ) {
+      return 'responding';
+    }
+  }
+
+  return null;
+};
+
+const resolveReceivedEmergencyCardState = (item, { isIgnored = false, userResponded = false } = {}) => {
+  const backendState = resolveBackendEmergencyState(item);
+
+  if (isIgnored || backendState === 'ignored') {
+    return 'ignored';
+  }
+
+  if (backendState === 'completed' || inferEmergencyCompleted(item)) {
+    return 'completed';
+  }
+
+  if (userResponded || isTruthyFlag(item?.isRescuerJoined)) {
+    return 'responded';
+  }
+
+  return 'pending';
+};
+
+const getReceivedEmergencyBadgeType = (cardState) => {
+  if (cardState === 'ignored') return 'ignored';
+  if (cardState === 'completed') return 'completed';
+  return 'responding';
+};
+
+const getReceivedEmergencyCompletedActionLabel = (item, userResponded) => (
+  userResponded || isTruthyFlag(item?.isRescuerJoined) ? '我已响应' : '已完成'
+);
+
+const getReceivedEmergencySortRank = (cardState) => {
+  if (cardState === 'ignored') return 2;
+  if (cardState === 'completed') return 1;
+  return 0;
+};
+
 const normalizeEmergencyItem = (item = {}, index = 0) => {
   const id = item?.id ?? item?.helpId ?? item?.emergencyId ?? `emergency-${index}`;
   const rescuerCount = Math.max(0, Math.round(toSafeNumber(item?.neededHelperCount ?? item?.rescuerCount)));
@@ -140,7 +267,10 @@ const normalizeEmergencyItem = (item = {}, index = 0) => {
     rescuerCount,
     respondedCount,
     time: formatRelativeTime(rawTime),
-    status: item?.status || '',
+    status: item?.status || item?.helpStatus || item?.emergencyStatus || item?.rescueStatus || item?.userStatus || item?.currentUserStatus || '',
+    isCompleted: inferEmergencyCompleted(item),
+    isIgnored: isTruthyFlag(item?.isIgnored) || isTruthyFlag(item?.ignored) || isTruthyFlag(item?.ignoreFlag),
+    isRescuerJoined: isTruthyFlag(item?.isRescuerJoined) || isTruthyFlag(item?.joined) || isTruthyFlag(item?.hasJoined) || isTruthyFlag(item?.hasResponded) || isTruthyFlag(item?.responded) || isTruthyFlag(item?.userResponded),
     urgencyLevel: item?.urgencyLevel,
     responseCount: respondedCount,
     responders: Array.isArray(item?.responders) ? item.responders : [],
@@ -384,7 +514,7 @@ export default function EmergencyListScreen({ navigation, route }) {
   const [joinLoadingId, setJoinLoadingId] = useState('');
   const [resolveLoading, setResolveLoading] = useState(false);
   const [leaveLoading, setLeaveLoading] = useState(false);
-  const { isResponded, ignoredEmergencies, respondToEmergency, cancelEmergencyResponse, ignoreEmergency } = useEmergency();
+  const { respondedEmergencies, ignoredEmergencies, respondToEmergency, cancelEmergencyResponse, ignoreEmergency } = useEmergency();
 
   const [showRegionModal, setShowRegionModal] = useState(false);
   const [selectedRegion, setSelectedRegion] = useState({ country: '', city: '', state: '', district: '' });
@@ -394,7 +524,9 @@ export default function EmergencyListScreen({ navigation, route }) {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [currentUserId, setCurrentUserId] = useState('');
+  const [currentUserLoaded, setCurrentUserLoaded] = useState(false);
   const bottomSafeInset = useBottomSafeInset(16);
+  const respondedEmergencyIdSet = React.useMemo(() => new Set(respondedEmergencies.map(id => String(id))), [respondedEmergencies]);
   const ignoredEmergencyIdSet = React.useMemo(() => new Set(ignoredEmergencies.map(id => String(id))), [ignoredEmergencies]);
 
   const getDisplayRegion = () => {
@@ -425,6 +557,10 @@ export default function EmergencyListScreen({ navigation, route }) {
         if (mounted) {
           setCurrentUserId('');
         }
+      } finally {
+        if (mounted) {
+          setCurrentUserLoaded(true);
+        }
       }
     };
 
@@ -447,12 +583,8 @@ export default function EmergencyListScreen({ navigation, route }) {
           throw new Error(response?.msg || '\u52a0\u8f7d\u7d27\u6025\u6c42\u52a9\u5931\u8d25');
         }
 
-        let rows = extractEmergencyListRows(response)
+        const rows = extractEmergencyListRows(response)
           .map((item, index) => normalizeEmergencyItem(item, index));
-
-        if (activeTab === 'received' && currentUserId) {
-          rows = rows.filter((item) => String(item?.ownerUserId || '').trim() !== currentUserId);
-        }
 
         setEmergencyItems(rows);
       } catch (error) {
@@ -465,31 +597,67 @@ export default function EmergencyListScreen({ navigation, route }) {
     };
 
     loadEmergencyList();
-  }, [activeTab, currentUserId]);
+  }, [activeTab]);
 
   const filteredEmergencies = useMemo(() => {
     const baseItems = activeTab === 'received'
-      ? emergencyItems.filter(item => !ignoredEmergencyIdSet.has(String(item?.id)))
+      ? emergencyItems.filter(item => {
+          if (!currentUserLoaded || !currentUserId) {
+            return true;
+          }
+
+          return String(item?.ownerUserId || '').trim() !== currentUserId;
+        })
       : emergencyItems;
 
     const regionFilteredItems = activeTab === 'received'
       ? baseItems.filter(item => matchesEmergencyRegion(item, selectedRegion))
       : baseItems;
 
-    if (!searchText.trim()) {
-      return regionFilteredItems;
-    }
-
     const keyword = searchText.trim().toLowerCase();
-    return regionFilteredItems.filter(item =>
+    const searchedItems = !searchText.trim()
+      ? regionFilteredItems
+      : regionFilteredItems.filter(item =>
       String(item?.name || '').toLowerCase().includes(keyword) ||
       String(item?.title || '').toLowerCase().includes(keyword) ||
       String(item?.location || '').toLowerCase().includes(keyword)
     );
-  }, [activeTab, emergencyItems, ignoredEmergencyIdSet, searchText, selectedRegion]);
+
+    if (activeTab !== 'received') {
+      return searchedItems;
+    }
+
+    return [...searchedItems].sort((left, right) => {
+      const leftId = String(left?.id || '');
+      const rightId = String(right?.id || '');
+      const leftState = resolveReceivedEmergencyCardState(left, {
+        isIgnored: ignoredEmergencyIdSet.has(leftId),
+        userResponded: respondedEmergencyIdSet.has(leftId) || isTruthyFlag(left?.isRescuerJoined),
+      });
+      const rightState = resolveReceivedEmergencyCardState(right, {
+        isIgnored: ignoredEmergencyIdSet.has(rightId),
+        userResponded: respondedEmergencyIdSet.has(rightId) || isTruthyFlag(right?.isRescuerJoined),
+      });
+
+      return getReceivedEmergencySortRank(leftState) - getReceivedEmergencySortRank(rightState);
+    });
+  }, [activeTab, currentUserId, currentUserLoaded, emergencyItems, ignoredEmergencyIdSet, respondedEmergencyIdSet, searchText, selectedRegion]);
 
   const handleIgnoreEmergency = (item) => {
-    ignoreEmergency(String(item?.id || ''));
+    const normalizedId = String(item?.id || '').trim();
+    if (!normalizedId) {
+      return;
+    }
+
+    const cardState = resolveReceivedEmergencyCardState(item, {
+      isIgnored: ignoredEmergencyIdSet.has(normalizedId),
+      userResponded: respondedEmergencyIdSet.has(normalizedId) || isTruthyFlag(item?.isRescuerJoined),
+    });
+    if (cardState !== 'pending') {
+      return;
+    }
+
+    ignoreEmergency(normalizedId);
   };
 
   const handleShowResponders = async (emergency) => {
@@ -688,6 +856,21 @@ export default function EmergencyListScreen({ navigation, route }) {
     }
 
     const normalizedId = String(emergencyId);
+    if (joinLoadingId === normalizedId) {
+      return;
+    }
+
+    const matchedItem = emergencyItems.find((item) => String(item?.id) === normalizedId);
+    if (matchedItem) {
+      const cardState = resolveReceivedEmergencyCardState(matchedItem, {
+        isIgnored: ignoredEmergencyIdSet.has(normalizedId),
+        userResponded: respondedEmergencyIdSet.has(normalizedId) || isTruthyFlag(matchedItem?.isRescuerJoined),
+      });
+      if (cardState !== 'pending') {
+        return;
+      }
+    }
+
     setJoinLoadingId(normalizedId);
     try {
       const response = await emergencyApi.joinHelp(normalizedId);
@@ -706,6 +889,7 @@ export default function EmergencyListScreen({ navigation, route }) {
           ...item,
           respondedCount: nextCount,
           responseCount: nextCount,
+          isRescuerJoined: true,
         };
       }));
       setSelectedEmergencyDetail((prev) => {
@@ -753,7 +937,17 @@ export default function EmergencyListScreen({ navigation, route }) {
         ...(prev || {}),
         canMarkResolved: false,
       }));
-      setEmergencyItems((prev) => prev.filter((item) => String(item.id) !== String(emergencyId)));
+      setEmergencyItems((prev) => prev.map((item) => {
+        if (String(item.id) !== String(emergencyId)) {
+          return item;
+        }
+
+        return {
+          ...item,
+          isCompleted: true,
+          status: item?.status || 'completed',
+        };
+      }));
       showAppAlert('\u6210\u529f', '\u5df2\u6807\u8bb0\u4e3a\u5df2\u89e3\u51b3');
       setShowDetailModal(false);
     } catch (error) {
@@ -821,20 +1015,32 @@ export default function EmergencyListScreen({ navigation, route }) {
     ]);
   };
   const renderEmergencyCard = (item) => {
-    const isCompleted = item.respondedCount >= item.rescuerCount && item.rescuerCount > 0;
-    const userResponded = isResponded(item.id) || isResponded(String(item.id));
+    const normalizedId = String(item?.id || '');
+    const isCompleted = inferEmergencyCompleted(item);
+    const isIgnoredEmergency = ignoredEmergencyIdSet.has(normalizedId);
+    const userResponded = respondedEmergencyIdSet.has(normalizedId) || isTruthyFlag(item?.isRescuerJoined);
     const showMineAction = activeTab === 'mine';
+    const receivedCardState = resolveReceivedEmergencyCardState(item, {
+      isIgnored: isIgnoredEmergency,
+      userResponded,
+    });
+    const headerStatus = showMineAction ? (isCompleted ? 'completed' : null) : receivedCardState;
 
-    if (activeTab === 'received' && !isCompleted) {
+    if (activeTab === 'received') {
       return (
         <EmergencyReceivedCard
           key={item.id}
           item={item}
-          isResponded={userResponded}
+          highlight={item.urgencyLevel === 'high'}
+          statusType={getReceivedEmergencyBadgeType(receivedCardState)}
+          footerMode={receivedCardState}
+          completedActionLabel={getReceivedEmergencyCompletedActionLabel(item, userResponded)}
+          isActionLoading={joinLoadingId === normalizedId}
+          showViewDetailInPending={false}
           onPressResponders={() => handleShowResponders(item)}
           onPressViewDetail={() => handleShowDetail(item)}
-          onPressIgnore={() => handleIgnoreEmergency(item)}
-          onPressRespond={() => handleJoinRescue(item)}
+          onPressIgnore={receivedCardState === 'pending' ? () => handleIgnoreEmergency(item) : undefined}
+          onPressRespond={receivedCardState === 'pending' ? () => handleJoinRescue(item) : undefined}
         />
       );
     }
@@ -853,22 +1059,16 @@ export default function EmergencyListScreen({ navigation, route }) {
             <Text style={styles.emergencyName}>{item.name}</Text>
             <Text style={styles.emergencyTime}>{item.time}</Text>
           </View>
-          {showMineAction && isCompleted ? (
+          {headerStatus === 'completed' ? (
             <View style={styles.completedBadge}>
               <Ionicons name="checkmark-circle" size={14} color="#6b7280" />
               <Text style={styles.completedBadgeText}>{'\u5df2\u5b8c\u6210'}</Text>
             </View>
           ) : null}
-          {!showMineAction && userResponded ? (
-            <View style={styles.respondedBadge}>
-              <Ionicons name="checkmark-circle" size={14} color="#22c55e" />
-              <Text style={styles.respondedBadgeText}>{'\u5df2\u54cd\u5e94'}</Text>
-            </View>
-          ) : null}
-          {!showMineAction && isCompleted ? (
-            <View style={styles.completedBadge}>
-              <Ionicons name="checkmark-circle" size={14} color="#6b7280" />
-              <Text style={styles.completedBadgeText}>{'\u5df2\u5b8c\u6210'}</Text>
+          {headerStatus === 'ignored' ? (
+            <View style={styles.ignoredBadge}>
+              <Ionicons name="remove-circle" size={14} color="#6b7280" />
+              <Text style={styles.ignoredBadgeText}>{'\u5df2\u5ffd\u7565'}</Text>
             </View>
           ) : null}
         </View>
@@ -906,12 +1106,7 @@ export default function EmergencyListScreen({ navigation, route }) {
                 <Ionicons name="chevron-forward" size={14} color="#3b82f6" />
               </TouchableOpacity>
             </View>
-          ) : userResponded ? (
-            <View style={styles.respondedBadge}>
-              <Ionicons name="checkmark-circle" size={14} color="#22c55e" />
-              <Text style={styles.respondedBadgeText}>{'\u5df2\u54cd\u5e94'}</Text>
-            </View>
-          ) : isCompleted ? (
+          ) : isIgnoredEmergency || isCompleted || userResponded ? (
             <View style={styles.emergencyFooterRight}>
               <TouchableOpacity style={styles.responseCountBtn} onPress={() => handleShowResponders(item)}>
                 <Ionicons name="people" size={16} color="#3b82f6" />
@@ -937,6 +1132,8 @@ export default function EmergencyListScreen({ navigation, route }) {
     selectedEmergencyDetail?.isRescuerJoined || selectedEmergencyDetail?.canMarkResolved
   );
   const showEmergencyFee = canViewEmergencyFee(selectedEmergencyDetail, currentUserId);
+  const showInitialReceivedLoading = activeTab === 'received' && !currentUserLoaded;
+  const showListLoading = loading || showInitialReceivedLoading;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -986,7 +1183,7 @@ export default function EmergencyListScreen({ navigation, route }) {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.listContainer}>
-          {loading ? (
+          {showListLoading ? (
             <View style={styles.emptyContainer}>
               <ActivityIndicator color="#ef4444" />
               <Text style={styles.emptyText}>{'\u6682\u65e0\u54cd\u5e94\u8005'}</Text>
@@ -1065,7 +1262,14 @@ export default function EmergencyListScreen({ navigation, route }) {
                   <View style={styles.detailHeaderRow}>
                     <Avatar uri={selectedEmergencyDetail?.avatar} name={selectedEmergencyDetail?.name} size={44} />
                     <View style={styles.detailHeaderMeta}>
-                      <Text style={styles.detailName}>{selectedEmergencyDetail?.name || '\u533f\u540d\u7528\u6237'}</Text>
+                      <View style={styles.detailHeaderTopRow}>
+                        <Text style={styles.detailName}>{selectedEmergencyDetail?.name || '\u533f\u540d\u7528\u6237'}</Text>
+                        {selectedEmergencyDetail?.canMarkResolved ? (
+                          <View style={styles.detailTagNeutral}>
+                            <Text style={styles.detailTagNeutralText}>{'\u53ef\u6807\u8bb0\u5df2\u89e3\u51b3'}</Text>
+                          </View>
+                        ) : null}
+                      </View>
                       <Text style={styles.detailTime}>{selectedEmergencyDetail?.relativeTime || '--'}</Text>
                     </View>
                   </View>
@@ -1107,11 +1311,6 @@ export default function EmergencyListScreen({ navigation, route }) {
                     {selectedEmergencyDetail?.isRescuerJoined ? (
                       <View style={styles.detailTagSuccess}>
                         <Text style={styles.detailTagSuccessText}>{'\u5df2\u54cd\u5e94'}</Text>
-                      </View>
-                    ) : null}
-                    {selectedEmergencyDetail?.canMarkResolved ? (
-                      <View style={styles.detailTagNeutral}>
-                        <Text style={styles.detailTagNeutralText}>{'\u53ef\u6807\u8bb0\u5df2\u89e3\u51b3'}</Text>
                       </View>
                     ) : null}
                     {selectedEmergencyDetail?.pendingReview > 0 ? (
@@ -1447,6 +1646,18 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   completedBadgeText: { fontSize: scaleFont(13), color: '#6b7280', fontWeight: '600' },
+  ignoredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f3f4f6',
+    borderColor: '#d1d5db',
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  ignoredBadgeText: { fontSize: scaleFont(13), color: '#6b7280', fontWeight: '600' },
   responseCountBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1497,7 +1708,13 @@ const styles = StyleSheet.create({
   detailSectionTitle: { fontSize: scaleFont(detailFontSize.sectionTitle), fontWeight: '700', color: detailColors.textPrimary },
   detailHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   detailHeaderMeta: { flex: 1 },
-  detailName: { fontSize: scaleFont(16), color: detailColors.textPrimary, fontWeight: '600' },
+  detailHeaderTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  detailName: { flex: 1, fontSize: scaleFont(16), color: detailColors.textPrimary, fontWeight: '600' },
   detailTime: { fontSize: scaleFont(detailFontSize.small), color: detailColors.textTertiary, marginTop: 3 },
   detailTitle: { fontSize: scaleFont(21), color: detailColors.textPrimary, fontWeight: '700', lineHeight: scaleFont(28), marginTop: 2 },
   detailDescription: { fontSize: scaleFont(15), color: detailColors.textSecondary, lineHeight: scaleFont(23) },

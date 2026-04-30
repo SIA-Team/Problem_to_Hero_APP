@@ -142,7 +142,10 @@ export default function LoginScreen({ navigation, onLogin }) {
         });
 
         if (onLogin) {
-          onLogin();
+          onLogin({
+            loginMethod: 'password',
+            user: response.data.userBaseInfo || null,
+          });
         }
       } else {
         console.error('Login failed:', response.msg);
@@ -252,7 +255,10 @@ export default function LoginScreen({ navigation, onLogin }) {
         });
 
         if (onLogin) {
-          onLogin();
+          onLogin({
+            loginMethod: 'fingerprint',
+            user: result.data.userBaseInfo || null,
+          });
         }
       } else {
         console.error('Device login failed after retries');

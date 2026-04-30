@@ -7,6 +7,7 @@ import Avatar from '../components/Avatar';
 import EmergencyReceivedCard from '../components/EmergencyReceivedCard';
 import KeyboardDismissView from '../components/KeyboardDismissView';
 import ModalSafeAreaView from '../components/ModalSafeAreaView';
+import SkeletonBlock from '../components/SkeletonBlock';
 import { useTranslation } from '../i18n/withTranslation';
 import { modalTokens } from '../components/modalTokens';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
@@ -604,6 +605,7 @@ export default function MessagesScreen({
   const [followingUsersLoadError, setFollowingUsersLoadError] = useState('');
   const [emergencyRequestsData, setEmergencyRequestsData] = useState([]);
   const [emergencyLoading, setEmergencyLoading] = useState(false);
+  const [emergencyRefreshing, setEmergencyRefreshing] = useState(false);
   const [emergencyLoadError, setEmergencyLoadError] = useState('');
   const [showEmergencyRespondersModal, setShowEmergencyRespondersModal] = useState(false);
   const [selectedEmergencyResponders, setSelectedEmergencyResponders] = useState(null);
@@ -654,9 +656,16 @@ export default function MessagesScreen({
   const respondedEmergencyIdSet = React.useMemo(() => new Set(respondedEmergencies.map(id => String(id))), [respondedEmergencies]);
   const ignoredEmergencyIdSet = React.useMemo(() => new Set(ignoredEmergencies.map(id => String(id))), [ignoredEmergencies]);
 
-  const loadEmergencyRequests = async () => {
-    setEmergencyLoading(true);
-    setEmergencyLoadError('');
+  const loadEmergencyRequests = async ({ preserveVisibleContent = false } = {}) => {
+    const hasCachedEmergencyItems = emergencyRequestsData.length > 0;
+    const shouldPreserveContent = preserveVisibleContent && hasCachedEmergencyItems;
+
+    if (shouldPreserveContent) {
+      setEmergencyRefreshing(true);
+    } else {
+      setEmergencyLoading(true);
+      setEmergencyLoadError('');
+    }
 
     try {
       const response = await emergencyApi.getList({
@@ -675,12 +684,16 @@ export default function MessagesScreen({
         .sort((left, right) => toSafeNumber(right?.timestamp) - toSafeNumber(left?.timestamp));
 
       setEmergencyRequestsData(normalizedRows);
+      setEmergencyLoadError('');
     } catch (error) {
-      console.error('鍔犺浇绱ф€ユ眰鍔╁垪琛ㄥけ璐?', error);
-      setEmergencyRequestsData([]);
-      setEmergencyLoadError(error?.message || '加载紧急求助失败');
+      console.error('Failed to load emergency requests in messages screen:', error);
+      if (!shouldPreserveContent) {
+        setEmergencyRequestsData([]);
+        setEmergencyLoadError(error?.message || '加载紧急求助失败');
+      }
     } finally {
       setEmergencyLoading(false);
+      setEmergencyRefreshing(false);
     }
   };
 
@@ -895,7 +908,9 @@ export default function MessagesScreen({
     loadNotificationSummary();
     loadCategoryPreviews();
     loadPrivateUnreadBrief();
-    loadEmergencyRequests();
+    loadEmergencyRequests({
+      preserveVisibleContent: true
+    });
   }, [isFocused]);
 
   useEffect(() => {
@@ -1189,6 +1204,7 @@ export default function MessagesScreen({
   };
 
   const isWithinOneHour = (timestamp) => Number.isFinite(Number(timestamp)) && Date.now() - Number(timestamp) < 60 * 60 * 1000;
+  const showEmergencySkeleton = emergencyLoading && emergencyRequestsData.length === 0;
 
   const filteredEmergencyRequests = emergencyRequestsData
     .filter(item => {
@@ -1368,14 +1384,37 @@ export default function MessagesScreen({
                 <View style={styles.emergencyPulseDot} />
               </View>
             </View>
-            <TouchableOpacity onPress={() => navigation.navigate('EmergencyList')}>
-              <Text style={styles.sectionMore}>{'\u67e5\u770b\u5168\u90e8'}</Text>
-            </TouchableOpacity>
+            <View style={styles.sectionHeaderActions}>
+              {emergencyRefreshing ? <ActivityIndicator size="small" color="#ef4444" style={styles.sectionRefreshIndicator} /> : null}
+              <TouchableOpacity onPress={() => navigation.navigate('EmergencyList')}>
+                <Text style={styles.sectionMore}>{'\u67e5\u770b\u5168\u90e8'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
-          {emergencyLoading ? (
-            <View style={styles.sectionLoading}>
-              <ActivityIndicator color="#ef4444" />
+          {showEmergencySkeleton ? (
+            <View style={styles.emergencySkeletonList}>
+              {[0, 1, 2].map(index => (
+                <View key={`emergency-skeleton-${index}`} style={styles.emergencySkeletonCard}>
+                  <View style={styles.emergencySkeletonHeader}>
+                    <SkeletonBlock width={44} height={44} style={styles.emergencySkeletonAvatar} />
+                    <View style={styles.emergencySkeletonHeaderText}>
+                      <SkeletonBlock width="48%" height={14} style={styles.emergencySkeletonName} />
+                      <SkeletonBlock width="30%" height={11} style={styles.emergencySkeletonTime} />
+                    </View>
+                  </View>
+                  <SkeletonBlock width="82%" height={16} style={styles.emergencySkeletonTitle} />
+                  <SkeletonBlock width="100%" height={44} style={styles.emergencySkeletonInfo} />
+                  <SkeletonBlock width="42%" height={12} style={styles.emergencySkeletonMeta} />
+                  <View style={styles.emergencySkeletonFooter}>
+                    <SkeletonBlock width={72} height={30} style={styles.emergencySkeletonDetailBtn} />
+                    <View style={styles.emergencySkeletonActionRow}>
+                      <SkeletonBlock width={70} height={34} style={styles.emergencySkeletonSecondaryBtn} />
+                      <SkeletonBlock width={108} height={34} style={styles.emergencySkeletonPrimaryBtn} />
+                    </View>
+                  </View>
+                </View>
+              ))}
             </View>
           ) : filteredEmergencyRequests.length === 0 ? (
             <View style={styles.sectionEmpty}>
@@ -1983,6 +2022,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12
   },
+  sectionHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
   sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1996,6 +2040,10 @@ const styles = StyleSheet.create({
   sectionMore: {
     fontSize: scaleFont(13),
     color: '#ef4444'
+  },
+  sectionRefreshIndicator: {
+    width: 14,
+    height: 14
   },
   inviteItem: {
     flexDirection: 'row',
@@ -2042,6 +2090,76 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     marginTop: 8,
     padding: 12
+  },
+  emergencySkeletonList: {
+    gap: 12
+  },
+  emergencySkeletonCard: {
+    backgroundColor: '#fef2f2',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#fee2e2'
+  },
+  emergencySkeletonHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12
+  },
+  emergencySkeletonAvatar: {
+    borderRadius: 22,
+    backgroundColor: '#f3d8d8'
+  },
+  emergencySkeletonHeaderText: {
+    flex: 1,
+    marginLeft: 10,
+    gap: 8
+  },
+  emergencySkeletonName: {
+    borderRadius: 6,
+    backgroundColor: '#f0dddd'
+  },
+  emergencySkeletonTime: {
+    borderRadius: 6,
+    backgroundColor: '#f5e7e7'
+  },
+  emergencySkeletonTitle: {
+    borderRadius: 6,
+    backgroundColor: '#f0dddd',
+    marginBottom: 12
+  },
+  emergencySkeletonInfo: {
+    borderRadius: 10,
+    backgroundColor: '#fff7f7',
+    marginBottom: 12
+  },
+  emergencySkeletonMeta: {
+    borderRadius: 6,
+    backgroundColor: '#f5e7e7',
+    marginBottom: 14
+  },
+  emergencySkeletonFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8
+  },
+  emergencySkeletonDetailBtn: {
+    borderRadius: 16,
+    backgroundColor: '#eceff3'
+  },
+  emergencySkeletonActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  emergencySkeletonSecondaryBtn: {
+    borderRadius: 18,
+    backgroundColor: '#eef1f4'
+  },
+  emergencySkeletonPrimaryBtn: {
+    borderRadius: 18,
+    backgroundColor: '#f7caca'
   },
   emergencyPulse: {
     marginLeft: 6,
