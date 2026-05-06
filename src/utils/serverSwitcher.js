@@ -21,7 +21,7 @@ const normalizeServerUrl = (url) => {
 export const SERVERS = {
   SERVER1: {
     name: '开发服务器',
-    url: 'http://116.168.31.142:30560',
+    url: 'http://123.144.57.221:30560',
     key: 'server1'
   },
   SERVER2: {

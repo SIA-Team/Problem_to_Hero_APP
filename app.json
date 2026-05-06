@@ -4,6 +4,7 @@
     "slug": "qa-native-app",
     "scheme": "problemvshero",
     "version": "1.0.3",
+    "runtimeVersion": "1.0.3",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/app-logo.png",

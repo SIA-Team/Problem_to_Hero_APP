@@ -1,6 +1,5 @@
 ﻿import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, Platform, Modal, ActivityIndicator, InteractionManager } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, Platform, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -9,18 +8,56 @@ import i18n from '../i18n';
 import { modalTokens } from '../components/modalTokens';
 import RegionSelector from '../components/RegionSelector';
 import { showAppAlert } from '../utils/appAlert';
+import { showToast } from '../utils/toast';
 import emergencyApi from '../services/api/emergencyApi';
+import walletApi from '../services/api/walletApi';
 import uploadApi from '../services/api/uploadApi';
 import { buildEmergencyAddressText, resolveChinaRegionFromAddress } from '../utils/chinaRegionMatcher';
 
 import { scaleFont } from '../utils/responsive';
 
+const MAX_IMAGE_COUNT = 3;
+const MAX_DESCRIPTION_LENGTH = 500;
 const DEFAULT_EMERGENCY_SETTINGS = {
-  dailyFreeTotal: 0,
+  quickTitles: [],
+  feeConfig: {
+    period: 'DAY',
+    freeCount: 0,
+    extraFeeCents: 0,
+  },
+  timeoutConfig: {
+    responseMinutes: 30,
+    autoCompleteEnabled: true,
+  },
   freeHelperSlots: 5,
-  extraHelperPriceCents: 200,
-  extraPublishPriceCents: 500,
+  extraHelperPriceCents: 0,
   nearbyNotifyRadiusKm: 5,
+};
+const DEFAULT_EMERGENCY_QUOTA = {
+  period: 'DAY',
+  total: 0,
+  used: 0,
+  remaining: 0,
+};
+const DEFAULT_EMERGENCY_COST_ESTIMATE = {
+  period: 'DAY',
+  freePerPeriod: 0,
+  usedInPeriod: 0,
+  remainingFree: 0,
+  freeHelperSlots: 5,
+  extraHelperPoints: 0,
+  extraPublishPoints: 0,
+  helperOverageCount: 0,
+  helperOveragePoints: 0,
+  publishOveragePoints: 0,
+  needConsume: false,
+  consumePoints: 0,
+  availablePoints: 0,
+};
+const QUICK_TITLE_CATEGORY_MAP = {
+  个人安全求助: 1,
+  紧急医疗求助: 2,
+  财物丢失求助: 3,
 };
 
 const DEFAULT_SELECTED_REGION = {
@@ -80,6 +117,125 @@ const toPositiveIntOrUndefined = (value) => {
   return normalized > 0 ? normalized : undefined;
 };
 
+const normalizePoints = (value, fallback = 0) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return Math.max(0, Math.round(fallback));
+  }
+
+  return Math.max(0, Math.round(num));
+};
+
+const normalizeMajorUnitPoints = (value, fallback = 0) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return Math.max(0, Math.round((Number(fallback) + Number.EPSILON) * 100) / 100);
+  }
+
+  return Math.max(0, Math.round((num + Number.EPSILON) * 100) / 100);
+};
+
+const convertCentBasedPointsToMajorUnit = (value) => normalizePoints(value, 0) / 100;
+
+const formatCentBasedPointsDisplay = (value) => {
+  const normalized = convertCentBasedPointsToMajorUnit(value);
+  if (Number.isInteger(normalized)) {
+    return String(normalized);
+  }
+
+  return normalized.toFixed(2).replace(/\.?0+$/, '');
+};
+
+const clampHelperCount = (value) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return 1;
+  }
+
+  return Math.min(20, Math.max(1, Math.round(num)));
+};
+
+const inferEmergencyCategory = (title) => {
+  const normalizedTitle = String(title || '').trim();
+
+  if (QUICK_TITLE_CATEGORY_MAP[normalizedTitle]) {
+    return QUICK_TITLE_CATEGORY_MAP[normalizedTitle];
+  }
+
+  if (normalizedTitle.includes('安全')) {
+    return 1;
+  }
+  if (normalizedTitle.includes('医疗') || normalizedTitle.includes('急救')) {
+    return 2;
+  }
+  if (normalizedTitle.includes('财物') || normalizedTitle.includes('丢失')) {
+    return 3;
+  }
+  if (normalizedTitle.includes('车辆') || normalizedTitle.includes('车')) {
+    return 4;
+  }
+  if (normalizedTitle.includes('动物') || normalizedTitle.includes('宠物')) {
+    return 5;
+  }
+
+  return 6;
+};
+
+const getEmergencyPeriodLabel = (period) => {
+  switch (String(period || '').toUpperCase()) {
+    case 'DAY':
+      return '每日';
+    case 'WEEK':
+      return '每周';
+    case 'MONTH':
+      return '每月';
+    default:
+      return '';
+  }
+};
+
+const buildLocatedSpecificAddress = (address = {}) => {
+  const streetLine = [address.streetNumber, address.street].filter(Boolean).join(' ');
+  return [address.name, streetLine].filter(Boolean).join(' ').trim();
+};
+
+const resolveEmergencyRegionPayload = ({ resolvedChinaRegion, selectedRegion }) => {
+  const directProvinceId = toPositiveIntOrUndefined(resolvedChinaRegion?.provinceId);
+  const directCityId = toPositiveIntOrUndefined(resolvedChinaRegion?.cityId);
+  const directDistrictId = toPositiveIntOrUndefined(resolvedChinaRegion?.districtId);
+  const manualProvinceId = toPositiveIntOrUndefined(selectedRegion?.cityId);
+  const manualCityId = toPositiveIntOrUndefined(selectedRegion?.stateId);
+  const manualDistrictId = toPositiveIntOrUndefined(selectedRegion?.districtId);
+
+  const baseProvinceId = directProvinceId || manualProvinceId || manualCityId || manualDistrictId;
+  const baseCityId = directCityId || manualCityId || manualDistrictId || baseProvinceId;
+  const baseDistrictId = directDistrictId || manualDistrictId || manualCityId || baseCityId || baseProvinceId;
+
+  return {
+    provinceId: baseProvinceId,
+    cityId: baseCityId,
+    districtId: baseDistrictId,
+    provinceName:
+      resolvedChinaRegion?.provinceName ||
+      selectedRegion?.city ||
+      selectedRegion?.state ||
+      selectedRegion?.district ||
+      '',
+    cityName:
+      resolvedChinaRegion?.cityName ||
+      selectedRegion?.state ||
+      selectedRegion?.district ||
+      selectedRegion?.city ||
+      '',
+    districtName:
+      resolvedChinaRegion?.districtName ||
+      selectedRegion?.district ||
+      selectedRegion?.state ||
+      selectedRegion?.city ||
+      '',
+  };
+};
+
 export default function EmergencyScreen({ navigation }) {
   const t = (key) => {
     if (!i18n || typeof i18n.t !== 'function') {
@@ -98,7 +254,7 @@ export default function EmergencyScreen({ navigation }) {
   });
   const [emergencyImages, setEmergencyImages] = useState([]); // 紧急求助图片片?
   const [showProgressModal, setShowProgressModal] = useState(false); // 显示进度模态框
-  const [emergencyQuota, setEmergencyQuota] = useState(null);
+  const [emergencyQuota, setEmergencyQuota] = useState(DEFAULT_EMERGENCY_QUOTA);
   const [isLocating, setIsLocating] = useState(false);
   const [showRegionModal, setShowRegionModal] = useState(false);
   const [selectedRegion, setSelectedRegion] = useState(DEFAULT_SELECTED_REGION);
@@ -106,34 +262,66 @@ export default function EmergencyScreen({ navigation }) {
   const [locationAddress, setLocationAddress] = useState(null);
   const [resolvedChinaRegion, setResolvedChinaRegion] = useState(null);
   const [emergencySettings, setEmergencySettings] = useState(DEFAULT_EMERGENCY_SETTINGS);
-  const [emergencyFeeEstimate, setEmergencyFeeEstimate] = useState(null);
-  const [progressMessage, setProgressMessage] = useState('请稍候，正在提交真实数据...');
-  const emergencyPricingApiUnsupportedRef = React.useRef(false);
+  const [emergencyCostEstimate, setEmergencyCostEstimate] = useState(DEFAULT_EMERGENCY_COST_ESTIMATE);
+  const [pointsBalance, setPointsBalance] = useState(0);
+  const [pointsAcknowledged, setPointsAcknowledged] = useState(false);
+  const [pricingInitialized, setPricingInitialized] = useState(false);
+  const [progressMessage, setProgressMessage] = useState('请稍候，正在提交紧急求助...');
+  const emergencyFormRef = React.useRef({
+    title: '',
+    description: '',
+    location: '',
+    contact: '',
+    specificLocation: '',
+    rescuerCount: 1,
+  });
+  const emergencyQuotaRef = React.useRef(DEFAULT_EMERGENCY_QUOTA);
+  const emergencySettingsRef = React.useRef(DEFAULT_EMERGENCY_SETTINGS);
+  const emergencyPointsBalanceRef = React.useRef(0);
 
   const toSafeNumber = (value, fallback = 0) => {
     const num = Number(value);
     return Number.isFinite(num) ? num : fallback;
   };
 
-  const isMissingEmergencyPricingApi = React.useCallback((error) => {
-    const message = String(error?.message || error?.msg || error?.data?.msg || '');
-    return message.includes('No static resource') && message.includes('emergency-help');
-  }, []);
+  React.useEffect(() => {
+    emergencyFormRef.current = emergencyForm;
+  }, [emergencyForm]);
 
-  const formatAmount = (value) => {
-    const num = toSafeNumber(value, 0);
-    if (Number.isInteger(num)) {
-      return String(num);
-    }
-    return num.toFixed(2).replace(/\.?0+$/, '');
-  };
+  React.useEffect(() => {
+    emergencyQuotaRef.current = emergencyQuota;
+  }, [emergencyQuota]);
+
+  React.useEffect(() => {
+    emergencySettingsRef.current = emergencySettings;
+  }, [emergencySettings]);
+
+  React.useEffect(() => {
+    emergencyPointsBalanceRef.current = pointsBalance;
+  }, [pointsBalance]);
 
   const normalizeEmergencySettings = React.useCallback((rawSettings = {}) => {
+    const feeConfig = rawSettings?.feeConfig || {};
+    const timeoutConfig = rawSettings?.timeoutConfig || {};
+    const quickTitles = Array.isArray(rawSettings?.quickTitles)
+      ? rawSettings.quickTitles
+          .filter((item) => item && item.isoff !== true && String(item.name || '').trim())
+          .map((item) => String(item.name || '').trim())
+      : [];
+
     const normalized = {
-      dailyFreeTotal: Math.max(0, Math.round(toSafeNumber(rawSettings?.dailyFreeTotal, DEFAULT_EMERGENCY_SETTINGS.dailyFreeTotal))),
+      quickTitles,
+      feeConfig: {
+        period: feeConfig?.period || DEFAULT_EMERGENCY_SETTINGS.feeConfig.period,
+        freeCount: Math.max(0, Math.round(toSafeNumber(feeConfig?.freeCount, DEFAULT_EMERGENCY_SETTINGS.feeConfig.freeCount))),
+        extraFeeCents: Math.max(0, Math.round(toSafeNumber(feeConfig?.extraFeeCents, DEFAULT_EMERGENCY_SETTINGS.feeConfig.extraFeeCents))),
+      },
+      timeoutConfig: {
+        responseMinutes: Math.max(1, Math.round(toSafeNumber(timeoutConfig?.responseMinutes, DEFAULT_EMERGENCY_SETTINGS.timeoutConfig.responseMinutes))),
+        autoCompleteEnabled: timeoutConfig?.autoCompleteEnabled ?? DEFAULT_EMERGENCY_SETTINGS.timeoutConfig.autoCompleteEnabled,
+      },
       freeHelperSlots: Math.max(0, Math.round(toSafeNumber(rawSettings?.freeHelperSlots, DEFAULT_EMERGENCY_SETTINGS.freeHelperSlots))),
       extraHelperPriceCents: Math.max(0, Math.round(toSafeNumber(rawSettings?.extraHelperPriceCents, DEFAULT_EMERGENCY_SETTINGS.extraHelperPriceCents))),
-      extraPublishPriceCents: Math.max(0, Math.round(toSafeNumber(rawSettings?.extraPublishPriceCents, DEFAULT_EMERGENCY_SETTINGS.extraPublishPriceCents))),
       nearbyNotifyRadiusKm: Math.max(0, toSafeNumber(rawSettings?.nearbyNotifyRadiusKm, DEFAULT_EMERGENCY_SETTINGS.nearbyNotifyRadiusKm)),
     };
 
@@ -142,10 +330,6 @@ export default function EmergencyScreen({ navigation }) {
   }, []);
 
   const loadEmergencySettings = React.useCallback(async () => {
-    if (emergencyPricingApiUnsupportedRef.current) {
-      return DEFAULT_EMERGENCY_SETTINGS;
-    }
-
     try {
       const response = await emergencyApi.getPublicSettings();
       if (!isSuccessResponse(response)) {
@@ -153,183 +337,280 @@ export default function EmergencyScreen({ navigation }) {
       }
       return normalizeEmergencySettings(extractResponsePayload(response) || {});
     } catch (error) {
-      if (isMissingEmergencyPricingApi(error)) {
-        emergencyPricingApiUnsupportedRef.current = true;
-        return DEFAULT_EMERGENCY_SETTINGS;
-      }
       console.error('Failed to load emergency public settings:', error);
+      showToast('紧急求助配置加载失败', 'error');
+      setEmergencySettings(DEFAULT_EMERGENCY_SETTINGS);
       return DEFAULT_EMERGENCY_SETTINGS;
     }
-  }, [isMissingEmergencyPricingApi, normalizeEmergencySettings]);
+  }, [normalizeEmergencySettings]);
+
+  const normalizeEmergencyQuota = React.useCallback((rawQuota = {}, fallbackTotal = 0) => {
+    const total = Math.max(0, Math.round(toSafeNumber(rawQuota?.total, fallbackTotal)));
+    const used = Math.max(0, Math.round(toSafeNumber(rawQuota?.used, DEFAULT_EMERGENCY_QUOTA.used)));
+    const remaining = Math.max(0, Math.round(toSafeNumber(rawQuota?.remaining, Math.max(0, total - used))));
+    const normalized = {
+      period: rawQuota?.period || DEFAULT_EMERGENCY_QUOTA.period,
+      total,
+      used,
+      remaining,
+    };
+    setEmergencyQuota(normalized);
+    return normalized;
+  }, []);
 
   const loadEmergencyQuota = React.useCallback(async (fallbackTotal = 0) => {
-    if (emergencyPricingApiUnsupportedRef.current) {
-      setEmergencyQuota((prev) => prev || {
-        total: Math.max(0, Number(fallbackTotal) || 0),
-        remaining: 0,
-      });
-      return;
-    }
-
     try {
       const response = await emergencyApi.getQuota();
       if (!isSuccessResponse(response)) {
         throw new Error(response?.msg || 'Failed to load emergency quota');
       }
-
-      const quotaData = extractResponsePayload(response) || {};
-      const total = Number(quotaData.total);
-      const remaining = Number(quotaData.remaining);
-
-      setEmergencyQuota({
-        total: Number.isFinite(total) && total >= 0 ? total : Math.max(0, Number(fallbackTotal) || 0),
-        remaining: Number.isFinite(remaining) && remaining >= 0 ? remaining : 0,
-      });
+      return normalizeEmergencyQuota(extractResponsePayload(response) || {}, fallbackTotal);
     } catch (error) {
-      if (isMissingEmergencyPricingApi(error)) {
-        emergencyPricingApiUnsupportedRef.current = true;
-      } else {
-        console.error('Failed to load emergency quota:', error);
-      }
-      setEmergencyQuota((prev) => prev || {
-        total: Math.max(0, Number(fallbackTotal) || 0),
-        remaining: 0,
-      });
+      console.error('Failed to load emergency quota:', error);
+      showToast('免费额度加载失败', 'error');
+      return normalizeEmergencyQuota(DEFAULT_EMERGENCY_QUOTA, fallbackTotal);
     }
-  }, [isMissingEmergencyPricingApi]);
+  }, [normalizeEmergencyQuota]);
 
-  const buildLocalFeeEstimate = React.useCallback((neededHelperCount) => {
-    const requestedHelperCount = Math.max(1, Math.round(toSafeNumber(neededHelperCount, 1)));
-    const quotaTotal = Number(emergencyQuota?.total);
-    const quotaRemaining = Number(emergencyQuota?.remaining);
-    const dailyFreeTotal = Number.isFinite(quotaTotal) && quotaTotal >= 0
-      ? quotaTotal
-      : Math.max(0, Math.round(toSafeNumber(emergencySettings?.dailyFreeTotal, DEFAULT_EMERGENCY_SETTINGS.dailyFreeTotal)));
-    const remainingFree = Number.isFinite(quotaRemaining) && quotaRemaining >= 0
-      ? quotaRemaining
-      : Math.max(0, dailyFreeTotal);
-    const usedToday = Math.max(0, dailyFreeTotal - remainingFree);
-    const freeHelperSlots = Math.max(0, Math.round(toSafeNumber(emergencySettings?.freeHelperSlots, DEFAULT_EMERGENCY_SETTINGS.freeHelperSlots)));
-    const extraHelperPriceCents = Math.max(0, Math.round(toSafeNumber(emergencySettings?.extraHelperPriceCents, DEFAULT_EMERGENCY_SETTINGS.extraHelperPriceCents)));
-    const extraPublishPriceCents = Math.max(0, Math.round(toSafeNumber(emergencySettings?.extraPublishPriceCents, DEFAULT_EMERGENCY_SETTINGS.extraPublishPriceCents)));
+  const loadWalletPointsBalance = React.useCallback(async () => {
+    try {
+      const response = await walletApi.getPointsOverview();
+      const nextBalance = normalizeMajorUnitPoints(response?.data?.balance, 0);
+      setPointsBalance(nextBalance);
+      return nextBalance;
+    } catch (error) {
+      console.error('Failed to load points balance:', error);
+      return emergencyPointsBalanceRef.current;
+    }
+  }, []);
+
+  const buildLocalCostEstimate = React.useCallback((neededHelperCount, sourceQuota, sourceSettings, sourcePointsBalance) => {
+    const resolvedQuota = sourceQuota || emergencyQuotaRef.current;
+    const resolvedSettings = sourceSettings || emergencySettingsRef.current;
+    const requestedHelperCount = clampHelperCount(neededHelperCount);
+    const freePerPeriod = Math.max(
+      0,
+      Math.round(
+        toSafeNumber(
+          resolvedQuota?.total,
+          resolvedSettings?.feeConfig?.freeCount ?? DEFAULT_EMERGENCY_SETTINGS.feeConfig.freeCount
+        )
+      )
+    );
+    const remainingFree = Math.max(0, Math.round(toSafeNumber(resolvedQuota?.remaining, freePerPeriod)));
+    const usedInPeriod = Math.max(0, Math.round(toSafeNumber(resolvedQuota?.used, freePerPeriod - remainingFree)));
+    const freeHelperSlots = Math.max(0, Math.round(toSafeNumber(resolvedSettings?.freeHelperSlots, DEFAULT_EMERGENCY_COST_ESTIMATE.freeHelperSlots)));
+    const extraHelperPoints = Math.max(0, Math.round(toSafeNumber(resolvedSettings?.extraHelperPriceCents, DEFAULT_EMERGENCY_COST_ESTIMATE.extraHelperPoints)));
+    const extraPublishPoints = Math.max(0, Math.round(toSafeNumber(resolvedSettings?.feeConfig?.extraFeeCents, DEFAULT_EMERGENCY_COST_ESTIMATE.extraPublishPoints)));
     const helperOverageCount = Math.max(0, requestedHelperCount - freeHelperSlots);
-    const helperOverageFeeCents = helperOverageCount * extraHelperPriceCents;
-    const publishOverageFeeCents = remainingFree <= 0 ? extraPublishPriceCents : 0;
+    const helperOveragePoints = helperOverageCount * extraHelperPoints;
+    const publishOveragePoints = remainingFree <= 0 ? extraPublishPoints : 0;
+    const consumePoints = helperOveragePoints + publishOveragePoints;
 
     return {
-      dailyFreeTotal,
-      usedToday,
+      period: resolvedQuota?.period || resolvedSettings?.feeConfig?.period || DEFAULT_EMERGENCY_COST_ESTIMATE.period,
+      freePerPeriod,
+      usedInPeriod,
       remainingFree,
       freeHelperSlots,
-      extraHelperPriceCents,
-      extraPublishPriceCents,
+      extraHelperPoints,
+      extraPublishPoints,
       helperOverageCount,
-      helperOverageFeeCents,
-      publishOverageFeeCents,
-      totalFeeCents: helperOverageFeeCents + publishOverageFeeCents,
+      helperOveragePoints,
+      publishOveragePoints,
+      needConsume: consumePoints > 0,
+      consumePoints,
+      availablePoints: normalizeMajorUnitPoints(sourcePointsBalance, emergencyPointsBalanceRef.current),
     };
-  }, [emergencyQuota, emergencySettings]);
+  }, []);
 
-  const normalizeEmergencyFeeEstimate = React.useCallback((rawData = {}, neededHelperCount) => {
-    const fallback = buildLocalFeeEstimate(neededHelperCount);
-    const dailyFreeTotal = Math.max(0, Math.round(toSafeNumber(rawData?.dailyFreeTotal, fallback.dailyFreeTotal)));
-    const remainingFree = Math.max(0, Math.round(toSafeNumber(rawData?.remainingFree, fallback.remainingFree)));
-    const freeHelperSlots = Math.max(0, Math.round(toSafeNumber(rawData?.freeHelperSlots, fallback.freeHelperSlots)));
-    const extraHelperPriceCents = Math.max(0, Math.round(toSafeNumber(rawData?.extraHelperPriceCents, fallback.extraHelperPriceCents)));
-    const extraPublishPriceCents = Math.max(0, Math.round(toSafeNumber(rawData?.extraPublishPriceCents, fallback.extraPublishPriceCents)));
-    const helperOverageCount = Math.max(0, Math.round(toSafeNumber(rawData?.helperOverageCount, Math.max(0, Math.round(toSafeNumber(neededHelperCount, 1)) - freeHelperSlots))));
-    const helperOverageFeeCents = Math.max(0, Math.round(toSafeNumber(rawData?.helperOverageFeeCents, helperOverageCount * extraHelperPriceCents)));
-    const publishOverageFeeCents = Math.max(0, Math.round(toSafeNumber(rawData?.publishOverageFeeCents, remainingFree <= 0 ? extraPublishPriceCents : 0)));
-    const totalFeeCents = Math.max(0, Math.round(toSafeNumber(rawData?.totalFeeCents, helperOverageFeeCents + publishOverageFeeCents)));
-    const usedToday = Math.max(0, Math.round(toSafeNumber(rawData?.usedToday, Math.max(0, dailyFreeTotal - remainingFree))));
+  const normalizeEmergencyCostEstimate = React.useCallback((rawData = {}, neededHelperCount, sourceQuota, sourceSettings, sourcePointsBalance) => {
+    const fallback = buildLocalCostEstimate(neededHelperCount, sourceQuota, sourceSettings, sourcePointsBalance);
+    const helperOveragePoints = Math.max(0, Math.round(toSafeNumber(rawData?.helperOverageFeeCents, rawData?.helperOveragePoints ?? fallback.helperOveragePoints)));
+    const publishOveragePoints = Math.max(0, Math.round(toSafeNumber(rawData?.publishOverageFeeCents, rawData?.publishOveragePoints ?? fallback.publishOveragePoints)));
+    const consumePoints = normalizePoints(rawData?.totalFeeCents, rawData?.consumePoints ?? (helperOveragePoints + publishOveragePoints));
 
     return {
-      dailyFreeTotal,
-      usedToday,
-      remainingFree,
-      freeHelperSlots,
-      extraHelperPriceCents,
-      extraPublishPriceCents,
-      helperOverageCount,
-      helperOverageFeeCents,
-      publishOverageFeeCents,
-      totalFeeCents,
+      period: rawData?.period || fallback.period,
+      freePerPeriod: Math.max(0, Math.round(toSafeNumber(rawData?.freePerPeriod, fallback.freePerPeriod))),
+      usedInPeriod: Math.max(0, Math.round(toSafeNumber(rawData?.usedInPeriod, fallback.usedInPeriod))),
+      remainingFree: Math.max(0, Math.round(toSafeNumber(rawData?.remainingFree, fallback.remainingFree))),
+      freeHelperSlots: Math.max(0, Math.round(toSafeNumber(rawData?.freeHelperSlots, fallback.freeHelperSlots))),
+      extraHelperPoints: Math.max(0, Math.round(toSafeNumber(rawData?.extraHelperPriceCents, rawData?.extraHelperPoints ?? fallback.extraHelperPoints))),
+      extraPublishPoints: Math.max(0, Math.round(toSafeNumber(rawData?.extraPublishFeeCents, rawData?.extraPublishPoints ?? fallback.extraPublishPoints))),
+      helperOverageCount: Math.max(0, Math.round(toSafeNumber(rawData?.helperOverageCount, fallback.helperOverageCount))),
+      helperOveragePoints,
+      publishOveragePoints,
+      needConsume: consumePoints > 0,
+      consumePoints,
+      availablePoints: normalizeMajorUnitPoints(sourcePointsBalance, fallback.availablePoints),
     };
-  }, [buildLocalFeeEstimate]);
+  }, [buildLocalCostEstimate]);
 
-  const loadEmergencyFeeEstimate = React.useCallback(async (neededHelperCount) => {
-    const requestedHelperCount = Math.max(1, Math.round(toSafeNumber(neededHelperCount, 1)));
-
-    if (emergencyPricingApiUnsupportedRef.current) {
-      const fallbackData = buildLocalFeeEstimate(requestedHelperCount);
-      setEmergencyFeeEstimate(fallbackData);
-      return fallbackData;
-    }
+  const loadEmergencyCostEstimate = React.useCallback(async (neededHelperCount, options = {}) => {
+    const requestedHelperCount = clampHelperCount(neededHelperCount);
+    const sourceQuota = options?.quota || emergencyQuotaRef.current;
+    const sourceSettings = options?.settings || emergencySettingsRef.current;
+    const sourcePointsBalance =
+      options?.pointsBalance === undefined
+        ? emergencyPointsBalanceRef.current
+        : options.pointsBalance;
 
     try {
       const response = await emergencyApi.getFeeEstimate({ neededHelperCount: requestedHelperCount });
       if (!isSuccessResponse(response)) {
-        throw new Error(response?.msg || 'Failed to load emergency fee estimate');
+        throw new Error(response?.msg || 'Failed to load emergency points estimate');
       }
 
-      const estimateData = normalizeEmergencyFeeEstimate(extractResponsePayload(response) || {}, requestedHelperCount);
-      setEmergencyFeeEstimate(estimateData);
+      const estimateData = normalizeEmergencyCostEstimate(
+        extractResponsePayload(response) || {},
+        requestedHelperCount,
+        sourceQuota,
+        sourceSettings,
+        sourcePointsBalance
+      );
+      setEmergencyCostEstimate(estimateData);
       return estimateData;
     } catch (error) {
-      if (isMissingEmergencyPricingApi(error)) {
-        emergencyPricingApiUnsupportedRef.current = true;
-      } else {
-        console.error('Failed to load emergency fee estimate:', error);
+      console.error('Failed to load emergency points estimate:', error);
+      if (!options?.silent) {
+        showToast('积分消耗计算失败，请稍后重试', 'error');
       }
-
-      const fallbackData = buildLocalFeeEstimate(requestedHelperCount);
-      setEmergencyFeeEstimate(fallbackData);
+      const fallbackData = buildLocalCostEstimate(requestedHelperCount, sourceQuota, sourceSettings, sourcePointsBalance);
+      setEmergencyCostEstimate(fallbackData);
       return fallbackData;
     }
-  }, [buildLocalFeeEstimate, isMissingEmergencyPricingApi, normalizeEmergencyFeeEstimate]);
-
-  useFocusEffect(
-    React.useCallback(() => {
-      const syncEmergencyData = async () => {
-        const settings = await loadEmergencySettings();
-        await loadEmergencyQuota(settings?.dailyFreeTotal ?? 0);
-        await loadEmergencyFeeEstimate(1);
-      };
-
-      syncEmergencyData();
-    }, [loadEmergencyFeeEstimate, loadEmergencyQuota, loadEmergencySettings])
-  );
+  }, [buildLocalCostEstimate, normalizeEmergencyCostEstimate]);
 
   React.useEffect(() => {
-    const helperCount = Math.max(1, Number(emergencyForm.rescuerCount) || 1);
+    let isActive = true;
+
+    const syncEmergencyData = async () => {
+      setPricingInitialized(false);
+      const requestedHelperCount = clampHelperCount(emergencyFormRef.current?.rescuerCount);
+      const [settingsResult, quotaResult, pointsBalanceResult] = await Promise.allSettled([
+        loadEmergencySettings(),
+        loadEmergencyQuota(DEFAULT_EMERGENCY_SETTINGS.feeConfig.freeCount),
+        loadWalletPointsBalance(),
+      ]);
+
+      if (!isActive) {
+        return;
+      }
+
+      const resolvedSettings = settingsResult.status === 'fulfilled'
+        ? settingsResult.value
+        : DEFAULT_EMERGENCY_SETTINGS;
+      const resolvedQuota = quotaResult.status === 'fulfilled'
+        ? quotaResult.value
+        : normalizeEmergencyQuota(
+          DEFAULT_EMERGENCY_QUOTA,
+          resolvedSettings?.feeConfig?.freeCount ?? DEFAULT_EMERGENCY_SETTINGS.feeConfig.freeCount
+        );
+      const resolvedPointsBalance = pointsBalanceResult.status === 'fulfilled'
+        ? pointsBalanceResult.value
+        : emergencyPointsBalanceRef.current;
+
+      await loadEmergencyCostEstimate(requestedHelperCount, {
+        settings: resolvedSettings,
+        quota: resolvedQuota,
+        pointsBalance: resolvedPointsBalance,
+        silent: true,
+      });
+
+      if (isActive) {
+        setPricingInitialized(true);
+      }
+    };
+
+    syncEmergencyData();
+
+    return () => {
+      isActive = false;
+    };
+  }, [loadEmergencyCostEstimate, loadEmergencyQuota, loadEmergencySettings, loadWalletPointsBalance, normalizeEmergencyQuota]);
+
+  React.useEffect(() => {
+    if (!pricingInitialized) {
+      return undefined;
+    }
+
+    const helperCount = clampHelperCount(emergencyForm.rescuerCount);
     const timer = setTimeout(() => {
-      loadEmergencyFeeEstimate(helperCount);
+      loadEmergencyCostEstimate(helperCount, { silent: true });
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [emergencyForm.rescuerCount, loadEmergencyFeeEstimate]);
+  }, [emergencyForm.rescuerCount, loadEmergencyCostEstimate, pricingInitialized]);
 
-  const fallbackEstimate = buildLocalFeeEstimate(emergencyForm.rescuerCount || 1);
-  const activeFeeEstimate = emergencyFeeEstimate || fallbackEstimate;
-  const quotaLoaded = emergencyQuota !== null || emergencyFeeEstimate !== null;
-  const freeCount = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.dailyFreeTotal, 0)));
-  const remainingFree = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.remainingFree, 0)));
-  const freeCountDisplay = quotaLoaded ? `${remainingFree}/${freeCount}` : '--/--';
-  const hasRemainingFree = !quotaLoaded || remainingFree > 0;
+  const fallbackEstimate = buildLocalCostEstimate(emergencyForm.rescuerCount || 1, emergencyQuota, emergencySettings, pointsBalance);
+  const activeCostEstimate = emergencyCostEstimate || fallbackEstimate;
+  const freeCount = Math.max(0, Math.round(toSafeNumber(emergencyQuota?.total, DEFAULT_EMERGENCY_QUOTA.total)));
+  const remainingFree = Math.max(0, Math.round(toSafeNumber(emergencyQuota?.remaining, DEFAULT_EMERGENCY_QUOTA.remaining)));
+  const freeCountDisplay = `${remainingFree}/${freeCount}`;
+  const quotaPeriodLabel = getEmergencyPeriodLabel(emergencyQuota?.period || emergencySettings?.feeConfig?.period);
+  const freeCountLabel = quotaPeriodLabel ? `${quotaPeriodLabel}免费次数：` : '免费次数：';
+  const hasRemainingFree = remainingFree > 0;
 
-  const freeRescuerLimit = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.freeHelperSlots, DEFAULT_EMERGENCY_SETTINGS.freeHelperSlots)));
-  const extraRescuerFeeCents = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.extraHelperPriceCents, DEFAULT_EMERGENCY_SETTINGS.extraHelperPriceCents)));
-  const extraPublishFeeCents = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.extraPublishPriceCents, DEFAULT_EMERGENCY_SETTINGS.extraPublishPriceCents)));
-  const helperOverageCount = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.helperOverageCount, Math.max(0, (Number(emergencyForm.rescuerCount) || 1) - freeRescuerLimit))));
-  const helperOverageFeeCents = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.helperOverageFeeCents, helperOverageCount * extraRescuerFeeCents)));
-  const publishOverageFeeCents = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.publishOverageFeeCents, hasRemainingFree ? 0 : extraPublishFeeCents)));
-  const totalEstimatedFeeCents = Math.max(0, Math.round(toSafeNumber(activeFeeEstimate?.totalFeeCents, helperOverageFeeCents + publishOverageFeeCents)));
-
-  const extraRescuerFee = extraRescuerFeeCents / 100;
-  const helperOverageFee = helperOverageFeeCents / 100;
-  const publishOverageFee = publishOverageFeeCents / 100;
-  const totalEstimatedFee = totalEstimatedFeeCents / 100;
+  const freeRescuerLimit = Math.max(0, Math.round(toSafeNumber(activeCostEstimate?.freeHelperSlots, DEFAULT_EMERGENCY_SETTINGS.freeHelperSlots)));
+  const helperOverageCount = Math.max(0, Math.round(toSafeNumber(activeCostEstimate?.helperOverageCount, Math.max(0, (Number(emergencyForm.rescuerCount) || 1) - freeRescuerLimit))));
+  const helperOveragePoints = normalizePoints(activeCostEstimate?.helperOveragePoints, 0);
+  const publishOveragePoints = normalizePoints(activeCostEstimate?.publishOveragePoints, 0);
+  const totalConsumePoints = normalizePoints(activeCostEstimate?.consumePoints, helperOveragePoints + publishOveragePoints);
+  const requiredBalancePoints = convertCentBasedPointsToMajorUnit(totalConsumePoints);
+  const helperOveragePointsDisplay = formatCentBasedPointsDisplay(helperOveragePoints);
+  const publishOveragePointsDisplay = formatCentBasedPointsDisplay(publishOveragePoints);
+  const totalConsumePointsDisplay = formatCentBasedPointsDisplay(totalConsumePoints);
+  const needConsumePoints = Boolean(activeCostEstimate?.needConsume) || totalConsumePoints > 0;
   const nearbyNotifyRadiusKm = Math.max(0, toSafeNumber(emergencySettings?.nearbyNotifyRadiusKm, DEFAULT_EMERGENCY_SETTINGS.nearbyNotifyRadiusKm));
+  const quickTitles = React.useMemo(() => emergencySettings.quickTitles || [], [emergencySettings.quickTitles]);
+
+  React.useEffect(() => {
+    setPointsAcknowledged(false);
+  }, [emergencyForm.rescuerCount, totalConsumePoints]);
+
+  const regionDisplay = React.useMemo(() => {
+    const parts = [
+      resolvedChinaRegion?.provinceName || selectedRegion.city || '',
+      resolvedChinaRegion?.cityName || selectedRegion.state || '',
+      resolvedChinaRegion?.districtName || selectedRegion.district || '',
+    ].filter(Boolean);
+
+    if (parts.length > 0) {
+      return parts.join('·');
+    }
+
+    return (emergencyForm.location || '').trim();
+  }, [emergencyForm.location, resolvedChinaRegion, selectedRegion.city, selectedRegion.district, selectedRegion.state]);
+
+  const normalizedTitle = emergencyForm.title.trim();
+  const normalizedDescription = emergencyForm.description.trim();
+  const normalizedContactValue = normalizePhoneNumber(emergencyForm.contact);
+  const requestedHelperCount = clampHelperCount(emergencyForm.rescuerCount);
+  const locationInputValue = (emergencyForm.location || '').trim();
+  const hasCoordinates = Number.isFinite(Number(selectedCoordinates?.latitude)) && Number.isFinite(Number(selectedCoordinates?.longitude));
+  const draftRegionPayload = resolveEmergencyRegionPayload({ resolvedChinaRegion, selectedRegion });
+  const hasRegionSelection = Boolean(
+    draftRegionPayload.provinceId ||
+    draftRegionPayload.cityId ||
+    draftRegionPayload.districtId
+  );
+  const hasPublishLocation = hasCoordinates || hasRegionSelection;
+  const hasLocationSelectionText = Boolean(locationInputValue || regionDisplay);
+  const hasVisibleAddress = Boolean(regionDisplay || (emergencyForm.specificLocation || '').trim());
+  const requiresPointsAcknowledgement = needConsumePoints;
+  const canSubmit =
+    Boolean(normalizedTitle) &&
+    Boolean(normalizedDescription) &&
+    Boolean(normalizedContactValue) &&
+    isValidPhoneNumber(normalizedContactValue) &&
+    requestedHelperCount >= 1 &&
+    requestedHelperCount <= 20 &&
+    hasPublishLocation &&
+    hasLocationSelectionText &&
+    hasVisibleAddress &&
+    (!requiresPointsAcknowledgement || pointsAcknowledged) &&
+    !showProgressModal;
 
   const openRegionSelector = () => {
     setShowRegionModal(true);
@@ -363,13 +644,6 @@ export default function EmergencyScreen({ navigation }) {
     });
   }, []);
 
-  // Use useMemo to prevent calling t() during initial render
-  const quickTitles = React.useMemo(() => [
-    t('emergency.quickTitle1'),
-    t('emergency.quickTitle2'),
-    t('emergency.quickTitle3')
-  ], []);
-
   // 请求相册权限
   const requestPermission = async () => {
     if (Platform.OS !== 'web') {
@@ -385,8 +659,8 @@ export default function EmergencyScreen({ navigation }) {
   // 选择图片
   const pickImage = async () => {
     // 检查图片数量限制
-    if (emergencyImages.length >= 3) {
-      showAppAlert(t('common.ok'), '最多只能上传3张图片');
+    if (emergencyImages.length >= MAX_IMAGE_COUNT) {
+      showToast(`图片数量不能超过${MAX_IMAGE_COUNT}张`, 'warning');
       return;
     }
 
@@ -412,15 +686,15 @@ export default function EmergencyScreen({ navigation }) {
       }
     } catch (error) {
       console.error('选择图片失败:', error);
-      showAppAlert('错误', '选择图片失败，请重试');
+      showToast('选择图片失败，请重试', 'error');
     }
   };
 
   // 拍照
   const takePhoto = async () => {
     // 检查图片数量限制
-    if (emergencyImages.length >= 3) {
-      showAppAlert(t('common.ok'), '最多只能上传3张图片');
+    if (emergencyImages.length >= MAX_IMAGE_COUNT) {
+      showToast(`图片数量不能超过${MAX_IMAGE_COUNT}张`, 'warning');
       return;
     }
 
@@ -450,7 +724,7 @@ export default function EmergencyScreen({ navigation }) {
       }
     } catch (error) {
       console.error('拍照失败:', error);
-      showAppAlert('错误', '拍照失败，请重试');
+      showToast('拍照失败，请重试', 'error');
     }
   };
 
@@ -481,12 +755,14 @@ export default function EmergencyScreen({ navigation }) {
     setEmergencyImages(emergencyImages.filter(img => img.id !== id));
   };
 
-  const normalizePhoneNumber = (phone) => String(phone || '').replace(/[\s\-\(\)]/g, '').trim();
+  function normalizePhoneNumber(phone) {
+    return String(phone || '').replace(/[\s\-\(\)]/g, '').trim();
+  }
 
-  const isValidPhoneNumber = (phone) => {
+  function isValidPhoneNumber(phone) {
     const phoneRegex = /^\+?[1-9]\d{7,14}$/;
     return phoneRegex.test(normalizePhoneNumber(phone));
-  };
+  }
 
   const handleLocate = async () => {
     try {
@@ -526,9 +802,14 @@ export default function EmergencyScreen({ navigation }) {
       ].filter(Boolean);
 
       const locationText = locationParts.join(' ');
+      const locatedSpecificAddress = buildLocatedSpecificAddress(address);
       const matchedRegion = resolveChinaRegionFromAddress(address);
 
-      setEmergencyForm((prev) => ({ ...prev, location: locationText }));
+      setEmergencyForm((prev) => ({
+        ...prev,
+        location: locationText,
+        specificLocation: prev.specificLocation || locatedSpecificAddress,
+      }));
       setSelectedCoordinates({
         latitude: toSafeNumber(currentPosition?.coords?.latitude, 0),
         longitude: toSafeNumber(currentPosition?.coords?.longitude, 0),
@@ -566,6 +847,10 @@ export default function EmergencyScreen({ navigation }) {
       return [];
     }
 
+    if (emergencyImages.length > MAX_IMAGE_COUNT) {
+      throw new Error(`图片数量不能超过${MAX_IMAGE_COUNT}张`);
+    }
+
     const imageUrls = [];
     for (let index = 0; index < emergencyImages.length; index += 1) {
       const image = emergencyImages[index];
@@ -585,7 +870,21 @@ export default function EmergencyScreen({ navigation }) {
         throw new Error(uploadResult?.msg || '图片上传失败');
       }
 
-      imageUrls.push(uploadPayload);
+      const uploadUrl = typeof uploadPayload === 'string'
+        ? uploadPayload
+        : (
+          uploadPayload?.url ||
+          uploadPayload?.imageUrl ||
+          uploadPayload?.fileUrl ||
+          uploadPayload?.path ||
+          ''
+        );
+
+      if (!uploadUrl) {
+        throw new Error(`第 ${index + 1} 张图片上传结果无效`);
+      }
+
+      imageUrls.push(uploadUrl);
     }
 
     return imageUrls;
@@ -604,6 +903,24 @@ export default function EmergencyScreen({ navigation }) {
     return candidates.find((item) => typeof item === 'string' && item.trim()) || fallback;
   };
 
+  const getEmergencyPointsErrorMessage = (error, fallback = '操作失败，请稍后重试') => {
+    const rawMessage = extractRequestErrorMessage(error, fallback);
+
+    if (/insufficient|积分不足|余额不足|金额不足/i.test(rawMessage)) {
+      return '积分不足，请前往 Web 端获取积分后再发布';
+    }
+
+    if (/deduct|consume|扣减失败|支付失败/i.test(rawMessage)) {
+      return '积分扣减失败，请稍后重试';
+    }
+
+    return rawMessage
+      .replace(/本次预计需支付/g, '本次预计需消耗')
+      .replace(/支付失败/g, '积分扣减失败')
+      .replace(/金额不足/g, '积分不足')
+      .replace(/余额/g, '积分余额');
+  };
+
   const resetEmergencyForm = () => {
     setEmergencyForm({
       title: '',
@@ -618,106 +935,126 @@ export default function EmergencyScreen({ navigation }) {
     setSelectedCoordinates(null);
     setLocationAddress(null);
     setResolvedChinaRegion(null);
+    setEmergencyCostEstimate(DEFAULT_EMERGENCY_COST_ESTIMATE);
   };
 
   const closeProgressModal = React.useCallback(() => {
     setShowProgressModal(false);
-    setProgressMessage('请稍候，正在提交真实数据...');
+    setProgressMessage('请稍候，正在提交紧急求助...');
   }, []);
-
-  const showAlertAfterProgressClosed = React.useCallback((title, message, buttons = []) => {
-    closeProgressModal();
-
-    requestAnimationFrame(() => {
-      InteractionManager.runAfterInteractions(() => {
-        showAppAlert(title, message, buttons);
-      });
-    });
-  }, [closeProgressModal]);
 
   const handleSubmit = async () => {
     if (showProgressModal) {
       return;
     }
 
-    if (!emergencyForm.title.trim()) {
-      showAppAlert(t('emergency.enterTitle'));
+    if (!normalizedTitle) {
+      showToast('求助标题不能为空', 'warning');
       return;
     }
 
-    if (!emergencyForm.description.trim()) {
-      showAppAlert('提示', '请填写详细描述');
+    if (normalizedTitle.length > 100) {
+      showToast('求助标题不能超过100字', 'warning');
       return;
     }
 
-    if (!emergencyForm.contact.trim()) {
-      showAppAlert('提示', '请填写联系电话');
+    if (!normalizedDescription) {
+      showToast('详细描述不能为空', 'warning');
       return;
     }
 
-    if (!isValidPhoneNumber(emergencyForm.contact)) {
-      showAppAlert('提示', '请输入正确的联系电话，支持国内和国际号码');
+    if (normalizedDescription.length > MAX_DESCRIPTION_LENGTH) {
+      showToast(`详细描述不能超过${MAX_DESCRIPTION_LENGTH}字`, 'warning');
       return;
     }
 
-    if (!emergencyForm.location.trim()) {
-      showAppAlert('提示', '请先定位或手动选择地区');
+    if (!normalizedContactValue) {
+      showToast('联系电话不能为空', 'warning');
       return;
     }
 
-    setProgressMessage('正在校验费用...');
-    setShowProgressModal(true);
+    if (!isValidPhoneNumber(normalizedContactValue)) {
+      showToast('请输入正确的手机号', 'warning');
+      return;
+    }
+
+    if (requestedHelperCount < 1 || requestedHelperCount > 20) {
+      showToast('需要救援人数必须为1-20', 'warning');
+      return;
+    }
+
+    if (!hasPublishLocation) {
+      showToast('请先定位或手动选择地址', 'warning');
+      return;
+    }
+
+    if (!hasVisibleAddress) {
+      showToast('请补充位置描述', 'warning');
+      return;
+    }
+
+    if (emergencyImages.length > MAX_IMAGE_COUNT) {
+      showToast(`图片数量不能超过${MAX_IMAGE_COUNT}张`, 'warning');
+      return;
+    }
+
+    if (requiresPointsAcknowledgement && !pointsAcknowledged) {
+      showToast('请先确认本次发布可能消耗积分', 'warning');
+      return;
+    }
+
+    let latestPointsBalance = emergencyPointsBalanceRef.current;
+    if (needConsumePoints) {
+      latestPointsBalance = await loadWalletPointsBalance();
+      if (normalizeMajorUnitPoints(latestPointsBalance, 0) < requiredBalancePoints) {
+        showToast('积分不足，请前往 Web 端获取积分后再发布', 'warning');
+        return;
+      }
+    }
 
     try {
-      const requestedHelperCount = Math.max(1, Number(emergencyForm.rescuerCount) || 1);
-      const latestFeeEstimate = await withAsyncTimeout(
-        () => loadEmergencyFeeEstimate(requestedHelperCount),
-        REQUEST_TIMEOUT_MS,
-        '费用计算超时，请稍后重试'
-      );
-      const latestTotalFeeCents = Math.max(0, Math.round(toSafeNumber(latestFeeEstimate?.totalFeeCents, totalEstimatedFeeCents)));
+      setProgressMessage('正在发布紧急求助...');
+      setShowProgressModal(true);
 
-      const imageUrls = await uploadEmergencyImages();
-      const locationDisplay = emergencyForm.location.trim();
+      const locationDisplay = regionDisplay || emergencyForm.location.trim();
       const specificLocation = (emergencyForm.specificLocation || '').trim();
+      const submitRegionPayload = resolveEmergencyRegionPayload({ resolvedChinaRegion, selectedRegion });
 
       const addressText =
         buildEmergencyAddressText({
-          provinceName: resolvedChinaRegion?.provinceName || selectedRegion.city || '',
-          cityName: resolvedChinaRegion?.cityName || selectedRegion.state || '',
-          districtName: resolvedChinaRegion?.districtName || selectedRegion.district || '',
+          provinceName: submitRegionPayload.provinceName,
+          cityName: submitRegionPayload.cityName,
+          districtName: submitRegionPayload.districtName,
           street: locationAddress?.street || specificLocation,
           streetNumber: locationAddress?.streetNumber || '',
           name: locationAddress?.name || '',
         }) || [locationDisplay, specificLocation].filter(Boolean).join(' ');
 
-      const provinceId =
-        toPositiveIntOrUndefined(resolvedChinaRegion?.provinceId) ||
-        toPositiveIntOrUndefined(selectedRegion.cityId);
-      const cityId =
-        toPositiveIntOrUndefined(resolvedChinaRegion?.cityId) ||
-        toPositiveIntOrUndefined(selectedRegion.stateId);
-      const districtId =
-        toPositiveIntOrUndefined(resolvedChinaRegion?.districtId) ||
-        toPositiveIntOrUndefined(selectedRegion.districtId);
+      const { provinceId, cityId, districtId } = submitRegionPayload;
 
+      if (!provinceId || !cityId || !districtId) {
+        showToast('请重新定位或选择地址', 'warning');
+        return;
+      }
+
+      const imageUrls = await uploadEmergencyImages();
       const publishPayload = {
-        title: emergencyForm.title.trim(),
-        description: emergencyForm.description.trim(),
+        title: normalizedTitle,
+        description: normalizedDescription,
         urgencyLevel: 1,
-        category: 1,
+        category: inferEmergencyCategory(normalizedTitle),
         neededHelperCount: requestedHelperCount,
         contactType: 1,
-        contactValue: normalizePhoneNumber(emergencyForm.contact),
-        ...(provinceId ? { provinceId } : {}),
-        ...(cityId ? { cityId } : {}),
-        ...(districtId ? { districtId } : {}),
+        contactValue: normalizedContactValue,
+        provinceId,
+        cityId,
+        districtId,
         addressText: addressText || locationDisplay,
         regionDisplay: locationDisplay,
         latitude: toSafeNumber(selectedCoordinates?.latitude, 0),
         longitude: toSafeNumber(selectedCoordinates?.longitude, 0),
         imageUrls,
-        acknowledgeFees: latestTotalFeeCents > 0,
+        acknowledgeFees: requiresPointsAcknowledgement ? pointsAcknowledged : false,
       };
 
       setProgressMessage('正在提交紧急求助...');
@@ -730,23 +1067,51 @@ export default function EmergencyScreen({ navigation }) {
         throw new Error(response?.msg || '发布失败，请稍后重试');
       }
 
+      const responsePayload = extractResponsePayload(response) || {};
+      const chargedPoints = convertCentBasedPointsToMajorUnit(responsePayload?.chargedPoints);
+      const balanceAfter = responsePayload?.balanceAfter === undefined || responsePayload?.balanceAfter === null
+        ? null
+        : convertCentBasedPointsToMajorUnit(responsePayload.balanceAfter);
+      const pointsTxnNo = responsePayload?.pointsTxnNo ? String(responsePayload.pointsTxnNo).trim() : '';
+      const helpId = responsePayload?.helpId ?? null;
+
+      if (chargedPoints > 0 || balanceAfter !== null || pointsTxnNo) {
+        const syncResponse = await walletApi.syncServerPointsDebit(chargedPoints, {
+          balanceAfter,
+          txnNo: pointsTxnNo,
+          sourceType: 'BOUNTY',
+          remark: normalizedTitle ? `紧急求助发布 - ${normalizedTitle}` : '紧急求助发布',
+          refId: helpId,
+          refType: 'EMERGENCY',
+        });
+
+        if (syncResponse?.code !== 0 && syncResponse?.code !== 200) {
+          throw new Error(syncResponse?.msg || '积分扣减失败，请稍后重试');
+        }
+
+        if (syncResponse?.data?.balance !== undefined) {
+          setPointsBalance(normalizeMajorUnitPoints(syncResponse.data.balance, pointsBalance));
+        }
+      }
+
       resetEmergencyForm();
+      showToast('发布成功', 'success');
 
       Promise.allSettled([
-        loadEmergencyQuota(emergencySettings?.dailyFreeTotal ?? 0),
-        loadEmergencyFeeEstimate(1),
+        loadEmergencyQuota(emergencySettings?.feeConfig?.freeCount ?? 0),
+        loadEmergencyCostEstimate(1, { silent: true }),
+        loadWalletPointsBalance(),
       ]).catch((refreshError) => {
         console.error('Emergency post-publish refresh failed:', refreshError);
       });
 
-      showAlertAfterProgressClosed(
-        t('emergency.published'),
-        `紧急求助已成功发布！\n\n附近 ${formatAmount(nearbyNotifyRadiusKm)}km 用户将收到通知。`,
-        [{ text: t('emergency.confirm'), onPress: () => navigation.goBack() }]
-      );
+      closeProgressModal();
+      navigation.navigate('EmergencyList', { initialTab: 'mine' });
     } catch (error) {
       console.error('Emergency publish failed:', error);
-      showAlertAfterProgressClosed('提示', extractRequestErrorMessage(error));
+      showToast(getEmergencyPointsErrorMessage(error), 'error');
+    } finally {
+      closeProgressModal();
     }
   };
 
@@ -762,11 +1127,11 @@ export default function EmergencyScreen({ navigation }) {
           <Text style={styles.headerTitle}>{t('emergency.title')}</Text>
         </View>
         <TouchableOpacity 
-          style={[styles.submitBtn, (!emergencyForm.title.trim() || showProgressModal) && styles.submitBtnDisabled]}
+          style={[styles.submitBtn, !canSubmit && styles.submitBtnDisabled]}
           onPress={handleSubmit}
-          disabled={!emergencyForm.title.trim() || showProgressModal}
+          disabled={!canSubmit}
         >
-          <Text style={[styles.submitText, (!emergencyForm.title.trim() || showProgressModal) && styles.submitTextDisabled]}>
+          <Text style={[styles.submitText, !canSubmit && styles.submitTextDisabled]}>
             {t('emergency.publish')}
           </Text>
         </TouchableOpacity>
@@ -775,14 +1140,14 @@ export default function EmergencyScreen({ navigation }) {
       {/* Warning */}
       <View style={styles.warning}>
         <Ionicons name="warning" size={18} color="#f59e0b" />
-        <Text style={styles.warningText}>{t('emergency.warning')}</Text>
+        <Text style={styles.warningText}>{`紧急求助将推送给附近 ${nearbyNotifyRadiusKm}km 内的用户，请确保求助信息真实准确。`}</Text>
       </View>
 
       {/* Free Count Banner */}
       <View style={styles.freeCountBanner}>
         <View style={styles.freeCountLeft}>
           <Ionicons name="gift" size={20} color={hasRemainingFree ? "#22c55e" : "#9ca3af"} />
-          <Text style={styles.freeCountText}>{t('emergency.freeCount')}</Text>
+          <Text style={styles.freeCountText}>{freeCountLabel}</Text>
           <Text style={[styles.freeCountNumber, !hasRemainingFree && { color: '#9ca3af' }]}>
             {freeCountDisplay}
           </Text>
@@ -795,15 +1160,6 @@ export default function EmergencyScreen({ navigation }) {
             <Ionicons name="document-text-outline" size={14} color="#2563eb" />
             <Text style={styles.myPublishButtonText}>{'\u6211\u7684\u53d1\u5e03'}</Text>
           </TouchableOpacity>
-          {quotaLoaded && publishOverageFeeCents > 0 && (
-            <TouchableOpacity 
-              style={styles.monthlyPayButton}
-              onPress={() => showAppAlert('提示', `超出免费次数后，本次发布额外费用为 $${formatAmount(publishOverageFee)}`)}
-            >
-              <Text style={styles.monthlyPayButtonText}>{`${t('emergency.pay')} $${formatAmount(publishOverageFee)}`}</Text>
-              <Ionicons name="arrow-forward" size={14} color="#fff" />
-            </TouchableOpacity>
-          )}
         </View>
       </View>
       <ScrollView style={styles.formArea} keyboardShouldPersistTaps="handled">
@@ -819,20 +1175,22 @@ export default function EmergencyScreen({ navigation }) {
             value={emergencyForm.title}
             onChangeText={(text) => setEmergencyForm({...emergencyForm, title: text})}
           />
-          <View style={styles.quickTitlesContainer}>
-            <Text style={styles.quickTitlesLabel}>{t('emergency.quickTitles')}</Text>
-            <View style={styles.quickTitlesRow}>
-              {quickTitles.map((title, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.quickTitleTag}
-                  onPress={() => setEmergencyForm({...emergencyForm, title: title})}
-                >
-                  <Text style={styles.quickTitleText}>{title}</Text>
-                </TouchableOpacity>
-              ))}
+          {quickTitles.length > 0 ? (
+            <View style={styles.quickTitlesContainer}>
+              <Text style={styles.quickTitlesLabel}>{t('emergency.quickTitles')}</Text>
+              <View style={styles.quickTitlesRow}>
+                {quickTitles.map((title, index) => (
+                  <TouchableOpacity
+                    key={`${title}-${index}`}
+                    style={styles.quickTitleTag}
+                    onPress={() => setEmergencyForm({...emergencyForm, title })}
+                  >
+                    <Text style={styles.quickTitleText}>{title}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
-          </View>
+          ) : null}
         </View>
 
         {/* Description */}
@@ -841,9 +1199,9 @@ export default function EmergencyScreen({ navigation }) {
             <Text style={styles.formLabel}>{t('emergency.description')}</Text>
             <Text style={[
               styles.charCounter,
-              emergencyForm.description.length > 200 && styles.charCounterError
+              emergencyForm.description.length > MAX_DESCRIPTION_LENGTH && styles.charCounterError
             ]}>
-              {emergencyForm.description.length}/200
+              {emergencyForm.description.length}/{MAX_DESCRIPTION_LENGTH}
             </Text>
           </View>
           <TextInput
@@ -852,13 +1210,13 @@ export default function EmergencyScreen({ navigation }) {
             placeholderTextColor="#bbb"
             value={emergencyForm.description}
             onChangeText={(text) => {
-              if (text.length <= 200) {
+              if (text.length <= MAX_DESCRIPTION_LENGTH) {
                 setEmergencyForm({...emergencyForm, description: text});
               }
             }}
             multiline
             textAlignVertical="top"
-            maxLength={200}
+            maxLength={MAX_DESCRIPTION_LENGTH}
           />
           
           {/* 图片上传区域 */}
@@ -877,7 +1235,7 @@ export default function EmergencyScreen({ navigation }) {
               ))}
               
               {/* 添加图片按钮 */}
-              {emergencyImages.length < 3 && (
+              {emergencyImages.length < MAX_IMAGE_COUNT && (
                 <View style={styles.addImageBtnWrapper}>
                   <TouchableOpacity 
                     style={styles.addImageBtn}
@@ -889,13 +1247,13 @@ export default function EmergencyScreen({ navigation }) {
                 </View>
               )}
             </View>
-            <Text style={styles.imageHint}>最多可上传3张图片，帮助他人更好地了解情况况?</Text>
+            <Text style={styles.imageHint}>{`最多可上传${MAX_IMAGE_COUNT}张图片，帮助他人更好地了解情况`}</Text>
           </View>
         </View>
 
         {/* Location */}
         <View style={styles.formGroup}>
-          <Text style={styles.formLabel}>{t('emergency.location')}</Text>
+          <Text style={styles.formLabel}>{`${t('emergency.location')} *`}</Text>
           <View style={styles.locationRow}>
             <TouchableOpacity style={styles.locationInput} activeOpacity={0.85} onPress={openRegionSelector}>
               <Ionicons name="location" size={18} color="#ef4444" />
@@ -930,7 +1288,7 @@ export default function EmergencyScreen({ navigation }) {
 
         {/* Contact */}
         <View style={styles.formGroup}>
-          <Text style={styles.formLabel}>{t('emergency.contact')}</Text>
+          <Text style={styles.formLabel}>{`${t('emergency.contact')} *`}</Text>
           <View style={styles.contactInput}>
             <Ionicons name="call" size={18} color="#6b7280" />
             <TextInput
@@ -950,7 +1308,7 @@ export default function EmergencyScreen({ navigation }) {
             <Text style={styles.formLabel}>{t('emergency.rescuerCount')}</Text>
             <View style={styles.rescuerFreeTag}>
               <Ionicons name="information-circle" size={14} color="#22c55e" />
-              <Text style={styles.rescuerFreeText}>{t('emergency.rescuerFree')}</Text>
+              <Text style={styles.rescuerFreeText}>{`${freeRescuerLimit}人内免费`}</Text>
             </View>
           </View>
           
@@ -983,41 +1341,28 @@ export default function EmergencyScreen({ navigation }) {
           </View>
 
           <View style={styles.rescuerFeeInfo}>
-            {totalEstimatedFeeCents === 0 ? (
+            {!needConsumePoints ? (
               <View style={styles.rescuerFeeRow}>
                 <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
-                <Text style={styles.rescuerFeeTextFree}>{t('emergency.rescuerFeeTextFree')}</Text>
+                <Text style={styles.rescuerFeeTextFree}>当前人数免费</Text>
               </View>
             ) : (
               <View style={styles.rescuerFeeCard}>
-                <View style={styles.rescuerFeeRow}>
-                  <View style={styles.rescuerFeeLeft}>
-                    <Text style={styles.rescuerFeeLabel}>费用预估</Text>
-                    {helperOverageFeeCents > 0 && (
-                      <Text style={styles.rescuerFeeExtra}>
-                        救援人数超额费：{helperOverageCount}{t('emergency.rescuerUnit')} × ${formatAmount(extraRescuerFee)} = ${formatAmount(helperOverageFee)}
-                      </Text>
-                    )}
-                    {publishOverageFeeCents > 0 && (
-                      <Text style={styles.rescuerFeeExtra}>超额发布费：${formatAmount(publishOverageFee)}</Text>
-                    )}
-                  </View>
-                  <View style={styles.rescuerFeeRight}>
-                    <Text style={styles.rescuerFeeTotalLabel}>{t('emergency.needPay')}</Text>
-                    <Text style={styles.rescuerFeeTotal}>${formatAmount(totalEstimatedFee)}</Text>
-                  </View>
-                </View>
-                <Text style={styles.rescuerFeeNote}>{t('emergency.rescuerFeeNote')}</Text>
-                <TouchableOpacity 
-                  style={styles.payButton}
-                  onPress={() => showAppAlert(
-                    `${t('emergency.pay')} $${formatAmount(totalEstimatedFee)}`,
-                    t('emergency.paymentMethods')
-                  )}
+                <Text style={styles.rescuerFeeLabel}>{`本次预计需消耗：${totalConsumePointsDisplay} 积分`}</Text>
+                <Text style={styles.rescuerFeeExtra}>{`积分余额：${pointsBalance}`}</Text>
+                {publishOveragePoints > 0 ? (
+                  <Text style={styles.rescuerFeeExtra}>{`超额发布消耗：${publishOveragePointsDisplay} 积分`}</Text>
+                ) : null}
+                <Text style={styles.rescuerFeeExtra}>{`救援人数超额消耗：${helperOveragePointsDisplay} 积分`}</Text>
+                <TouchableOpacity
+                  style={styles.pointsAcknowledgeRow}
+                  activeOpacity={0.85}
+                  onPress={() => setPointsAcknowledged((prev) => !prev)}
                 >
-                  <Ionicons name="card" size={18} color="#fff" />
-                  <Text style={styles.payButtonText}>{t('emergency.payNow')} ${formatAmount(totalEstimatedFee)}</Text>
-                  <Ionicons name="arrow-forward" size={16} color="#fff" />
+                  <View style={[styles.pointsCheckbox, pointsAcknowledged && styles.pointsCheckboxChecked]}>
+                    {pointsAcknowledged ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}
+                  </View>
+                  <Text style={styles.pointsAcknowledgeText}>我已知晓本次发布可能消耗积分</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -1027,10 +1372,9 @@ export default function EmergencyScreen({ navigation }) {
         {/* Tips */}
         <View style={styles.tips}>
           <Text style={styles.tipsTitle}>{t('emergency.tips')}</Text>
-          <Text style={styles.tipsText}>{t('emergency.tip1')}</Text>
-          <Text style={styles.tipsText}>{t('emergency.tip2')}</Text>
-          <Text style={styles.tipsText}>{t('emergency.tip3')}</Text>
-          <Text style={styles.tipsText}>{`• 当前通知半径：${formatAmount(nearbyNotifyRadiusKm)}km`}</Text>
+          <Text style={styles.tipsText}>• 请确保描述真实准确，虚假求助将被处罚</Text>
+          <Text style={styles.tipsText}>• 如遇生命危险，请优先拨打急救电话</Text>
+          <Text style={styles.tipsText}>{`• 当前通知半径：${nearbyNotifyRadiusKm}km`}</Text>
         </View>
 
         <View style={{ height: 40 }} />
@@ -1311,25 +1655,33 @@ const styles = StyleSheet.create({
     borderRadius: 8, 
     padding: 12 
   },
-  rescuerFeeLeft: { flex: 1 },
-  rescuerFeeLabel: { fontSize: scaleFont(13), color: '#92400e', marginBottom: 4 },
-  rescuerFeeExtra: { fontSize: scaleFont(15), color: '#ea580c', fontWeight: '600' },
-  rescuerFeeRight: { alignItems: 'flex-end' },
-  rescuerFeeTotalLabel: { fontSize: scaleFont(12), color: '#92400e', marginBottom: 2 },
-  rescuerFeeTotal: { fontSize: scaleFont(24), fontWeight: 'bold', color: '#ef4444' },
-  rescuerFeeNote: { fontSize: scaleFont(12), color: '#92400e', marginTop: 8 },
-  payButton: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    backgroundColor: '#ef4444', 
-    paddingVertical: 12, 
-    paddingHorizontal: 16, 
-    borderRadius: 8, 
-    marginTop: 12, 
-    gap: 8 
+  rescuerFeeLabel: { fontSize: scaleFont(14), color: '#92400e', fontWeight: '600', marginBottom: 6 },
+  rescuerFeeExtra: { fontSize: scaleFont(13), color: '#c2410c', fontWeight: '500', marginTop: 4 },
+  pointsAcknowledgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 12,
   },
-  payButtonText: { fontSize: scaleFont(15), color: '#fff', fontWeight: '600' },
+  pointsCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#f97316',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pointsCheckboxChecked: {
+    backgroundColor: '#f97316',
+  },
+  pointsAcknowledgeText: {
+    flex: 1,
+    fontSize: scaleFont(13),
+    color: '#7c2d12',
+    lineHeight: scaleFont(18),
+  },
   tips: { 
     backgroundColor: '#fef2f2', 
     borderRadius: 8, 
