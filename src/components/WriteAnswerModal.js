@@ -38,6 +38,7 @@ import { countDisplayCharacters } from '../utils/twemoji';
 
 const COMPOSER_ALERT_CONFIRM_TEXT = '我知道了';
 const SEND_BUTTON_COLOR = '#f472b6';
+const ANSWER_INPUT_MIN_HEIGHT = 180;
 
 export default function WriteAnswerModal({
   visible,
@@ -70,6 +71,7 @@ export default function WriteAnswerModal({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [composerAlert, setComposerAlert] = useState(null);
   const [inputTop, setInputTop] = useState(0);
+  const [answerInputHeight, setAnswerInputHeight] = useState(ANSWER_INPUT_MIN_HEIGHT);
   const answerInputRef = React.useRef(null);
   const { recommendedMentionUsers } = useRecommendedMentionUsers({
     visible,
@@ -142,6 +144,7 @@ export default function WriteAnswerModal({
       setShowImagePicker(false);
       setShowEmojiPicker(false);
       setComposerAlert(null);
+      setAnswerInputHeight(ANSWER_INPUT_MIN_HEIGHT);
       inputFocusedRef.current = false;
     }
   }, [visible]);
@@ -421,11 +424,26 @@ export default function WriteAnswerModal({
             >
               <TextInput
                 ref={answerInputRef}
-                style={styles.answerTextInput}
+                style={[
+                  styles.answerTextInput,
+                  {
+                    minHeight: ANSWER_INPUT_MIN_HEIGHT,
+                    height: answerInputHeight,
+                  },
+                ]}
                 placeholder={placeholder}
                 placeholderTextColor="#bbb"
                 value={text}
                 onChangeText={handleChangeAnswerText}
+                onContentSizeChange={(event) => {
+                  const nextHeight = Math.max(
+                    ANSWER_INPUT_MIN_HEIGHT,
+                    Math.ceil(event.nativeEvent.contentSize.height) + 20
+                  );
+                  setAnswerInputHeight(currentHeight =>
+                    currentHeight === nextHeight ? currentHeight : nextHeight
+                  );
+                }}
                 onFocus={handleInputFocus}
                 onBlur={handleInputBlur}
                 onSelectionChange={handleSelectionChange}
@@ -520,7 +538,6 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(16),
     color: '#333',
     lineHeight: scaleFont(26),
-    minHeight: 300,
   },
   answerIdentitySection: {
     paddingHorizontal: 16,

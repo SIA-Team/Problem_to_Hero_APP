@@ -8040,7 +8040,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                     <View style={styles.commentFooter}>
                       <View style={styles.commentFooterLeft}>
                         <TouchableOpacity style={[styles.commentActionBtn, isLikeInteractionDisabled(isCommentLiked, isCommentDisliked) && styles.interactionBtnDisabled]} onPress={() => handleCommentLike(comment.id)} disabled={commentLikeLoading[comment.id] || isLikeInteractionDisabled(isCommentLiked, isCommentDisliked)}>
-                          <Ionicons name={isCommentLiked ? "thumbs-up" : "thumbs-up-outline"} size={14} color={isCommentLiked ? "#ef4444" : isLikeInteractionDisabled(isCommentLiked, isCommentDisliked) ? "#d1d5db" : "#9ca3af"} />
+                          <Ionicons name={isCommentLiked ? "thumbs-up" : "thumbs-up-outline"} size={18} color={isCommentLiked ? "#ef4444" : isLikeInteractionDisabled(isCommentLiked, isCommentDisliked) ? "#d1d5db" : "#9ca3af"} />
                           <Text style={[styles.commentActionText, isCommentLiked && {
                           color: '#ef4444'
                         }, isLikeInteractionDisabled(isCommentLiked, isCommentDisliked) && styles.interactionTextDisabled]}>{commentLikeCount}</Text>
@@ -8049,15 +8049,15 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                         setCurrentCommentId(comment.id);
                         setShowCommentReplyModal(true);
                       }}>
-                          <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
+                          <Ionicons name="chatbubble-outline" size={18} color="#9ca3af" />
                           <Text style={styles.commentActionText}>{formatNumber(comment.replyCount || comment.replies || 0)}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.commentActionBtn} onPress={() => openShareModalWithData(buildQuestionCommentSharePayload(comment))}>
-                          <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
+                          <Ionicons name="arrow-redo-outline" size={18} color="#9ca3af" />
                           <Text style={styles.commentActionText}>{formatNumber(comment.shareCount || comment.shares || 0)}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.commentActionBtn} onPress={() => handleCommentCollect(comment.id)} disabled={commentCollectLoading[comment.id]}>
-                          <Ionicons name={isCommentCollected ? "star" : "star-outline"} size={14} color={isCommentCollected ? "#f59e0b" : "#9ca3af"} />
+                          <Ionicons name={isCommentCollected ? "star" : "star-outline"} size={18} color={isCommentCollected ? "#f59e0b" : "#9ca3af"} />
                           <Text style={[styles.commentActionText, isCommentCollected && {
                           color: '#f59e0b'
                         }]}>{commentCollectCount}</Text>
@@ -8065,7 +8065,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                       </View>
                       <View style={styles.commentFooterRight}>
                         <TouchableOpacity style={[styles.commentActionBtn, isDislikeInteractionDisabled(isCommentLiked, isCommentDisliked) && styles.interactionBtnDisabled]} onPress={() => handleCommentDislike(comment.id)} disabled={commentDislikeLoading[comment.id] || isDislikeInteractionDisabled(isCommentLiked, isCommentDisliked)}>
-                          <Ionicons name={isCommentDisliked ? "thumbs-down" : "thumbs-down-outline"} size={14} color={isCommentDisliked ? "#6b7280" : isDislikeInteractionDisabled(isCommentLiked, isCommentDisliked) ? "#d1d5db" : "#9ca3af"} />
+                          <Ionicons name={isCommentDisliked ? "thumbs-down" : "thumbs-down-outline"} size={18} color={isCommentDisliked ? "#6b7280" : isDislikeInteractionDisabled(isCommentLiked, isCommentDisliked) ? "#d1d5db" : "#9ca3af"} />
                           <Text style={[styles.commentActionText, isCommentDisliked && {
                           color: '#6b7280'
                         }, isDislikeInteractionDisabled(isCommentLiked, isCommentDisliked) && styles.interactionTextDisabled]}>{commentDislikeCount}</Text>
@@ -8075,7 +8075,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                         targetType: 5,
                         targetId: Number(comment.id) || 0
                       })}>
-                          <Ionicons name="flag-outline" size={14} color="#ef4444" />
+                          <Ionicons name="flag-outline" size={18} color="#ef4444" />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -12249,13 +12249,13 @@ const styles = StyleSheet.create({
   commentFooterLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 18,
     flex: 1
   },
   commentFooterRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4
+    gap: 14
   },
   commentActions: {
     flexDirection: 'row',
@@ -12266,7 +12266,10 @@ const styles = StyleSheet.create({
   commentActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4
+    gap: 5,
+    minHeight: 34,
+    paddingVertical: 6,
+    paddingHorizontal: 4
   },
   commentActionText: {
     fontSize: scaleFont(12),

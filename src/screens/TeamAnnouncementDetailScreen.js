@@ -53,9 +53,11 @@ export default function TeamAnnouncementDetailScreen({ navigation, route }) {
           <View style={styles.titleRow}>
             <Text style={styles.title}>{announcement?.title || t('screens.teamAnnouncementDetail.emptyTitle')}</Text>
             {announcement?.isPinned ? (
-              <View style={styles.pinnedBadge}>
-                <Ionicons name="pin" size={12} color="#ef4444" />
-                <Text style={styles.pinnedText}>{t('screens.teamAnnouncementDetail.pinned')}</Text>
+              <View style={styles.pinnedBadgeRow}>
+                <View style={styles.pinnedBadge}>
+                  <Ionicons name="pin" size={12} color="#ef4444" />
+                  <Text style={styles.pinnedText}>{t('screens.teamAnnouncementDetail.pinned')}</Text>
+                </View>
               </View>
             ) : null}
           </View>
@@ -143,18 +145,17 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
   },
   titleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
     marginBottom: 16,
   },
   title: {
-    flex: 1,
     fontSize: scaleFont(20),
     fontWeight: '700',
     lineHeight: 28,
     color: '#111827',
+  },
+  pinnedBadgeRow: {
+    marginTop: 10,
+    alignItems: 'flex-start',
   },
   pinnedBadge: {
     flexDirection: 'row',

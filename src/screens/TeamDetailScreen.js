@@ -1187,10 +1187,10 @@ export default function TeamDetailScreen({
     }
   };
   const handleOpenCreateActivity = () => {
-    navigation.navigate('CreateActivity', {
+    navigation.navigate('QuestionActivityList', {
       teamId: team.id,
       teamName: team.name,
-      fromTeamDetail: true
+      fromTeamDetail: true,
     });
   };
   const handleJoinTeam = () => {
@@ -1948,7 +1948,7 @@ export default function TeamDetailScreen({
         submitText={t('screens.teamDetail.announcement.publishButton')}
         submitDisabled={!announcementTitle.trim() || !announcementContent.trim()}
         closePlacement="left"
-        submitPlacement="header"
+        submitPlacement="footer"
         containerStyle={styles.publishAnnouncementComposerContainer}
       >
         <ScrollView

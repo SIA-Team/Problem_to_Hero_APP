@@ -71,6 +71,70 @@ const normalizePositiveNumber = (value) => {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : null;
 };
+const normalizeQuestionImageUri = (value) => {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const normalizedValue = value.trim();
+  if (!normalizedValue) {
+    return '';
+  }
+
+  const loweredValue = normalizedValue.toLowerCase();
+  if (loweredValue === 'null' || loweredValue === 'undefined') {
+    return '';
+  }
+
+  return normalizedValue;
+};
+const normalizeQuestionImageList = (value) => (
+  Array.isArray(value)
+    ? value.map(normalizeQuestionImageUri).filter(Boolean)
+    : []
+);
+
+function HomeFeedImage({ uri, style, resizeMode = 'cover', showPlaceholder = false }) {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const flattenedStyle = StyleSheet.flatten(style) || {};
+  const frameRadius = Number(flattenedStyle.borderRadius) || 8;
+
+  useEffect(() => {
+    setImageError(false);
+    setImageLoaded(false);
+  }, [uri]);
+
+  if (!showPlaceholder && (!uri || imageError)) {
+    return null;
+  }
+
+  return (
+    <View style={[showPlaceholder ? styles.imagePlaceholder : null, style]}>
+      {showPlaceholder ? (
+        <>
+          <Ionicons name="image-outline" size={28} color="#cbd5e1" />
+          <Text style={styles.imagePlaceholderText}>Image unavailable</Text>
+        </>
+      ) : null}
+      {uri && !imageError ? (
+        <Image
+          source={{ uri }}
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              borderRadius: frameRadius,
+              opacity: imageLoaded ? 1 : 0,
+            },
+          ]}
+          resizeMode={resizeMode}
+          onLoad={() => setImageLoaded(true)}
+          onError={() => setImageError(true)}
+        />
+      ) : null}
+    </View>
+  );
+}
 const getHotTabKey = (item) => String(item?.tabCode || item?.id || '');
 const normalizeHotTabNode = (item, parentId = 0) => {
   const key = getHotTabKey(item);
@@ -988,13 +1052,9 @@ export default function HomeScreen({ navigation }) {
 
 
   // 同城筛选状态
-  const [localCity, setLocalCity] = useState('北京');
   const [localFilter, setLocalFilter] = useState('latest');
-  const [showCityModal, setShowCityModal] = useState(false);
   const [showNearbyModal, setShowNearbyModal] = useState(false);
   const [nearbyDistance, setNearbyDistance] = useState('3公里');
-  const [citySelectStep, setCitySelectStep] = useState(0); // 0:国家 1:省份 2:城市
-  const [selectedCityRegion, setSelectedCityRegion] = useState({ country: '中国', state: '北京市', city: '北京' });
   const handleConfirmInitialCredentials = React.useCallback(async () => {
     try {
       await AsyncStorage.removeItem(INITIAL_CREDENTIALS_NOTICE_STORAGE_KEY);
@@ -1005,9 +1065,6 @@ export default function HomeScreen({ navigation }) {
       setInitialCredentials({ username: '', password: '' });
     }
   }, []);
-
-  // 同城地区数据 - 使用与主区域选择器相同的多语言数据
-  const cityRegionData = regionData;
 
   const filterBlockedQuestions = React.useCallback((items, blockedIds) => {
     if (!Array.isArray(items) || !blockedIds?.size) {
@@ -1049,44 +1106,6 @@ export default function HomeScreen({ navigation }) {
       };
     }, [activeTab, locale])
   );
-
-
-
-  // 同城功能
-  const getCitySelectOptions = () => {
-    if (citySelectStep === 0) return cityRegionData.countries;
-    if (citySelectStep === 1) {
-      // 使用 cities 对象，键是国家名
-      return cityRegionData.cities[selectedCityRegion.country] || [];
-    }
-    if (citySelectStep === 2) {
-      // 使用 states 对象，键是城市名
-      return cityRegionData.states[selectedCityRegion.state] || [];
-    }
-    return [];
-  };
-
-  const getCitySelectTitle = () => [t('home.selectCountry'), t('home.selectState'), t('home.selectCity')][citySelectStep];
-
-  const selectCityRegion = (value) => {
-    if (citySelectStep === 0) {
-      setSelectedCityRegion({ ...selectedCityRegion, country: value, state: '', city: '' });
-      setCitySelectStep(1);
-    } else if (citySelectStep === 1) {
-      setSelectedCityRegion({ ...selectedCityRegion, state: value, city: '' });
-      setCitySelectStep(2);
-    } else {
-      setSelectedCityRegion({ ...selectedCityRegion, city: value });
-      setLocalCity(value);
-      setShowCityModal(false);
-      setCitySelectStep(0);
-    }
-  };
-
-  const closeCityModal = () => {
-    setShowCityModal(false);
-    setCitySelectStep(0);
-  };
 
   // 紧急求助状态
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
@@ -1986,12 +2005,6 @@ export default function HomeScreen({ navigation }) {
 
       <View style={[styles.localFilterBar, { display: activeTab === t('home.sameCity') ? 'flex' : 'none' }]}>
         <View style={styles.localFilterRow}>
-          <TouchableOpacity style={styles.localFilterItem} onPress={() => setShowCityModal(true)}>
-            <View style={[styles.localFilterIcon, { backgroundColor: '#e0f2fe' }]}>
-              <Ionicons name="navigate" size={22} color="#0ea5e9" />
-            </View>
-            <Text style={styles.localFilterLabel}>{t('home.switchLocation')}</Text>
-          </TouchableOpacity>
           <TouchableOpacity
             style={styles.localFilterItem}
             onPress={() => setLocalFilter('latest')}
@@ -2188,6 +2201,12 @@ export default function HomeScreen({ navigation }) {
             const rewardPointsValue = `${formatCompactRewardPoints(rewardPoints, { locale: i18n?.locale })}${isChineseLocale(i18n?.locale) ? '积分' : ' pts'}`;
             const isFirstItem = index === 0;
             const isLastItem = index === displayQuestionList.length - 1;
+            const imageList = normalizeQuestionImageList(item.images);
+            const coverImage = imageList.length === 0 ? normalizeQuestionImageUri(item.image) : '';
+            const hasUploadedImages =
+              Boolean(item.hadUploadedImages) ||
+              Boolean(item.image) ||
+              (Array.isArray(item.images) && item.images.length > 0);
             return (
               <TouchableOpacity 
                 style={[styles.questionCard, isFirstItem && styles.firstQuestionCard]} 
@@ -2258,68 +2277,71 @@ export default function HomeScreen({ navigation }) {
                   )}
 
                   {/* 图片 */}
-                  {item.image && <Image source={{ uri: item.image }} style={styles.singleImage} resizeMode="cover" />}
-                  {item.images && item.images.length > 0 && (
+                  {coverImage ? <HomeFeedImage uri={coverImage} style={styles.singleImage} resizeMode="cover" showPlaceholder /> : null}
+                  {!coverImage && imageList.length === 0 && hasUploadedImages ? (
+                    <HomeFeedImage uri="" style={styles.singleImage} showPlaceholder />
+                  ) : null}
+                  {imageList.length > 0 && (
                     <View style={styles.imagesContainer}>
                       {/* 1张图片：大图显示 */}
-                      {item.images.length === 1 && (
-                        <Image source={{ uri: item.images[0] }} style={styles.singleImage} resizeMode="cover" />
+                      {imageList.length === 1 && (
+                        <HomeFeedImage uri={imageList[0]} style={styles.singleImageInGrid} resizeMode="cover" showPlaceholder />
                       )}
                       
                       {/* 2张图片：左右各一张 */}
-                      {item.images.length === 2 && (
+                      {imageList.length === 2 && (
                         <View style={styles.twoImagesGrid}>
-                          <Image source={{ uri: item.images[0] }} style={styles.twoImageItem} resizeMode="cover" />
-                          <Image source={{ uri: item.images[1] }} style={styles.twoImageItem} resizeMode="cover" />
+                          <HomeFeedImage uri={imageList[0]} style={styles.twoImageItem} resizeMode="cover" showPlaceholder />
+                          <HomeFeedImage uri={imageList[1]} style={styles.twoImageItem} resizeMode="cover" showPlaceholder />
                         </View>
                       )}
                       
                       {/* 3张图片：横向三张 */}
-                      {item.images.length === 3 && (
+                      {imageList.length === 3 && (
                         <View style={styles.threeImagesGrid}>
-                          <Image source={{ uri: item.images[0] }} style={styles.threeImageItem} resizeMode="cover" />
-                          <Image source={{ uri: item.images[1] }} style={styles.threeImageItem} resizeMode="cover" />
-                          <Image source={{ uri: item.images[2] }} style={styles.threeImageItem} resizeMode="cover" />
+                          <HomeFeedImage uri={imageList[0]} style={styles.threeImageItem} resizeMode="cover" showPlaceholder />
+                          <HomeFeedImage uri={imageList[1]} style={styles.threeImageItem} resizeMode="cover" showPlaceholder />
+                          <HomeFeedImage uri={imageList[2]} style={styles.threeImageItem} resizeMode="cover" showPlaceholder />
                         </View>
                       )}
                       
                       {/* 4张图片：2x2网格 */}
-                      {item.images.length === 4 && (
+                      {imageList.length === 4 && (
                         <View style={styles.fourImagesGrid}>
-                          {item.images.map((img, idx) => (
-                            <Image key={idx} source={{ uri: img }} style={styles.fourImageItem} resizeMode="cover" />
+                          {imageList.map((img, idx) => (
+                            <HomeFeedImage key={idx} uri={img} style={styles.fourImageItem} resizeMode="cover" showPlaceholder />
                           ))}
                         </View>
                       )}
                       
                       {/* 5-6张图片：3列布局 */}
-                      {item.images.length >= 5 && item.images.length <= 6 && (
+                      {imageList.length >= 5 && imageList.length <= 6 && (
                         <View style={styles.multiImagesGrid}>
-                          {item.images.map((img, idx) => (
-                            <Image key={idx} source={{ uri: img }} style={styles.multiImageItem} resizeMode="cover" />
+                          {imageList.map((img, idx) => (
+                            <HomeFeedImage key={idx} uri={img} style={styles.multiImageItem} resizeMode="cover" showPlaceholder />
                           ))}
                         </View>
                       )}
                       
                       {/* 7-9张图片：3x3网格 */}
-                      {item.images.length >= 7 && item.images.length <= 9 && (
+                      {imageList.length >= 7 && imageList.length <= 9 && (
                         <View style={styles.nineImagesGrid}>
-                          {item.images.slice(0, 9).map((img, idx) => (
-                            <Image key={idx} source={{ uri: img }} style={styles.nineImageItem} resizeMode="cover" />
+                          {imageList.slice(0, 9).map((img, idx) => (
+                            <HomeFeedImage key={idx} uri={img} style={styles.nineImageItem} resizeMode="cover" showPlaceholder />
                           ))}
                         </View>
                       )}
                       
                       {/* 超过9张：显示前9张，最后一张显示+N */}
-                      {item.images.length > 9 && (
+                      {imageList.length > 9 && (
                         <View style={styles.nineImagesGrid}>
-                          {item.images.slice(0, 8).map((img, idx) => (
-                            <Image key={idx} source={{ uri: img }} style={styles.nineImageItem} resizeMode="cover" />
+                          {imageList.slice(0, 8).map((img, idx) => (
+                            <HomeFeedImage key={idx} uri={img} style={styles.nineImageItem} resizeMode="cover" showPlaceholder />
                           ))}
                           <View style={styles.moreImagesWrapper}>
-                            <Image source={{ uri: item.images[8] }} style={styles.nineImageItem} resizeMode="cover" />
+                            <HomeFeedImage uri={imageList[8]} style={styles.nineImageItem} resizeMode="cover" showPlaceholder />
                             <View style={styles.moreImagesOverlay}>
-                              <Text style={styles.moreImagesText}>+{item.images.length - 8}</Text>
+                              <Text style={styles.moreImagesText}>+{imageList.length - 8}</Text>
                             </View>
                           </View>
                         </View>
@@ -2942,64 +2964,97 @@ const styles = StyleSheet.create({
   fullTextBtnText: { fontSize: scaleFont(14), color: '#3b82f6', fontWeight: '500' },
   imagesContainer: {
     marginBottom: 6,
+    alignSelf: 'flex-start',
+  },
+  imagePlaceholder: {
+    width: 96,
+    height: 96,
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderStyle: 'dashed',
+    backgroundColor: '#f8fafc',
+    marginBottom: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  imagePlaceholderText: {
+    fontSize: scaleFont(12),
+    color: '#94a3b8',
+    fontWeight: '500',
+    textAlign: 'center',
   },
   singleImage: { 
-    width: '100%', 
-    height: 200, 
+    width: 96, 
+    height: 96, 
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 6,
+  },
+  singleImageInGrid: {
+    width: 96,
+    height: 96,
     borderRadius: 8,
     marginBottom: 6,
   },
   twoImagesGrid: {
     flexDirection: 'row',
     gap: 4,
+    alignSelf: 'flex-start',
   },
   twoImageItem: {
-    flex: 1,
-    height: 180,
+    width: 96,
+    height: 96,
     borderRadius: 6,
   },
   threeImagesGrid: {
     flexDirection: 'row',
     gap: 4,
+    alignSelf: 'flex-start',
   },
   threeImageItem: {
-    flex: 1,
-    height: 120,
+    width: 64,
+    height: 64,
     borderRadius: 6,
   },
   fourImagesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
+    width: 132,
   },
   fourImageItem: {
-    width: '49%',
-    height: 120,
+    width: 64,
+    height: 64,
     borderRadius: 6,
   },
   multiImagesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
+    width: 200,
   },
   multiImageItem: {
-    width: '32.5%',
-    height: 100,
+    width: 64,
+    height: 66,
     borderRadius: 6,
   },
   nineImagesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
+    width: 200,
   },
   nineImageItem: {
-    width: '32.5%',
-    height: 100,
+    width: 64,
+    height: 66,
     borderRadius: 6,
   },
   moreImagesWrapper: {
-    width: '32.5%',
-    height: 100,
+    width: 64,
+    height: 66,
     position: 'relative',
   },
   moreImagesOverlay: {

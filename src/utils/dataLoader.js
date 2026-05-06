@@ -62,6 +62,30 @@ const normalizeLocationText = (value) => {
   return String(value).replace(/\s+/g, ' ').trim();
 };
 
+const normalizeQuestionImageUri = (value) => {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const normalizedValue = value.trim();
+  if (!normalizedValue) {
+    return '';
+  }
+
+  const loweredValue = normalizedValue.toLowerCase();
+  if (loweredValue === 'null' || loweredValue === 'undefined') {
+    return '';
+  }
+
+  return normalizedValue;
+};
+
+const normalizeQuestionImageList = (value) => (
+  Array.isArray(value)
+    ? value.map(normalizeQuestionImageUri).filter(Boolean)
+    : []
+);
+
 const resolveLocationParts = (item = {}) => {
   const normalizedLocation = normalizeLocationText(
     item.location ||
@@ -233,9 +257,10 @@ const transformSupplementDataToFormat = (apiData) => {
     };
     
     // 处理图片
-    if (item.imageUrls && Array.isArray(item.imageUrls) && item.imageUrls.length > 0) {
-      transformedItem.imageUrls = item.imageUrls;
-      transformedItem.images = item.imageUrls;
+    const normalizedImageUrls = normalizeQuestionImageList(item.imageUrls);
+    if (normalizedImageUrls.length > 0) {
+      transformedItem.imageUrls = normalizedImageUrls;
+      transformedItem.images = normalizedImageUrls;
     }
     
     return transformedItem;
@@ -330,6 +355,12 @@ const transformApiDataToHomeFormat = (apiData) => {
       adoptRate: normalizedAdoptRate,
       payViewAmount: normalizedPayViewAmount,
     });
+    const rawImageUrls = Array.isArray(item.imageUrls) ? item.imageUrls : [];
+    const hadUploadedImages =
+      rawImageUrls.length > 0 ||
+      Boolean(normalizeQuestionImageUri(item.image)) ||
+      Boolean(normalizeQuestionImageUri(item.coverImage)) ||
+      normalizeCount(item.imageCount, item.picCount, item.mediaCount, item.attachmentCount) > 0;
 
     // 基础数据转换
     const transformedItem = {
@@ -400,6 +431,7 @@ const transformApiDataToHomeFormat = (apiData) => {
       topicNames: normalizedTopicNames,
       rawType: item.type ?? null,
       requiresPaidView,
+      hadUploadedImages,
     };
     
     // 问题类型转换
@@ -431,11 +463,12 @@ const transformApiDataToHomeFormat = (apiData) => {
     }
     
     // 处理图片
-    if (item.imageUrls && Array.isArray(item.imageUrls) && item.imageUrls.length > 0) {
-      if (item.imageUrls.length === 1) {
-        transformedItem.image = item.imageUrls[0];
+    const normalizedImageUrls = normalizeQuestionImageList(item.imageUrls);
+    if (normalizedImageUrls.length > 0) {
+      if (normalizedImageUrls.length === 1) {
+        transformedItem.image = normalizedImageUrls[0];
       } else {
-        transformedItem.images = item.imageUrls;
+        transformedItem.images = normalizedImageUrls;
       }
     }
     

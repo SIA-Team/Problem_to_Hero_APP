@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from './Avatar';
 import { formatNumber } from '../utils/numberFormatter';
 import { getLastLocationLevel } from '../utils/locationFormatter';
+import { useTranslation } from '../i18n/useTranslation';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const scale = size => (SCREEN_WIDTH / 375) * size;
@@ -18,15 +19,52 @@ export default function PublicProfileHero({
   isOwnProfile,
   onMessagePress,
 }) {
+  const { t } = useTranslation();
+
   if (!userData) {
     return null;
   }
 
   const verificationText =
     userData.verification?.text || (userData.verification?.verified ? '已认证' : '');
-  const hasMetaInfo = Boolean(
-    userData.occupation || userData.verification?.verified || userData.location
-  );
+
+  const summaryItems = [];
+
+  if (userData.location) {
+    summaryItems.push({
+      key: 'location',
+      icon: 'location-outline',
+      label: t('screens.settings.profile.location'),
+      value: getLastLocationLevel(userData.location),
+    });
+  }
+
+  if (userData.occupation) {
+    summaryItems.push({
+      key: 'occupation',
+      icon: 'briefcase-outline',
+      label: t('screens.settings.profile.occupation'),
+      value: userData.occupation,
+    });
+  }
+
+  if (userData.expertiseSummary) {
+    summaryItems.push({
+      key: 'expertise',
+      icon: 'sparkles-outline',
+      label: t('screens.settings.profile.expertise'),
+      value: userData.expertiseSummary,
+    });
+  }
+
+  if (userData.verification?.verified) {
+    summaryItems.push({
+      key: 'verification',
+      label: t('profile.verification'),
+      value: verificationText,
+      isVerification: true,
+    });
+  }
 
   return (
     <View style={styles.container}>
@@ -68,14 +106,6 @@ export default function PublicProfileHero({
             ))}
           </View>
 
-          {userData.bio ? (
-            <View style={styles.bioSectionCompact}>
-              <Text style={styles.bioText} numberOfLines={2}>
-                {userData.bio}
-              </Text>
-            </View>
-          ) : null}
-
           {!isOwnProfile ? (
             <View style={styles.actionButtonsRow}>
               <TouchableOpacity
@@ -104,30 +134,41 @@ export default function PublicProfileHero({
             </View>
           ) : null}
 
-          {hasMetaInfo ? (
-            <View style={styles.metaRow}>
-              {userData.occupation ? (
-                <View style={styles.metaItem}>
-                  <Ionicons name="briefcase-outline" size={scale(13)} color="#8e8e93" />
-                  <Text style={styles.metaText}>{userData.occupation}</Text>
-                </View>
-              ) : null}
-
-              {userData.verification?.verified ? (
-                <View style={styles.metaItem}>
-                  <View style={styles.verificationBadge}>
-                    <Text style={styles.verificationBadgeText}>V</Text>
-                  </View>
-                  <Text style={styles.metaText}>{verificationText}</Text>
-                </View>
-              ) : null}
-
-              {userData.location ? (
-                <View style={styles.metaItem}>
-                  <Ionicons name="location-outline" size={scale(13)} color="#8e8e93" />
-                  <Text style={styles.metaText}>
-                    IP属地: {getLastLocationLevel(userData.location)}
+          {userData.bio || summaryItems.length > 0 ? (
+            <View style={styles.profileSummarySection}>
+              {userData.bio ? (
+                <View style={styles.summaryBlock}>
+                  <Text style={styles.summaryLabel}>{t('screens.settings.profile.bio')}</Text>
+                  <Text style={styles.bioText} numberOfLines={3}>
+                    {userData.bio}
                   </Text>
+                </View>
+              ) : null}
+
+              {summaryItems.length > 0 ? (
+                <View style={styles.summaryFacts}>
+                  {summaryItems.map(item => (
+                    <View key={item.key} style={styles.summaryItem}>
+                      <View style={styles.summaryIconWrap}>
+                        {item.isVerification ? (
+                          <View style={styles.verificationBadge}>
+                            <Text style={styles.verificationBadgeText}>V</Text>
+                          </View>
+                        ) : (
+                          <Ionicons name={item.icon} size={16} color="#ef4444" />
+                        )}
+                      </View>
+                      <View style={styles.summaryContent}>
+                        <Text style={styles.summaryItemLabel}>{item.label}</Text>
+                        <Text
+                          style={styles.summaryItemValue}
+                          numberOfLines={item.key === 'expertise' ? 2 : 1}
+                        >
+                          {item.value}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
                 </View>
               ) : null}
             </View>
@@ -212,15 +253,11 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     color: '#8e8e93',
   },
-  bioSectionCompact: {
-    marginTop: scaleSpacing(6),
-    marginBottom: scaleSpacing(4),
-  },
   bioText: {
     fontSize: scale(14),
     fontWeight: '400',
-    lineHeight: scale(20),
-    color: '#8e8e93',
+    lineHeight: scale(21),
+    color: '#374151',
   },
   actionButtonsRow: {
     flexDirection: 'row',
@@ -260,22 +297,54 @@ const styles = StyleSheet.create({
     backgroundColor: '#e5e7eb',
     borderRadius: scaleSpacing(6),
   },
-  metaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
+  profileSummarySection: {
+    marginTop: scaleSpacing(12),
+    paddingTop: scaleSpacing(14),
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
     gap: scaleSpacing(12),
-    marginTop: scaleSpacing(2),
   },
-  metaItem: {
+  summaryBlock: {
+    gap: scaleSpacing(6),
+  },
+  summaryLabel: {
+    fontSize: scale(12),
+    fontWeight: '600',
+    color: '#9ca3af',
+  },
+  summaryFacts: {
+    gap: scaleSpacing(10),
+  },
+  summaryItem: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: scaleSpacing(4),
+    alignItems: 'flex-start',
+    gap: scaleSpacing(10),
+    paddingVertical: scaleSpacing(10),
+    paddingHorizontal: scaleSpacing(12),
+    borderRadius: scaleSpacing(12),
+    backgroundColor: '#f9fafb',
   },
-  metaText: {
+  summaryIconWrap: {
+    width: scaleSpacing(32),
+    height: scaleSpacing(32),
+    borderRadius: scaleSpacing(16),
+    backgroundColor: '#fee2e2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryContent: {
+    flex: 1,
+    gap: scaleSpacing(3),
+  },
+  summaryItemLabel: {
+    fontSize: scale(12),
+    color: '#9ca3af',
+  },
+  summaryItemValue: {
     fontSize: scale(14),
-    fontWeight: '400',
-    color: '#8e8e93',
+    fontWeight: '500',
+    lineHeight: scale(20),
+    color: '#1f2937',
   },
   verificationBadge: {
     width: scaleSpacing(16),

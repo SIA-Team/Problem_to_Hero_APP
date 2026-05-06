@@ -34,6 +34,7 @@ import UserCacheService from '../services/UserCacheService';
 import { showAppAlert } from '../utils/appAlert';
 import { showToast } from '../utils/toast';
 import { invalidateBlacklistRelatedCaches } from '../utils/blacklistContent';
+import { buildExpertiseSummary, getUserExpertisePreferences } from '../utils/expertisePreferences';
 
 import { scaleFont } from '../utils/responsive';
 const PROFILE_ANSWER_PAGE_SIZE = 10;
@@ -104,6 +105,61 @@ const normalizeGender = profile => {
   return null;
 };
 
+const summarizeExpertiseNames = names => {
+  const normalizedNames = Array.from(
+    new Set(
+      (Array.isArray(names) ? names : [])
+        .map(item => String(item || '').trim())
+        .filter(Boolean)
+    )
+  );
+
+  if (normalizedNames.length === 0) {
+    return '';
+  }
+
+  if (normalizedNames.length <= 2) {
+    return normalizedNames.join(' / ');
+  }
+
+  return `${normalizedNames[0]} / ${normalizedNames[1]} 等${normalizedNames.length}项`;
+};
+
+const resolveProfileExpertiseSummary = profile => {
+  const directSummary = [
+    profile?.expertiseSummary,
+    profile?.expertise,
+    profile?.specialty,
+    profile?.speciality,
+    profile?.goodAt,
+    profile?.skill,
+  ].find(value => typeof value === 'string' && value.trim());
+
+  if (directSummary) {
+    return String(directSummary).trim();
+  }
+
+  const arraySummary = summarizeExpertiseNames([
+    ...(Array.isArray(profile?.skills) ? profile.skills : []),
+    ...(Array.isArray(profile?.expertiseTags) ? profile.expertiseTags : []),
+    ...(Array.isArray(profile?.tagNames) ? profile.tagNames : []),
+    ...(Array.isArray(profile?.tags)
+      ? profile.tags.map(tag => (typeof tag === 'string' ? tag : tag?.name || tag?.label))
+      : []),
+  ]);
+
+  if (arraySummary) {
+    return arraySummary;
+  }
+
+  const normalizedFromPreferences = buildExpertiseSummary({
+    level1: Array.isArray(profile?.expertiseLevel1) ? profile.expertiseLevel1 : profile?.level1,
+    level2: Array.isArray(profile?.expertiseLevel2) ? profile.expertiseLevel2 : profile?.level2,
+  });
+
+  return normalizedFromPreferences === '未设置' ? '' : normalizedFromPreferences;
+};
+
 const buildProfileViewModel = (profile, fallbackUserId) => {
   const resolvedUserId = String(profile?.userId ?? profile?.id ?? fallbackUserId ?? '');
   const likeCount = Number(profile?.likeCount ?? 0) || 0;
@@ -127,6 +183,7 @@ const buildProfileViewModel = (profile, fallbackUserId) => {
     bio: profile?.signature || profile?.bio || '',
     occupation: profile?.profession || profile?.occupation || '',
     location: profile?.location || '',
+    expertiseSummary: resolveProfileExpertiseSummary(profile),
     gender: normalizeGender(profile),
     verification,
     statsItems: [
@@ -145,6 +202,9 @@ const buildRouteFallbackProfile = routeParams => {
   const fallbackRole = String(routeParams?.role ?? routeParams?.occupation ?? '').trim();
   const fallbackBio = String(routeParams?.bio ?? '').trim();
   const fallbackLocation = String(routeParams?.location ?? '').trim();
+  const fallbackExpertise = String(
+    routeParams?.expertiseSummary ?? routeParams?.expertise ?? routeParams?.skill ?? ''
+  ).trim();
 
   if (!fallbackUserId && !fallbackName && !fallbackAvatar) {
     return null;
@@ -173,6 +233,7 @@ const buildRouteFallbackProfile = routeParams => {
     occupation: fallbackRole || fallbackProfile.occupation,
     bio: fallbackBio || fallbackProfile.bio,
     location: fallbackLocation || fallbackProfile.location,
+    expertiseSummary: fallbackExpertise || fallbackProfile.expertiseSummary,
     statsItems: fallbackProfile.statsItems.map(item => ({
       ...item,
       value: 0,
@@ -457,6 +518,21 @@ export default function PublicProfileScreen({ navigation, route }) {
             ? blacklistItems.map(item => String(item?.blockedUserId ?? item?.blockedUid ?? item?.userId ?? ''))
             : [],
         });
+      }
+
+      if (!nextUserData.expertiseSummary) {
+        try {
+          const storedPreferences = await getUserExpertisePreferences(nextUserData.userId);
+          const storedSummary = buildExpertiseSummary(storedPreferences);
+          if (storedSummary && storedSummary !== '未设置') {
+            nextUserData = {
+              ...nextUserData,
+              expertiseSummary: storedSummary,
+            };
+          }
+        } catch (expertiseError) {
+          console.error('Load public profile expertise summary failed:', expertiseError);
+        }
       }
 
       setCurrentUserId(nextCurrentUserId);

@@ -31,7 +31,7 @@ export default function QuestionListItem({ item, onPress }) {
       </View>
 
       <View style={styles.titleRow}>
-        <Text style={styles.title}>
+        <Text style={styles.title} numberOfLines={3}>
           {displayItem.questionType === 'reward' && rewardPoints > 0 && (
             <Text style={styles.rewardInlineBadge}>
               <Ionicons name="sparkles-outline" size={11} color="#b45309" />

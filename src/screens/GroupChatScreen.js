@@ -290,38 +290,104 @@ const parseDateValue = value => {
 };
 
 const formatMessageTime = (rawValue, t) => {
-  if (rawValue === 0 || rawValue === '0') {
-    return t('screens.groupChat.justNow');
-  }
-
+  const normalizedText = String(rawValue ?? '').trim();
   const numericValue = Number(rawValue);
-  if (Number.isFinite(numericValue) && `${rawValue}`.trim() !== '') {
-    if (numericValue < 1) {
-      return t('screens.groupChat.justNow');
+  let targetTimestamp = null;
+
+  if (Number.isFinite(numericValue) && normalizedText !== '') {
+    if (Math.abs(numericValue) >= 1000000000000) {
+      targetTimestamp = numericValue;
+    } else if (Math.abs(numericValue) >= 1000000000) {
+      targetTimestamp = numericValue * 1000;
+    }
+  }
+
+  if (!targetTimestamp) {
+    const parsedDate = parseDateValue(rawValue);
+    if (parsedDate) {
+      targetTimestamp = parsedDate.getTime();
+    }
+  }
+
+  if (targetTimestamp) {
+    const diffSeconds = Math.max(1, Math.floor((Date.now() - targetTimestamp) / 1000));
+    const safeDiffSeconds = Number.isFinite(diffSeconds) ? diffSeconds : 1;
+
+    if (safeDiffSeconds < 60) {
+      return `${safeDiffSeconds}s`;
     }
 
-    if (numericValue < 60) {
-      return `${numericValue}${t('screens.groupChat.minutesAgo')}`;
+    const diffMinutes = Math.floor(safeDiffSeconds / 60);
+    if (diffMinutes < 60) {
+      return `${diffMinutes} mins`;
     }
 
-    return `${Math.floor(numericValue / 60)}${t('screens.groupChat.hoursAgo')}`;
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) {
+      return `${diffHours}h`;
+    }
+
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 30) {
+      return `${diffDays}d`;
+    }
+
+    const diffMonths = Math.floor(diffDays / 30);
+    if (diffMonths < 12) {
+      return `${diffMonths}m`;
+    }
+
+    return `${Math.floor(diffDays / 365)}y`;
   }
 
-  const parsedDate = parseDateValue(rawValue);
-  if (!parsedDate) {
-    return '';
+  const chineseRelativeMatch = normalizedText.match(/^(\d+)\s*(秒前|分钟前|小时前|天前|个月前|月前|年前)$/);
+  if (chineseRelativeMatch) {
+    const [, value, unit] = chineseRelativeMatch;
+    if (unit === '秒前') {
+      return `${value}s`;
+    }
+    if (unit === '分钟前') {
+      return `${value} mins`;
+    }
+    if (unit === '小时前') {
+      return `${value}h`;
+    }
+    if (unit === '天前') {
+      return `${value}d`;
+    }
+    if (unit === '个月前' || unit === '月前') {
+      return `${value}m`;
+    }
+    if (unit === '年前') {
+      return `${value}y`;
+    }
   }
 
-  const diffMinutes = Math.floor((Date.now() - parsedDate.getTime()) / 60000);
-  if (diffMinutes < 1) {
-    return t('screens.groupChat.justNow');
+  const englishRelativeMatch = normalizedText.match(/^(\d+)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|months?|years?)\s*ago$/i);
+  if (englishRelativeMatch) {
+    const [, value, unit] = englishRelativeMatch;
+    const normalizedUnit = unit.toLowerCase();
+    if (normalizedUnit.startsWith('sec')) {
+      return `${value}s`;
+    }
+    if (normalizedUnit.startsWith('min')) {
+      return `${value} mins`;
+    }
+    if (normalizedUnit.startsWith('hour') || normalizedUnit.startsWith('hr')) {
+      return `${value}h`;
+    }
+    if (normalizedUnit.startsWith('day')) {
+      return `${value}d`;
+    }
+    if (normalizedUnit.startsWith('month')) {
+      return `${value}m`;
+    }
+    if (normalizedUnit.startsWith('year')) {
+      return `${value}y`;
+    }
   }
 
-  if (diffMinutes < 60) {
-    return `${diffMinutes}${t('screens.groupChat.minutesAgo')}`;
-  }
-
-  return `${Math.floor(diffMinutes / 60)}${t('screens.groupChat.hoursAgo')}`;
+  return normalizedText ? '1s' : t('screens.groupChat.justNow');
 };
 
 const normalizeMessageItem = (item, index, t) => {
@@ -344,7 +410,7 @@ const normalizeMessageItem = (item, index, t) => {
   const content = item?.content || item?.messageContent || item?.message || item?.text || '';
   const imageUrls = normalizeMessageImages(item);
   const rawTime = item?.time ?? item?.createTime ?? item?.createdAt ?? item?.gmtCreate ?? item?.createDate;
-  const timeLabel = item?.createTimeDesc || item?.timeDesc || formatMessageTime(rawTime, t);
+  const timeLabel = formatMessageTime(rawTime, t) || item?.createTimeDesc || item?.timeDesc || '';
   const isFeatured =
     Boolean(item?.isFeatured ?? item?.featured ?? item?.essence) ||
     Number(item?.featuredFlag ?? item?.essenceFlag ?? item?.isEssence) === 1;
@@ -2413,7 +2479,7 @@ export default function GroupChatScreen({ navigation, route }) {
             >
               <Ionicons
                 name={likedState ? 'thumbs-up' : 'thumbs-up-outline'}
-                size={12}
+                size={18}
                 color={
                   likedState
                     ? '#ef4444'
@@ -2433,17 +2499,17 @@ export default function GroupChatScreen({ navigation, route }) {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.threadReplyActionBtn} onPress={() => openReplyComposer(reply, currentReplyMessageId)}>
-              <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
+              <Ionicons name="chatbubble-outline" size={18} color="#9ca3af" />
               <Text style={styles.threadReplyMetaText}>{Number(reply.replyCount || reply.replies || 0)}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.threadReplyActionBtn}>
-              <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
+              <Ionicons name="arrow-redo-outline" size={18} color="#9ca3af" />
               <Text style={styles.threadReplyMetaText}>{Number(reply.shares || 0)}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.threadReplyActionBtn} onPress={() => toggleMessageBookmark(reply)}>
               <Ionicons
                 name={bookmarkedState ? 'star' : 'star-outline'}
-                size={12}
+                size={18}
                 color={bookmarkedState ? '#f59e0b' : '#9ca3af'}
               />
               <Text style={[styles.threadReplyMetaText, bookmarkedState && styles.msgActionTextBookmarked]}>
@@ -2462,7 +2528,7 @@ export default function GroupChatScreen({ navigation, route }) {
             >
               <Ionicons
                 name={dislikedState ? 'thumbs-down' : 'thumbs-down-outline'}
-                size={12}
+                size={18}
                 color={
                   dislikedState
                     ? '#6b7280'
@@ -2482,7 +2548,7 @@ export default function GroupChatScreen({ navigation, route }) {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.threadReplyActionBtn} onPress={handleReport}>
-              <Ionicons name="flag-outline" size={12} color="#ef4444" />
+              <Ionicons name="flag-outline" size={18} color="#ef4444" />
               <Text style={styles.threadReplyMetaText}>{Number(reply.reports || 0)}</Text>
             </TouchableOpacity>
           </View>
@@ -2763,7 +2829,7 @@ export default function GroupChatScreen({ navigation, route }) {
                         >
                           <Ionicons
                             name={likedState ? 'thumbs-up' : 'thumbs-up-outline'}
-                            size={14}
+                            size={18}
                             color={
                               likedState
                                 ? '#ef4444'
@@ -2784,11 +2850,11 @@ export default function GroupChatScreen({ navigation, route }) {
                           </Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.msgActionBtn} onPress={() => openReplyModal(msg)}>
-                          <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
+                          <Ionicons name="chatbubble-outline" size={18} color="#9ca3af" />
                           <Text style={styles.msgActionText}>{Number(msg.replyCount || 0)}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.msgActionBtn}>
-                          <Ionicons name="arrow-redo-outline" size={14} color="#9ca3af" />
+                          <Ionicons name="arrow-redo-outline" size={18} color="#9ca3af" />
                           <Text style={styles.msgActionText}>{Number(msg.shares || 0)}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -2797,7 +2863,7 @@ export default function GroupChatScreen({ navigation, route }) {
                         >
                           <Ionicons
                             name={bookmarkedState ? 'star' : 'star-outline'}
-                            size={14}
+                            size={18}
                             color={bookmarkedState ? '#f59e0b' : '#9ca3af'}
                           />
                           <Text
@@ -2822,7 +2888,7 @@ export default function GroupChatScreen({ navigation, route }) {
                         >
                           <Ionicons
                             name={dislikedState ? 'thumbs-down' : 'thumbs-down-outline'}
-                            size={14}
+                            size={18}
                             color={
                               dislikedState
                                 ? '#6b7280'
@@ -2843,7 +2909,7 @@ export default function GroupChatScreen({ navigation, route }) {
                           </Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.msgActionBtn} onPress={handleReport}>
-                          <Ionicons name="flag-outline" size={14} color="#ef4444" />
+                          <Ionicons name="flag-outline" size={18} color="#ef4444" />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -2941,7 +3007,7 @@ export default function GroupChatScreen({ navigation, route }) {
                             >
                               <Ionicons
                                 name={likedState ? 'thumbs-up' : 'thumbs-up-outline'}
-                                size={12}
+                                size={18}
                                 color={
                                   likedState
                                     ? '#ef4444'
@@ -2965,13 +3031,13 @@ export default function GroupChatScreen({ navigation, route }) {
                               style={styles.threadReplyActionBtn}
                               onPress={() => openReplyThreadLayer(reply.id)}
                             >
-                              <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
+                              <Ionicons name="chatbubble-outline" size={18} color="#9ca3af" />
                               <Text style={styles.threadReplyMetaText}>
                                 {Number(reply.replyCount || 0)}
                               </Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.threadReplyActionBtn}>
-                              <Ionicons name="arrow-redo-outline" size={12} color="#9ca3af" />
+                              <Ionicons name="arrow-redo-outline" size={18} color="#9ca3af" />
                               <Text style={styles.threadReplyMetaText}>{Number(reply.shares || 0)}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
@@ -2980,7 +3046,7 @@ export default function GroupChatScreen({ navigation, route }) {
                             >
                               <Ionicons
                                 name={bookmarkedState ? 'star' : 'star-outline'}
-                                size={12}
+                                size={18}
                                 color={bookmarkedState ? '#f59e0b' : '#9ca3af'}
                               />
                               <Text
@@ -3005,7 +3071,7 @@ export default function GroupChatScreen({ navigation, route }) {
                             >
                               <Ionicons
                                 name={dislikedState ? 'thumbs-down' : 'thumbs-down-outline'}
-                                size={12}
+                                size={18}
                                 color={
                                   dislikedState
                                     ? '#6b7280'
@@ -3026,7 +3092,7 @@ export default function GroupChatScreen({ navigation, route }) {
                               </Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.threadReplyActionBtn} onPress={handleReport}>
-                              <Ionicons name="flag-outline" size={12} color="#ef4444" />
+                              <Ionicons name="flag-outline" size={18} color="#ef4444" />
                               <Text style={styles.threadReplyMetaText}>{Number(reply.reports || 0)}</Text>
                             </TouchableOpacity>
                           </View>
@@ -3529,13 +3595,13 @@ const styles = StyleSheet.create({
   msgActionsLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 18,
     flex: 1,
   },
   msgActionsRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 14,
   },
   inlineRepliesContainer: {
     marginTop: 2,
@@ -3621,7 +3687,10 @@ const styles = StyleSheet.create({
   msgActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
+    minHeight: 34,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
   },
   msgActionBtnDisabled: {
     opacity: 0.45,
@@ -3727,13 +3796,13 @@ const styles = StyleSheet.create({
   threadListActionsLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 18,
     flex: 1,
   },
   threadListActionsRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 14,
   },
   threadModalBottomBar: {
     paddingHorizontal: 16,
@@ -3829,13 +3898,13 @@ const styles = StyleSheet.create({
   threadReplyActionsLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 18,
     flex: 1,
   },
   threadReplyActionsRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 14,
   },
   threadReplyMetaGroup: {
     flexDirection: 'row',
@@ -3849,7 +3918,10 @@ const styles = StyleSheet.create({
   threadReplyActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
+    minHeight: 34,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
   },
   threadReplyActionText: {
     fontSize: scaleFont(12),

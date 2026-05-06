@@ -44,6 +44,7 @@ const questionTypes = [{
   icon: 'locate',
   color: '#3b82f6'
 }];
+const TITLE_MAX_LENGTH = 80;
 const rewardAmounts = [10, 20, 50, 100];
 const CUSTOM_LEVEL2_PREFIX = 'custom-level2-';
 
@@ -176,6 +177,9 @@ export default function PublishScreen({
   const { t, i18n } = useTranslation();
   const bottomSafeInset = useBottomSafeInset(20);
   const rewardMinAmountText = formatRewardPointsValue(REWARD_MIN_AMOUNT, { locale: i18n?.locale });
+  const rewardMinAmountPlaceholder = String(i18n?.locale || '').toLowerCase().startsWith('zh')
+    ? t('publish.enterAmountMin').replace('{amount}', rewardMinAmountText)
+    : `Min ${formatAmount(REWARD_MIN_AMOUNT)}`;
   
   // 获取多语言区域数据
   const regionData = React.useMemo(() => getRegionData(), []);
@@ -880,8 +884,8 @@ export default function PublishScreen({
       showToast(t('publish.toasts.titleTooShort'), 'warning');
       return;
     }
-    if (title.trim().length > 50) {
-      console.log('❌ 标题验证失败: 标题长度超过50个字');
+    if (title.trim().length > TITLE_MAX_LENGTH) {
+      console.log(`❌ 标题验证失败: 标题长度超过${TITLE_MAX_LENGTH}个字符`);
       showToast(t('publish.toasts.titleTooLong'), 'warning');
       return;
     }
@@ -1534,7 +1538,7 @@ export default function PublishScreen({
             </View>
             <View style={styles.customAmount}>
               <Text style={styles.customLabel}>{t('publish.customAmount')}</Text>
-              <TextInput style={styles.customInput} placeholder={t('publish.enterAmountMin').replace('{amount}', rewardMinAmountText)} keyboardType="decimal-pad" value={reward} onChangeText={text => {
+              <TextInput style={styles.customInput} placeholder={rewardMinAmountPlaceholder} keyboardType="decimal-pad" value={reward} onChangeText={text => {
             // 只允许输入数字和小数点
             setReward(sanitizeAmountInput(text));
           }} />
@@ -1669,9 +1673,9 @@ export default function PublishScreen({
             placeholderTextColor="#9ca3af"
             value={title}
             onChangeText={setTitle}
-            maxLength={50}
+            maxLength={TITLE_MAX_LENGTH}
           />
-          <Text style={styles.charCount}>{title.length}/50</Text>
+          <Text style={styles.charCount}>{title.length}/{TITLE_MAX_LENGTH}</Text>
         </View>
 
         {/* 问题描述 */}

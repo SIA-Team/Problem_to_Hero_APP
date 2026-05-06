@@ -30,6 +30,7 @@ import { formatNumber } from '../utils/numberFormatter';
 import { formatRewardPointsValue } from '../utils/rewardPointsDisplay';
 import { isVisibleMyTeam, normalizeMyTeam } from '../utils/teamTransforms';
 import { showToast } from '../utils/toast';
+import { buildExpertiseSummary, getUserExpertisePreferences } from '../utils/expertisePreferences';
 import {
   extractWalletTransactionRows,
   getWalletTransactionUniqueKey,
@@ -412,6 +413,7 @@ export default function ProfileScreen({
   const [draftsTotalCount, setDraftsTotalCount] = useState(0);
   const [myTeamsCount, setMyTeamsCount] = useState(0);
   const [myActivitiesCount, setMyActivitiesCount] = useState(0);
+  const [expertiseSummary, setExpertiseSummary] = useState('');
 
   // 加载用户信息
   const loadUserProfile = React.useCallback(async () => {
@@ -607,12 +609,32 @@ export default function ProfileScreen({
     }
   }, []);
 
+  const loadExpertiseSummary = React.useCallback(async userId => {
+    if (!userId) {
+      setExpertiseSummary('');
+      return;
+    }
+
+    try {
+      const preferences = await getUserExpertisePreferences(userId);
+      const summary = buildExpertiseSummary(preferences);
+      setExpertiseSummary(summary === '未设置' ? '' : summary);
+    } catch (error) {
+      console.log('Failed to load expertise summary:', error?.message || error);
+      setExpertiseSummary('');
+    }
+  }, []);
+
   useEffect(() => {
     loadUserProfile();
     loadWalletBalance();
     loadMyTeamsCount();
     loadMyActivitiesCount();
   }, [loadMyActivitiesCount, loadMyTeamsCount, loadUserProfile, loadWalletBalance]);
+
+  useEffect(() => {
+    loadExpertiseSummary(userProfile.userId);
+  }, [loadExpertiseSummary, userProfile.userId]);
 
   // 每次页面获得焦点时重新加载（从设置页面返回时会触发）
   useFocusEffect(React.useCallback(() => {
@@ -621,7 +643,8 @@ export default function ProfileScreen({
     loadWalletBalance();
     loadMyTeamsCount();
     loadMyActivitiesCount();
-  }, [loadMyActivitiesCount, loadMyTeamsCount, loadUserProfile, loadWalletBalance]));
+    loadExpertiseSummary(userProfile.userId);
+  }, [loadExpertiseSummary, loadMyActivitiesCount, loadMyTeamsCount, loadUserProfile, loadWalletBalance, userProfile.userId]));
   const stats = React.useMemo(() => [{
     label: t('profile.likes'),
     value: formatNumber(userProfile.likeCount),
@@ -670,6 +693,38 @@ export default function ProfileScreen({
     value: '',
     color: '#3b82f6'
   }], [draftsTotalCount, myActivitiesCount, myTeamsCount, t]);
+  const profileSummaryItems = React.useMemo(() => {
+    const items = [];
+
+    if (userProfile.location) {
+      items.push({
+        key: 'location',
+        icon: 'location-outline',
+        label: t('screens.settings.profile.location'),
+        value: getLocationDisplay(userProfile.location)
+      });
+    }
+
+    if (userProfile.occupation) {
+      items.push({
+        key: 'occupation',
+        icon: 'briefcase-outline',
+        label: t('screens.settings.profile.occupation'),
+        value: userProfile.occupation
+      });
+    }
+
+    if (expertiseSummary) {
+      items.push({
+        key: 'expertise',
+        icon: 'sparkles-outline',
+        label: t('screens.settings.profile.expertise'),
+        value: expertiseSummary
+      });
+    }
+
+    return items;
+  }, [expertiseSummary, t, userProfile.location, userProfile.occupation]);
   const superLikeQuickActions = React.useMemo(() => [{
     key: 'purchase',
     icon: 'sparkles',
@@ -2338,17 +2393,25 @@ export default function ProfileScreen({
               <Text style={styles.userId}>ID: {userProfile.userId}</Text>
             </View>
           </View>
-          {userProfile.bio ? <Text style={styles.userBio}>{userProfile.bio}</Text> : null}
-          <View style={styles.userMeta}>
-            {userProfile.location ? <View style={styles.metaItem}>
-                <Ionicons name="location-outline" size={14} color="#9ca3af" />
-                <Text style={styles.metaText}>{getLocationDisplay(userProfile.location)}</Text>
-              </View> : null}
-            {userProfile.occupation ? <View style={styles.metaItem}>
-                <Ionicons name="briefcase-outline" size={14} color="#9ca3af" />
-                <Text style={styles.metaText}>{userProfile.occupation}</Text>
-              </View> : null}
-          </View>
+          {userProfile.bio || profileSummaryItems.length > 0 ? <View style={styles.profileSummarySection}>
+              {userProfile.bio ? <View style={styles.summaryBlock}>
+                  <Text style={styles.summaryLabel}>{t('screens.settings.profile.bio')}</Text>
+                  <Text style={styles.userBio}>{userProfile.bio}</Text>
+                </View> : null}
+              {profileSummaryItems.length > 0 ? <View style={styles.summaryFacts}>
+                  {profileSummaryItems.map(item => <View key={item.key} style={styles.summaryItem}>
+                      <View style={styles.summaryIconWrap}>
+                        <Ionicons name={item.icon} size={16} color="#ef4444" />
+                      </View>
+                      <View style={styles.summaryContent}>
+                        <Text style={styles.summaryItemLabel}>{item.label}</Text>
+                        <Text style={styles.summaryItemValue} numberOfLines={item.key === 'expertise' ? 2 : 1}>
+                          {item.value}
+                        </Text>
+                      </View>
+                    </View>)}
+                </View> : null}
+            </View> : null}
           
           {/* 影响力和智慧指数 */}
           {/* <View style={styles.indexRow}>
@@ -3667,23 +3730,58 @@ const styles = StyleSheet.create({
   },
   userBio: {
     fontSize: scaleFont(14),
-    color: '#4b5563',
-    marginTop: 12,
-    lineHeight: scaleFont(18)
+    color: '#374151',
+    lineHeight: scaleFont(21)
   },
-  userMeta: {
-    flexDirection: 'row',
-    gap: 16,
-    marginTop: 10
+  profileSummarySection: {
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    gap: 12
   },
-  metaItem: {
+  summaryBlock: {
+    gap: 6
+  },
+  summaryLabel: {
+    fontSize: scaleFont(12),
+    fontWeight: '600',
+    color: '#9ca3af',
+    letterSpacing: 0.2
+  },
+  summaryFacts: {
+    gap: 10
+  },
+  summaryItem: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#f9fafb'
+  },
+  summaryIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#fee2e2',
     alignItems: 'center',
-    gap: 4
+    justifyContent: 'center'
   },
-  metaText: {
-    fontSize: scaleFont(14),
+  summaryContent: {
+    flex: 1,
+    gap: 3
+  },
+  summaryItemLabel: {
+    fontSize: scaleFont(12),
     color: '#9ca3af'
+  },
+  summaryItemValue: {
+    fontSize: scaleFont(14),
+    lineHeight: scaleFont(20),
+    color: '#1f2937',
+    fontWeight: '500'
   },
   indexRow: {
     flexDirection: 'row',
