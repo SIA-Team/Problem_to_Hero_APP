@@ -19,6 +19,7 @@ import {
   normalizeWalletPointsOverview,
   WALLET_POINTS_DEFAULT_CURRENCY,
 } from '../utils/walletPoints';
+import { formatRewardPointsValue } from '../utils/rewardPointsDisplay';
 
 import { scaleFont } from '../utils/responsive';
 
@@ -27,7 +28,6 @@ const PAGE_SIZE = 20;
 const TAB_KEYS = {
   INCOME: 'income',
   EXPENSE: 'expense',
-  RECHARGE: 'recharge',
 };
 
 const createInitialTabState = () => ({
@@ -43,13 +43,11 @@ const createInitialTabState = () => ({
 const TAB_ICON_MAP = {
   [TAB_KEYS.INCOME]: 'arrow-down',
   [TAB_KEYS.EXPENSE]: 'arrow-up',
-  [TAB_KEYS.RECHARGE]: 'card',
 };
 
 const TAB_COLOR_MAP = {
   [TAB_KEYS.INCOME]: '#22c55e',
   [TAB_KEYS.EXPENSE]: '#ef4444',
-  [TAB_KEYS.RECHARGE]: '#3b82f6',
 };
 
 const buildTabRequestParams = tabKey => {
@@ -58,8 +56,6 @@ const buildTabRequestParams = tabKey => {
       return { direction: 'CREDIT' };
     case TAB_KEYS.EXPENSE:
       return { direction: 'DEBIT' };
-    case TAB_KEYS.RECHARGE:
-      return { direction: 'CREDIT', sourceType: 'TOPUP' };
     default:
       return {};
   }
@@ -170,7 +166,7 @@ const normalizeTransactionItem = (item, t) => ({
 });
 
 export default function WalletDetailScreen({ navigation, route }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const initialBalance = route?.params?.balance;
   const initialCurrency = route?.params?.currency || WALLET_POINTS_DEFAULT_CURRENCY;
   const [activeTab, setActiveTab] = useState(TAB_KEYS.INCOME);
@@ -181,7 +177,6 @@ export default function WalletDetailScreen({ navigation, route }) {
   const [tabData, setTabData] = useState(() => ({
     [TAB_KEYS.INCOME]: createInitialTabState(),
     [TAB_KEYS.EXPENSE]: createInitialTabState(),
-    [TAB_KEYS.RECHARGE]: createInitialTabState(),
   }));
   const tabDataRef = useRef(tabData);
   const hasFocusedOnceRef = useRef(false);
@@ -190,7 +185,6 @@ export default function WalletDetailScreen({ navigation, route }) {
     () => [
       { key: TAB_KEYS.INCOME, label: t('profile.incomeDetails') },
       { key: TAB_KEYS.EXPENSE, label: t('profile.expenseDetails') },
-      { key: TAB_KEYS.RECHARGE, label: t('profile.recharge') },
     ],
     [t]
   );
@@ -202,9 +196,8 @@ export default function WalletDetailScreen({ navigation, route }) {
   }, [tabData]);
 
   const formatMoney = useCallback(
-    (amount, currency = walletData.currency) =>
-      `${getCurrencySymbol(currency)}${formatAmount(amount)}`,
-    [walletData.currency]
+    amount => formatRewardPointsValue(amount, { locale: i18n?.locale }),
+    [i18n?.locale]
   );
 
   const loadOverview = useCallback(async () => {
@@ -393,8 +386,6 @@ export default function WalletDetailScreen({ navigation, route }) {
       emptyHint = t('screens.walletDetail.emptyHints.income');
     } else if (activeTab === TAB_KEYS.EXPENSE) {
       emptyHint = t('screens.walletDetail.emptyHints.expense');
-    } else if (activeTab === TAB_KEYS.RECHARGE) {
-      emptyHint = t('screens.walletDetail.emptyHints.recharge');
     }
 
     return (

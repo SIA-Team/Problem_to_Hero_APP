@@ -8,6 +8,7 @@ import {
   isChineseLocale,
   resolveRewardPointsFromItem,
 } from '../utils/rewardPointsDisplay';
+import useRewardAwareQuestionItem from '../hooks/useRewardAwareQuestionItem';
 
 import { scaleFont } from '../utils/responsive';
 /**
@@ -15,33 +16,31 @@ import { scaleFont } from '../utils/responsive';
  */
 export default function QuestionListItem({ item, onPress }) {
   const { t, i18n } = useTranslation();
-  const rewardPoints = resolveRewardPointsFromItem(item);
+  const displayItem = useRewardAwareQuestionItem(item);
+  const rewardPoints = resolveRewardPointsFromItem(displayItem);
   const rewardPointsValue = `${formatCompactRewardPoints(rewardPoints, { locale: i18n?.locale })}${isChineseLocale(i18n?.locale) ? '积分' : ' pts'}`;
 
   return (
     <TouchableOpacity 
       style={styles.container} 
-      onPress={() => onPress && onPress(item)}
+      onPress={() => onPress && onPress(displayItem)}
       activeOpacity={0.7}
     >
       <View style={styles.header}>
-        <Text style={styles.time}>{formatTime(item.createdAt)}</Text>
+        <Text style={styles.time}>{formatTime(displayItem.createdAt)}</Text>
       </View>
 
       <View style={styles.titleRow}>
-        {item.questionType === 'reward' && rewardPoints > 0 && (
-          <View style={styles.rewardCard}>
-            <View style={styles.rewardCardIconWrap}>
-              <Ionicons name="sparkles-outline" size={11} color="#b45309" />
-            </View>
-            <Text style={styles.rewardCardText} numberOfLines={1}>
-              {t('home.reward')} {rewardPointsValue}
-            </Text>
-          </View>
-        )}
         <Text style={styles.title}>
-          {item.title}
-          {item.solved && (
+          {displayItem.questionType === 'reward' && rewardPoints > 0 && (
+            <Text style={styles.rewardInlineBadge}>
+              <Ionicons name="sparkles-outline" size={11} color="#b45309" />
+              {' '}{t('home.reward')} {rewardPointsValue}
+            </Text>
+          )}
+          {displayItem.questionType === 'reward' && rewardPoints > 0 ? ' ' : ''}
+          {displayItem.title}
+          {displayItem.solved && (
             <Text style={styles.solvedTagText}>
               {'  '}{t('components.questionListItem.solved')}{'  '}
             </Text>
@@ -52,15 +51,15 @@ export default function QuestionListItem({ item, onPress }) {
       <View style={styles.stats}>
         <View style={styles.statItem}>
           <Ionicons name="eye-outline" size={12} color="#9ca3af" />
-          <Text style={styles.statText}>{item.viewsCount}</Text>
+          <Text style={styles.statText}>{displayItem.viewsCount}</Text>
         </View>
         <View style={styles.statItem}>
           <Ionicons name="chatbubble-outline" size={12} color="#9ca3af" />
-          <Text style={styles.statText}>{item.commentsCount}</Text>
+          <Text style={styles.statText}>{displayItem.commentsCount}</Text>
         </View>
         <View style={styles.statItem}>
           <Ionicons name="thumbs-up-outline" size={12} color="#9ca3af" />
-          <Text style={styles.statText}>{item.likesCount}</Text>
+          <Text style={styles.statText}>{displayItem.likesCount}</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -83,45 +82,27 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
   },
   titleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
     marginBottom: 8,
   },
   title: {
-    flex: 1,
     fontSize: scaleFont(15),
     lineHeight: scaleFont(23),
     color: '#1f2937',
     fontWeight: '500',
   },
-  rewardCard: {
-    maxWidth: 124,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    marginRight: 10,
+  rewardInlineBadge: {
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#f4d27d',
     backgroundColor: '#fff8e2',
-  },
-  rewardCardIconWrap: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#fde68a',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 4,
-  },
-  rewardCardText: {
-    fontSize: scaleFont(11),
+    fontSize: scaleFont(15),
     color: '#92400e',
     fontWeight: '700',
-    lineHeight: scaleFont(15),
+    lineHeight: scaleFont(23),
     includeFontPadding: false,
-    flexShrink: 1,
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   solvedTagText: {
     backgroundColor: '#ecfdf3',

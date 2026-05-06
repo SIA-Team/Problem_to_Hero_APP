@@ -3,6 +3,8 @@ import contentApiClient from './contentApiClient';
 import { API_ENDPOINTS, replaceUrlParams } from '../../config/api';
 
 const LEGACY_QUESTION_DETAIL_ENDPOINT = '/qa-hero-content/app/content/question/detail';
+const QUESTION_REWARD_SUBMIT_ENDPOINT = '/qa-hero-content/app/content/question/:id/reward/submit';
+const QUESTION_REWARD_RECORDS_ENDPOINT = '/qa-hero-content/app/content/question/:id/reward/records';
 const QUESTION_RANKING_ALL_CACHE_TTL = 2 * 60 * 1000;
 const questionRankingAllCache = new Map();
 const questionRankingAllPendingRequests = new Map();
@@ -179,6 +181,23 @@ const questionApi = {
           }),
       ],
       debugLabel: '问题详情',
+    });
+  },
+
+  submitReward: (questionId, payload = {}) => {
+    const url = replaceUrlParams(QUESTION_REWARD_SUBMIT_ENDPOINT, { id: questionId });
+    return contentApiClient.post(url, {
+      points: payload.points,
+    });
+  },
+
+  getRewardRecords: (questionId, params = {}) => {
+    const url = replaceUrlParams(QUESTION_REWARD_RECORDS_ENDPOINT, { id: questionId });
+    return contentApiClient.get(url, {
+      params: {
+        pageNum: params.pageNum ?? 1,
+        pageSize: params.pageSize ?? 20,
+      },
     });
   },
 

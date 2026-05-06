@@ -12,7 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { formatNumber } from '../utils/numberFormatter';
-import { centsToAmount, formatAmount } from '../utils/rewardAmount';
+import { centsToAmount } from '../utils/rewardAmount';
+import { formatRewardPointsValue } from '../utils/rewardPointsDisplay';
 import questionApi from '../services/api/questionApi';
 import { scaleFont } from '../utils/responsive';
 
@@ -210,7 +211,7 @@ const resolveRegionId = routeParams => {
 };
 
 export default function QuestionRankingScreen({ navigation, route }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState('answers');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -392,7 +393,7 @@ export default function QuestionRankingScreen({ navigation, route }) {
                   <View style={styles.questionContent}>
                     <Text style={styles.questionTitle} numberOfLines={2}>
                       {item.type === 'reward' && item.reward > 0 ? (
-                        <Text style={styles.rewardTagInline}>{formatAmount(item.reward)} </Text>
+                        <Text style={styles.rewardTagInline}>{formatRewardPointsValue(item.reward, { locale: i18n?.locale })} </Text>
                       ) : null}
                       {item.title}
                     </Text>

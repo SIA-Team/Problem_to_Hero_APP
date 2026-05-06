@@ -7,11 +7,12 @@ import Avatar from '../components/Avatar';
 import KeyboardDismissView from '../components/KeyboardDismissView';
 import { modalTokens } from '../components/modalTokens';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
+import { useTranslation } from '../i18n/withTranslation';
 import teamApi from '../services/api/teamApi';
 import { showAppAlert } from '../utils/appAlert';
 import { isVisibleMyTeam, mapTeamToDetailRoute, normalizeMyTeam } from '../utils/teamTransforms';
 import { executeTeamExitFlow, getTransferLeaderCandidates } from '../utils/teamExit';
-import { formatAmount } from '../utils/rewardAmount';
+import { formatRewardPointsValue } from '../utils/rewardPointsDisplay';
 
 import { scaleFont } from '../utils/responsive';
 /*
@@ -51,6 +52,7 @@ const myTeams = [{
 export default function MyTeamsScreen({
   navigation
 }) {
+  const { i18n } = useTranslation();
   const bottomSafeInset = useBottomSafeInset(20);
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -661,7 +663,7 @@ export default function MyTeamsScreen({
               }}>
                   <View style={styles.questionOptionContent}>
                     {q.type === 'reward' && <View style={styles.rewardTagSmall}>
-                        <Text style={styles.rewardTagSmallText}>{formatAmount(q.reward)}</Text>
+                        <Text style={styles.rewardTagSmallText}>{formatRewardPointsValue(q.reward, { locale: i18n?.locale })}</Text>
                       </View>}
                     <Text style={styles.questionOptionTitle} numberOfLines={2}>{q.title}</Text>
                   </View>

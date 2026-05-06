@@ -5,10 +5,11 @@ import { Ionicons } from '@expo/vector-icons';
 import superLikeCreditService from '../services/SuperLikeCreditService';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
+import { formatRewardPointsValue } from '../utils/rewardPointsDisplay';
 
 import { scaleFont } from '../utils/responsive';
 export default function SuperLikePurchaseScreen({ navigation }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   
   const [balance, setBalance] = useState(0);
@@ -40,6 +41,7 @@ export default function SuperLikePurchaseScreen({ navigation }) {
     const amount = getCurrentAmount();
     return superLikeCreditService.calculatePrice(amount);
   };
+  const formatPointsCost = amount => formatRewardPointsValue(amount, { locale: i18n?.locale });
 
   // 处理购买
   const handlePurchase = async () => {
@@ -71,7 +73,7 @@ export default function SuperLikePurchaseScreen({ navigation }) {
             t('superLike.purchase.successTitle'),
             t('superLike.purchase.successMessage')
               .replace('{amount}', amount)
-              .replace('{cost}', totalCost),
+              .replace('{cost}', formatPointsCost(totalCost)),
             [
               {
                 text: t('common.confirm'),
@@ -155,7 +157,7 @@ export default function SuperLikePurchaseScreen({ navigation }) {
               <Text style={[
                 styles.quickPrice,
                 selectedAmount === amount && styles.quickPriceActive
-              ]}>${superLikeCreditService.calculatePrice(amount)}</Text>
+              ]}>{formatPointsCost(superLikeCreditService.calculatePrice(amount))}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -176,7 +178,7 @@ export default function SuperLikePurchaseScreen({ navigation }) {
             keyboardType="numeric"
           />
           <Text style={styles.priceHint}>
-            ${calculateTotalPrice()}
+            {formatPointsCost(calculateTotalPrice())}
           </Text>
         </View>
 
@@ -195,7 +197,7 @@ export default function SuperLikePurchaseScreen({ navigation }) {
           <View style={[styles.priceRow, styles.priceTotal]}>
             <Text style={styles.priceTotalLabel}>{t('superLike.purchase.total')}</Text>
             <Text style={styles.priceTotalValue}>
-              ${calculateTotalPrice()}
+              {formatPointsCost(calculateTotalPrice())}
             </Text>
           </View>
         </View>

@@ -1,28 +1,101 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import { useTranslation } from '../i18n/withTranslation';
-import { formatAmount } from '../utils/rewardAmount';
+import { formatRewardPointsValue } from '../utils/rewardPointsDisplay';
+import { centsToAmount } from '../utils/rewardAmount';
+import { formatTime } from '../utils/timeFormatter';
+import questionApi from '../services/api/questionApi';
 
 import { scaleFont } from '../utils/responsive';
 
 const FALLBACK_CONTRIBUTORS = [];
+const DEFAULT_PAGE_NUM = 1;
+const DEFAULT_PAGE_SIZE = 20;
+
+const isSuccessResponse = response => {
+  const code = Number(response?.code ?? response?.data?.code);
+  return code === 0 || code === 200;
+};
+
+const normalizeContributorRecord = (record, t) => ({
+  id: String(record?.recordId ?? `${record?.rewarderUserId ?? 'rewarder'}-${record?.eventTime ?? Date.now()}`),
+  userId: record?.rewarderUserId ?? null,
+  name: String(record?.nickName || '').trim() || t('screens.questionDetail.states.anonymousUser'),
+  avatar: record?.avatar || null,
+  amount: centsToAmount(record?.amountFen ?? 0),
+  time: formatTime(record?.eventTime) || String(record?.eventTime || '').trim() || t('common.loading'),
+});
 
 export default function ContributorsScreen({ navigation, route }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const {
+    questionId = '',
     currentReward = 50,
     rewardContributors = 3,
     rewardContributorsList: routeRewardContributorsList = [],
   } = route?.params || {};
 
-  const rewardContributorsList =
-    Array.isArray(routeRewardContributorsList) && routeRewardContributorsList.length > 0
-      ? routeRewardContributorsList
-      : FALLBACK_CONTRIBUTORS;
+  const fallbackContributors = useMemo(
+    () => (
+      Array.isArray(routeRewardContributorsList) && routeRewardContributorsList.length > 0
+        ? routeRewardContributorsList
+        : FALLBACK_CONTRIBUTORS
+    ),
+    [routeRewardContributorsList]
+  );
+  const [contributors, setContributors] = useState(fallbackContributors);
+  const [contributorsTotal, setContributorsTotal] = useState(Math.max(Number(rewardContributors) || 0, 0));
+  const [loading, setLoading] = useState(false);
+  const formatPoints = amount => formatRewardPointsValue(amount, { locale: i18n?.locale });
+
+  const loadRewardRecords = useCallback(async () => {
+    const normalizedQuestionId = String(questionId ?? '').trim();
+    if (!normalizedQuestionId) {
+      setContributors(fallbackContributors);
+      setContributorsTotal(Math.max(Number(rewardContributors) || 0, fallbackContributors.length));
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await questionApi.getRewardRecords(normalizedQuestionId, {
+        pageNum: DEFAULT_PAGE_NUM,
+        pageSize: DEFAULT_PAGE_SIZE,
+      });
+
+      if (!isSuccessResponse(response)) {
+        throw new Error(response?.msg || 'Failed to load reward records');
+      }
+
+      const remoteData = response?.data || {};
+      const remoteRows = Array.isArray(remoteData?.rows) ? remoteData.rows : [];
+      const normalizedRows = remoteRows.map(item => normalizeContributorRecord(item, t));
+      const remoteTotal = Number(remoteData?.total);
+
+      setContributors(normalizedRows);
+      setContributorsTotal(
+        Number.isFinite(remoteTotal) && remoteTotal >= 0
+          ? remoteTotal
+          : normalizedRows.length
+      );
+    } catch (error) {
+      console.error('Failed to load reward contributor records:', error);
+      setContributors(fallbackContributors);
+      setContributorsTotal(Math.max(Number(rewardContributors) || 0, fallbackContributors.length));
+    } finally {
+      setLoading(false);
+    }
+  }, [fallbackContributors, questionId, rewardContributors, t]);
+
+  useEffect(() => {
+    loadRewardRecords().catch(error => {
+      console.error('Failed to initialize reward contributor records:', error);
+    });
+  }, [loadRewardRecords]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -41,10 +114,10 @@ export default function ContributorsScreen({ navigation, route }) {
       <View style={styles.totalInfo}>
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>{t('screens.contributorsScreen.totalLabel')}</Text>
-          <Text style={styles.totalAmount}>{formatAmount(currentReward)}</Text>
+          <Text style={styles.totalAmount}>{formatPoints(currentReward)}</Text>
         </View>
         <Text style={styles.totalDesc}>
-          {t('screens.contributorsScreen.totalDesc').replace('{count}', rewardContributors)}
+          {t('screens.contributorsScreen.totalDesc').replace('{count}', contributorsTotal)}
         </Text>
       </View>
 
@@ -53,8 +126,13 @@ export default function ContributorsScreen({ navigation, route }) {
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) }}
         showsVerticalScrollIndicator={false}
       >
-        {rewardContributorsList.length > 0 ? (
-          rewardContributorsList.map((contributor, index) => (
+        {loading && contributors.length === 0 ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#f59e0b" />
+            <Text style={styles.loadingText}>{t('common.loading')}</Text>
+          </View>
+        ) : contributors.length > 0 ? (
+          contributors.map((contributor, index) => (
             <View key={contributor.id || `contributor-${index}`} style={styles.item}>
               <View style={styles.rank}>
                 <Text style={styles.rankText}>#{index + 1}</Text>
@@ -66,7 +144,7 @@ export default function ContributorsScreen({ navigation, route }) {
               </View>
               <View style={styles.amountBadge}>
                 <Ionicons name="add" size={12} color="#ef4444" />
-                <Text style={styles.amountText}>{formatAmount(contributor.amount)}</Text>
+                <Text style={styles.amountText}>{formatPoints(contributor.amount)}</Text>
               </View>
             </View>
           ))
@@ -130,6 +208,16 @@ const styles = StyleSheet.create({
   },
   totalDesc: { fontSize: scaleFont(12), color: '#92400e' },
   list: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
+  loadingContainer: {
+    paddingTop: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: scaleFont(14),
+    color: '#94a3b8',
+  },
   item: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -27,6 +27,7 @@ import { shouldRequirePaidQuestionAccess } from '../utils/questionAccessRules';
 import { openOfficialRechargePage } from '../utils/externalLinks';
 import {
   formatCompactRewardPoints,
+  formatRewardPointsValue,
   isChineseLocale,
   resolveRewardPointsFromItem,
 } from '../utils/rewardPointsDisplay';
@@ -48,11 +49,17 @@ import {
   normalizeWalletPointsOverview,
   WALLET_POINTS_DEFAULT_CURRENCY,
 } from '../utils/walletPoints';
+import useRewardAwareQuestionItem from '../hooks/useRewardAwareQuestionItem';
+import topicApi from '../services/api/topicApi';
+import { formatNumber as formatCompactNumber } from '../utils/numberFormatter';
 
 import { scaleFont } from '../utils/responsive';
 const { width: screenWidth } = Dimensions.get('window');
 const INITIAL_CREDENTIALS_NOTICE_STORAGE_KEY = '@initial_credentials_notice';
 const HOME_WALLET_REFRESH_DEBOUNCE_MS = 15000;
+const HOME_TOPIC_PAGE_SIZE = 50;
+const HOME_TOPIC_ICONS = ['code-slash', 'restaurant', 'briefcase', 'fitness', 'phone-portrait', 'airplane', 'cash', 'camera', 'book', 'barbell'];
+const HOME_TOPIC_COLORS = ['#3b82f6', '#f97316', '#8b5cf6', '#22c55e', '#06b6d4', '#ec4899', '#f59e0b', '#6366f1', '#14b8a6', '#ef4444'];
 const HERO_RANK_TABS = [
   { key: 'adopted', label: '被采纳' },
   { key: 'liked', label: '被点赞' },
@@ -94,6 +101,231 @@ const normalizeHotTabTree = (rows) => (
       .sort((left, right) => (left.sortOrder - right.sortOrder) || left.tabName.localeCompare(right.tabName))
     : []
 );
+const pickFirstAvailableValue = (...values) => (
+  values.find(value => value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === ''))
+);
+const normalizeTopicCountDisplay = (value) => {
+  if (typeof value === 'string' && value.trim()) {
+    return value.trim();
+  }
+
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? formatCompactNumber(numericValue) : '--';
+};
+const normalizeTopicFollowedState = (value) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    return value === 1;
+  }
+
+  if (typeof value === 'string') {
+    const normalizedValue = value.trim().toLowerCase();
+    return ['1', 'true', 'yes', 'y'].includes(normalizedValue);
+  }
+
+  return false;
+};
+const extractTopicRows = (payload) => {
+  const candidates = [
+    payload,
+    payload?.data,
+    payload?.page,
+    payload?.pagination,
+    payload?.result,
+    payload?.data?.page,
+    payload?.data?.pagination,
+    payload?.data?.result,
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate;
+    }
+
+    if (!candidate || typeof candidate !== 'object') {
+      continue;
+    }
+
+    for (const key of ['rows', 'list', 'records', 'items', 'content', 'data']) {
+      if (Array.isArray(candidate[key])) {
+        return candidate[key];
+      }
+    }
+  }
+
+  return [];
+};
+const extractTopicTotal = (payload) => {
+  const candidates = [
+    payload,
+    payload?.data,
+    payload?.page,
+    payload?.pagination,
+    payload?.result,
+    payload?.data?.page,
+    payload?.data?.pagination,
+    payload?.data?.result,
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      continue;
+    }
+
+    const totalValue = Number(
+      pickFirstAvailableValue(
+        candidate?.total,
+        candidate?.totalCount,
+        candidate?.count
+      )
+    );
+
+    if (Number.isFinite(totalValue) && totalValue >= 0) {
+      return totalValue;
+    }
+  }
+
+  return null;
+};
+const normalizeTopicListItem = (item, index = 0) => {
+  const rawName = pickFirstAvailableValue(
+    item?.name,
+    item?.topicName,
+    item?.topicTitle,
+    item?.title
+  );
+  const trimmedName = String(rawName || '').trim();
+
+  if (!trimmedName) {
+    return null;
+  }
+
+  const normalizedName = trimmedName.startsWith('#') ? trimmedName : `#${trimmedName}`;
+  const resolvedId = String(
+    pickFirstAvailableValue(
+      item?.id,
+      item?.topicId,
+      item?.topic_id,
+      item?.contentTopicId,
+      item?.content_topic_id,
+      item?.topicCode,
+      normalizedName
+    )
+  ).trim();
+
+  if (!resolvedId) {
+    return null;
+  }
+
+  const icon = typeof item?.icon === 'string' && item.icon.trim()
+    ? item.icon.trim()
+    : HOME_TOPIC_ICONS[index % HOME_TOPIC_ICONS.length];
+  const color = typeof item?.color === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(item.color.trim())
+    ? item.color.trim()
+    : HOME_TOPIC_COLORS[index % HOME_TOPIC_COLORS.length];
+
+  return {
+    id: resolvedId,
+    name: normalizedName,
+    description: String(
+      pickFirstAvailableValue(
+        item?.description,
+        item?.desc,
+        item?.topicDesc,
+        item?.summary,
+        item?.intro,
+        item?.introduction,
+        item?.remark
+      ) || ''
+    ).trim(),
+    followers: normalizeTopicCountDisplay(
+      pickFirstAvailableValue(
+        item?.followCount,
+        item?.followedCount,
+        item?.followers,
+        item?.followersCount,
+        item?.fansCount,
+        item?.userCount
+      )
+    ),
+    questions: normalizeTopicCountDisplay(
+      pickFirstAvailableValue(
+        item?.questionCount,
+        item?.questions,
+        item?.contentCount,
+        item?.qaCount,
+        item?.problemCount
+      )
+    ),
+    isFollowed: normalizeTopicFollowedState(
+      pickFirstAvailableValue(
+        item?.isFollowed,
+        item?.followed,
+        item?.hasFollowed,
+        item?.focused,
+        item?.subscribed
+      )
+    ),
+    icon,
+    color,
+    raw: item,
+  };
+};
+const mergeTopicItems = (currentItems, nextItems) => {
+  const mergedItems = [...currentItems];
+  const existingIds = new Set(currentItems.map(item => String(item?.id ?? '')));
+
+  nextItems.forEach((item) => {
+    const itemId = String(item?.id ?? '');
+    if (!itemId || existingIds.has(itemId)) {
+      return;
+    }
+
+    existingIds.add(itemId);
+    mergedItems.push(item);
+  });
+
+  return mergedItems;
+};
+const RewardAwareHomeQuestionTitle = ({
+  item,
+  i18n,
+  t,
+  styles,
+  onTextLayout,
+}) => {
+  const displayItem = useRewardAwareQuestionItem(item);
+  const rewardPoints = resolveRewardPointsFromItem(displayItem);
+  const hasRewardPoints = rewardPoints > 0;
+  const rewardPointsValue = `${formatCompactRewardPoints(rewardPoints, { locale: i18n?.locale })}${isChineseLocale(i18n?.locale) ? '积分' : ' pts'}`;
+
+  return (
+    <Text
+      style={styles.questionTitle}
+      numberOfLines={3}
+      ellipsizeMode="tail"
+      onTextLayout={onTextLayout}
+    >
+      {((displayItem.type === 'reward' || displayItem.type === 'targeted') && hasRewardPoints) && (
+        <Text style={styles.rewardTitleInlineBadge}>
+          <Ionicons name="sparkles-outline" size={11} color="#b45309" />
+          {' '}{t('home.reward')} {rewardPointsValue}
+        </Text>
+      )}
+      {((displayItem.type === 'reward' || displayItem.type === 'targeted') && hasRewardPoints) ? ' ' : ''}
+      {displayItem.title}
+      {displayItem.type === 'targeted' && (
+        <Text style={styles.targetedInlineBadge}>  {t('home.targeted')}  </Text>
+      )}
+      {displayItem.status === 2 && (
+        <Text style={styles.solvedInlineBadge}>  {t('home.solved')}  </Text>
+      )}
+    </Text>
+  );
+};
 const doesQuestionMatchHotTab = (item, tabNode) => {
   if (!tabNode) {
     return true;
@@ -502,6 +734,14 @@ export default function HomeScreen({ navigation }) {
   
   // 话题关注状态
   const [topicFollowState, setTopicFollowState] = useState({});
+  const [homeTopics, setHomeTopics] = useState([]);
+  const [homeTopicsLoading, setHomeTopicsLoading] = useState(false);
+  const [homeTopicsLoaded, setHomeTopicsLoaded] = useState(false);
+  const [homeTopicsError, setHomeTopicsError] = useState('');
+  const [homeTopicsRefreshing, setHomeTopicsRefreshing] = useState(false);
+  const [homeTopicsLoadingMore, setHomeTopicsLoadingMore] = useState(false);
+  const [homeTopicsHasMore, setHomeTopicsHasMore] = useState(true);
+  const [homeTopicsNextPage, setHomeTopicsNextPage] = useState(1);
   
   // 评论弹窗状态
   const [showCommentModal, setShowCommentModal] = useState(false);
@@ -527,6 +767,75 @@ export default function HomeScreen({ navigation }) {
     () => (Array.isArray(questionList) ? questionList.filter(item => item && typeof item === 'object' && !Array.isArray(item)) : []),
     [questionList]
   );
+  const loadHomeTopics = useCallback(async ({ forceRefresh = false, loadMore = false } = {}) => {
+    if (loadMore) {
+      if (homeTopicsLoading || homeTopicsRefreshing || homeTopicsLoadingMore || !homeTopicsHasMore) {
+        return;
+      }
+    } else if (homeTopicsLoading || homeTopicsRefreshing) {
+      return;
+    }
+
+    const targetPage = loadMore ? homeTopicsNextPage : 1;
+
+    if (loadMore) {
+      setHomeTopicsLoadingMore(true);
+    } else if (forceRefresh) {
+      setHomeTopicsRefreshing(true);
+      setHomeTopicsError('');
+    } else {
+      setHomeTopicsLoading(true);
+      setHomeTopicsError('');
+    }
+
+    try {
+      const response = await topicApi.getHomeTopicList({
+        sortType: 'recommend',
+        pageNum: targetPage,
+        pageSize: HOME_TOPIC_PAGE_SIZE,
+      });
+
+      const responseCode = Number(response?.code);
+      if (responseCode !== 200 && responseCode !== 0) {
+        throw new Error(response?.msg || t('common.loadFailed'));
+      }
+
+      const nextTopics = extractTopicRows(response?.data)
+        .map((item, index) => normalizeTopicListItem(item, index))
+        .filter(Boolean);
+      const topicTotal = extractTopicTotal(response?.data);
+      const mergedTopics = loadMore ? mergeTopicItems(homeTopics, nextTopics) : nextTopics;
+      const hasMoreByTotal = Number.isFinite(topicTotal) ? mergedTopics.length < topicTotal : null;
+      const nextHasMore = hasMoreByTotal !== null ? hasMoreByTotal : nextTopics.length >= HOME_TOPIC_PAGE_SIZE;
+
+      setHomeTopics(mergedTopics);
+      setHomeTopicsLoaded(true);
+      setHomeTopicsHasMore(nextHasMore);
+      setHomeTopicsNextPage(nextHasMore ? targetPage + 1 : targetPage);
+      setHomeTopicsError('');
+    } catch (error) {
+      if (loadMore) {
+        showToast(error?.message || t('common.loadFailed'), 'error');
+      } else {
+        setHomeTopics([]);
+        setHomeTopicsLoaded(true);
+        setHomeTopicsHasMore(false);
+        setHomeTopicsNextPage(1);
+        setHomeTopicsError(error?.message || t('common.loadFailed'));
+      }
+    } finally {
+      setHomeTopicsLoading(false);
+      setHomeTopicsRefreshing(false);
+      setHomeTopicsLoadingMore(false);
+    }
+  }, [homeTopics, homeTopicsHasMore, homeTopicsLoading, homeTopicsLoadingMore, homeTopicsNextPage, homeTopicsRefreshing, t]);
+  useEffect(() => {
+    if (activeTab !== t('home.topics') || homeTopicsLoaded || homeTopicsLoading) {
+      return;
+    }
+
+    loadHomeTopics();
+  }, [activeTab, homeTopicsLoaded, homeTopicsLoading, loadHomeTopics, t]);
 
   
   // 问题标题展开/折叠状态
@@ -1231,9 +1540,76 @@ export default function HomeScreen({ navigation }) {
 
     navigation.navigate('TopicDetail', {
       topicId: topic.id,
-      topic,
+      topic: topic.raw ? { ...topic.raw, ...topic } : topic,
     });
   }, [navigation]);
+  const handleHomeTopicsRefresh = useCallback(() => {
+    loadHomeTopics({ forceRefresh: true });
+  }, [loadHomeTopics]);
+  const handleHomeTopicsLoadMore = useCallback(() => {
+    loadHomeTopics({ loadMore: true });
+  }, [loadHomeTopics]);
+  const handleHomeTopicsScroll = useCallback((event) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent || {};
+    if (!layoutMeasurement || !contentOffset || !contentSize) {
+      return;
+    }
+
+    const distanceToBottom = contentSize.height - (layoutMeasurement.height + contentOffset.y);
+    if (distanceToBottom <= 120) {
+      handleHomeTopicsLoadMore();
+    }
+  }, [handleHomeTopicsLoadMore]);
+  const renderTopicItem = useCallback(({ item }) => {
+    const isFollowed = item.isFollowed !== undefined ? item.isFollowed : false;
+    const currentFollowState = topicFollowState[item.id];
+    const displayFollowed = currentFollowState !== undefined ? currentFollowState : isFollowed;
+
+    return (
+      <View style={styles.topicCard}>
+        <TouchableOpacity
+          style={styles.topicMain}
+          activeOpacity={0.82}
+          onPress={() => handleTopicPress(item)}
+        >
+          <View style={[styles.topicIcon, { backgroundColor: `${item.color}20` }]}>
+            <Ionicons name={item.icon} size={24} color={item.color} />
+          </View>
+          <View style={styles.topicInfo}>
+            <Text style={styles.topicName}>{item.name}</Text>
+            {item.description ? (
+              <Text style={styles.topicDesc}>{item.description}</Text>
+            ) : null}
+            <Text style={styles.topicStats}>{item.followers} {t('home.followers')} 路 {item.questions} {t('home.questions')}</Text>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.topicFollowBtn, displayFollowed && styles.topicFollowBtnActive]}
+          onPress={() => toggleFollowTopic(item.id, displayFollowed)}
+        >
+          <Text style={[styles.topicFollowBtnText, displayFollowed && styles.topicFollowBtnTextActive]}>
+            {displayFollowed ? t('home.unfollowTopic') : t('home.followTopic')}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }, [handleTopicPress, t, topicFollowState]);
+  const homeTopicKeyExtractor = useCallback((item, index) => String(item?.id ?? `topic-${index}`), []);
+  const renderHomeTopicsFooter = useCallback(() => {
+    if (!homeTopicsLoadingMore) {
+      return <View style={{ height: 20 }} />;
+    }
+
+    return (
+      <View>
+        <View style={styles.footerLoading}>
+          <ActivityIndicator size="small" color="#ef4444" />
+          <Text style={styles.footerText}>{t('home.loading')}</Text>
+        </View>
+        <View style={{ height: 20 }} />
+      </View>
+    );
+  }, [homeTopicsLoadingMore, t]);
 
   const formatNumber = (num) => num >= 1000 ? (num / 1000).toFixed(1) + 'k' : num;
 
@@ -1276,9 +1652,8 @@ export default function HomeScreen({ navigation }) {
     console.log('Home question shared:', platform, payload);
   };
   const formatPaidAmount = useCallback((amount) => {
-    const numericAmount = Number(amount) || 0;
-    return Number.isInteger(numericAmount) ? `${numericAmount}` : numericAmount.toFixed(2);
-  }, []);
+    return formatRewardPointsValue(amount, { locale: i18n?.locale });
+  }, [i18n?.locale]);
 
   const loadWalletBalance = useCallback(async (options = {}) => {
     const forceRefresh = options.forceRefresh === true;
@@ -1809,8 +2184,7 @@ export default function HomeScreen({ navigation }) {
             const isDisliked = getQuestionDislikeState(item.id);
             const isLikeDisabled = !isLiked && isDisliked;
             const requiresPaidView = item.requiresPaidView ?? shouldRequirePaidQuestionAccess(item);
-            const rewardPoints = resolveRewardPointsFromItem(item);
-            const hasRewardPoints = rewardPoints > 0;
+            const rewardPoints = 0;
             const rewardPointsValue = `${formatCompactRewardPoints(rewardPoints, { locale: i18n?.locale })}${isChineseLocale(i18n?.locale) ? '积分' : ' pts'}`;
             const isFirstItem = index === 0;
             const isLastItem = index === displayQuestionList.length - 1;
@@ -1827,43 +2201,25 @@ export default function HomeScreen({ navigation }) {
                   <View style={styles.questionTitleWrapper}>
                     {/* 实际显示的文本 */}
                     <View style={styles.titleContainer}>
-                      <View style={styles.questionTitleRow}>
-                        {((item.type === 'reward' || item.type === 'targeted') && hasRewardPoints) && (
-                          <View style={styles.rewardTitleCard}>
-                            <View style={styles.rewardTitleCardIconWrap}>
-                              <Ionicons name="sparkles-outline" size={11} color="#b45309" />
-                            </View>
-                            <Text style={styles.rewardTitleCardText} numberOfLines={1}>
-                              {t('home.reward')} {rewardPointsValue}
-                            </Text>
-                          </View>
-                        )}
-                        <Text
-                          style={styles.questionTitle}
-                          numberOfLines={3}
-                          onTextLayout={(e) => {
-                            if (measuredTitleIdsRef.current.has(item.id)) {
-                              return;
-                            }
+                      <RewardAwareHomeQuestionTitle
+                        item={item}
+                        i18n={i18n}
+                        t={t}
+                        styles={styles}
+                        onTextLayout={(e) => {
+                          if (measuredTitleIdsRef.current.has(item.id)) {
+                            return;
+                          }
 
-                            measuredTitleIdsRef.current.add(item.id);
-                            const lineCount = e.nativeEvent.lines.length;
+                          measuredTitleIdsRef.current.add(item.id);
+                          const lineCount = e.nativeEvent.lines.length;
 
-                            if (lineCount > 3) {
-                              setTitleLineCount(prev => prev[item.id] === lineCount ? prev : ({ ...prev, [item.id]: lineCount }));
-                              setNeedsExpand(prev => prev[item.id] ? prev : ({ ...prev, [item.id]: true }));
-                            }
-                          }}
-                        >
-                          {item.title}
-                          {item.type === 'targeted' && (
-                            <Text style={styles.targetedInlineBadge}>  {t('home.targeted')}  </Text>
-                          )}
-                          {item.status === 2 && (
-                            <Text style={styles.solvedInlineBadge}>  {t('home.solved')}  </Text>
-                          )}
-                        </Text>
-                      </View>
+                          if (lineCount > 3) {
+                            setTitleLineCount(prev => prev[item.id] === lineCount ? prev : ({ ...prev, [item.id]: lineCount }));
+                            setNeedsExpand(prev => prev[item.id] ? prev : ({ ...prev, [item.id]: true }));
+                          }
+                        }}
+                      />
                     </View>
                     
                     {/* 全文按钮 */}
@@ -1895,7 +2251,7 @@ export default function HomeScreen({ navigation }) {
                         <Text style={styles.paidViewText}>{t('home.paidViewContent')}</Text>
                       </View>
                       <View style={styles.paidViewPrice}>
-                        <Text style={styles.paidViewPriceText}>${item.paidAmount}</Text>
+                        <Text style={styles.paidViewPriceText}>{formatPaidAmount(item.paidAmount)}</Text>
                         <Ionicons name="chevron-forward" size={16} color="#f59e0b" />
                       </View>
                     </TouchableOpacity>
@@ -2037,26 +2393,56 @@ export default function HomeScreen({ navigation }) {
       </View>
       ) : (
         /* 话题列表 */
-        <ScrollView style={styles.topicsContainer} showsVerticalScrollIndicator={false}>
-          <View style={styles.topicsSection}>
-            {topicsData.map(topic => {
+        <ScrollView
+          style={styles.topicsContainer}
+          showsVerticalScrollIndicator={false}
+          refreshControl={(
+            <RefreshControl
+              refreshing={homeTopicsRefreshing}
+              onRefresh={handleHomeTopicsRefresh}
+              colors={['#ef4444']}
+              tintColor="#ef4444"
+            />
+          )}
+          onScroll={handleHomeTopicsScroll}
+          scrollEventThrottle={16}
+        >
+          {homeTopicsLoading && homeTopics.length === 0 ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#ef4444" />
+            </View>
+          ) : homeTopics.length === 0 ? (
+            <View style={styles.listStateContainer}>
+              <Ionicons name="document-text-outline" size={30} color="#9ca3af" />
+              <Text style={styles.listStateTitle}>
+                {homeTopicsError || t('common.noData')}
+              </Text>
+              <TouchableOpacity style={styles.listRetryBtn} onPress={handleHomeTopicsRefresh} activeOpacity={0.8}>
+                <Text style={styles.listRetryBtnText}>{t('common.refresh')}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.topicsSection}>
+            {homeTopics.map((topic, index) => {
               const isFollowed = topic.isFollowed !== undefined ? topic.isFollowed : false;
               const currentFollowState = topicFollowState[topic.id];
               const displayFollowed = currentFollowState !== undefined ? currentFollowState : isFollowed;
               
               return (
-                <View key={topic.id} style={styles.topicCard}>
+                <View key={homeTopicKeyExtractor(topic, index)} style={styles.topicCard}>
                   <TouchableOpacity
                     style={styles.topicMain}
                     activeOpacity={0.82}
                     onPress={() => handleTopicPress(topic)}
                   >
-                  <View style={[styles.topicIcon, { backgroundColor: topic.color + '20' }]}>
+                  <View style={[styles.topicIcon, { backgroundColor: `${topic.color}20` }]}>
                     <Ionicons name={topic.icon} size={24} color={topic.color} />
                   </View>
                   <View style={styles.topicInfo}>
                     <Text style={styles.topicName}>{topic.name}</Text>
-                    <Text style={styles.topicDesc}>{topic.description}</Text>
+                    {topic.description ? (
+                      <Text style={styles.topicDesc}>{topic.description}</Text>
+                    ) : null}
                     <Text style={styles.topicStats}>{topic.followers} {t('home.followers')} · {topic.questions} {t('home.questions')}</Text>
                   </View>
                   </TouchableOpacity>
@@ -2071,8 +2457,9 @@ export default function HomeScreen({ navigation }) {
                 </View>
               );
             })}
-          </View>
-          <View style={{ height: 20 }} />
+            </View>
+          )}
+          {renderHomeTopicsFooter()}
         </ScrollView>
       )}
 
@@ -2396,10 +2783,6 @@ const styles = StyleSheet.create({
   questionTitleWrapper: {
     marginBottom: 12,
   },
-  questionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
   cardHeader: {
     marginTop: 0
   },
@@ -2468,39 +2851,19 @@ const styles = StyleSheet.create({
   headerActionText: { fontSize: scaleFont(12), color: '#666666', marginLeft: 4 },
   headerActionTextDisabled: { color: '#d1d5db' },
   headerMoreBtn: { padding: 2, marginLeft: 16 },
-  rewardTitleCard: {
-    maxWidth: 128,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    marginRight: 10,
+  rewardTitleInlineBadge: {
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#f4d27d',
     backgroundColor: '#fff8e2',
-    shadowColor: '#f59e0b',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 1,
-  },
-  rewardTitleCardIconWrap: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#fde68a',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 4,
-  },
-  rewardTitleCardText: {
-    fontSize: scaleFont(11),
+    fontSize: scaleFont(16),
     color: '#92400e',
     fontWeight: '700',
-    lineHeight: scaleFont(15),
+    lineHeight: scaleFont(24),
     includeFontPadding: false,
-    flexShrink: 1,
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   targetedInlineBadge: {
     backgroundColor: '#f5f3ff',

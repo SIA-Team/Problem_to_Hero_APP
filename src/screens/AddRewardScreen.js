@@ -5,13 +5,17 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/withTranslation';
 import { showAppAlert } from '../utils/appAlert';
+import { sanitizeUserFacingMessage } from '../utils/userFacingMessage';
+import questionApi from '../services/api/questionApi';
 import userApi from '../services/api/userApi';
 import walletApi from '../services/api/walletApi';
 import { recordQuestionLocalRewardContribution } from '../services/localRewardState';
 import { openOfficialRechargePage } from '../utils/externalLinks';
 import { REWARD_MIN_AMOUNT } from '../constants/reward';
 import {
-  formatAmount,
+  centsToAmount,
+  formatAmountValue,
+  parseAmountNumber,
   parseRewardAmountToCents,
   sanitizeAmountInput,
 } from '../utils/rewardAmount';
@@ -19,12 +23,51 @@ import {
   normalizeWalletPointsOverview,
   WALLET_POINTS_DEFAULT_CURRENCY,
 } from '../utils/walletPoints';
+import { formatRewardPointsValue, isChineseLocale } from '../utils/rewardPointsDisplay';
 
 import { scaleFont } from '../utils/responsive';
 
+const MIN_ADD_REWARD_POINTS = REWARD_MIN_AMOUNT;
+const MAX_ADD_REWARD_POINTS = 1000;
+
+const isSuccessResponse = response => {
+  const code = Number(response?.code ?? response?.data?.code);
+  return code === 0 || code === 200;
+};
+
+const isInsufficientBalanceMessage = message =>
+  /积分.*不足|余额.*不足|not enough|insufficient/i.test(String(message || ''));
+
+const resolveDisplayedBalanceAfter = (rawBalanceAfter, currentBalance, deductedAmount) => {
+  const numericBalanceAfter = Number(rawBalanceAfter);
+  if (!Number.isFinite(numericBalanceAfter)) {
+    return null;
+  }
+
+  const expectedBalance = Math.max(
+    0,
+    Math.round((Number(currentBalance || 0) - Number(deductedAmount || 0) + Number.EPSILON) * 100) / 100
+  );
+  const candidates = [numericBalanceAfter, numericBalanceAfter / 100];
+
+  return candidates.reduce((bestCandidate, candidate) => {
+    if (!Number.isFinite(candidate)) {
+      return bestCandidate;
+    }
+
+    if (bestCandidate === null) {
+      return candidate;
+    }
+
+    const currentDistance = Math.abs(candidate - expectedBalance);
+    const bestDistance = Math.abs(bestCandidate - expectedBalance);
+    return currentDistance < bestDistance ? candidate : bestCandidate;
+  }, null);
+};
+
 export default function AddRewardScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const {
     currentReward = 50,
     rewardContributors = 3,
@@ -69,20 +112,37 @@ export default function AddRewardScreen({ navigation, route }) {
 
     return `${getCurrencySymbol(currency)}${safeAmount.toFixed(2)}`;
   }, [getCurrencySymbol, walletData.currency]);
+  const formatPoints = useCallback(
+    amount => formatRewardPointsValue(amount, { locale: i18n?.locale }),
+    [i18n?.locale]
+  );
+  const rewardInputUnitLabel = isChineseLocale(i18n?.locale) ? '积分' : 'pts';
+  const rewardInputPlaceholder = isChineseLocale(i18n?.locale)
+    ? `最低${formatAmountValue(MIN_ADD_REWARD_POINTS)}积分`
+    : `Minimum ${formatAmountValue(MIN_ADD_REWARD_POINTS)} pts`;
+  const minAmountValidationMessage = isChineseLocale(i18n?.locale)
+    ? `最低追加金额为${formatPoints(MIN_ADD_REWARD_POINTS)}`
+    : `Minimum amount is ${formatPoints(MIN_ADD_REWARD_POINTS)}`;
+  const maxAmountValidationMessage = isChineseLocale(i18n?.locale)
+    ? `单次追加最高为${formatPoints(MAX_ADD_REWARD_POINTS)}`
+    : `Maximum amount per addition is ${formatPoints(MAX_ADD_REWARD_POINTS)}`;
 
   const loadWalletBalance = useCallback(async () => {
     try {
       const response = await walletApi.getPointsOverview();
-      if (response.code === 0 || response.code === 200) {
+      if (isSuccessResponse(response)) {
         const overview = normalizeWalletPointsOverview(response?.data);
         setWalletData({
           balance: overview.balance,
           currency: overview.currency || WALLET_POINTS_DEFAULT_CURRENCY,
         });
+        return overview;
       }
     } catch (error) {
       console.error('Failed to load wallet balance in AddRewardScreen:', error);
     }
+
+    return null;
   }, []);
 
   const loadUserProfile = useCallback(async () => {
@@ -132,6 +192,29 @@ export default function AddRewardScreen({ navigation, route }) {
     );
   }, [routeUserId, routeUsername, t, userProfile.userId, userProfile.username]);
 
+  const promptInsufficientBalance = useCallback((balanceAmount, requiredAmount) => {
+    showAppAlert(
+      t('screens.addRewardScreen.insufficientBalance.title'),
+      t('screens.addRewardScreen.insufficientBalance.message')
+        .replace('{balance}', formatPoints(balanceAmount))
+        .replace('{amount}', formatPoints(requiredAmount)),
+      [
+        {
+          text: t('common.cancel'),
+          style: 'cancel',
+        },
+        {
+          text: t('profile.recharge'),
+          onPress: () => {
+            handleRecharge().catch(error => {
+              console.error('Failed to open recharge page from AddRewardScreen:', error);
+            });
+          },
+        },
+      ]
+    );
+  }, [formatPoints, handleRecharge, t]);
+
   const syncRewardResultToSource = useCallback(addedRewardResult => {
     if (!sourceRouteKey) {
       return;
@@ -150,95 +233,112 @@ export default function AddRewardScreen({ navigation, route }) {
       return;
     }
 
+    const customAmount = parseAmountNumber(addRewardAmount);
+    const amount =
+      selectedAddRewardAmount !== null
+        ? Number(selectedAddRewardAmount)
+        : customAmount;
     const amountInCents =
       selectedAddRewardAmount !== null
         ? Math.round(Number(selectedAddRewardAmount) * 100)
         : parseRewardAmountToCents(addRewardAmount);
-    const amount = amountInCents === null ? null : amountInCents / 100;
 
     if (!amount || amount <= 0) {
       showAppAlert(t('screens.addRewardScreen.validation.hint'), t('screens.addRewardScreen.validation.invalidAmount'));
       return;
     }
-    if (amount < REWARD_MIN_AMOUNT) {
-      showAppAlert(t('screens.addRewardScreen.validation.hint'), t('screens.addRewardScreen.validation.minAmount'));
+    if (amount < MIN_ADD_REWARD_POINTS) {
+      showAppAlert(t('screens.addRewardScreen.validation.hint'), minAmountValidationMessage);
       return;
     }
-    if (amount > 1000) {
-      showAppAlert(t('screens.addRewardScreen.validation.hint'), t('screens.addRewardScreen.validation.maxAmount'));
+    if (amount > MAX_ADD_REWARD_POINTS) {
+      showAppAlert(t('screens.addRewardScreen.validation.hint'), maxAmountValidationMessage);
+      return;
+    }
+    if (!amountInCents || amountInCents <= 0) {
+      showAppAlert(t('screens.addRewardScreen.validation.hint'), t('screens.addRewardScreen.validation.invalidAmount'));
       return;
     }
 
     const currentBalance = Number(walletData.balance) || 0;
     if (currentBalance < amount) {
-      showAppAlert(
-        t('screens.addRewardScreen.insufficientBalance.title'),
-        t('screens.addRewardScreen.insufficientBalance.message')
-          .replace('{balance}', formatMoney(currentBalance))
-          .replace('{amount}', formatMoney(amount)),
-        [
-          {
-            text: t('common.cancel'),
-            style: 'cancel',
-          },
-          {
-            text: t('profile.recharge'),
-            onPress: () => {
-              handleRecharge().catch(error => {
-                console.error('Failed to open recharge page from AddRewardScreen:', error);
-              });
-            },
-          },
-        ]
-      );
+      promptInsufficientBalance(currentBalance, amount);
       return;
     }
 
     try {
       setSubmitting(true);
 
-      const rewardTitlePrefix = t('screens.addRewardScreen.expenseRecordType');
-      const rewardRemark = questionTitle
-        ? `${rewardTitlePrefix} - ${questionTitle}`
-        : rewardTitlePrefix;
-      const consumeResponse = await walletApi.consumePoints(amount, {
-        sourceType: 'BOUNTY',
-        remark: rewardRemark,
-        refId: questionId || null,
-        refType: 'QUESTION',
-        currency: walletData.currency,
-      });
-
-      if (consumeResponse?.code !== 0 && consumeResponse?.code !== 200) {
-        throw new Error(
-          consumeResponse?.msg || t('screens.addRewardScreen.deductionFailed')
-        );
+      const normalizedQuestionId = String(questionId ?? '').trim();
+      if (!normalizedQuestionId) {
+        throw new Error(t('screens.addRewardScreen.validation.invalidAmount'));
       }
 
-      const nextBalance = Number(consumeResponse?.data?.balance);
-      if (Number.isFinite(nextBalance)) {
+      const submitResponse = await questionApi.submitReward(normalizedQuestionId, {
+        points: amountInCents,
+      });
+      const submitMessage = sanitizeUserFacingMessage(
+        submitResponse,
+        t('screens.addRewardScreen.deductionFailed')
+      );
+
+      if (!isSuccessResponse(submitResponse)) {
+        if (isInsufficientBalanceMessage(submitMessage)) {
+          const latestOverview = await loadWalletBalance();
+          promptInsufficientBalance(latestOverview?.balance ?? currentBalance, amount);
+          return;
+        }
+
+        throw new Error(submitMessage);
+      }
+
+      const submitData = submitResponse?.data || {};
+      const debitedPoints = Number(submitData?.debitedPoints);
+      const equivalentAmountFen = Number(submitData?.equivalentAmountFen);
+      const debitedAmount = Number.isFinite(debitedPoints) && debitedPoints > 0
+        ? centsToAmount(debitedPoints)
+        : amount;
+      const rewardAddedAmount = Number.isFinite(equivalentAmountFen) && equivalentAmountFen > 0
+        ? centsToAmount(equivalentAmountFen)
+        : debitedAmount;
+      const nextBalance = resolveDisplayedBalanceAfter(
+        submitData?.balanceAfter,
+        currentBalance,
+        debitedAmount
+      );
+
+      if (Number.isFinite(nextBalance) && nextBalance !== null) {
         setWalletData(prev => ({
           ...prev,
           balance: nextBalance,
         }));
       }
 
-      const normalizedAmount = Math.round(amount * 100) / 100;
-      const localRewardState = await recordQuestionLocalRewardContribution(questionId, {
-        amount: normalizedAmount,
+      const returnedQuestionId = submitData?.questionId ?? normalizedQuestionId;
+      const normalizedAddedAmount =
+        Math.round((rewardAddedAmount + Number.EPSILON) * 100) / 100;
+      const localRewardState = await recordQuestionLocalRewardContribution(returnedQuestionId, {
+        amount: normalizedAddedAmount,
         contributor: {
-          id: `local-reward-${Date.now()}`,
+          id: submitData?.pointsTxnNo || `reward-${Date.now()}`,
           userId: routeUserId || userProfile.userId || null,
           name: routeUsername || userProfile.username || 'Me',
           avatar: null,
-          amount: normalizedAmount,
+          amount: normalizedAddedAmount,
           time: t('home.justNow'),
         },
       });
       const addedRewardResult = {
-        questionId,
-        addedAmount: normalizedAmount,
-        totalReward: Math.round((currentReward + normalizedAmount) * 100) / 100,
+        questionId: returnedQuestionId,
+        addedAmount: normalizedAddedAmount,
+        debitedPoints: Number.isFinite(debitedPoints) ? debitedPoints : amountInCents,
+        balanceAfter: submitData?.balanceAfter ?? null,
+        balanceAfterDisplay: nextBalance,
+        pointsTxnNo: submitData?.pointsTxnNo || null,
+        equivalentAmountFen: Number.isFinite(equivalentAmountFen)
+          ? equivalentAmountFen
+          : Math.round(normalizedAddedAmount * 100),
+        totalReward: Math.round((currentReward + normalizedAddedAmount) * 100) / 100,
         rewardContributors: Math.max(Number(rewardContributors) || 0, 0) + Number(localRewardState.contributorCountDelta || 0),
         contributorUserId: routeUserId || userProfile.userId || null,
         contributor: localRewardState.contributors[0] || null,
@@ -246,12 +346,13 @@ export default function AddRewardScreen({ navigation, route }) {
       };
 
       syncRewardResultToSource(addedRewardResult);
+      loadWalletBalance();
 
       showAppAlert(
         t('screens.addRewardScreen.success.title'),
         t('screens.addRewardScreen.success.message').replace(
           '${amount}',
-          formatAmount(normalizedAmount)
+          formatPoints(debitedAmount)
         ),
         [
           {
@@ -262,9 +363,20 @@ export default function AddRewardScreen({ navigation, route }) {
       );
     } catch (error) {
       console.error('Add reward submit failed:', error);
+      const errorMessage = sanitizeUserFacingMessage(
+        error,
+        t('screens.addRewardScreen.deductionFailed')
+      );
+
+      if (isInsufficientBalanceMessage(errorMessage)) {
+        const latestOverview = await loadWalletBalance();
+        promptInsufficientBalance(latestOverview?.balance ?? currentBalance, amount);
+        return;
+      }
+
       showAppAlert(
         t('screens.addRewardScreen.validation.hint'),
-        error?.message || t('screens.addRewardScreen.deductionFailed')
+        errorMessage
       );
     } finally {
       setSubmitting(false);
@@ -295,7 +407,7 @@ export default function AddRewardScreen({ navigation, route }) {
         <View style={styles.currentRewardInfo}>
           <View style={styles.currentRewardRow}>
             <Text style={styles.currentRewardLabel}>{t('screens.addRewardScreen.currentReward.label')}</Text>
-            <Text style={styles.currentRewardAmount}>{formatAmount(currentReward)}</Text>
+            <Text style={styles.currentRewardAmount}>{formatPoints(currentReward)}</Text>
           </View>
           <View style={styles.currentRewardRow}>
             <Text style={styles.currentRewardDesc}>
@@ -306,7 +418,7 @@ export default function AddRewardScreen({ navigation, route }) {
 
         <View style={styles.walletSummaryCard}>
           <Text style={styles.walletSummaryLabel}>{t('screens.addRewardScreen.paymentBalanceLabel')}</Text>
-          <Text style={styles.walletSummaryValue}>{formatMoney(walletData.balance)}</Text>
+          <Text style={styles.walletSummaryValue}>{formatPoints(walletData.balance)}</Text>
         </View>
         <Text style={styles.walletSummaryHint}>{t('screens.addRewardScreen.paymentHint')}</Text>
 
@@ -328,7 +440,7 @@ export default function AddRewardScreen({ navigation, route }) {
               <Text style={[
                 styles.quickAmountText,
                 selectedAddRewardAmount === amount && styles.quickAmountTextActive
-              ]}>{formatAmount(amount)}</Text>
+              ]}>{formatPoints(amount)}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -336,10 +448,10 @@ export default function AddRewardScreen({ navigation, route }) {
         {/* 自定义金额 */}
         <Text style={styles.sectionTitle}>{t('screens.addRewardScreen.customAmount.title')}</Text>
         <View style={styles.customAmountInput}>
-          <Text style={styles.currencySymbol}>$</Text>
+          <Text style={styles.currencySymbol}>{rewardInputUnitLabel}</Text>
           <TextInput
             style={styles.customAmountField}
-            placeholder={t('screens.addRewardScreen.customAmount.placeholder')}
+            placeholder={rewardInputPlaceholder}
             placeholderTextColor="#9ca3af"
             value={addRewardAmount}
             onChangeText={(text) => {
@@ -372,7 +484,7 @@ export default function AddRewardScreen({ navigation, route }) {
           disabled={(!selectedAddRewardAmount && !addRewardAmount) || submitting}
         >
           <Text style={styles.confirmBtnText}>
-            {t('screens.addRewardScreen.confirmButton').replace('${amount}', formatAmount(selectedAddRewardAmount ?? addRewardAmount ?? 0))}
+            {t('screens.addRewardScreen.confirmButton').replace('${amount}', formatPoints(selectedAddRewardAmount ?? addRewardAmount ?? 0))}
           </Text>
         </TouchableOpacity>
 
