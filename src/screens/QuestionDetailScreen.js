@@ -61,11 +61,12 @@ import {
 } from '../utils/appAlert';
 import { sanitizeUserFacingMessage } from '../utils/userFacingMessage';
 import { formatNumber } from '../utils/numberFormatter';
-import { centsToAmount, formatAmount } from '../utils/rewardAmount';
+import { centsToAmount, formatAmountValue } from '../utils/rewardAmount';
 import { formatTime } from '../utils/timeFormatter';
 import { getQuestionAdoptRate, getQuestionPayViewAmount, isQuestionSolvedByAdoptRate } from '../utils/questionAccessRules';
 import { normalizeEntityId } from '../utils/jsonLongId';
 import { navigateToPublicProfile } from '../utils/publicProfileNavigation';
+import { formatRewardPointsValue, isChineseLocale } from '../utils/rewardPointsDisplay';
 import useBottomSafeInset from '../hooks/useBottomSafeInset';
 import useKeyboardVisibility from '../hooks/useKeyboardVisibility';
 import useMentionComposer from '../hooks/useMentionComposer';
@@ -436,7 +437,8 @@ export default function QuestionDetailScreen({
   route
 }) {
   const {
-    t
+    t,
+    i18n,
   } = useTranslation();
   const recommendedQuestionItems = React.useMemo(() => [{
     id: 2,
@@ -1368,7 +1370,11 @@ export default function QuestionDetailScreen({
 
   // 当前悬赏金额 - 从问题数据中获取
   const currentReward = questionData ? centsToAmount(questionData.bountyAmount || 0) : 0;
-  const rewardAmountDisplayText = formatAmount(currentReward);
+  const rewardAmountDisplayText = formatRewardPointsValue(currentReward, { locale: i18n?.locale });
+  const rewardInputUnitLabel = isChineseLocale(i18n?.locale) ? '积分' : 'pts';
+  const rewardInputPlaceholder = isChineseLocale(i18n?.locale)
+    ? `最低${formatAmountValue(0.01)}积分`
+    : `Minimum ${formatAmountValue(0.01)} pts`;
   useEffect(() => {
     const currentQuestionId = String(
       questionData?.questionId ?? questionData?.id ?? route?.params?.id ?? ''
@@ -7169,8 +7175,8 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
       ...answerSuperLikes,
       [answerId]: currentCount + amount
     });
-    const totalCost = amount * 2; // 每个超级赞 $2
-    alert(`成功购买 ${amount} 个超级赞！\n花费：$${totalCost}\n您的回答排名将会提升！`);
+    const totalCost = amount * 2;
+    alert(`成功购买 ${amount} 个超级赞！\n花费：${formatRewardPointsValue(totalCost, { locale: i18n?.locale })}\n您的回答排名将会提升！`);
     setShowSuperLikeModal(false);
     setSuperLikeAmount('');
     setSelectedSuperLikeAmount(null);
@@ -7442,7 +7448,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
         <View style={styles.questionSection}>
           {/* 问题标题 - 使用真实数据 */}
           <Text style={styles.questionTitle}>
-            {(currentQuestion.displayType === 'reward' || currentQuestion.displayType === 'targeted') && currentQuestion.reward > 0 && <Text style={styles.rewardTagInline}>{formatAmount(currentQuestion.reward)} </Text>}
+            {(currentQuestion.displayType === 'reward' || currentQuestion.displayType === 'targeted') && currentQuestion.reward > 0 && <Text style={styles.rewardTagInline}>{formatRewardPointsValue(currentQuestion.reward, { locale: i18n?.locale })} </Text>}
             {currentQuestion.title}
             {currentQuestion.status === 2 && (
               <Text style={styles.solvedTagInline}> {t('questionDetail.solved')}</Text>
@@ -7590,6 +7596,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
 
               {/* 追加人数 */}
               <TouchableOpacity style={styles.rewardContributorsRow} onPress={() => navigation.navigate('Contributors', {
+                questionId: route?.params?.id ?? questionData?.id ?? questionData?.questionId ?? '',
                 currentReward,
                 rewardContributors,
                 rewardContributorsList
@@ -8598,7 +8605,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               activeOpacity={0.95}
             >
               <Text style={styles.recommendedQuestionTitle}>
-                <Text style={styles.rewardTagInline}>${item.reward} </Text>
+                <Text style={styles.rewardTagInline}>{formatRewardPointsValue(item.reward, { locale: i18n?.locale })} </Text>
                 {item.showHot ? (
                   <>
                     <View style={styles.recommendedHotTagInline}>
@@ -9472,7 +9479,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               <View style={styles.currentRewardInfo}>
                 <View style={styles.currentRewardRow}>
                   <Text style={styles.currentRewardLabel}>{t('screens.addRewardScreen.currentReward.label')}</Text>
-                  <Text style={styles.currentRewardAmount}>{formatAmount(currentReward)}</Text>
+                  <Text style={styles.currentRewardAmount}>{formatRewardPointsValue(currentReward, { locale: i18n?.locale })}</Text>
                 </View>
                 <View style={styles.currentRewardRow}>
                   <Text style={styles.currentRewardDesc}>{t('screens.addRewardScreen.currentReward.contributors', { count: rewardContributors })}</Text>
@@ -9486,15 +9493,15 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 setSelectedAddRewardAmount(amount);
                 setAddRewardAmount('');
               }}>
-                    <Text style={[styles.quickAmountText, selectedAddRewardAmount === amount && styles.quickAmountTextActive]}>{formatAmount(amount)}</Text>
+                    <Text style={[styles.quickAmountText, selectedAddRewardAmount === amount && styles.quickAmountTextActive]}>{formatRewardPointsValue(amount, { locale: i18n?.locale })}</Text>
                   </TouchableOpacity>)}
               </View>
 
               {/* 自定义金额 */}
               <Text style={styles.addRewardSectionTitle}>{t('screens.addRewardScreen.customAmount.title')}</Text>
               <View style={styles.customAmountInput}>
-                <Text style={styles.currencySymbol}>$</Text>
-                <TextInput style={styles.customAmountField} placeholder={t('screens.addRewardScreen.customAmount.placeholder')} placeholderTextColor="#9ca3af" value={addRewardAmount} onChangeText={text => {
+                <Text style={styles.currencySymbol}>{rewardInputUnitLabel}</Text>
+                <TextInput style={styles.customAmountField} placeholder={rewardInputPlaceholder} placeholderTextColor="#9ca3af" value={addRewardAmount} onChangeText={text => {
                 setAddRewardAmount(text);
                 setSelectedAddRewardAmount(null);
               }} keyboardType="numeric" />
@@ -9566,7 +9573,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
               }}>
                     <Ionicons name="star" size={18} color={selectedSuperLikeAmount === amount ? "#fff" : "#f59e0b"} />
                     <Text style={[styles.quickSuperLikeText, selectedSuperLikeAmount === amount && styles.quickSuperLikeTextActive]}>x{amount}</Text>
-                    <Text style={[styles.quickSuperLikePrice, selectedSuperLikeAmount === amount && styles.quickSuperLikePriceActive]}>${amount * 2}</Text>
+                    <Text style={[styles.quickSuperLikePrice, selectedSuperLikeAmount === amount && styles.quickSuperLikePriceActive]}>{formatRewardPointsValue(amount * 2, { locale: i18n?.locale })}</Text>
                   </TouchableOpacity>)}
               </View>
 
@@ -9579,7 +9586,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 setSelectedSuperLikeAmount(null);
               }} keyboardType="numeric" />
                 <Text style={styles.superLikePriceHint}>
-                  ${(parseInt(superLikeAmount) || 0) * 2}
+                  {formatRewardPointsValue((parseInt(superLikeAmount) || 0) * 2, { locale: i18n?.locale })}
                 </Text>
               </View>
 
@@ -9598,7 +9605,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                 <View style={[styles.priceInfoRow, styles.priceInfoTotal]}>
                   <Text style={styles.priceInfoTotalLabel}>{t('screens.questionDetail.states.totalLabel')}</Text>
                   <Text style={styles.priceInfoTotalValue}>
-                    ${(selectedSuperLikeAmount || parseInt(superLikeAmount) || 0) * 2}
+                    {formatRewardPointsValue((selectedSuperLikeAmount || parseInt(superLikeAmount) || 0) * 2, { locale: i18n?.locale })}
                   </Text>
                 </View>
               </View>
@@ -9655,7 +9662,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
             <View style={styles.contributorsTotalInfo}>
               <View style={styles.contributorsTotalRow}>
                 <Text style={styles.contributorsTotalLabel}>{t('screens.contributorsScreen.totalLabel')}</Text>
-                <Text style={styles.contributorsTotalAmount}>{formatAmount(currentReward)}</Text>
+                <Text style={styles.contributorsTotalAmount}>{formatRewardPointsValue(currentReward, { locale: i18n?.locale })}</Text>
               </View>
               <Text style={styles.contributorsTotalDesc}>{t('screens.contributorsScreen.totalDesc', { count: rewardContributors })}</Text>
             </View>
@@ -9672,7 +9679,7 @@ const getResolvedInteractionDisplayCount = (baseCount, serverState, localState, 
                   </View>
                   <View style={styles.contributorAmountBadge}>
                     <Ionicons name="add" size={12} color="#ef4444" />
-                    <Text style={styles.contributorAmountText}>{formatAmount(contributor.amount)}</Text>
+                    <Text style={styles.contributorAmountText}>{formatRewardPointsValue(contributor.amount, { locale: i18n?.locale })}</Text>
                   </View>
                 </View>) : <Text style={styles.contributorsEmptyText}>{t('common.noData')}</Text>}
             </ScrollView>

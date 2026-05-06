@@ -130,6 +130,10 @@ export const API_ENDPOINTS = {
     LIST: buildApiPath(SERVICES.CONTENT, '/app/content/category/list'),
   },
 
+  TOPIC: {
+    HOME_LIST: buildApiPath(SERVICES.CONTENT, '/app/content/topic/home/list'),
+  },
+
   CHANNEL: {
     CATALOG: buildApiPath(SERVICES.CONTENT, '/app/content/channel/catalog/query'),
     COMBINED_CREATE: buildApiPath(SERVICES.CONTENT, '/app/content/channel/combined/create'),

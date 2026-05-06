@@ -2,8 +2,9 @@ import React, { useCallback } from 'react';
 import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import OptimizedTabList from './OptimizedTabList';
+import { useTranslation } from '../i18n/withTranslation';
 import questionApi from '../services/api/questionApi';
-import { formatAmount } from '../utils/rewardAmount';
+import { formatRewardPointsValue } from '../utils/rewardPointsDisplay';
 
 /**
  * 首页 Tab 内容组件
@@ -15,6 +16,7 @@ const HomeTabContent = ({
   isActive,
   navigation
 }) => {
+  const { i18n } = useTranslation();
   /**
    * 获取问题列表数据
    */
@@ -73,7 +75,7 @@ const HomeTabContent = ({
         {Boolean(item.type) && <View style={styles.typeTag}>
             {item.type === 'reward' && <>
                 <Ionicons name="cash" size={14} color="#f97316" />
-                <Text style={styles.typeText}>{formatAmount(item.reward)}</Text>
+                <Text style={styles.typeText}>{formatRewardPointsValue(item.reward, { locale: i18n?.locale })}</Text>
               </>}
             {item.type === 'paid' && <>
                 <Ionicons name="lock-closed" size={14} color="#8b5cf6" />

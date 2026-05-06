@@ -27,7 +27,7 @@ import { getOfficialWebsiteUrl } from '../utils/externalLinks';
 import { resolveComposerTopInset } from '../utils/composerLayout';
 import { formatTime } from '../utils/timeFormatter';
 import { formatNumber } from '../utils/numberFormatter';
-import { formatAmount } from '../utils/rewardAmount';
+import { formatRewardPointsValue } from '../utils/rewardPointsDisplay';
 import { isVisibleMyTeam, normalizeMyTeam } from '../utils/teamTransforms';
 import { showToast } from '../utils/toast';
 import {
@@ -320,7 +320,8 @@ export default function ProfileScreen({
   onLogout
 }) {
   const {
-    t
+    t,
+    i18n,
   } = useTranslation();
   const insets = useSafeAreaInsets();
   const bottomSafeInset = useBottomSafeInset(20);
@@ -376,15 +377,14 @@ export default function ProfileScreen({
         return '$';
     }
   }, []);
-  const formattedWalletBalance = React.useMemo(() => {
-    const amount = Number(walletData.balance);
-    const safeAmount = Number.isFinite(amount) ? amount : 0;
-    return `${getCurrencySymbol(walletData.currency)}${safeAmount.toFixed(2)}`;
-  }, [walletData.balance, walletData.currency, getCurrencySymbol]);
-  const formatWalletAmount = React.useCallback((amount, currency = walletData.currency) => {
-    const safeAmount = Number.isFinite(Number(amount)) ? Number(amount) : 0;
-    return `${getCurrencySymbol(currency)}${safeAmount.toFixed(2)}`;
-  }, [getCurrencySymbol, walletData.currency]);
+  const formattedWalletBalance = React.useMemo(
+    () => formatRewardPointsValue(walletData.balance, { locale: i18n?.locale }),
+    [i18n?.locale, walletData.balance]
+  );
+  const formatWalletAmount = React.useCallback(
+    amount => formatRewardPointsValue(amount, { locale: i18n?.locale }),
+    [i18n?.locale]
+  );
   const formattedWalletIncome = React.useMemo(() => formatWalletAmount(walletData.incomeAmount), [formatWalletAmount, walletData.incomeAmount]);
   const formattedWalletExpense = React.useMemo(() => formatWalletAmount(walletData.expenseAmount), [formatWalletAmount, walletData.expenseAmount]);
   const formattedWithdrawableBalance = React.useMemo(() => formatWalletAmount(walletData.withdrawableBalance), [formatWalletAmount, walletData.withdrawableBalance]);
@@ -2525,7 +2525,7 @@ export default function ProfileScreen({
                 </View>
                 <Text style={styles.questionTitle}>
                   {q.type === 'reward' && <Text style={styles.rewardTagInline}>
-                      <Text style={styles.rewardTagInlineText}>{formatAmount(q.reward)}</Text>
+                      <Text style={styles.rewardTagInlineText}>{formatRewardPointsValue(q.reward, { locale: i18n?.locale })}</Text>
                     </Text>}
                   {q.solved && <Text style={styles.solvedTagInline}>
                       <Text style={styles.solvedTagInlineText}>{t('profile.solved')}</Text>

@@ -23,6 +23,7 @@ import {
   parseRewardAmountToCents,
   sanitizeAmountInput,
 } from '../utils/rewardAmount';
+import { formatRewardPointsValue } from '../utils/rewardPointsDisplay';
 import { scaleFont, scaleWidth } from '../utils/responsive';
 const questionTypes = [{
   id: 0,
@@ -172,9 +173,9 @@ export default function PublishScreen({
   navigation,
   route
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const bottomSafeInset = useBottomSafeInset(20);
-  const rewardMinAmountText = formatAmount(REWARD_MIN_AMOUNT);
+  const rewardMinAmountText = formatRewardPointsValue(REWARD_MIN_AMOUNT, { locale: i18n?.locale });
   
   // 获取多语言区域数据
   const regionData = React.useMemo(() => getRegionData(), []);

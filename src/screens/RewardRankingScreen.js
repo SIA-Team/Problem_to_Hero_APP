@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, RefreshCon
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/useTranslation';
-import { formatAmount } from '../utils/rewardAmount';
+import { formatRewardPointsValue } from '../utils/rewardPointsDisplay';
 
 import { scaleFont } from '../utils/responsive';
 // 悬赏榜数据（示例数据）
@@ -148,6 +148,7 @@ const getRankBg = (rank) => {
 
 // 悬赏榜项组件
 function RewardItem({ item, onPress, t }) {
+  const { i18n } = useTranslation();
   return (
     <TouchableOpacity style={styles.rewardItem} onPress={onPress}>
       <View style={[styles.rankBadge, { backgroundColor: getRankBg(item.rank) }]}>
@@ -166,7 +167,7 @@ function RewardItem({ item, onPress, t }) {
         <View style={styles.rewardInfoRow}>
           <View style={styles.rewardAmountBadge}>
             <Ionicons name="cash" size={14} color="#fff" />
-            <Text style={styles.rewardAmountText}>{formatAmount(item.reward)}</Text>
+            <Text style={styles.rewardAmountText}>{formatRewardPointsValue(item.reward, { locale: i18n?.locale })}</Text>
           </View>
           <View style={styles.statItem}>
             <Ionicons name="flame" size={14} color="#ef4444" />
